@@ -1,0 +1,293 @@
+.blaster-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 75%);
+  border: 1px solid var(--charcoal-600);
+  border-top-color: var(--charcoal-700);
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.5),
+    0 2px 0 rgba(255, 255, 255, 0.03) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.6) inset;
+}
+
+.blaster-card--clickable {
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
+}
+
+.blaster-card--clickable:hover {
+  border-color: var(--gold-dim);
+  transform: translateY(-2px);
+}
+
+.blaster-card-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.blaster-card--lg .blaster-card-top {
+  flex-direction: column;
+  text-align: center;
+}
+
+.blaster-card-image {
+  flex-shrink: 0;
+  width: 60px;
+  height: 60px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-600);
+  box-shadow: 0 0 0 2px rgba(201, 162, 75, 0.35) inset;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.blaster-card--lg .blaster-card-image {
+  width: 120px;
+  height: 120px;
+  border-radius: 20px;
+}
+
+.blaster-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.blaster-card-image svg {
+  width: 40%;
+  height: 40%;
+  color: var(--gold-dim);
+}
+
+.blaster-card-identity {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.blaster-card-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gold-soft);
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blaster-card--lg .blaster-card-name {
+  font-size: 22px;
+  white-space: normal;
+}
+
+.blaster-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.blaster-card--lg .blaster-card-badges {
+  justify-content: center;
+}
+
+.blaster-card-type,
+.blaster-card-quality {
+  display: inline-flex;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.blaster-card-type {
+  color: var(--ink-dim);
+  border: 1px solid var(--charcoal-600);
+  background: var(--charcoal-900);
+}
+
+.blaster-card-quality {
+  color: var(--gold-soft);
+  border: 1px solid var(--gold-dim);
+  background: rgba(201, 162, 75, 0.12);
+}
+
+.blaster-card-quality--0 {
+  color: var(--ink-dim);
+  border-color: var(--charcoal-600);
+  background: var(--charcoal-900);
+}
+
+.blaster-card-quality--4 {
+  color: #f3d98a;
+  border-color: var(--gold);
+  background: rgba(201, 162, 75, 0.22);
+}
+
+.blaster-card-equipped-badge {
+  display: inline-flex;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #7be0a8;
+  border: 1px solid #3a8a5c;
+  background: rgba(58, 138, 92, 0.18);
+}
+
+.blaster-card-equipped-badge--1 {
+  color: #8fc3f0;
+  border-color: #3a6f8a;
+  background: rgba(58, 111, 138, 0.18);
+}
+
+.blaster-card--draggable {
+  cursor: grab;
+}
+
+.blaster-card--draggable:active {
+  cursor: grabbing;
+}
+
+.blaster-card-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.blaster-card--lg .blaster-card-stats {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.blaster-card-stat {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border-radius: 9px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+}
+
+.blaster-card-stat-value {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gold-soft);
+  font-size: 15px;
+}
+
+.blaster-card--lg .blaster-card-stat-value {
+  font-size: 19px;
+}
+
+.blaster-card-stat-label {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--ink-dim);
+  text-align: center;
+  overflow-wrap: break-word;
+}
+
+.blaster-card-fail-rate {
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  text-align: center;
+}
+
+.blaster-card-fail-rate strong {
+  color: var(--danger);
+}
+
+.blaster-card-slots {
+  padding-top: 10px;
+  border-top: 1px solid var(--charcoal-700);
+}
+
+.blaster-card-slots-label {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--gold-dim);
+  margin-bottom: 8px;
+}
+
+.blaster-card-slots-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border-radius: 9px;
+  transition: background 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
+}
+
+.blaster-card-slots-row--dragover {
+  background: rgba(201, 162, 75, 0.12);
+  box-shadow: 0 0 0 2px rgba(201, 162, 75, 0.4);
+}
+
+.blaster-card-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.blaster-card-slot--filled {
+  color: var(--gold-soft);
+  background: rgba(201, 162, 75, 0.14);
+  border: 1px solid var(--gold-dim);
+  cursor: default;
+  gap: 5px;
+  max-width: 120px;
+}
+
+.blaster-card-slot--filled svg {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+}
+
+.blaster-card-slot--filled span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blaster-card-slot--empty {
+  color: var(--charcoal-600);
+  border: 1px dashed var(--charcoal-600);
+  background: transparent;
+}
+
+.blaster-card-slot--empty svg {
+  width: 12px;
+  height: 12px;
+}
+
+.blaster-card-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+

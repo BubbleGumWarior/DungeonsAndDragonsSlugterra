@@ -1,0 +1,48 @@
+.energy-pips {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.energy-pip {
+  border-radius: 50%;
+  background: #5ac8e0;
+  border: 1.5px solid #0c2e35;
+  box-shadow: 0 0 6px rgba(90, 200, 224, 0.6);
+  padding: 0;
+  cursor: default;
+  transition: background 0.15s var(--ease-out), transform 0.12s var(--ease-out), box-shadow 0.15s var(--ease-out);
+}
+
+.energy-pip--spent {
+  background: transparent;
+  box-shadow: none;
+  border-color: var(--charcoal-600);
+}
+
+.energy-pips--sm .energy-pip {
+  width: 9px;
+  height: 9px;
+}
+
+.energy-pips--md .energy-pip {
+  width: 12px;
+  height: 12px;
+}
+
+.energy-pips--lg .energy-pip {
+  width: 15px;
+  height: 15px;
+}
+
+button.energy-pip {
+  cursor: pointer;
+}
+
+button.energy-pip:hover {
+  transform: scale(1.2);
+}
+
+button.energy-pip:active {
+  transform: scale(1.05);
+}

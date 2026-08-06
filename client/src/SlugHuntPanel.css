@@ -1,0 +1,68 @@
+.slughunt-location {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(201, 162, 75, 0.08);
+  border: 1px solid rgba(201, 162, 75, 0.25);
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+
+.slughunt-location strong {
+  color: var(--gold-soft);
+  font-size: 14px;
+}
+
+.slughunt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.slughunt-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.slughunt-name {
+  width: 84px;
+  flex-shrink: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slughunt-bar-track {
+  flex: 1;
+  min-width: 0;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-700);
+  overflow: hidden;
+}
+
+.slughunt-bar-fill {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gold-dim), var(--gold));
+  transform: scaleX(var(--fill, 0));
+  transform-origin: left;
+  transition: transform 0.4s var(--ease-out);
+}
+
+.slughunt-chance {
+  width: 36px;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--gold-soft);
+}

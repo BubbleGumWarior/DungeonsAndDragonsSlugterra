@@ -1,0 +1,287 @@
+.chatbox {
+  /* Filled via .chat-slot (Dashboard.css): absolute + inset:0 means this
+     panel's own message content never contributes to the grid's row
+     sizing, however many messages pile up — it just fills whatever height
+     Challenge + Slug Hunt combined (or the mobile floor) produce. */
+  position: absolute;
+  inset: 0;
+}
+
+.chatbox-body {
+  padding: 0;
+  gap: 0;
+}
+
+.chatbox-messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px;
+
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: var(--maroon-600) transparent;
+}
+
+.chatbox-messages::-webkit-scrollbar {
+  width: 10px;
+}
+
+.chatbox-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chatbox-messages::-webkit-scrollbar-thumb {
+  background-color: var(--maroon-600);
+  border-radius: 999px;
+  border: 2.5px solid var(--charcoal-950);
+}
+
+.chatbox-messages::-webkit-scrollbar-thumb:hover {
+  background-color: var(--maroon-500);
+}
+
+.chatbox-messages::-webkit-scrollbar-thumb:active {
+  background-color: var(--maroon-400);
+}
+
+.chatbox-message {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+}
+
+.chatbox-message--dm {
+  background: rgba(92, 18, 29, 0.35);
+  border-color: var(--maroon-600);
+}
+
+.chatbox-message--self {
+  border-color: var(--gold-dim);
+}
+
+.chatbox-system-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 6px 14px;
+  margin: 0 auto;
+  border-radius: 999px;
+  background: rgba(201, 162, 75, 0.08);
+  border: 1px dashed rgba(201, 162, 75, 0.3);
+  color: var(--gold-soft);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  max-width: 100%;
+}
+
+.chatbox-system-line svg {
+  width: 13px;
+  height: 13px;
+  color: var(--gold);
+  flex-shrink: 0;
+}
+
+.chatbox-system-line span {
+  overflow-wrap: break-word;
+}
+
+/* Dice-roll log entries: a compact card with real die tiles, not a text
+   formula. Sits visually between a system pill and a full chat bubble. */
+.chatbox-diceroll {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(201, 162, 75, 0.06);
+  border: 1px dashed rgba(201, 162, 75, 0.28);
+}
+
+.chatbox-diceroll-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.chatbox-diceroll-head svg {
+  width: 13px;
+  height: 13px;
+  color: var(--gold);
+  flex-shrink: 0;
+}
+
+.chatbox-diceroll-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gold-soft);
+}
+
+.chatbox-diceroll-mod {
+  font-weight: 500;
+  color: var(--ink-dim);
+}
+
+.chatbox-diceroll-type {
+  font-weight: 500;
+  color: var(--ink-dim);
+}
+
+.chatbox-diceroll-time {
+  font-size: 10.5px;
+  color: var(--ink-dim);
+  flex-shrink: 0;
+}
+
+/* Top margin keeps the dice off the header text; centering and per-roll
+   cards keep multiple rolls from reading as one ambiguous row of numbers. */
+.chatbox-diceroll-results {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.chatbox-diceroll-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 9px;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-700);
+}
+
+.chatbox-diceroll-dice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* The kept die scales to 1.3x on reveal (Panel.css); transforms don't
+     affect layout size, so without this reserved height it visually
+     overflows the card's top/bottom edge. */
+  min-height: 40px;
+}
+
+.chatbox-diceroll-arrow {
+  color: var(--ink-dim);
+  font-size: 13px;
+}
+
+.chatbox-diceroll-total-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.1;
+}
+
+.chatbox-diceroll-total {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--gold-soft);
+}
+
+.chatbox-diceroll-total-caption {
+  font-size: 9px;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.chatbox-message--enter {
+  animation: chat-message-in 0.32s var(--ease-out);
+}
+
+@keyframes chat-message-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.chatbox-empty {
+  margin: auto;
+  padding: 20px;
+  text-align: center;
+  color: var(--ink-dim);
+  font-size: 13px;
+}
+
+.chatbox-message-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.chatbox-message-author {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gold-soft);
+}
+
+.chatbox-message--dm .chatbox-message-author {
+  color: var(--gold);
+}
+
+.chatbox-message-time {
+  font-size: 10.5px;
+  color: var(--ink-dim);
+  flex-shrink: 0;
+}
+
+.chatbox-message-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.chatbox-input-row {
+  display: flex;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--charcoal-700);
+  flex-shrink: 0;
+}
+
+.chatbox-input-row input {
+  flex: 1;
+  min-width: 0;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-600);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--ink);
+  font-size: 13.5px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s var(--ease-out);
+}
+
+.chatbox-input-row input:focus {
+  border-color: var(--gold);
+}
+
+.chatbox-input-row input:disabled {
+  opacity: 0.6;
+}
+
+.chatbox-body .panel-error {
+  padding: 0 20px 12px;
+}

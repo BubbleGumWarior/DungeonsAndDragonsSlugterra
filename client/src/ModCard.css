@@ -1,0 +1,160 @@
+.mod-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 75%);
+  border: 1px solid var(--charcoal-600);
+  border-top-color: var(--charcoal-700);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.mod-card--clickable {
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
+}
+
+.mod-card--clickable:hover {
+  border-color: var(--gold-dim);
+  transform: translateY(-2px);
+}
+
+.mod-card--draggable {
+  cursor: grab;
+}
+
+.mod-card--draggable:active {
+  cursor: grabbing;
+}
+
+.mod-card-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mod-card-image {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-600);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mod-card-image svg {
+  width: 40%;
+  height: 40%;
+  color: var(--gold-dim);
+}
+
+.mod-card-identity {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.mod-card-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gold-soft);
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mod-card-bonuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.mod-card-bonus {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--gold);
+  background: rgba(201, 162, 75, 0.12);
+  border: 1px solid rgba(201, 162, 75, 0.32);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.mod-card-bonus--mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #8fc3f0;
+  background: rgba(58, 111, 138, 0.18);
+  border-color: #3a6f8a;
+}
+
+.mod-card-bonus--mode svg {
+  width: 10px;
+  height: 10px;
+}
+
+.mod-card-effect {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-dim);
+  line-height: 1.5;
+}
+
+.mod-card-equip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--charcoal-700);
+}
+
+.mod-card-equipped-label {
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mod-card-unequip {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--charcoal-600);
+  background: transparent;
+  color: var(--ink-dim);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+}
+
+.mod-card-unequip:hover {
+  background: var(--charcoal-700);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.mod-card-drag-hint {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 1px dashed var(--charcoal-600);
+  color: var(--charcoal-600);
+  font-size: 11.5px;
+  text-align: center;
+}
+
+.mod-card-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}

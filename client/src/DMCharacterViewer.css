@@ -1,0 +1,79 @@
+.dm-viewer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.dm-viewer-toolbar {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.dm-viewer-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: transparent;
+  border: none;
+  color: var(--ink-dim);
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 500;
+  padding: 0;
+  transition: color 0.15s var(--ease-out);
+}
+
+.dm-viewer-back svg {
+  width: 15px;
+  height: 15px;
+}
+
+.dm-viewer-back:hover {
+  color: var(--gold-soft);
+}
+
+.dm-viewer-edit-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: transparent;
+  border: 1px solid var(--charcoal-600);
+  color: var(--gold-soft);
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
+}
+
+.dm-viewer-edit-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+
+.dm-viewer-edit-toggle:hover {
+  background: var(--charcoal-700);
+  border-color: var(--gold);
+}
+
+.dm-viewer-edit-toggle:active {
+  transform: scale(0.97);
+}
+
+.dm-viewer-empty {
+  width: 100%;
+  max-width: 560px;
+  text-align: center;
+  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 75%);
+  border: 1px solid var(--charcoal-600);
+  border-radius: 16px;
+  padding: 40px;
+  color: var(--ink-dim);
+  font-size: 14.5px;
+}

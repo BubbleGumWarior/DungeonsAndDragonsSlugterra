@@ -1,0 +1,103 @@
+.roster-body {
+  align-items: center;
+}
+
+.roster-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+}
+
+.roster-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 104px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+}
+
+.roster-chip--selectable {
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+}
+
+.roster-chip--selectable:hover {
+  background: var(--charcoal-800);
+}
+
+.roster-chip--selected {
+  border-color: var(--gold);
+  background: rgba(201, 162, 75, 0.08);
+}
+
+.roster-portrait {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  overflow: visible;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-600);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: box-shadow 0.3s var(--ease-out), border-color 0.3s var(--ease-out);
+}
+
+.roster-portrait img {
+  border-radius: 50%;
+}
+
+.roster-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.roster-portrait svg:not(.grit-ring) {
+  width: 30px;
+  height: 30px;
+  color: var(--gold-dim);
+}
+
+.roster-chip--online .roster-portrait {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(201, 162, 75, 0.35), 0 0 14px rgba(201, 162, 75, 0.55);
+  animation: roster-glow 2.2s ease-in-out infinite;
+}
+
+@keyframes roster-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(201, 162, 75, 0.35), 0 0 10px rgba(201, 162, 75, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(201, 162, 75, 0.5), 0 0 18px rgba(201, 162, 75, 0.75);
+  }
+}
+
+.roster-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  transition: color 0.3s var(--ease-out);
+}
+
+.roster-chip--online .roster-name {
+  color: var(--gold);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .roster-chip--online .roster-portrait {
+    animation: none;
+  }
+}

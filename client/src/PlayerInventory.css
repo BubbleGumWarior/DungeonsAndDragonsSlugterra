@@ -1,0 +1,151 @@
+.player-inventory {
+  width: 100%;
+  max-width: 960px;
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+}
+
+.weapon-loadout {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.weapon-loadout-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gold-soft);
+  font-size: 19px;
+}
+
+.weapon-loadout-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.weapon-loadout-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 112px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px dashed var(--charcoal-600);
+  background: var(--charcoal-900);
+  transition: border-color 0.15s var(--ease-out), background 0.15s var(--ease-out);
+}
+
+.weapon-loadout-slot--filled {
+  border-style: solid;
+  border-color: var(--gold-dim);
+  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 75%);
+}
+
+.weapon-loadout-slot--dragover {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(201, 162, 75, 0.35);
+}
+
+.weapon-loadout-slot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.weapon-loadout-slot-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--gold-dim);
+}
+
+.weapon-loadout-slot-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid var(--charcoal-600);
+  background: var(--charcoal-900);
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.weapon-loadout-slot-remove:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.weapon-loadout-slot-remove svg {
+  width: 11px;
+  height: 11px;
+}
+
+.weapon-loadout-slot-weapon {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.weapon-loadout-slot-image {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-600);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.weapon-loadout-slot-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.weapon-loadout-slot-image svg {
+  width: 40%;
+  height: 40%;
+  color: var(--gold-dim);
+}
+
+.weapon-loadout-slot-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gold-soft);
+  font-size: 15px;
+}
+
+.weapon-loadout-slot-empty {
+  font-size: 12.5px;
+  color: var(--charcoal-600);
+}
+
+.weapon-loadout-slot-hint {
+  margin-top: auto;
+  font-size: 11px;
+  color: var(--ink-dim);
+  line-height: 1.4;
+}
+
+.player-inventory-mods h2 {
+  margin: 0 0 16px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gold-soft);
+  font-size: 19px;
+}
+
+.player-inventory-mods-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}

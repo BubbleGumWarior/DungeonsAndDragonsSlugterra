@@ -1,0 +1,22 @@
+.grit-ring {
+  position: absolute;
+  inset: -6px;
+  width: calc(100% + 12px);
+  height: calc(100% + 12px);
+  pointer-events: none;
+  transform: rotate(-90deg);
+  z-index: 1;
+}
+
+.grit-ring-track {
+  fill: none;
+  stroke: var(--charcoal-700);
+  stroke-width: 3.5;
+}
+
+.grit-ring-fill {
+  fill: none;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.5s var(--ease-out), stroke 0.5s var(--ease-out);
+}

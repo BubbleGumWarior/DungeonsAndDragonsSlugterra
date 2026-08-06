@@ -1,0 +1,115 @@
+.skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.skill-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.skill-group-abbr {
+  font-family: var(--font-display);
+  color: var(--gold);
+}
+
+.skill-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skill-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 82px 36px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+  cursor: default;
+}
+
+.skill-row--proficient {
+  border-color: var(--gold-dim);
+  background: rgba(201, 162, 75, 0.08);
+}
+
+.skill-row-label {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink);
+  text-align: center;
+}
+
+.skill-row-badge-slot {
+  display: flex;
+  justify-content: center;
+}
+
+.skill-row-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--gold-soft);
+  background: rgba(201, 162, 75, 0.16);
+  border: 1px solid rgba(201, 162, 75, 0.35);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.skill-row-modifier {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gold-soft);
+  text-align: right;
+}
+
+.skill-row[data-tooltip]:hover::after,
+.skill-row[data-tooltip]:focus-visible::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 240px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: var(--charcoal-950);
+  border: 1px solid var(--gold-dim);
+  color: var(--ink-dim);
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.55);
+  z-index: 15;
+  pointer-events: none;
+  animation: skill-tooltip-fade 0.15s var(--ease-out);
+}
+
+@keyframes skill-tooltip-fade {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}

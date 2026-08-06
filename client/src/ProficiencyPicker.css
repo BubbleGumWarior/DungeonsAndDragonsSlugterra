@@ -1,0 +1,143 @@
+.proficiency-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.proficiency-remaining {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-600);
+  transition: border-color 0.2s var(--ease-out);
+}
+
+.proficiency-remaining--done {
+  border-color: var(--gold);
+}
+
+.proficiency-remaining-value {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--gold-soft);
+}
+
+.proficiency-remaining--done .proficiency-remaining-value {
+  color: var(--success);
+}
+
+.proficiency-remaining-label {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--ink-dim);
+}
+
+.proficiency-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.proficiency-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.proficiency-group-abbr {
+  font-family: var(--font-display);
+  color: var(--gold);
+}
+
+.proficiency-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.proficiency-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out), opacity 0.15s var(--ease-out);
+}
+
+.proficiency-item:hover:not(:disabled) {
+  border-color: var(--gold-dim);
+  background: var(--charcoal-800);
+}
+
+.proficiency-item--selected {
+  border-color: var(--gold);
+  background: rgba(201, 162, 75, 0.1);
+}
+
+.proficiency-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.proficiency-checkbox {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 5px;
+  border: 1px solid var(--charcoal-600);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+}
+
+.proficiency-item--selected .proficiency-checkbox {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--charcoal-950);
+}
+
+.proficiency-checkbox svg {
+  width: 12px;
+  height: 12px;
+}
+
+.proficiency-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.proficiency-item-label {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.proficiency-item-description {
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  line-height: 1.4;
+}

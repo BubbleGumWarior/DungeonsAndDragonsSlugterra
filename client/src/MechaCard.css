@@ -1,0 +1,287 @@
+.mecha-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 75%);
+  border: 1px solid var(--charcoal-600);
+  border-top-color: var(--charcoal-700);
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.5),
+    0 2px 0 rgba(255, 255, 255, 0.03) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.6) inset;
+}
+
+.mecha-card--clickable {
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
+}
+
+.mecha-card--clickable:hover {
+  border-color: var(--gold-dim);
+  transform: translateY(-2px);
+}
+
+.mecha-card-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.mecha-card--lg .mecha-card-top {
+  flex-direction: column;
+  text-align: center;
+}
+
+.mecha-card-image {
+  flex-shrink: 0;
+  width: 60px;
+  height: 60px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-600);
+  box-shadow: 0 0 0 2px rgba(201, 162, 75, 0.35) inset;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mecha-card--lg .mecha-card-image {
+  width: 120px;
+  height: 120px;
+  border-radius: 20px;
+}
+
+.mecha-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mecha-card-image svg {
+  width: 40%;
+  height: 40%;
+  color: var(--gold-dim);
+}
+
+.mecha-card-identity {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mecha-card-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gold-soft);
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mecha-card--lg .mecha-card-name {
+  font-size: 22px;
+  white-space: normal;
+}
+
+.mecha-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mecha-card--lg .mecha-card-badges {
+  justify-content: center;
+}
+
+.mecha-card-frame,
+.mecha-card-tier {
+  display: inline-flex;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.mecha-card-frame {
+  color: var(--ink-dim);
+  border: 1px solid var(--charcoal-600);
+  background: var(--charcoal-900);
+}
+
+.mecha-card-tier {
+  color: var(--gold-soft);
+  border: 1px solid var(--gold-dim);
+  background: rgba(201, 162, 75, 0.12);
+}
+
+.mecha-card-tier--0 {
+  color: var(--ink-dim);
+  border-color: var(--charcoal-600);
+  background: var(--charcoal-900);
+}
+
+.mecha-card-tier--4 {
+  color: #f3d98a;
+  border-color: var(--gold);
+  background: rgba(201, 162, 75, 0.22);
+}
+
+.mecha-card-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.mecha-card-stat {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border-radius: 9px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+}
+
+.mecha-card-stat-value {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gold-soft);
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.mecha-card--lg .mecha-card-stat-value {
+  font-size: 19px;
+}
+
+.mecha-card-stat-label {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--ink-dim);
+  text-align: center;
+  overflow-wrap: break-word;
+}
+
+.mecha-card-breakdown {
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  text-align: center;
+}
+
+.mecha-card-breakdown strong {
+  color: var(--danger);
+}
+
+.mecha-card-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.mecha-card-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #8fc3f0;
+  border: 1px solid #3a6f8a;
+  background: rgba(58, 111, 138, 0.18);
+}
+
+.mecha-card-mode svg {
+  width: 11px;
+  height: 11px;
+}
+
+.mecha-card-slots {
+  padding-top: 10px;
+  border-top: 1px solid var(--charcoal-700);
+}
+
+.mecha-card-slots-label {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--gold-dim);
+  margin-bottom: 8px;
+}
+
+.mecha-card-slots-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border-radius: 9px;
+  transition: background 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
+}
+
+.mecha-card-slots-row--dragover {
+  background: rgba(201, 162, 75, 0.12);
+  box-shadow: 0 0 0 2px rgba(201, 162, 75, 0.4);
+}
+
+.mecha-card-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.mecha-card-slot--filled {
+  color: var(--gold-soft);
+  background: rgba(201, 162, 75, 0.14);
+  border: 1px solid var(--gold-dim);
+  cursor: default;
+  gap: 5px;
+  max-width: 120px;
+}
+
+.mecha-card-slot--filled svg {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+}
+
+.mecha-card-slot--filled span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mecha-card-slot--empty {
+  color: var(--charcoal-600);
+  border: 1px dashed var(--charcoal-600);
+  background: transparent;
+}
+
+.mecha-card-slot--empty svg {
+  width: 12px;
+  height: 12px;
+}
+
+.mecha-card-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}

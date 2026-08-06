@@ -1,0 +1,64 @@
+.knockout-pips {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translate(-50%, 35%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.knockout-pip {
+  border-radius: 50%;
+  background: var(--gold);
+  border: 1.5px solid var(--charcoal-950);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  padding: 0;
+  cursor: default;
+  transition: background 0.15s var(--ease-out), transform 0.12s var(--ease-out);
+}
+
+.knockout-pip--knocked {
+  background: transparent;
+  border-color: var(--gold-dim);
+}
+
+.knockout-pips--sm {
+  gap: 2px;
+}
+
+.knockout-pips--sm .knockout-pip {
+  width: 8px;
+  height: 8px;
+}
+
+.knockout-pips--md {
+  gap: 3px;
+}
+
+.knockout-pips--md .knockout-pip {
+  width: 10px;
+  height: 10px;
+}
+
+.knockout-pips--lg {
+  gap: 4px;
+}
+
+.knockout-pips--lg .knockout-pip {
+  width: 13px;
+  height: 13px;
+}
+
+button.knockout-pip {
+  cursor: pointer;
+}
+
+button.knockout-pip:hover {
+  transform: scale(1.2);
+}
+
+button.knockout-pip:active {
+  transform: scale(1.05);
+}

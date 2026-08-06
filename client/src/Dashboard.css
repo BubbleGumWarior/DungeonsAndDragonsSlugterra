@@ -1,0 +1,459 @@
+.dashboard-page {
+  min-height: 100vh;
+}
+
+.dashboard-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 32px;
+  height: 68px;
+  background: linear-gradient(180deg, var(--charcoal-800), var(--charcoal-950));
+  border-bottom: 1px solid var(--charcoal-600);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.dashboard-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.4px;
+  color: var(--gold-soft);
+}
+
+.dashboard-brand svg {
+  width: 19px;
+  height: 19px;
+  color: var(--gold);
+  flex-shrink: 0;
+}
+
+.dashboard-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dashboard-admin-link,
+.dashboard-logout,
+.dashboard-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: transparent;
+  border: 1px solid var(--charcoal-600);
+  color: var(--ink);
+  padding: 9px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
+}
+
+.dashboard-admin-link svg,
+.dashboard-logout svg,
+.dashboard-back svg {
+  width: 15px;
+  height: 15px;
+}
+
+.dashboard-admin-link {
+  color: var(--gold-soft);
+}
+
+.dashboard-back {
+  color: var(--ink-dim);
+}
+
+.dashboard-admin-link:hover,
+.dashboard-logout:hover,
+.dashboard-back:hover {
+  background: var(--charcoal-700);
+  border-color: var(--gold);
+  color: var(--ink);
+}
+
+.dashboard-admin-link:active,
+.dashboard-logout:active,
+.dashboard-back:active {
+  transform: scale(0.97);
+}
+
+/* Nav actions collapse to icon-only before they run out of room and force
+   the page to scroll sideways. Brand keeps its label — identity stays. */
+@media (max-width: 600px) {
+  .dashboard-nav {
+    padding: 12px 16px;
+  }
+
+  .dashboard-nav-actions {
+    gap: 6px;
+  }
+
+  .dashboard-admin-link,
+  .dashboard-logout,
+  .dashboard-back {
+    padding: 9px;
+  }
+
+  .dashboard-nav-actions .nav-label {
+    display: none;
+  }
+}
+
+.dashboard-body {
+  display: flex;
+  justify-content: center;
+  /* center, not the default stretch: otherwise the grid gets forced to
+     fill the full viewport height regardless of its content. With the full
+     bento that was invisible (content already exceeds viewport height),
+     but with only hero+roster showing (Slugterra hidden) it left a huge
+     dead zone below the content instead of a tidy centered card. */
+  align-items: center;
+  min-height: calc(100vh - 68px);
+  padding: 24px;
+}
+
+/*
+ * Bento layout. Weight follows use, not uniformity:
+ * - hero + roster share the top row (identity, then who's with you)
+ * - chat is a tall, persistent left column (the thing you touch most)
+ * - challenge sits beside it, wide, because it's the active event
+ * - slug hunt is the quiet reference tile underneath
+ * - the DM dice console runs the full width as a distinct utility bar
+ */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  grid-template-areas:
+    "hero    roster"
+    "chat    challenge"
+    "chat    slughunt"
+    "dice    dice";
+  gap: 20px;
+  width: 100%;
+  max-width: 1180px;
+  text-align: left;
+}
+
+/* Slugterra hidden and not the DM: none of the slug-world panels render,
+   so there's nothing to reserve those rows for. */
+.dashboard-grid--minimal {
+  grid-template-areas: "hero roster";
+}
+
+.dashboard-hero {
+  grid-area: hero;
+  display: flex;
+}
+
+.dashboard-hero > * {
+  width: 100%;
+}
+
+.dashboard-grid > .roster {
+  grid-area: roster;
+}
+
+/* Sizing-transparent slot: its only child (.chatbox) is absolutely
+   positioned, so this cell contributes zero intrinsic content to the grid's
+   auto row-sizing — the "chat" rows size purely from Challenge + Slug Hunt,
+   and chat just fills whatever height that produces. min-height is the
+   floor used on mobile, where chat has no sibling row to borrow height
+   from. */
+.dashboard-grid > .chat-slot {
+  grid-area: chat;
+  position: relative;
+  min-height: 380px;
+}
+
+.dashboard-grid > .challenge-panel {
+  grid-area: challenge;
+}
+
+.dashboard-grid > .slughunt-panel {
+  grid-area: slughunt;
+}
+
+.dashboard-grid > .dice-console {
+  grid-area: dice;
+}
+
+@media (max-width: 860px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "hero"
+      "roster"
+      "challenge"
+      "chat"
+      "slughunt"
+      "dice";
+  }
+
+  .dashboard-grid--minimal {
+    grid-template-areas:
+      "hero"
+      "roster";
+  }
+}
+
+/* Phone widths: the desktop identity-card padding (52px/28px) was eating a
+   quarter of the screen and squeezing the portrait against the name. */
+@media (max-width: 560px) {
+  .dashboard-body {
+    padding: 14px;
+  }
+
+  .dashboard-grid {
+    gap: 14px;
+  }
+
+  .dashboard-card,
+  .character-empty-card {
+    padding: 32px 22px;
+  }
+
+  .character-card {
+    flex-direction: column;
+    text-align: center;
+    gap: 14px;
+    padding: 22px;
+  }
+
+  .character-card-portrait {
+    width: 72px;
+    height: 72px;
+  }
+
+  .character-card-info h1 {
+    text-align: center;
+  }
+}
+
+.dashboard-card {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 75%);
+  border: 1px solid var(--charcoal-600);
+  border-top-color: var(--charcoal-700);
+  border-radius: 16px;
+  padding: 52px 60px;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.65),
+    0 2px 0 rgba(255, 255, 255, 0.03) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.6) inset,
+    0 0 0 1px rgba(0, 0, 0, 0.4);
+  animation: dashboard-rise 0.6s var(--ease-out);
+}
+
+.dashboard-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(201, 162, 75, 0.16), transparent 70%);
+  border: 1px solid rgba(201, 162, 75, 0.3);
+  color: var(--gold);
+}
+
+.dashboard-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+@keyframes dashboard-rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dashboard-card h1 {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gold-soft);
+  font-size: 25px;
+}
+
+.dashboard-card p {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+.character-empty-card {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 75%);
+  border: 1px dashed var(--charcoal-600);
+  border-radius: 16px;
+  padding: 52px 60px;
+  cursor: pointer;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.65),
+    0 2px 0 rgba(255, 255, 255, 0.03) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.6) inset,
+    0 0 0 1px rgba(0, 0, 0, 0.4);
+  animation: dashboard-rise 0.6s var(--ease-out);
+  transition: border-color 0.2s var(--ease-out), transform 0.15s var(--ease-out);
+  font-family: inherit;
+  color: inherit;
+}
+
+.character-empty-card:hover {
+  border-color: var(--gold);
+  transform: translateY(-2px);
+}
+
+.character-empty-card:active {
+  transform: translateY(0) scale(0.99);
+}
+
+.character-empty-plus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 20px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(201, 162, 75, 0.16), transparent 70%);
+  border: 1px solid rgba(201, 162, 75, 0.3);
+  color: var(--gold);
+  transition: transform 0.2s var(--ease-out), background 0.2s var(--ease-out);
+}
+
+.character-empty-card:hover .character-empty-plus {
+  transform: scale(1.08) rotate(90deg);
+  background: radial-gradient(circle, rgba(201, 162, 75, 0.28), transparent 70%);
+}
+
+.character-empty-plus svg {
+  width: 28px;
+  height: 28px;
+}
+
+.character-empty-card h1 {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gold-soft);
+  font-size: 25px;
+}
+
+.character-empty-card p {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+.character-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  text-decoration: none;
+  color: inherit;
+  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 75%);
+  border: 1px solid var(--charcoal-600);
+  border-top-color: var(--charcoal-700);
+  border-radius: 16px;
+  padding: 28px 40px;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.65),
+    0 2px 0 rgba(255, 255, 255, 0.03) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.6) inset,
+    0 0 0 1px rgba(0, 0, 0, 0.4);
+  animation: dashboard-rise 0.6s var(--ease-out);
+  transition: border-color 0.2s var(--ease-out), transform 0.15s var(--ease-out);
+}
+
+.character-card:hover {
+  border-color: var(--gold);
+  transform: translateY(-2px);
+}
+
+.character-card-portrait {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  overflow: visible;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-600);
+  box-shadow: 0 0 0 2px rgba(201, 162, 75, 0.5) inset;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.character-card-portrait img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.character-card-portrait svg:not(.grit-ring) {
+  width: 40px;
+  height: 40px;
+  color: var(--gold-dim);
+}
+
+.character-card-info h1 {
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gold-soft);
+  font-size: 22px;
+  text-align: left;
+}
+
+.character-card-info p {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 13.5px;
+}
+
+.dashboard-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--maroon-700);
+  border: 1px solid var(--maroon-500);
+  color: var(--gold-soft);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}

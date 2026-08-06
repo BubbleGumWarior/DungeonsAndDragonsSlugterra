@@ -1,0 +1,104 @@
+.placeholder-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.placeholder-page--wide {
+  justify-content: flex-start;
+  padding-top: 90px;
+}
+
+.slugs-page-title {
+  margin: 0 0 28px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gold-soft);
+  font-size: 28px;
+}
+
+.placeholder-back {
+  position: fixed;
+  top: 28px;
+  left: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-dim);
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 500;
+  transition: color 0.15s var(--ease-out);
+}
+
+.placeholder-back svg {
+  width: 15px;
+  height: 15px;
+}
+
+.placeholder-back:hover {
+  color: var(--gold-soft);
+}
+
+.placeholder-card {
+  text-align: center;
+  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 75%);
+  border: 1px solid var(--charcoal-600);
+  border-top-color: var(--charcoal-700);
+  border-radius: 16px;
+  padding: 52px 60px;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.65),
+    0 2px 0 rgba(255, 255, 255, 0.03) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.6) inset,
+    0 0 0 1px rgba(0, 0, 0, 0.4);
+  animation: dashboard-rise 0.6s var(--ease-out);
+}
+
+.placeholder-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(201, 162, 75, 0.16), transparent 70%);
+  border: 1px solid rgba(201, 162, 75, 0.3);
+  color: var(--gold);
+}
+
+.placeholder-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.placeholder-card h1 {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gold-soft);
+  font-size: 25px;
+}
+
+.placeholder-card p {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+@keyframes dashboard-rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
