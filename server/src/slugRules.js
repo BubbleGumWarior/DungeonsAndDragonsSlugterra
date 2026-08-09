@@ -1,14 +1,20 @@
 export const SLUG_TYPES = [
-  "Fire",
-  "Water",
-  "Earth",
   "Air",
-  "Electric",
+  "Dark",
+  "Earth",
+  "Electricity",
+  "Energy",
+  "Fire",
+  "Healing",
   "Ice",
-  "Flash",
-  "Rock",
+  "Light",
   "Metal",
+  "None",
+  "Plant",
+  "Psychic",
   "Toxic",
+  "Unique",
+  "Water",
 ];
 
 export const CLASH_POWER_MIN = 1;
@@ -56,6 +62,8 @@ export function validateSlugFields({
   loyaltyTier,
   velocityAbility,
   protoformUtility,
+  breaksWalls,
+  causesKnockback,
 }) {
   if (typeof name !== "string" || !name.trim() || name.trim().length > 40) {
     return { valid: false, error: "Name must be a non-empty string of 40 characters or fewer." };
@@ -96,6 +104,13 @@ export function validateSlugFields({
 
   const protoformUtilityError = validateText(protoformUtility, "Protoform Utility");
   if (protoformUtilityError) return { valid: false, error: protoformUtilityError };
+
+  if (breaksWalls !== undefined && typeof breaksWalls !== "boolean") {
+    return { valid: false, error: "Breaks Walls must be a boolean." };
+  }
+  if (causesKnockback !== undefined && typeof causesKnockback !== "boolean") {
+    return { valid: false, error: "Causes Knockback must be a boolean." };
+  }
 
   return { valid: true };
 }

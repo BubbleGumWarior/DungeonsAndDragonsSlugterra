@@ -32,8 +32,12 @@ export function toClientSlug(row) {
     loyaltyTier: row.loyalty_tier,
     velocityAbility: row.velocity_ability,
     protoformUtility: row.protoform_utility,
+    breaksWalls: row.breaks_walls,
+    causesKnockback: row.causes_knockback,
+    ownerCombatantId: row.owner_combatant_id,
     equippedBlasterId: row.equipped_blaster_id,
     magazineSlot: row.magazine_slot,
+    cooldownTurnsLeft: row.cooldown_turns_left,
     createdAt: row.created_at,
   };
 }
@@ -76,6 +80,8 @@ router.post("/", requireDungeonMaster, async (req, res) => {
     loyaltyTier,
     velocityAbility,
     protoformUtility,
+    breaksWalls,
+    causesKnockback,
   } = req.body || {};
 
   const validation = validateSlugFields({
@@ -90,6 +96,8 @@ router.post("/", requireDungeonMaster, async (req, res) => {
     loyaltyTier,
     velocityAbility,
     protoformUtility,
+    breaksWalls,
+    causesKnockback,
   });
   if (!validation.valid) {
     return res.status(400).json({ error: validation.error });
@@ -104,8 +112,8 @@ router.post("/", requireDungeonMaster, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `INSERT INTO slugs
-        (template_id, user_id, name, type, protoform_image, velocity_image, clash_power, clash_defense, ap_cost, max_energy_pips, energy_pips, loyalty_tier, velocity_ability, protoform_utility)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        (template_id, user_id, name, type, protoform_image, velocity_image, clash_power, clash_defense, ap_cost, max_energy_pips, energy_pips, loyalty_tier, velocity_ability, protoform_utility, breaks_walls, causes_knockback)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING *`,
       [
         Number.isInteger(templateId) ? templateId : null,
@@ -122,6 +130,8 @@ router.post("/", requireDungeonMaster, async (req, res) => {
         loyaltyTier,
         velocityAbility ?? null,
         protoformUtility ?? null,
+        Boolean(breaksWalls),
+        Boolean(causesKnockback),
       ]
     );
 
@@ -148,6 +158,8 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
     loyaltyTier,
     velocityAbility,
     protoformUtility,
+    breaksWalls,
+    causesKnockback,
   } = req.body || {};
 
   const validation = validateSlugFields({
@@ -162,6 +174,8 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
     loyaltyTier,
     velocityAbility,
     protoformUtility,
+    breaksWalls,
+    causesKnockback,
   });
   if (!validation.valid) {
     return res.status(400).json({ error: validation.error });
@@ -182,8 +196,9 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
       `UPDATE slugs SET
         name = $1, type = $2, protoform_image = $3, velocity_image = $4,
         clash_power = $5, clash_defense = $6, ap_cost = $7, max_energy_pips = $8, energy_pips = $9,
-        loyalty_tier = $10, velocity_ability = $11, protoform_utility = $12
-       WHERE id = $13
+        loyalty_tier = $10, velocity_ability = $11, protoform_utility = $12,
+        breaks_walls = $13, causes_knockback = $14
+       WHERE id = $15
        RETURNING *`,
       [
         name.trim(),
@@ -198,6 +213,8 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
         loyaltyTier,
         velocityAbility ?? null,
         protoformUtility ?? null,
+        Boolean(breaksWalls),
+        Boolean(causesKnockback),
         id,
       ]
     );

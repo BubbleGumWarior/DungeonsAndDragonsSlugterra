@@ -1,14 +1,20 @@
 export const SLUG_TYPES = [
-  { key: "Fire", color: "#e0623f" },
-  { key: "Water", color: "#4a9fd8" },
-  { key: "Earth", color: "#a97c50" },
   { key: "Air", color: "#9fd8c9" },
-  { key: "Electric", color: "#e0c53f" },
+  { key: "Dark", color: "#5b4a70" },
+  { key: "Earth", color: "#a97c50" },
+  { key: "Electricity", color: "#e0c53f" },
+  { key: "Energy", color: "#c98fe0" },
+  { key: "Fire", color: "#e0623f" },
+  { key: "Healing", color: "#6fd88a" },
   { key: "Ice", color: "#8fd0e0" },
-  { key: "Flash", color: "#e0a23f" },
-  { key: "Rock", color: "#8a7d6b" },
+  { key: "Light", color: "#f0e6a0" },
   { key: "Metal", color: "#9aa5ad" },
+  { key: "None", color: "#6b6b6b" },
+  { key: "Plant", color: "#5a9c4a" },
+  { key: "Psychic", color: "#b06fd8" },
   { key: "Toxic", color: "#8fc23f" },
+  { key: "Unique", color: "#d8a24a" },
+  { key: "Water", color: "#4a9fd8" },
 ];
 
 export const LOYALTY_TIER_LABELS = {
@@ -33,6 +39,33 @@ export function typeColor(type) {
   return SLUG_TYPES.find((t) => t.key === type)?.color ?? "#c9a24b";
 }
 
+// Mirrors TYPE_BALLISTICS' `range` in server/src/combatRules.js (already
+// includes that file's RANGE_SCALE) -- client-side estimate only, used to
+// preview a slug's reach before firing. The server is always the authority
+// on the real combinedRange when a shot actually resolves.
+const TYPE_RANGES = {
+  Air: 800,
+  Dark: 500,
+  Earth: 400,
+  Electricity: 550,
+  Energy: 500,
+  Fire: 450,
+  Healing: 450,
+  Ice: 500,
+  Light: 700,
+  Metal: 450,
+  None: 250,
+  Plant: 450,
+  Psychic: 450,
+  Toxic: 500,
+  Unique: 500,
+  Water: 600,
+};
+
+export function typeRange(type) {
+  return TYPE_RANGES[type] ?? TYPE_RANGES.Unique;
+}
+
 export function defaultSlugFields() {
   return {
     name: "",
@@ -46,5 +79,7 @@ export function defaultSlugFields() {
     loyaltyTier: 0,
     velocityAbility: "",
     protoformUtility: "",
+    breaksWalls: false,
+    causesKnockback: false,
   };
 }

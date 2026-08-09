@@ -1,0 +1,102 @@
+.knockout-prompt-stack {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(360px, calc(100vw - 32px));
+}
+
+.knockout-prompt-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 80%);
+  border: 1px solid var(--gold-dim);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(0, 0, 0, 0.4);
+  padding: 18px;
+  animation: dashboard-rise 0.4s var(--ease-out);
+}
+
+.knockout-prompt-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+
+.knockout-prompt-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: radial-gradient(circle, rgba(201, 162, 75, 0.16), transparent 70%);
+  border: 1px solid rgba(201, 162, 75, 0.3);
+  color: var(--gold);
+  flex-shrink: 0;
+}
+
+.knockout-prompt-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.knockout-prompt-kicker {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--ink-dim);
+}
+
+.knockout-prompt-title {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gold-soft);
+  font-size: 15px;
+}
+
+.knockout-prompt-die-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.knockout-prompt-total {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.knockout-prompt-total span:first-child {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 24px;
+  color: var(--gold-soft);
+}
+
+.knockout-prompt-mod {
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+
+.knockout-prompt-result {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.knockout-prompt-result--success {
+  color: var(--success);
+}
+
+.knockout-prompt-result--fail {
+  color: var(--danger);
+}

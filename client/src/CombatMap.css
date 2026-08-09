@@ -1,0 +1,383 @@
+.combat-map-wrap {
+  position: relative;
+  width: 100%;
+  justify-self: center;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--charcoal-600);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.4);
+  background: #000;
+}
+
+.combat-map-wrap--misfire {
+  animation:
+    combat-map-shake 0.4s ease-in-out 2,
+    combat-map-misfire-border 3s ease-out forwards;
+}
+
+@keyframes combat-map-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-8px, 2px);
+  }
+  40% {
+    transform: translate(7px, -3px);
+  }
+  60% {
+    transform: translate(-5px, 2px);
+  }
+  80% {
+    transform: translate(4px, -1px);
+  }
+}
+
+@keyframes combat-map-misfire-border {
+  0%,
+  80% {
+    box-shadow: 0 0 0 4px var(--danger), 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.4);
+  }
+  100% {
+    box-shadow: 0 0 0 4px transparent, 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* A miss gets the same border treatment as a misfire, minus the shake --
+   it's a clean whiff, not a mechanical failure. */
+.combat-map-wrap--miss {
+  animation: combat-map-miss-border 3s ease-out forwards;
+}
+
+@keyframes combat-map-miss-border {
+  0%,
+  80% {
+    box-shadow: 0 0 0 4px var(--gold), 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.4);
+  }
+  100% {
+    box-shadow: 0 0 0 4px transparent, 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.4);
+  }
+}
+
+.combat-map {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+.combat-map--drawing {
+  cursor: cell;
+}
+
+.combat-map--map-edit {
+  cursor: move;
+}
+
+.combat-map-bg {
+  fill: #000;
+}
+
+.combat-map-image {
+  pointer-events: none;
+}
+
+.combat-map-file-input {
+  display: none;
+}
+
+.combat-map-toolbar {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  max-width: calc(100% - 20px);
+}
+
+.combat-map-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--gold-dim);
+  background: rgba(12, 13, 15, 0.85);
+  color: var(--gold-soft);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+
+.combat-map-toolbar-btn:hover {
+  background: rgba(201, 162, 75, 0.18);
+}
+
+.combat-map-toolbar-btn--on {
+  background: var(--gold-dim);
+  color: var(--charcoal-950);
+}
+
+.combat-map-toolbar-btn--danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.combat-map-toolbar-btn--danger:hover {
+  background: rgba(197, 66, 66, 0.18);
+}
+
+.combat-map-toolbar-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(12, 13, 15, 0.85);
+  border: 1px solid var(--gold-dim);
+  color: var(--gold-soft);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.combat-map-upload-error {
+  position: absolute;
+  top: 48px;
+  left: 10px;
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(12, 13, 15, 0.9);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  font-size: 12px;
+  max-width: calc(100% - 20px);
+}
+
+.combat-map-upload-cta {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 36px;
+  border-radius: 16px;
+  border: 1px dashed var(--gold-dim);
+  background: rgba(201, 162, 75, 0.06);
+  color: var(--gold-soft);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+}
+
+.combat-map-upload-cta svg {
+  font-size: 28px;
+}
+
+.combat-map-upload-cta:hover {
+  background: rgba(201, 162, 75, 0.14);
+  border-color: var(--gold);
+}
+
+.combat-map-wall {
+  stroke: var(--ink);
+  stroke-width: 4;
+  stroke-linecap: round;
+  cursor: pointer;
+}
+
+.combat-map-wall:hover {
+  stroke: var(--danger);
+}
+
+.combat-map-wall--pending {
+  stroke: var(--gold);
+  stroke-dasharray: 6 6;
+  cursor: default;
+  pointer-events: none;
+}
+
+.combat-map-range-ring {
+  fill: rgba(201, 162, 75, 0.05);
+  stroke: var(--gold-dim);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 5;
+  pointer-events: none;
+}
+
+.combat-token {
+  cursor: pointer;
+}
+
+.combat-token--draggable {
+  cursor: grab;
+}
+
+.combat-token--draggable:active {
+  cursor: grabbing;
+}
+
+.combat-drag-preview line {
+  stroke: var(--gold);
+  stroke-width: 2;
+  stroke-dasharray: 5 5;
+  pointer-events: none;
+}
+
+.combat-drag-preview text {
+  text-anchor: middle;
+  font-size: 13px;
+  font-weight: 700;
+  fill: var(--gold-soft);
+  paint-order: stroke;
+  stroke: var(--charcoal-950);
+  stroke-width: 4px;
+  pointer-events: none;
+}
+
+.combat-token-fill {
+  fill: var(--charcoal-700);
+}
+
+.combat-token--character .combat-token-fill {
+  fill: var(--maroon-500);
+}
+
+.combat-token--npc .combat-token-fill {
+  fill: var(--charcoal-600);
+}
+
+.combat-token--mecha .combat-token-fill {
+  fill: #3a4a5c;
+}
+
+.combat-token-border {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+  opacity: 0.6;
+}
+
+.combat-token--down .combat-token-fill,
+.combat-token--down .combat-token-border {
+  opacity: 0.35;
+}
+
+.combat-token-down-mark {
+  text-anchor: middle;
+  font-size: 20px;
+  font-weight: 800;
+  fill: var(--danger);
+  pointer-events: none;
+}
+
+.combat-token-grit-ring {
+  fill: none;
+  stroke-width: 2.5;
+  opacity: 0.9;
+  transition: stroke 0.3s var(--ease-out);
+}
+
+.combat-token-active-ring {
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 2;
+  stroke-dasharray: 3 4;
+  animation: combat-token-spin 6s linear infinite;
+}
+
+@keyframes combat-token-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.combat-token-selected-ring {
+  fill: none;
+  stroke: var(--success);
+  stroke-width: 2;
+}
+
+.combat-token-mounted-dot {
+  fill: var(--gold);
+  stroke: var(--charcoal-950);
+  stroke-width: 1;
+}
+
+.combat-token-label {
+  text-anchor: middle;
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--ink);
+  paint-order: stroke;
+  stroke: var(--charcoal-950);
+  stroke-width: 3px;
+  pointer-events: none;
+}
+
+.shot-fx-bolt {
+  fill: var(--fx-color, var(--gold));
+  stroke: rgba(255, 255, 255, 0.7);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 0 8px var(--fx-color, var(--gold)));
+  pointer-events: none;
+}
+
+.shot-fx-burst {
+  fill: var(--fx-color, var(--gold));
+  filter: drop-shadow(0 0 14px var(--fx-color, var(--gold)));
+  pointer-events: none;
+}
+
+.shot-fx-burst--miss,
+.shot-fx-burst--out-of-range {
+  fill: none;
+  stroke: var(--fx-color, var(--gold));
+  stroke-width: 2;
+}
+
+/* A clash renders as two full-strength circles of each slug's own color,
+   stacked and screen-blended within their own isolated group -- reads as
+   the two colors visibly fusing, rather than one flat third color. */
+.shot-fx-clash {
+  isolation: isolate;
+}
+
+.shot-fx-burst--clash {
+  mix-blend-mode: screen;
+}
+
+.shot-fx-spark {
+  fill: none;
+  stroke: var(--danger);
+  stroke-width: 2;
+  stroke-dasharray: 3 4;
+  pointer-events: none;
+}
+
+.combat-map-hint {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(12, 13, 15, 0.85);
+  border: 1px solid var(--gold-dim);
+  color: var(--gold-soft);
+  font-size: 12px;
+  pointer-events: none;
+}

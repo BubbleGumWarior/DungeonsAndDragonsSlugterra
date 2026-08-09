@@ -1,0 +1,66 @@
+.combat-log-body {
+  padding: 0;
+  gap: 0;
+}
+
+.combat-log-entries {
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 16px;
+
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: var(--maroon-600) transparent;
+}
+
+.combat-log-entries::-webkit-scrollbar {
+  width: 10px;
+}
+
+.combat-log-entries::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.combat-log-entries::-webkit-scrollbar-thumb {
+  background-color: var(--maroon-600);
+  border-radius: 999px;
+  border: 2.5px solid var(--charcoal-950);
+}
+
+.combat-log-entries::-webkit-scrollbar-thumb:hover {
+  background-color: var(--maroon-500);
+}
+
+.combat-log-entry {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+  font-size: 12px;
+}
+
+.combat-log-entry-time {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.combat-log-entry-body {
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+.combat-log-empty {
+  margin: auto;
+  padding: 20px;
+  text-align: center;
+  color: var(--ink-dim);
+  font-size: 12.5px;
+}

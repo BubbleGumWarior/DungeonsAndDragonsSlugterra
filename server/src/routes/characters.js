@@ -8,6 +8,8 @@ import {
   computeMaxGrit,
 } from "../characterRules.js";
 import { broadcastAll } from "../ws.js";
+import { toClientSlug } from "./slugs.js";
+import { getActiveEncounterRow, broadcastEncounter } from "./combat.js";
 
 const router = Router();
 
@@ -173,6 +175,51 @@ router.patch("/:userId/knockout", requireDungeonMaster, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not update knockout pips." });
+  }
+});
+
+// Fully heals every player character at the table -- Grit back to max, all
+// three knockout pips cleared, and every slug any of them own recharged to
+// full energy. Lives here (not combat.js) because it's a table-wide reset
+// the DM can reach for any time, not just mid-encounter -- but if a fight
+// happens to be going on, the matching character-kind combatants (and the
+// live encounter view) are kept in sync too, so nothing looks stale there.
+router.post("/heal-all", requireDungeonMaster, async (req, res) => {
+  try {
+    const { rows: characters } = await pool.query("SELECT * FROM characters");
+    for (const c of characters) {
+      const newMax = computeMaxGrit(c.stats);
+      const { rows } = await pool.query(
+        `UPDATE characters SET current_grit = $1, knockout_pips = $2 WHERE user_id = $3 RETURNING *`,
+        [newMax, JSON.stringify([false, false, false]), c.user_id]
+      );
+      if (rows[0]) broadcastAll({ type: "character-updated", userId: c.user_id, character: toClientCharacter(rows[0]) });
+    }
+
+    const { rows: slugs } = await pool.query("SELECT id, max_energy_pips, user_id FROM slugs WHERE user_id IS NOT NULL");
+    for (const s of slugs) {
+      const { rows: updatedSlug } = await pool.query("UPDATE slugs SET energy_pips = $1 WHERE id = $2 RETURNING *", [
+        JSON.stringify(Array(s.max_energy_pips).fill(true)),
+        s.id,
+      ]);
+      if (updatedSlug[0]) broadcastAll({ type: "slug-updated", userId: s.user_id, slug: toClientSlug(updatedSlug[0]) });
+    }
+
+    const activeEncounter = await getActiveEncounterRow();
+    if (activeEncounter) {
+      await pool.query(
+        `UPDATE combatants c SET current_grit = c.max_grit, knockout_pips = '[false,false,false]', unconscious = false, disabled = false
+         FROM characters ch
+         WHERE c.encounter_id = $1 AND c.kind = 'character' AND c.ref_user_id = ch.user_id`,
+        [activeEncounter.id]
+      );
+      await broadcastEncounter(activeEncounter.id);
+    }
+
+    res.json({ healed: characters.length });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not heal the party." });
   }
 });
 

@@ -281,6 +281,19 @@ export async function initSchema() {
   `);
 
   await pool.query(`
+    ALTER TABLE slug_templates ADD COLUMN IF NOT EXISTS breaks_walls BOOLEAN NOT NULL DEFAULT false;
+  `);
+  await pool.query(`
+    ALTER TABLE slug_templates ADD COLUMN IF NOT EXISTS causes_knockback BOOLEAN NOT NULL DEFAULT false;
+  `);
+  await pool.query(`
+    ALTER TABLE slugs ADD COLUMN IF NOT EXISTS breaks_walls BOOLEAN NOT NULL DEFAULT false;
+  `);
+  await pool.query(`
+    ALTER TABLE slugs ADD COLUMN IF NOT EXISTS causes_knockback BOOLEAN NOT NULL DEFAULT false;
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS blaster_templates (
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
@@ -326,6 +339,13 @@ export async function initSchema() {
   `);
   await pool.query(`
     ALTER TABLE slugs ADD COLUMN IF NOT EXISTS magazine_slot INTEGER;
+  `);
+
+  // A fired slug is away in flight/recovering -- it can't be fired again
+  // (as a shot or a counter) until it's counted down through this many of
+  // its owner's own turns. See combatRules.js's SLUG_RETURN_TURNS.
+  await pool.query(`
+    ALTER TABLE slugs ADD COLUMN IF NOT EXISTS cooldown_turns_left INTEGER NOT NULL DEFAULT 0;
   `);
 
   await pool.query(`
@@ -438,6 +458,9 @@ export async function initSchema() {
   await pool.query(`
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS meta JSONB;
   `);
+  await pool.query(`
+    ALTER TABLE messages ALTER COLUMN user_id DROP NOT NULL;
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS challenges (
@@ -459,6 +482,129 @@ export async function initSchema() {
       value INTEGER NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       UNIQUE (challenge_id, user_id)
+    );
+  `);
+
+  // Combat: one active encounter at a time, run by the DM. See
+  // docs/combat-system-design.md for the full rules these tables back.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS encounters (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'setup',
+      map_width INTEGER NOT NULL DEFAULT 1600,
+      map_height INTEGER NOT NULL DEFAULT 900,
+      walls JSONB NOT NULL DEFAULT '[]',
+      next_wall_id INTEGER NOT NULL DEFAULT 1,
+      turn_order JSONB NOT NULL DEFAULT '[]',
+      active_turn_index INTEGER NOT NULL DEFAULT 0,
+      round INTEGER NOT NULL DEFAULT 1,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS combatants (
+      id SERIAL PRIMARY KEY,
+      encounter_id INTEGER NOT NULL REFERENCES encounters(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      ref_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      ref_mecha_id INTEGER REFERENCES mechas(id) ON DELETE SET NULL,
+      name TEXT NOT NULL,
+      portrait TEXT,
+      x DOUBLE PRECISION NOT NULL DEFAULT 0,
+      y DOUBLE PRECISION NOT NULL DEFAULT 0,
+      max_ap INTEGER NOT NULL DEFAULT 0,
+      current_ap INTEGER NOT NULL DEFAULT 0,
+      max_grit INTEGER,
+      current_grit INTEGER,
+      max_structure INTEGER,
+      current_structure INTEGER,
+      knockout_pips JSONB,
+      unconscious BOOLEAN NOT NULL DEFAULT false,
+      disabled BOOLEAN NOT NULL DEFAULT false,
+      initiative INTEGER NOT NULL DEFAULT 0,
+      mounted_on INTEGER REFERENCES combatants(id) ON DELETE SET NULL,
+      hunkered_last_turn BOOLEAN NOT NULL DEFAULT false,
+      damaged_this_turn BOOLEAN NOT NULL DEFAULT false,
+      rammed_this_round BOOLEAN NOT NULL DEFAULT false,
+      status_effects JSONB NOT NULL DEFAULT '{}',
+      data JSONB NOT NULL DEFAULT '{}',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
+  // NPCs: a reusable DM roster (name, portrait, base stats, a loadout of
+  // slug/blaster/mecha *templates*). Pulling one into an encounter clones
+  // fresh, independently-tracked gear for that specific instance -- so
+  // "Bandit 1" and "Bandit 2" from the same template don't share ammo.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS npc_templates (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      image TEXT,
+      max_grit INTEGER NOT NULL DEFAULT 20,
+      max_ap INTEGER NOT NULL DEFAULT 2,
+      dex_modifier INTEGER NOT NULL DEFAULT 0,
+      con_modifier INTEGER NOT NULL DEFAULT 0,
+      slug_template_ids JSONB NOT NULL DEFAULT '[]',
+      blaster_template_ids JSONB NOT NULL DEFAULT '[]',
+      mecha_template_id INTEGER REFERENCES mecha_templates(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
+  // The DM's uploaded battle-map image, plus the pan/zoom transform applied
+  // on top of a "cover" fit -- see CombatMap.jsx's mapImgSize/coverScale math
+  // for how these two combine into the final placement.
+  await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS map_image TEXT;`);
+  await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS map_image_scale DOUBLE PRECISION NOT NULL DEFAULT 1;`);
+  await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS map_image_offset_x DOUBLE PRECISION NOT NULL DEFAULT 0;`);
+  await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS map_image_offset_y DOUBLE PRECISION NOT NULL DEFAULT 0;`);
+
+  // Whether players know about this NPC at all -- set once on the template
+  // from the NPCs tab, not per-encounter. Every instance pulled from this
+  // template (Bandit 1, Bandit 2, ...) shares it, and toggling it here
+  // updates all of them immediately, including ones already in combat.
+  await pool.query(`
+    ALTER TABLE npc_templates ADD COLUMN IF NOT EXISTS revealed BOOLEAN NOT NULL DEFAULT false;
+  `);
+
+  await pool.query(`
+    ALTER TABLE combatants ADD COLUMN IF NOT EXISTS ref_npc_template_id INTEGER REFERENCES npc_templates(id) ON DELETE SET NULL;
+  `);
+  await pool.query(`
+    ALTER TABLE combatants ADD COLUMN IF NOT EXISTS revealed BOOLEAN NOT NULL DEFAULT false;
+  `);
+
+  // NPC-owned gear isn't tied to a real user account -- it belongs to the
+  // specific spawned combatant instance instead, and is cleaned up with it.
+  await pool.query(`ALTER TABLE slugs ALTER COLUMN user_id DROP NOT NULL;`);
+  await pool.query(`ALTER TABLE slugs ADD COLUMN IF NOT EXISTS owner_combatant_id INTEGER REFERENCES combatants(id) ON DELETE CASCADE;`);
+  await pool.query(`ALTER TABLE blasters ALTER COLUMN user_id DROP NOT NULL;`);
+  await pool.query(`ALTER TABLE blasters ADD COLUMN IF NOT EXISTS owner_combatant_id INTEGER REFERENCES combatants(id) ON DELETE CASCADE;`);
+
+  // A player's private "I think this NPC is carrying..." guesses -- pure
+  // flavor/strategy bookkeeping, never consulted by combat resolution.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS npc_slug_guesses (
+      id SERIAL PRIMARY KEY,
+      combatant_id INTEGER NOT NULL REFERENCES combatants(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      slug_template_id INTEGER NOT NULL REFERENCES slug_templates(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (combatant_id, user_id, slug_template_id)
+    );
+  `);
+
+  // The blow-by-blow battle log lives on its own, separate from Party Chat --
+  // scoped per-encounter so it clears naturally when a fight ends.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS combat_log (
+      id SERIAL PRIMARY KEY,
+      encounter_id INTEGER NOT NULL REFERENCES encounters(id) ON DELETE CASCADE,
+      body TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
 }

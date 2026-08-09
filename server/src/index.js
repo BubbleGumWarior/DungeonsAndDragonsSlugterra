@@ -20,6 +20,8 @@ import mechaModsRouter from "./routes/mechaMods.js";
 import chatRouter from "./routes/chat.js";
 import challengeRouter from "./routes/challenge.js";
 import diceRollRouter from "./routes/diceRoll.js";
+import combatRouter from "./routes/combat.js";
+import npcTemplatesRouter from "./routes/npcTemplates.js";
 import { requireAuth } from "./middleware/auth.js";
 import { setupWebSocket, getOnlineUserIds } from "./ws.js";
 
@@ -44,6 +46,8 @@ app.use("/api/mecha-mods", mechaModsRouter);
 app.use("/api/chat", chatRouter);
 app.use("/api/challenge", challengeRouter);
 app.use("/api/dice-roll", diceRollRouter);
+app.use("/api/combat", combatRouter);
+app.use("/api/npc-templates", npcTemplatesRouter);
 
 app.get("/api/presence/online", requireAuth, (req, res) => {
   res.json({ onlineUserIds: getOnlineUserIds() });

@@ -16,7 +16,7 @@ function requireDungeonMaster(req, res, next) {
 
 router.use(requireAuth);
 
-function toClientBlaster(row) {
+export function toClientBlaster(row) {
   return {
     id: row.id,
     templateId: row.template_id,
@@ -32,6 +32,7 @@ function toClientBlaster(row) {
     quality: row.quality,
     equipSlot: row.equip_slot,
     equipped: row.equip_slot !== null,
+    ownerCombatantId: row.owner_combatant_id,
     createdAt: row.created_at,
   };
 }

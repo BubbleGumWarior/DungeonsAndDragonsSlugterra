@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { UserCircleIcon, UsersThreeIcon } from "@phosphor-icons/react";
+import { HeartStraightIcon, UserCircleIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import { maxGrit } from "./characterData.js";
@@ -8,10 +8,11 @@ import GritRing from "./GritRing.jsx";
 import "./Panel.css";
 import "./Roster.css";
 
-export default function Roster({ selectable = false, selectedUserId, onSelect }) {
+export default function Roster({ selectable = false, selectedUserId, onSelect, healable = false }) {
   const { token } = useAuth();
   const { onlineUserIds, characterUpdate } = useLiveState();
   const [characters, setCharacters] = useState([]);
+  const [healing, setHealing] = useState(false);
 
   useEffect(() => {
     fetch("/api/characters", { headers: { Authorization: `Bearer ${token}` } })
@@ -51,6 +52,21 @@ export default function Roster({ selectable = false, selectedUserId, onSelect })
     }).catch(() => {});
   }
 
+  async function handleHealAll() {
+    if (healing) return;
+    setHealing(true);
+    try {
+      await fetch("/api/characters/heal-all", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {
+      // character-updated broadcasts (or a retry) will catch it up either way
+    } finally {
+      setHealing(false);
+    }
+  }
+
   if (characters.length === 0) {
     return null;
   }
@@ -65,6 +81,12 @@ export default function Roster({ selectable = false, selectedUserId, onSelect })
           <h2>Roster</h2>
           <p>Everyone at the table</p>
         </div>
+        {healable && (
+          <button type="button" className="panel-btn panel-btn--ghost roster-heal-all" disabled={healing} onClick={handleHealAll}>
+            <HeartStraightIcon weight="bold" />
+            {healing ? "Healing..." : "Heal All"}
+          </button>
+        )}
       </div>
       <div className="panel-body roster-body">
         <div className="roster-grid">

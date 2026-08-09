@@ -9,20 +9,22 @@ import {
   STAT_MAX,
   MOD_SLOTS_MIN,
   MOD_SLOTS_MAX,
+  RANGE_MIN,
+  RANGE_MAX,
   defaultBlasterFields,
 } from "./itemData.js";
 import "./SlugForm.css";
 
-function Stepper({ label, value, min, max, onChange, formatValue }) {
+function Stepper({ label, value, min, max, step = 1, onChange, formatValue }) {
   return (
     <div className="slug-form-stepper">
       <label>{label}</label>
       <div className="slug-form-stepper-control">
-        <button type="button" onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min}>
+        <button type="button" onClick={() => onChange(Math.max(min, value - step))} disabled={value <= min}>
           <MinusIcon weight="bold" />
         </button>
         <span>{formatValue ? formatValue(value) : value}</span>
-        <button type="button" onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max}>
+        <button type="button" onClick={() => onChange(Math.min(max, value + step))} disabled={value >= max}>
           <PlusIcon weight="bold" />
         </button>
       </div>
@@ -110,7 +112,7 @@ export default function BlasterForm({ mode, initialValues, players, onSubmit, on
       <div className="slug-form-steppers">
         <Stepper label="Accuracy" value={fields.accuracy} min={STAT_MIN} max={STAT_MAX} onChange={(v) => update("accuracy", v)} />
         <Stepper label="Reload AP Cost" value={fields.reloadApCost} min={1} max={STAT_MAX} onChange={(v) => update("reloadApCost", v)} />
-        <Stepper label="Range" value={fields.range} min={1} max={STAT_MAX} onChange={(v) => update("range", v)} />
+        <Stepper label="Range" value={fields.range} min={Math.max(1, RANGE_MIN)} max={RANGE_MAX} step={10} onChange={(v) => update("range", v)} />
         <Stepper label="Magazine Size" value={fields.magazineSize} min={1} max={STAT_MAX} onChange={(v) => update("magazineSize", v)} />
         <Stepper label="Mod Slots" value={fields.modSlots} min={MOD_SLOTS_MIN} max={MOD_SLOTS_MAX} onChange={(v) => update("modSlots", v)} />
       </div>

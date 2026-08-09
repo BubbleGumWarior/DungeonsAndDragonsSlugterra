@@ -1,0 +1,197 @@
+.combat-slug-panel-body {
+  gap: 8px;
+}
+
+.combat-slug-panel-empty {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+  text-align: center;
+  padding: 10px;
+}
+
+.combat-slug-panel-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--charcoal-950);
+  border: 1px solid var(--type-color, var(--charcoal-600));
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: filter 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
+}
+
+.combat-slug-panel-card:hover {
+  filter: brightness(1.15);
+}
+
+.combat-slug-panel-card--armed {
+  box-shadow: 0 0 0 2px var(--gold) inset;
+}
+
+.combat-slug-panel-card--unusable {
+  cursor: not-allowed;
+}
+
+/* Frosted-glass block over the whole card: blurred backdrop, a soft light
+   fill and a bright hairline edge for that "pane of glass laid on top"
+   look, regardless of what's showing through underneath. */
+.combat-slug-cooldown-glass {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: inherit;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.03) 60%);
+  backdrop-filter: blur(6px) saturate(140%);
+  -webkit-backdrop-filter: blur(6px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -12px 20px rgba(0, 0, 0, 0.25);
+  animation: combat-slug-cooldown-pulse 2.4s ease-in-out infinite;
+}
+
+/* The countdown ring: a circle stroke that traces down from full to
+   nothing as the turns remaining count falls, with the number sitting big
+   and centered inside it. */
+.combat-slug-cooldown-ring {
+  position: absolute;
+  width: 56px;
+  height: 56px;
+  transform: rotate(-90deg);
+}
+
+.combat-slug-cooldown-ring-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.2);
+  stroke-width: 5;
+}
+
+.combat-slug-cooldown-ring-progress {
+  fill: none;
+  stroke: var(--type-color, var(--gold));
+  stroke-width: 5;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 5px var(--type-color, var(--gold)));
+  transition: stroke-dashoffset 0.6s var(--ease-out);
+}
+
+.combat-slug-cooldown-number {
+  position: relative;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+/* Same frosted pane as the cooldown state, just tinted toward danger red
+   instead of gold/type-colored, and holding a flat "out of energy" mark
+   instead of a ticking ring -- there's no fixed turn count to count down. */
+.combat-slug-cooldown-glass--exhausted {
+  flex-direction: column;
+  gap: 4px;
+  background: linear-gradient(160deg, rgba(255, 120, 107, 0.16), rgba(255, 255, 255, 0.03) 60%);
+  border-color: rgba(255, 122, 107, 0.35);
+}
+
+.combat-slug-exhausted-icon {
+  width: 26px;
+  height: 26px;
+  color: var(--danger);
+  filter: drop-shadow(0 0 5px rgba(255, 122, 107, 0.6));
+}
+
+.combat-slug-exhausted-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--danger);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+@keyframes combat-slug-cooldown-pulse {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.25),
+      inset 0 -12px 20px rgba(0, 0, 0, 0.25);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.4),
+      inset 0 -12px 20px rgba(0, 0, 0, 0.25),
+      0 0 10px rgba(255, 255, 255, 0.15);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .combat-slug-cooldown-glass {
+    animation: none;
+  }
+
+  .combat-slug-cooldown-ring-progress {
+    transition: none;
+  }
+}
+
+.combat-slug-panel-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.combat-slug-panel-card-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.combat-slug-panel-card-ap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(201, 162, 75, 0.14);
+  border: 1px solid var(--gold-dim);
+  color: var(--gold-soft);
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.combat-slug-panel-card-ap svg {
+  width: 10px;
+  height: 10px;
+}
+
+.combat-slug-panel-card-type {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--type-color, var(--ink-dim));
+}
+
+.combat-slug-panel-card-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+
+.combat-slug-panel-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--gold-soft);
+  font-style: italic;
+  text-align: center;
+}

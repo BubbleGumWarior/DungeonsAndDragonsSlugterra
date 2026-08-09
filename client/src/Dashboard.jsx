@@ -12,6 +12,8 @@ import {
   BackpackIcon,
   CircleDashedIcon,
   PawPrintIcon,
+  SwordIcon,
+  MaskHappyIcon,
 } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
@@ -95,6 +97,10 @@ export default function Dashboard() {
                 <PawPrintIcon weight="bold" />
                 <span className="nav-label">Mecha-Beasts</span>
               </Link>
+              <Link className="dashboard-admin-link" to="/combat">
+                <SwordIcon weight="bold" />
+                <span className="nav-label">Combat</span>
+              </Link>
             </>
           )}
           {isDungeonMaster && (
@@ -103,6 +109,10 @@ export default function Dashboard() {
                 {slugterraRevealed ? <EyeSlashIcon weight="bold" /> : <EyeIcon weight="bold" />}
                 <span className="nav-label">{slugterraRevealed ? "Hide Slugterra" : "Reveal Slugterra"}</span>
               </button>
+              <Link className="dashboard-admin-link" to="/npcs">
+                <MaskHappyIcon weight="bold" />
+                <span className="nav-label">NPCs</span>
+              </Link>
               <Link className="dashboard-admin-link" to="/admin">
                 <ShieldCheckIcon weight="bold" />
                 <span className="nav-label">Admin</span>
@@ -161,6 +171,7 @@ export default function Dashboard() {
 
           <Roster
             selectable={isDungeonMaster}
+            healable={isDungeonMaster}
             selectedUserId={selectedUserId}
             onSelect={(c) => setSelectedUserId(c.userId)}
           />

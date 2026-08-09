@@ -149,6 +149,29 @@
   cursor: not-allowed;
 }
 
+.slug-form-checkboxes {
+  gap: 10px;
+}
+
+.slug-form-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-dim);
+  letter-spacing: 0.1px;
+  cursor: pointer;
+}
+
+.slug-form-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--gold);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 .slug-form-error {
   background: rgba(255, 107, 107, 0.12);
   border: 1px solid rgba(255, 107, 107, 0.4);

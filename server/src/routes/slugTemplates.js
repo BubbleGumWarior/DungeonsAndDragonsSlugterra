@@ -12,6 +12,18 @@ function requireDungeonMaster(req, res, next) {
   next();
 }
 
+// Player-visible "gallery": name and protoform art only, no stats -- this is
+// what the NPC slug-guessing minigame picks from, so a guess is a real guess.
+router.get("/gallery", requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query("SELECT id, name, protoform_image FROM slug_templates ORDER BY name ASC");
+    res.json({ templates: rows.map((row) => ({ id: row.id, name: row.name, protoformImage: row.protoform_image })) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not load the slug gallery." });
+  }
+});
+
 router.use(requireAuth, requireDungeonMaster);
 
 function toClientTemplate(row) {
@@ -28,6 +40,8 @@ function toClientTemplate(row) {
     loyaltyTier: row.loyalty_tier,
     velocityAbility: row.velocity_ability,
     protoformUtility: row.protoform_utility,
+    breaksWalls: row.breaks_walls,
+    causesKnockback: row.causes_knockback,
     createdAt: row.created_at,
   };
 }
@@ -55,6 +69,8 @@ router.post("/", async (req, res) => {
     loyaltyTier,
     velocityAbility,
     protoformUtility,
+    breaksWalls,
+    causesKnockback,
   } = req.body || {};
 
   const validation = validateSlugFields({
@@ -69,6 +85,8 @@ router.post("/", async (req, res) => {
     loyaltyTier,
     velocityAbility,
     protoformUtility,
+    breaksWalls,
+    causesKnockback,
   });
   if (!validation.valid) {
     return res.status(400).json({ error: validation.error });
@@ -77,8 +95,8 @@ router.post("/", async (req, res) => {
   try {
     const { rows } = await pool.query(
       `INSERT INTO slug_templates
-        (name, type, protoform_image, velocity_image, clash_power, clash_defense, ap_cost, max_energy_pips, loyalty_tier, velocity_ability, protoform_utility)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        (name, type, protoform_image, velocity_image, clash_power, clash_defense, ap_cost, max_energy_pips, loyalty_tier, velocity_ability, protoform_utility, breaks_walls, causes_knockback)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
       [
         name.trim(),
@@ -92,6 +110,8 @@ router.post("/", async (req, res) => {
         loyaltyTier,
         velocityAbility ?? null,
         protoformUtility ?? null,
+        Boolean(breaksWalls),
+        Boolean(causesKnockback),
       ]
     );
     res.status(201).json({ template: toClientTemplate(rows[0]) });
@@ -115,6 +135,8 @@ router.patch("/:id", async (req, res) => {
     loyaltyTier,
     velocityAbility,
     protoformUtility,
+    breaksWalls,
+    causesKnockback,
   } = req.body || {};
 
   const validation = validateSlugFields({
@@ -129,6 +151,8 @@ router.patch("/:id", async (req, res) => {
     loyaltyTier,
     velocityAbility,
     protoformUtility,
+    breaksWalls,
+    causesKnockback,
   });
   if (!validation.valid) {
     return res.status(400).json({ error: validation.error });
@@ -139,8 +163,8 @@ router.patch("/:id", async (req, res) => {
       `UPDATE slug_templates SET
         name = $1, type = $2, protoform_image = $3, velocity_image = $4,
         clash_power = $5, clash_defense = $6, ap_cost = $7, max_energy_pips = $8, loyalty_tier = $9,
-        velocity_ability = $10, protoform_utility = $11
-       WHERE id = $12
+        velocity_ability = $10, protoform_utility = $11, breaks_walls = $12, causes_knockback = $13
+       WHERE id = $14
        RETURNING *`,
       [
         name.trim(),
@@ -154,6 +178,8 @@ router.patch("/:id", async (req, res) => {
         loyaltyTier,
         velocityAbility ?? null,
         protoformUtility ?? null,
+        Boolean(breaksWalls),
+        Boolean(causesKnockback),
         id,
       ]
     );

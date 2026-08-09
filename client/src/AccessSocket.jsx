@@ -27,6 +27,12 @@ export default function AccessSocket({ children }) {
   const [challengeRollRemoved, setChallengeRollRemoved] = useState(null);
   const [challengeFinished, setChallengeFinished] = useState(null);
   const [diceRollOffered, setDiceRollOffered] = useState(null);
+  const [encounter, setEncounter] = useState(null);
+  const [counterOffered, setCounterOffered] = useState(null);
+  const [knockoutRollOffered, setKnockoutRollOffered] = useState(null);
+  const [shotFx, setShotFx] = useState(null);
+  const [shotResolved, setShotResolved] = useState(null);
+  const [combatLogEntry, setCombatLogEntry] = useState(null);
 
   useEffect(() => {
     if (!token) return;
@@ -147,6 +153,36 @@ export default function AccessSocket({ children }) {
 
       if (data.type === "dice-roll-offered") {
         setDiceRollOffered(data.offer);
+        return;
+      }
+
+      if (data.type === "encounter-updated") {
+        setEncounter(data.encounter);
+        return;
+      }
+
+      if (data.type === "counter-offered") {
+        setCounterOffered(data.offer);
+        return;
+      }
+
+      if (data.type === "combat-shot-fx") {
+        setShotFx(data.fx);
+        return;
+      }
+
+      if (data.type === "combat-shot-resolved") {
+        setShotResolved(data.resolved);
+        return;
+      }
+
+      if (data.type === "knockout-roll-offered") {
+        setKnockoutRollOffered(data.offer);
+        return;
+      }
+
+      if (data.type === "combat-log-entry") {
+        setCombatLogEntry({ encounterId: data.encounterId, entry: data.entry, at: Date.now() });
       }
     };
 
@@ -170,6 +206,12 @@ export default function AccessSocket({ children }) {
         challengeRollRemoved,
         challengeFinished,
         diceRollOffered,
+        encounter,
+        counterOffered,
+        knockoutRollOffered,
+        shotFx,
+        shotResolved,
+        combatLogEntry,
       }}
     >
       {children}

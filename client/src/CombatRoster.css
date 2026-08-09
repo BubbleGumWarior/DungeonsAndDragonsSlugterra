@@ -1,0 +1,201 @@
+.combat-roster-body {
+  gap: 8px;
+}
+
+.combat-roster-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+  transition: border-color 0.15s var(--ease-out), background 0.15s var(--ease-out);
+}
+
+.combat-roster-row[role="button"] {
+  cursor: pointer;
+}
+
+.combat-roster-row[role="button"]:hover {
+  border-color: var(--gold-dim);
+}
+
+.combat-roster-row--active {
+  border-color: var(--gold);
+  background: rgba(201, 162, 75, 0.08);
+}
+
+.combat-roster-row--acting {
+  box-shadow: 0 0 0 2px var(--success) inset;
+}
+
+.combat-roster-row--down {
+  opacity: 0.55;
+}
+
+.combat-roster-portrait {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--charcoal-700);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--charcoal-600);
+}
+
+.combat-roster-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.combat-roster-initial {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gold-soft);
+  font-size: 14px;
+}
+
+.combat-roster-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.combat-roster-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.combat-roster-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.combat-roster-kind {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--ink-dim);
+  flex-shrink: 0;
+}
+
+.combat-roster-bar-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-700);
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4) inset;
+}
+
+.combat-roster-bar-fill {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  transform-origin: left;
+  background: linear-gradient(90deg, var(--maroon-500), var(--success));
+  transition: transform 0.3s var(--ease-out);
+}
+
+.combat-roster-bar-track--structure .combat-roster-bar-fill {
+  background: linear-gradient(90deg, #3a4a5c, #8fd0e0);
+}
+
+/* A clearly labeled row instead of a few bare dots -- icon, "Knockout"
+   label, the pips themselves, and a plain X/3 count, colored by severity
+   so it reads at a glance whether this combatant is close to going down. */
+.combat-roster-knockout {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-dim);
+}
+
+.combat-roster-knockout svg {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+}
+
+.combat-roster-knockout-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.combat-roster-knockout-count {
+  font-size: 10.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+
+.combat-roster-knockout--1 {
+  color: var(--gold-soft);
+}
+
+.combat-roster-knockout--2 {
+  color: var(--gold);
+}
+
+.combat-roster-knockout--3 {
+  color: var(--danger);
+}
+
+.combat-roster-guess-hint {
+  font-size: 10.5px;
+  color: var(--gold-dim);
+  font-style: italic;
+}
+
+.combat-roster-status {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--danger);
+}
+
+.combat-roster-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.combat-roster-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--charcoal-600);
+  background: transparent;
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+
+.combat-roster-icon-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.combat-roster-icon-btn:hover {
+  border-color: var(--gold);
+  color: var(--ink);
+}

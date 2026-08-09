@@ -160,6 +160,16 @@ export function computeMaxGrit(stats) {
   return 20 + statModifier(stats.constitution) * 5 + statModifier(stats.dexterity);
 }
 
+// Mirrors client/src/characterData.js -- kept here too since the server is
+// the authority when building combatants / rolling initiative for combat.
+export function actionPoints(stats) {
+  return Math.max(3, 3 * statModifier(stats.dexterity));
+}
+
+export function initiativeBonus(stats) {
+  return statModifier(stats.dexterity);
+}
+
 export function validateCurrentGrit(value, stats) {
   const max = computeMaxGrit(stats);
   if (!Number.isInteger(value) || value < 0 || value > max) {

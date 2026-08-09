@@ -171,6 +171,25 @@ export default function SlugForm({ mode, initialValues, players, slugId, onSubmi
         </div>
       )}
 
+      <div className="slug-form-field slug-form-checkboxes">
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.breaksWalls)}
+            onChange={(e) => update("breaksWalls", e.target.checked)}
+          />
+          Breaks walls (explosive/heavy hits punch through terrain)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.causesKnockback)}
+            onChange={(e) => update("causesKnockback", e.target.checked)}
+          />
+          Causes knockback (a wall collision triggers a knockout roll)
+        </label>
+      </div>
+
       <div className="slug-form-field">
         <label htmlFor="slug-form-protoform-utility">Protoform Utility</label>
         <textarea

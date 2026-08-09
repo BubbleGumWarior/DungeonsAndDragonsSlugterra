@@ -1,10 +1,10 @@
 import "./KnockoutPips.css";
 
-export default function KnockoutPips({ pips, editable = false, onToggle, size = "md" }) {
+export default function KnockoutPips({ pips, editable = false, onToggle, size = "md", inline = false }) {
   const values = pips && pips.length === 3 ? pips : [false, false, false];
 
   return (
-    <div className={`knockout-pips knockout-pips--${size}`}>
+    <div className={`knockout-pips knockout-pips--${size} ${inline ? "knockout-pips--inline" : ""}`}>
       {values.map((knocked, i) =>
         editable ? (
           <button

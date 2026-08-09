@@ -1,0 +1,194 @@
+.combat-page {
+  width: min(94vw, 1400px);
+  margin: 0 auto;
+  padding: 24px 20px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.combat-page--empty {
+  width: min(94vw, 560px);
+  padding-top: 40px;
+}
+
+.combat-empty-card p {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 14px;
+  text-align: center;
+}
+
+.combat-topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.combat-topbar-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-600);
+  color: var(--ink-dim);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
+  flex-shrink: 0;
+}
+
+.combat-topbar-back svg {
+  width: 14px;
+  height: 14px;
+}
+
+.combat-topbar-back:hover {
+  border-color: var(--gold);
+  color: var(--ink);
+}
+
+.combat-topbar-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.combat-topbar-title-main {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gold-soft);
+  font-size: 17px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.combat-topbar-title-sub {
+  font-size: 12px;
+  color: var(--ink-dim);
+  flex-shrink: 0;
+}
+
+.combat-topbar-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.combat-toggle--on {
+  border-color: var(--gold) !important;
+  color: var(--gold-soft) !important;
+  background: rgba(201, 162, 75, 0.12) !important;
+}
+
+/* Wide by default -- the map wants as much of the screen as it can get. */
+.combat-page--active {
+  width: min(98vw, 2200px);
+}
+
+.combat-page-columns {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) minmax(300px, 380px);
+  align-items: start;
+  gap: 20px;
+}
+
+.combat-page-center {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.combat-page-right {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.combat-page-error {
+  margin: 0;
+}
+
+@media (max-width: 1180px) {
+  .combat-page-columns {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  }
+  .combat-slug-panel {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .combat-page-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.combat-new-form .panel-body {
+  gap: 16px;
+}
+
+.combat-setup-panel .panel-header {
+  align-items: center;
+}
+
+.combat-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+}
+
+.combat-setup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.combat-setup-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+  font-size: 13px;
+}
+
+.combat-setup-item-kind {
+  margin-left: auto;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--ink-dim);
+}
+
+.combat-setup-map {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.combat-setup-map-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.combat-map-drag-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-dim);
+  font-style: italic;
+}

@@ -3,6 +3,7 @@ import { ArrowClockwiseIcon, TargetIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import SlugCard from "./SlugCard.jsx";
+import "./Panel.css";
 import "./PlayerSlugs.css";
 
 const SLOT_LABELS = ["Primary", "Secondary"];
@@ -16,6 +17,7 @@ export default function PlayerSlugs() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [dragOverSlot, setDragOverSlot] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     Promise.all([
@@ -102,21 +104,52 @@ export default function PlayerSlugs() {
     };
   }, [activeWeapon]);
 
+  // Both of these update local state optimistically (so the drag/drop feels
+  // instant), but that update used to be unconditional -- a failed request
+  // (a stale magazine-slot conflict, a dropped connection, a session hiccup)
+  // left the UI permanently showing a slug as loaded when the server never
+  // actually persisted it, with the error silently swallowed. Now the
+  // optimistic update is rolled back and surfaced if the request doesn't
+  // actually succeed.
   function loadSlug(slugId, blasterId, slot) {
+    setError(null);
+    const previous = slugs;
     setSlugs((prev) => prev.map((s) => (s.id === slugId ? { ...s, equippedBlasterId: blasterId, magazineSlot: slot } : s)));
     fetch(`/api/slugs/${slugId}/load`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ blasterId, slot }),
-    }).catch(() => {});
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Could not load that slug.");
+        }
+      })
+      .catch((err) => {
+        setSlugs(previous);
+        setError(err.message);
+      });
   }
 
   function unloadSlug(slugId) {
+    setError(null);
+    const previous = slugs;
     setSlugs((prev) => prev.map((s) => (s.id === slugId ? { ...s, equippedBlasterId: null, magazineSlot: null } : s)));
     fetch(`/api/slugs/${slugId}/unload`, {
       method: "PATCH",
       headers: { Authorization: `Bearer ${token}` },
-    }).catch(() => {});
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Could not unload that slug.");
+        }
+      })
+      .catch((err) => {
+        setSlugs(previous);
+        setError(err.message);
+      });
   }
 
   function handleSlotDrop(slot, e) {
@@ -153,6 +186,7 @@ export default function PlayerSlugs() {
 
   return (
     <div className="player-slugs-page">
+      {error && <p className="panel-error">{error}</p>}
       {equippedBlasters.length > 0 && (
         <div className="slug-loadout">
           <div className="slug-loadout-header">

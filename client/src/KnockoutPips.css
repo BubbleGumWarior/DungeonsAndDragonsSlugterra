@@ -9,6 +9,14 @@
   z-index: 2;
 }
 
+/* For contexts with no portrait ring to overlay -- flows normally in place
+   instead of floating relative to whatever positioned ancestor happens to
+   be nearby. */
+.knockout-pips--inline {
+  position: static;
+  transform: none;
+}
+
 .knockout-pip {
   border-radius: 50%;
   background: var(--gold);

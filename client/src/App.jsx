@@ -3,6 +3,8 @@ import { AuthProvider, useAuth } from "./AuthContext.jsx";
 import AccessSocket from "./AccessSocket.jsx";
 import ChallengeResultOverlay from "./ChallengeResultOverlay.jsx";
 import DiceRollPrompt from "./DiceRollPrompt.jsx";
+import CounterClashPrompt from "./CounterClashPrompt.jsx";
+import KnockoutRollPrompt from "./KnockoutRollPrompt.jsx";
 import AuthGate from "./AuthGate.jsx";
 import AuthPage from "./AuthPage.jsx";
 import Dashboard from "./Dashboard.jsx";
@@ -14,6 +16,8 @@ import CharacterSheet from "./CharacterSheet.jsx";
 import Inventory from "./Inventory.jsx";
 import Slugs from "./Slugs.jsx";
 import Mechas from "./Mechas.jsx";
+import CombatPage from "./CombatPage.jsx";
+import Npcs from "./Npcs.jsx";
 
 function PublicOnlyRoute({ children }) {
   const { token } = useAuth();
@@ -26,6 +30,8 @@ function App() {
       <AccessSocket>
         <ChallengeResultOverlay />
         <DiceRollPrompt />
+        <CounterClashPrompt />
+        <KnockoutRollPrompt />
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route
@@ -54,6 +60,8 @@ function App() {
             <Route path="/inventory" element={<Inventory />} />
             <Route path="/slugs" element={<Slugs />} />
             <Route path="/mechas" element={<Mechas />} />
+            <Route path="/combat" element={<CombatPage />} />
+            <Route path="/npcs" element={<Npcs />} />
             <Route path="/admin" element={<Admin />} />
           </Route>
 
