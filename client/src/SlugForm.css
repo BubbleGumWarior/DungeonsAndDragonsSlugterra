@@ -207,7 +207,14 @@
   padding: 11px 13px;
   border-radius: 9px;
   border: 1px solid var(--gold-dim);
-  background: rgba(201, 162, 75, 0.1);
+  /* A plain `rgba()` background lets the option-list popup fall back to the
+     browser's own (often white/light) surface -- native <select> dropdown
+     panels aren't painted in this element's own stacking context, so a
+     translucent background never actually shows the dark page behind it,
+     just light text on a light popup. Layering the same tint over an
+     opaque color keeps the identical look but resolves to one fully
+     opaque color, which browsers apply to the popup correctly. */
+  background: linear-gradient(rgba(201, 162, 75, 0.1), rgba(201, 162, 75, 0.1)), var(--charcoal-950);
   color: var(--ink);
   font-size: 14.5px;
   font-family: inherit;

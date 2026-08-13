@@ -97,13 +97,13 @@ export default function Dashboard() {
                 <PawPrintIcon weight="bold" />
                 <span className="nav-label">Mecha-Beasts</span>
               </Link>
-              <Link className="dashboard-admin-link" to="/combat">
-                <SwordIcon weight="bold" />
-                <span className="nav-label">Combat</span>
-              </Link>
               <Link className="dashboard-admin-link" to="/npcs">
                 <MaskHappyIcon weight="bold" />
                 <span className="nav-label">NPCs</span>
+              </Link>
+              <Link className="dashboard-admin-link" to="/combat">
+                <SwordIcon weight="bold" />
+                <span className="nav-label">Combat</span>
               </Link>
             </>
           )}

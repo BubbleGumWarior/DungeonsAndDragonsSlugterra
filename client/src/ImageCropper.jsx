@@ -110,6 +110,12 @@ export default function ImageCropper({ value, onChange }) {
   function confirmCrop() {
     if (!image) return;
     commitCrop(image, zoom, offset);
+    // Done adjusting -- drop back to the compact result view. Without this,
+    // `image` stays set and (now that the crop viewport is shown whenever
+    // `image` is set, rather than whenever `value` isn't) the interactive
+    // cropper would just stay open forever, live-committing on every zoom/
+    // drag but never actually finishing.
+    setImage(null);
   }
 
   function reset() {
@@ -122,14 +128,19 @@ export default function ImageCropper({ value, onChange }) {
 
   return (
     <div className="cropper">
-      {value ? (
-        <div className="cropper-result">
-          <img src={value} alt="Character portrait" className="cropper-result-img" />
-          <button type="button" className="cropper-change" onClick={reset}>
-            Change Photo
-          </button>
-        </div>
-      ) : (
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFile}
+        className="cropper-file-input"
+      />
+
+      {image ? (
+        // Actively cropping a just-picked file -- checked before `value` on
+        // purpose: handleFile commits an initial (uncropped) preview to
+        // `value` the moment a file loads, so gating on `value` alone would
+        // skip straight past this interactive step every time.
         <>
           <div
             className="cropper-viewport"
@@ -139,60 +150,58 @@ export default function ImageCropper({ value, onChange }) {
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerUp}
           >
-            {image ? (
-              <img
-                src={image.src}
-                alt=""
-                draggable={false}
-                className="cropper-image"
-                style={{
-                  width: image.width * baseScale(image) * zoom,
-                  height: image.height * baseScale(image) * zoom,
-                  transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px)`,
-                }}
-              />
-            ) : (
-              <button type="button" className="cropper-empty" onClick={() => fileInputRef.current?.click()}>
-                <ImageIcon weight="duotone" />
-                <span>Upload a photo</span>
-              </button>
-            )}
+            <img
+              src={image.src}
+              alt=""
+              draggable={false}
+              className="cropper-image"
+              style={{
+                width: image.width * baseScale(image) * zoom,
+                height: image.height * baseScale(image) * zoom,
+                transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px)`,
+              }}
+            />
             <div className="cropper-ring" />
           </div>
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFile}
-            className="cropper-file-input"
-          />
-
-          {image && (
-            <div className="cropper-controls">
-              <label className="cropper-zoom-label">
-                Zoom
-                <input
-                  type="range"
-                  min="1"
-                  max="3"
-                  step="0.01"
-                  value={zoom}
-                  onChange={handleZoomChange}
-                />
-              </label>
-              <div className="cropper-actions">
-                <button type="button" className="cropper-secondary" onClick={() => fileInputRef.current?.click()}>
-                  <UploadSimpleIcon weight="bold" />
-                  Choose Different Photo
-                </button>
-                <button type="button" className="cropper-confirm" onClick={confirmCrop}>
-                  Use This Photo
-                </button>
-              </div>
+          <div className="cropper-controls">
+            <label className="cropper-zoom-label">
+              Zoom
+              <input
+                type="range"
+                min="1"
+                max="3"
+                step="0.01"
+                value={zoom}
+                onChange={handleZoomChange}
+              />
+            </label>
+            <div className="cropper-actions">
+              <button type="button" className="cropper-secondary" onClick={() => fileInputRef.current?.click()}>
+                <UploadSimpleIcon weight="bold" />
+                Choose Different Photo
+              </button>
+              <button type="button" className="cropper-confirm" onClick={confirmCrop}>
+                Use This Photo
+              </button>
             </div>
-          )}
+          </div>
         </>
+      ) : value ? (
+        <div className="cropper-result">
+          <img src={value} alt="Character portrait" className="cropper-result-img" />
+          <button type="button" className="cropper-change" onClick={reset}>
+            Change Photo
+          </button>
+        </div>
+      ) : (
+        <div className="cropper-viewport" style={{ width: VIEWPORT_SIZE, height: VIEWPORT_SIZE }}>
+          <button type="button" className="cropper-empty" onClick={() => fileInputRef.current?.click()}>
+            <ImageIcon weight="duotone" />
+            <span>Upload a photo</span>
+          </button>
+          <div className="cropper-ring" />
+        </div>
       )}
     </div>
   );
