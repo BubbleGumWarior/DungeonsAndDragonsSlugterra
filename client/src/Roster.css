@@ -111,3 +111,28 @@
     animation: none;
   }
 }
+
+@media (min-width: 1300px) {
+  .roster-grid {
+    gap: 20px;
+  }
+
+  .roster-chip {
+    width: 128px;
+    gap: 12px;
+  }
+
+  .roster-portrait {
+    width: 88px;
+    height: 88px;
+  }
+
+  .roster-portrait svg:not(.grit-ring) {
+    width: 36px;
+    height: 36px;
+  }
+
+  .roster-name {
+    font-size: 13.5px;
+  }
+}

@@ -285,3 +285,44 @@
 .chatbox-body .panel-error {
   padding: 0 20px 12px;
 }
+
+@media (min-width: 1300px) {
+  .chatbox-messages {
+    gap: 15px;
+    padding: 20px 26px;
+  }
+
+  .chatbox-message {
+    padding: 12px 15px;
+  }
+
+  .chatbox-message-author {
+    font-size: 13.5px;
+  }
+
+  .chatbox-message-time {
+    font-size: 11.5px;
+  }
+
+  .chatbox-message-text {
+    font-size: 15px;
+  }
+
+  .chatbox-input-row {
+    padding: 18px 26px;
+    gap: 10px;
+  }
+
+  .chatbox-input-row input {
+    padding: 12px 15px;
+    font-size: 15px;
+  }
+
+  .chatbox-diceroll-title {
+    font-size: 13.5px;
+  }
+
+  .chatbox-diceroll-total {
+    font-size: 20px;
+  }
+}

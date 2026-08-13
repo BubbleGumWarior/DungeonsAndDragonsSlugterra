@@ -36,7 +36,7 @@
 
 .blaster-card-image {
   flex-shrink: 0;
-  width: 60px;
+  width: 96px;
   height: 60px;
   border-radius: 14px;
   overflow: hidden;
@@ -49,7 +49,7 @@
 }
 
 .blaster-card--lg .blaster-card-image {
-  width: 120px;
+  width: 200px;
   height: 120px;
   border-radius: 20px;
 }

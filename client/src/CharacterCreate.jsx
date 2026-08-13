@@ -116,7 +116,7 @@ export default function CharacterCreate() {
               maxLength={40}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Eli Shane"
+              placeholder="John Doe"
             />
           </div>
 
@@ -141,7 +141,7 @@ export default function CharacterCreate() {
         <div className="creation-page-inner">
           <h2>Assign Your Stats</h2>
           <p className="creation-page-subtitle">Distribute {TOTAL_STAT_POINTS} points across your {STATS.length} stats.</p>
-          <StatPointBuy stats={stats} onChange={setStats} />
+          <StatPointBuy stats={stats} onChange={setStats} revealed={slugterraRevealed} />
         </div>
       );
     }
@@ -150,7 +150,7 @@ export default function CharacterCreate() {
       <div className="creation-page-inner">
         <h2>Choose Proficiencies</h2>
         <p className="creation-page-subtitle">Pick {REQUIRED_PROFICIENCIES} skills. Each grants a +2 bonus to its stat.</p>
-        <ProficiencyPicker selected={proficiencies} onChange={setProficiencies} />
+        <ProficiencyPicker selected={proficiencies} onChange={setProficiencies} revealed={slugterraRevealed} />
       </div>
     );
   }

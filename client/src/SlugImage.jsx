@@ -14,7 +14,7 @@ export default function SlugImage({ protoformImage, velocityImage, size = "md", 
   }
 
   return (
-    <div className={`slug-image slug-image--${size}`}>
+    <div className={`slug-image slug-image--${size} ${flipped ? "slug-image--flipped" : ""}`}>
       <div className={`slug-image-flipper ${flipped ? "slug-image-flipper--flipped" : ""}`}>
         <div className="slug-image-face slug-image-face--front">
           {protoformImage ? (

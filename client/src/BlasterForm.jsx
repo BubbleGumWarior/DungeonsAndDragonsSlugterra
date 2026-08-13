@@ -73,7 +73,7 @@ export default function BlasterForm({ mode, initialValues, players, onSubmit, on
     <form className="slug-form" onSubmit={handleSubmit}>
       <div className="slug-form-image-field" style={{ margin: "0 auto" }}>
         <label>Image</label>
-        <ImageCropper value={fields.image} onChange={(v) => update("image", v)} />
+        <ImageCropper value={fields.image} onChange={(v) => update("image", v)} shape="landscape" />
       </div>
 
       <div className="slug-form-field">

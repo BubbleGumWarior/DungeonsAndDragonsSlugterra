@@ -50,7 +50,7 @@
   align-items: center;
   gap: 8px;
   padding: 6px 10px 6px 6px;
-  border-radius: 999px;
+  border-radius: 10px;
   background: var(--charcoal-950);
   border: 1px solid var(--type-color, var(--charcoal-600));
   color: var(--ink-dim);
@@ -62,12 +62,22 @@
 
 .npc-form-picker-item img,
 .npc-form-picker-placeholder {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
+  border-radius: 7px;
   object-fit: cover;
   background: var(--charcoal-800);
   flex-shrink: 0;
+}
+
+.npc-form-picker-item--blaster img,
+.npc-form-picker-item--blaster .npc-form-picker-placeholder {
+  width: 42px;
+  height: 26px;
+}
+
+.npc-form-picker-item--slug img,
+.npc-form-picker-item--slug .npc-form-picker-placeholder {
+  width: 26px;
+  height: 40px;
 }
 
 .npc-form-picker-item:hover {

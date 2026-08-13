@@ -37,6 +37,15 @@
   gap: 10px;
 }
 
+/* On desktop this wrapper doesn't exist as far as layout is concerned --
+   its children are direct flex items of .dashboard-nav-actions, same as
+   before the wrapper was introduced. Mobile (below) turns it into a real
+   box, since the grid-rows reveal trick needs exactly one sizable child to
+   clip/expand. */
+.dashboard-nav-actions-inner {
+  display: contents;
+}
+
 .dashboard-admin-link,
 .dashboard-logout,
 .dashboard-back {
@@ -84,25 +93,93 @@
   transform: scale(0.97);
 }
 
-/* Nav actions collapse to icon-only before they run out of room and force
-   the page to scroll sideways. Brand keeps its label — identity stays. */
-@media (max-width: 600px) {
+.dashboard-nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--charcoal-600);
+  color: var(--ink);
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+}
+
+.dashboard-nav-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.dashboard-nav-toggle:hover {
+  background: var(--charcoal-700);
+  border-color: var(--gold);
+}
+
+/* Below 950px there are simply too many nav items (up to nine, for a DM)
+   to fit in a row at any size without either overflowing or shrinking to
+   illegible icon-only buttons. Instead the row becomes a hamburger button
+   that drops the actions down as a full-width, vertically stacked panel --
+   plenty of room to keep every label readable. */
+@media (max-width: 950px) {
   .dashboard-nav {
     padding: 12px 16px;
+    position: relative;
+  }
+
+  .dashboard-nav-toggle {
+    display: inline-flex;
   }
 
   .dashboard-nav-actions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 15;
+    /* Animating to an unknown/intrinsic content height without either
+       hardcoding a max-height guess or thrashing layout on `height: auto`
+       -- a 0fr/1fr grid track does that cleanly. Still a layout-affecting
+       property, but it's the standard technique for this exact case
+       (max-height would need a large, height-independent-of-content value
+       and still looks janky snapping open past the real content height). */
+    display: grid;
+    grid-template-rows: 0fr;
+    background: var(--charcoal-900);
+    border-bottom: 1px solid var(--charcoal-600);
+    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: grid-template-rows 0.2s var(--ease-out), opacity 0.15s var(--ease-out);
+  }
+
+  .dashboard-nav-actions--open {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .dashboard-nav-actions-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
     gap: 6px;
+    min-height: 0;
+    overflow: hidden auto;
+    padding: 10px 16px 16px;
+    max-height: calc(100vh - 68px);
   }
 
   .dashboard-admin-link,
   .dashboard-logout,
   .dashboard-back {
-    padding: 9px;
+    width: 100%;
+    padding: 12px 14px;
   }
 
   .dashboard-nav-actions .nav-label {
-    display: none;
+    display: inline;
   }
 }
 
@@ -200,6 +277,141 @@
     grid-template-areas:
       "hero"
       "roster";
+  }
+}
+
+/* Large screens: the 1180px cap left wide monitors with a small content
+   island adrift in empty page. Keep the exact same bento shape (the 7:5
+   column split, chat spanning two rows beside challenge/slug hunt) --
+   just scale the whole thing up, canvas and content together, instead of
+   reproportioning it into a different layout. A bigger stage needs bigger
+   actors: type, icons, portraits and padding all step up here too, so the
+   extra room reads as "everything got roomier," not "more grey padding." */
+@media (min-width: 1300px) {
+  .dashboard-body {
+    padding: 40px;
+  }
+
+  .dashboard-grid {
+    max-width: min(1560px, 92vw);
+    gap: 28px;
+  }
+
+  .dashboard-nav {
+    padding: 20px 40px;
+  }
+
+  .dashboard-brand {
+    font-size: 20px;
+  }
+
+  .dashboard-brand svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .dashboard-nav-actions {
+    gap: 12px;
+  }
+
+  .dashboard-admin-link,
+  .dashboard-logout,
+  .dashboard-back {
+    padding: 10px 18px;
+    font-size: 14px;
+  }
+
+  .dashboard-admin-link svg,
+  .dashboard-logout svg,
+  .dashboard-back svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .character-card,
+  .dashboard-card,
+  .character-empty-card {
+    padding: 40px 52px;
+  }
+
+  .character-card-portrait {
+    width: 112px;
+    height: 112px;
+  }
+
+  .character-card-portrait svg:not(.grit-ring) {
+    width: 50px;
+    height: 50px;
+  }
+
+  .character-card-info h1,
+  .dashboard-card h1,
+  .character-empty-card h1 {
+    font-size: 30px;
+  }
+
+  .character-card-info p,
+  .dashboard-card p,
+  .character-empty-card p {
+    font-size: 16px;
+  }
+
+  .dashboard-icon,
+  .character-empty-plus {
+    width: 68px;
+    height: 68px;
+  }
+
+  .dashboard-icon svg {
+    width: 30px;
+    height: 30px;
+  }
+
+  .character-empty-plus svg {
+    width: 34px;
+    height: 34px;
+  }
+
+  .dashboard-role {
+    font-size: 13.5px;
+    padding: 8px 18px;
+  }
+
+  /* Without a wider floor, the DM console's fields (each sized to their
+     own content, not flex-grown) would cluster at the left of the wider
+     bar, leaving a dead gap before the Call Roll button -- so the fields
+     grow with everything else instead of leaving that gap behind. */
+  .dm-console {
+    padding: 22px 30px;
+    gap: 26px;
+  }
+
+  .dm-console-label {
+    font-size: 16px;
+  }
+
+  .dm-console-label svg {
+    width: 19px;
+    height: 19px;
+  }
+
+  .dm-console-field {
+    min-width: 108px;
+  }
+
+  .dm-console-field label {
+    font-size: 12px;
+  }
+
+  .dm-console-field input,
+  .dm-console-field select {
+    padding: 10px 12px;
+    font-size: 14.5px;
+  }
+
+  .dm-console-toggle-btn {
+    padding: 10px 14px;
+    font-size: 13px;
   }
 }
 

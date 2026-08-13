@@ -1,5 +1,6 @@
 import { UserCircleIcon } from "@phosphor-icons/react";
 import { STATS, formatModifier, maxGrit, scoreLabel, statModifier } from "./characterData.js";
+import { useLiveState } from "./AccessSocket.jsx";
 import CharacterVitals from "./CharacterVitals.jsx";
 import SkillList from "./SkillList.jsx";
 import KnockoutPips from "./KnockoutPips.jsx";
@@ -7,6 +8,7 @@ import GritRing from "./GritRing.jsx";
 import "./CharacterSheet.css";
 
 export default function CharacterSheetView({ character }) {
+  const { slugterraRevealed } = useLiveState();
   return (
     <div className="sheet-card">
       <div className="sheet-columns">
@@ -55,7 +57,7 @@ export default function CharacterSheetView({ character }) {
         <div className="sheet-column sheet-column-skills">
           <div className="sheet-section">
             <h2>Skills</h2>
-            <SkillList stats={character.stats} proficiencies={character.proficiencies} />
+            <SkillList stats={character.stats} proficiencies={character.proficiencies} revealed={slugterraRevealed} />
           </div>
         </div>
       </div>

@@ -6,13 +6,14 @@ import {
   MIN_STAT,
   STATS,
   TOTAL_STAT_POINTS,
+  describeEntry,
   scoreLabel,
   statCost,
   totalStatCost,
 } from "./characterData.js";
 import "./StatPointBuy.css";
 
-export default function StatPointBuy({ stats, onChange, unrestricted = false }) {
+export default function StatPointBuy({ stats, onChange, unrestricted = false, revealed = true }) {
   const minStat = unrestricted ? DM_MIN_STAT : MIN_STAT;
   const maxStat = unrestricted ? DM_MAX_STAT : MAX_STAT;
   const spent = totalStatCost(stats);
@@ -41,7 +42,8 @@ export default function StatPointBuy({ stats, onChange, unrestricted = false }) 
       )}
 
       <div className="point-buy-rows">
-        {STATS.map(({ key, label, abbr, description }) => {
+        {STATS.map((stat) => {
+          const { key, label, abbr } = stat;
           const value = stats[key];
           const nextCost = !unrestricted && value < maxStat ? statCost(value + 1) - statCost(value) : null;
           return (
@@ -51,7 +53,7 @@ export default function StatPointBuy({ stats, onChange, unrestricted = false }) 
                   <span className="point-buy-row-abbr">{abbr}</span>
                   <span className="point-buy-row-label">{label}</span>
                 </div>
-                <p className="point-buy-row-description">{description}</p>
+                <p className="point-buy-row-description">{describeEntry(stat, revealed)}</p>
               </div>
 
               <div className="point-buy-row-controls">

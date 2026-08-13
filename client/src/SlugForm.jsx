@@ -95,11 +95,11 @@ export default function SlugForm({ mode, initialValues, players, slugId, onSubmi
       <div className="slug-form-images">
         <div className="slug-form-image-field">
           <label>Protoform Image</label>
-          <ImageCropper value={fields.protoformImage} onChange={(v) => update("protoformImage", v)} />
+          <ImageCropper value={fields.protoformImage} onChange={(v) => update("protoformImage", v)} shape="portrait" />
         </div>
         <div className="slug-form-image-field">
           <label>Velocity Image</label>
-          <ImageCropper value={fields.velocityImage} onChange={(v) => update("velocityImage", v)} />
+          <ImageCropper value={fields.velocityImage} onChange={(v) => update("velocityImage", v)} shape="landscape" />
         </div>
       </div>
 

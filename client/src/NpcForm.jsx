@@ -87,7 +87,7 @@ export default function NpcForm({ initialValues, slugTemplates, blasterTemplates
             <button
               type="button"
               key={t.id}
-              className={`npc-form-picker-item ${fields.slugTemplateIds.includes(t.id) ? "npc-form-picker-item--picked" : ""}`}
+              className={`npc-form-picker-item npc-form-picker-item--slug ${fields.slugTemplateIds.includes(t.id) ? "npc-form-picker-item--picked" : ""}`}
               style={{ "--type-color": typeColor(t.type) }}
               onClick={() => toggleId("slugTemplateIds", t.id)}
             >
@@ -106,7 +106,7 @@ export default function NpcForm({ initialValues, slugTemplates, blasterTemplates
             <button
               type="button"
               key={t.id}
-              className={`npc-form-picker-item ${fields.blasterTemplateIds.includes(t.id) ? "npc-form-picker-item--picked" : ""}`}
+              className={`npc-form-picker-item npc-form-picker-item--blaster ${fields.blasterTemplateIds.includes(t.id) ? "npc-form-picker-item--picked" : ""}`}
               onClick={() => toggleId("blasterTemplateIds", t.id)}
             >
               {t.image ? <img src={t.image} alt="" /> : <span className="npc-form-picker-placeholder" />}

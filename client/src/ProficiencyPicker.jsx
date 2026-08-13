@@ -1,8 +1,8 @@
 import { CheckIcon } from "@phosphor-icons/react";
-import { PROFICIENCIES, REQUIRED_PROFICIENCIES, STATS } from "./characterData.js";
+import { PROFICIENCIES, REQUIRED_PROFICIENCIES, STATS, describeEntry } from "./characterData.js";
 import "./ProficiencyPicker.css";
 
-export default function ProficiencyPicker({ selected, onChange, unlimited = false }) {
+export default function ProficiencyPicker({ selected, onChange, unlimited = false, revealed = true }) {
   const remaining = REQUIRED_PROFICIENCIES - selected.length;
 
   function toggle(key) {
@@ -46,7 +46,7 @@ export default function ProficiencyPicker({ selected, onChange, unlimited = fals
                     </span>
                     <span className="proficiency-item-text">
                       <span className="proficiency-item-label">{p.label}</span>
-                      <span className="proficiency-item-description">{p.description}</span>
+                      <span className="proficiency-item-description">{describeEntry(p, revealed)}</span>
                     </span>
                   </button>
                 );

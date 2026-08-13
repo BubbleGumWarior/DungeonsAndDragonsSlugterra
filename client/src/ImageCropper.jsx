@@ -2,10 +2,21 @@ import { useRef, useState } from "react";
 import { ImageIcon, UploadSimpleIcon } from "@phosphor-icons/react";
 import "./ImageCropper.css";
 
-const VIEWPORT_SIZE = 220;
-const OUTPUT_SIZE = 480;
+// Crop frame dimensions per shape -- circle for character/NPC portraits,
+// portrait for slug art (matches SlugImage's protoform aspect), landscape
+// for weapon art (matches BlasterCard's aspect). Output is 2x the viewport
+// for a reasonably sharp saved image.
+const SHAPES = {
+  circle: { width: 220, height: 220 },
+  portrait: { width: 200, height: 300 },
+  landscape: { width: 300, height: 200 },
+};
+const OUTPUT_SCALE = 2;
 
-export default function ImageCropper({ value, onChange }) {
+export default function ImageCropper({ value, onChange, shape = "circle" }) {
+  const { width: viewportW, height: viewportH } = SHAPES[shape] || SHAPES.circle;
+  const outputW = viewportW * OUTPUT_SCALE;
+  const outputH = viewportH * OUTPUT_SCALE;
   const fileInputRef = useRef(null);
   const [image, setImage] = useState(null);
   const [zoom, setZoom] = useState(1);
@@ -31,15 +42,15 @@ export default function ImageCropper({ value, onChange }) {
   }
 
   function baseScale(img) {
-    return Math.max(VIEWPORT_SIZE / img.width, VIEWPORT_SIZE / img.height);
+    return Math.max(viewportW / img.width, viewportH / img.height);
   }
 
   function clampOffset(img, nextZoom, nextOffset) {
     const scale = baseScale(img) * nextZoom;
     const displayW = img.width * scale;
     const displayH = img.height * scale;
-    const maxX = Math.max(0, (displayW - VIEWPORT_SIZE) / 2);
-    const maxY = Math.max(0, (displayH - VIEWPORT_SIZE) / 2);
+    const maxX = Math.max(0, (displayW - viewportW) / 2);
+    const maxY = Math.max(0, (displayH - viewportH) / 2);
     return {
       x: Math.min(maxX, Math.max(-maxX, nextOffset.x)),
       y: Math.min(maxY, Math.max(-maxY, nextOffset.y)),
@@ -85,19 +96,18 @@ export default function ImageCropper({ value, onChange }) {
 
   function cropToDataUrl(img, cropZoom, cropOffset) {
     const canvas = document.createElement("canvas");
-    canvas.width = OUTPUT_SIZE;
-    canvas.height = OUTPUT_SIZE;
+    canvas.width = outputW;
+    canvas.height = outputH;
     const ctx = canvas.getContext("2d");
 
     const scale = baseScale(img) * cropZoom;
     const displayW = img.width * scale;
     const displayH = img.height * scale;
-    const outputScale = OUTPUT_SIZE / VIEWPORT_SIZE;
 
-    const drawW = displayW * outputScale;
-    const drawH = displayH * outputScale;
-    const drawX = OUTPUT_SIZE / 2 - drawW / 2 + cropOffset.x * outputScale;
-    const drawY = OUTPUT_SIZE / 2 - drawH / 2 + cropOffset.y * outputScale;
+    const drawW = displayW * OUTPUT_SCALE;
+    const drawH = displayH * OUTPUT_SCALE;
+    const drawX = outputW / 2 - drawW / 2 + cropOffset.x * OUTPUT_SCALE;
+    const drawY = outputH / 2 - drawH / 2 + cropOffset.y * OUTPUT_SCALE;
 
     ctx.drawImage(img, drawX, drawY, drawW, drawH);
     return canvas.toDataURL("image/jpeg", 0.85);
@@ -127,7 +137,7 @@ export default function ImageCropper({ value, onChange }) {
   }
 
   return (
-    <div className="cropper">
+    <div className={`cropper cropper--${shape}`}>
       <input
         ref={fileInputRef}
         type="file"
@@ -144,7 +154,7 @@ export default function ImageCropper({ value, onChange }) {
         <>
           <div
             className="cropper-viewport"
-            style={{ width: VIEWPORT_SIZE, height: VIEWPORT_SIZE }}
+            style={{ width: viewportW, height: viewportH }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
@@ -189,13 +199,13 @@ export default function ImageCropper({ value, onChange }) {
         </>
       ) : value ? (
         <div className="cropper-result">
-          <img src={value} alt="Character portrait" className="cropper-result-img" />
+          <img src={value} alt="" className="cropper-result-img" style={{ width: viewportW, height: viewportH }} />
           <button type="button" className="cropper-change" onClick={reset}>
             Change Photo
           </button>
         </div>
       ) : (
-        <div className="cropper-viewport" style={{ width: VIEWPORT_SIZE, height: VIEWPORT_SIZE }}>
+        <div className="cropper-viewport" style={{ width: viewportW, height: viewportH }}>
           <button type="button" className="cropper-empty" onClick={() => fileInputRef.current?.click()}>
             <ImageIcon weight="duotone" />
             <span>Upload a photo</span>

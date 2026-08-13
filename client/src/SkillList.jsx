@@ -1,7 +1,7 @@
-import { PROFICIENCIES, STATS, formatModifier, skillModifier } from "./characterData.js";
+import { PROFICIENCIES, STATS, describeEntry, formatModifier, skillModifier } from "./characterData.js";
 import "./SkillList.css";
 
-export default function SkillList({ stats, proficiencies }) {
+export default function SkillList({ stats, proficiencies, revealed = true }) {
   return (
     <div className="skill-list">
       {STATS.filter(({ key: statKey }) => PROFICIENCIES.some((p) => p.stat === statKey)).map(({ key: statKey, label, abbr }) => (
@@ -18,7 +18,7 @@ export default function SkillList({ stats, proficiencies }) {
                 <div
                   className={`skill-row ${isProficient ? "skill-row--proficient" : ""}`}
                   key={p.key}
-                  data-tooltip={p.description}
+                  data-tooltip={describeEntry(p, revealed)}
                 >
                   <span className="skill-row-label">{p.label}</span>
                   <span className="skill-row-badge-slot">

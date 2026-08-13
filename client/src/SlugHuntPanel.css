@@ -66,3 +66,32 @@
   font-weight: 700;
   color: var(--gold-soft);
 }
+
+@media (min-width: 1300px) {
+  .slughunt-location {
+    padding: 13px 17px;
+    font-size: 13.5px;
+  }
+
+  .slughunt-location strong {
+    font-size: 16px;
+  }
+
+  .slughunt-list {
+    gap: 13px;
+  }
+
+  .slughunt-name {
+    width: 96px;
+    font-size: 13.5px;
+  }
+
+  .slughunt-bar-track {
+    height: 10px;
+  }
+
+  .slughunt-chance {
+    width: 42px;
+    font-size: 13.5px;
+  }
+}

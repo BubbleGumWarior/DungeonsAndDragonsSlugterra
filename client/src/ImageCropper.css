@@ -17,6 +17,11 @@
   flex-shrink: 0;
 }
 
+.cropper--portrait .cropper-viewport,
+.cropper--landscape .cropper-viewport {
+  border-radius: 22px;
+}
+
 .cropper-viewport:active {
   cursor: grabbing;
 }
@@ -36,6 +41,11 @@
   border-radius: 50%;
   box-shadow: 0 0 0 2px rgba(201, 162, 75, 0.5) inset;
   pointer-events: none;
+}
+
+.cropper--portrait .cropper-ring,
+.cropper--landscape .cropper-ring {
+  border-radius: 22px;
 }
 
 .cropper-empty {
@@ -158,10 +168,13 @@
 }
 
 .cropper-result-img {
-  width: 220px;
-  height: 220px;
   border-radius: 50%;
   object-fit: cover;
   border: 1px solid var(--charcoal-600);
   box-shadow: 0 0 0 2px rgba(201, 162, 75, 0.5) inset;
+}
+
+.cropper--portrait .cropper-result-img,
+.cropper--landscape .cropper-result-img {
+  border-radius: 22px;
 }
