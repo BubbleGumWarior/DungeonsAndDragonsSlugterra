@@ -11,7 +11,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
   margin-bottom: 16px;
+}
+
+.slug-management-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .slug-management-section h2 {
@@ -52,6 +61,48 @@
 
 .slug-management-new:active {
   transform: scale(0.97);
+}
+
+.slug-management-ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-600);
+  color: var(--ink-dim);
+  padding: 8px 15px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: border-color 0.15s var(--ease-out), color 0.15s var(--ease-out), background 0.15s var(--ease-out);
+}
+
+.slug-management-ghost-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.slug-management-ghost-btn:hover:not(:disabled) {
+  border-color: var(--gold-dim);
+  color: var(--gold-soft);
+}
+
+.slug-management-ghost-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.slug-management-ghost-btn--danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(255, 122, 107, 0.08);
+}
+
+.slug-management-bulk-status {
+  margin: -8px 0 16px;
+  font-size: 12.5px;
+  color: var(--gold-soft);
 }
 
 .slug-management-empty {

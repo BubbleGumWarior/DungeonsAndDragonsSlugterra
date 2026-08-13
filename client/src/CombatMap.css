@@ -206,6 +206,92 @@
   pointer-events: none;
 }
 
+/* A Wall Maker's wall -- tinted to match the slug that made it. */
+.combat-map-wall--slug {
+  stroke: var(--wall-color, var(--ink));
+}
+
+/* Draws the line growing from one end to the other over its length instead
+   of just popping into existence -- pathLength="1" on the element (see
+   CombatMap.jsx) normalizes the dash math regardless of the wall's actual
+   length or angle. */
+.combat-map-wall--growing {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: combat-wall-grow 0.5s ease-out forwards;
+}
+
+@keyframes combat-wall-grow {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.combat-map-hazard {
+  pointer-events: none;
+}
+
+.combat-map-hazard--ice {
+  fill: rgba(140, 210, 255, 0.2);
+  stroke: rgba(190, 230, 255, 0.55);
+  stroke-width: 2;
+  stroke-dasharray: 3 5;
+}
+
+/* A Hazard Maker's patch -- tinted to match the slug that left it (Fire
+   reads as a scorched pool, Toxic as a sickly cloud, etc.), same dashed
+   ground-marking treatment as Ice's. */
+.combat-map-hazard--damage {
+  fill: color-mix(in srgb, var(--hazard-color, var(--danger)) 20%, transparent);
+  stroke: color-mix(in srgb, var(--hazard-color, var(--danger)) 60%, transparent);
+  stroke-width: 2;
+  stroke-dasharray: 3 5;
+}
+
+/* A hazard (Ice or Hazard Maker) grows in from nothing instead of just
+   appearing at full size -- transform-box: fill-box makes the scale happen
+   around the circle's own center rather than the SVG viewport's origin. */
+.combat-map-hazard--growing {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: combat-hazard-grow 0.5s var(--ease-out);
+}
+
+@keyframes combat-hazard-grow {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* A Bridge Maker's bridge -- a rounded-corner rect tinted to match the slug
+   that built it (see CombatMap.jsx's translate+rotate transform). */
+.combat-map-bridge {
+  pointer-events: none;
+  animation: combat-bridge-appear 0.4s var(--ease-out);
+}
+
+.combat-map-bridge rect {
+  fill: var(--bridge-color, var(--gold));
+  fill-opacity: 0.22;
+  stroke: var(--bridge-color, var(--gold));
+  stroke-opacity: 0.7;
+  stroke-width: 2;
+}
+
+@keyframes combat-bridge-appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .combat-map-range-ring {
   fill: rgba(201, 162, 75, 0.05);
   stroke: var(--gold-dim);
@@ -272,6 +358,13 @@
   opacity: 0.35;
 }
 
+/* Thugglet's invisibility -- only ever rendered at all (see CombatMap.jsx's
+   combatants.map filter) for the DM and the combatant's own player; every
+   other player never gets this token in the first place. */
+.combat-token--invisible {
+  opacity: 0.7;
+}
+
 .combat-token-down-mark {
   text-anchor: middle;
   font-size: 20px;
@@ -316,6 +409,35 @@
   stroke-width: 1;
 }
 
+.combat-token-effects {
+  pointer-events: auto;
+}
+
+.combat-token-effect-dot {
+  stroke: rgba(10, 10, 12, 0.85);
+  stroke-width: 1.5;
+}
+
+.combat-token-effect-dot--burn {
+  fill: #e08a3c;
+}
+
+.combat-token-effect-dot--poison {
+  fill: #7fbf5f;
+}
+
+.combat-token-effect-dot--snare {
+  fill: #6fae53;
+}
+
+.combat-token-effect-dot--stun {
+  fill: var(--gold);
+}
+
+.combat-token-effect-dot--blind {
+  fill: #d9d9d9;
+}
+
 .combat-token-label {
   text-anchor: middle;
   font-size: 11px;
@@ -346,6 +468,18 @@
   fill: none;
   stroke: var(--fx-color, var(--gold));
   stroke-width: 2;
+}
+
+/* An AOE Blast's burst always reads as a real explosion -- filled, not just
+   the thin outline ring a miss otherwise gets above -- since at blast-radius
+   size an empty ring would look weak rather than dangerous. Declared after
+   shot-fx-burst--miss/--out-of-range so it wins the fill/stroke tug-of-war
+   when a shot is both (an AOE slug that missed). */
+.shot-fx-burst--aoe {
+  fill: var(--fx-color, var(--gold));
+  fill-opacity: 0.32;
+  stroke: var(--fx-color, var(--gold));
+  stroke-width: 2.5;
 }
 
 /* A clash renders as two full-strength circles of each slug's own color,

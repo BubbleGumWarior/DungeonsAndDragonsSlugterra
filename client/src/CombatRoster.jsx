@@ -14,16 +14,11 @@ function Row({ combatant, isActive, isActing, isDM, onSelect, onRevive, onRemove
   const fraction = Math.max(0, Math.min(1, barFraction(combatant)));
   const downed = combatant.unconscious || combatant.disabled;
   const pipsUsed = Array.isArray(combatant.knockoutPips) ? combatant.knockoutPips.filter(Boolean).length : 0;
-  // Combat never hides a combatant -- every token/row always shows. Players
-  // just never see an NPC's numbers unless the NPC's own "revealed to
-  // players" flag (set on the NPCs tab, shared by every instance of it) is
-  // on -- until then they get name and portrait only.
-  const redacted = !isDM && combatant.kind === "npc" && !combatant.npcRevealed;
-  const clickable = isDM || combatant.kind === "npc";
+  const clickable = isDM;
 
   return (
     <div
-      className={`combat-roster-row ${isActive ? "combat-roster-row--active" : ""} ${isActing ? "combat-roster-row--acting" : ""} ${downed && !redacted ? "combat-roster-row--down" : ""}`}
+      className={`combat-roster-row ${isActive ? "combat-roster-row--active" : ""} ${isActing ? "combat-roster-row--acting" : ""} ${downed ? "combat-roster-row--down" : ""}`}
       onClick={clickable ? () => onSelect(combatant) : undefined}
       role={clickable ? "button" : undefined}
       tabIndex={clickable ? 0 : undefined}
@@ -35,25 +30,50 @@ function Row({ combatant, isActive, isActing, isDM, onSelect, onRevive, onRemove
       <div className="combat-roster-info">
         <div className="combat-roster-name-row">
           <span className="combat-roster-name">{combatant.name}</span>
-          {!redacted && <span className="combat-roster-kind">{combatant.kind}</span>}
+          <span className="combat-roster-kind">{combatant.kind}</span>
         </div>
-        {!redacted && (
-          <>
-            <div className={`combat-roster-bar-track ${combatant.kind === "mecha" ? "combat-roster-bar-track--structure" : ""}`}>
-              <div className="combat-roster-bar-fill" style={{ transform: `scaleX(${fraction})` }} />
-            </div>
-            {combatant.knockoutPips && (
-              <div className={`combat-roster-knockout combat-roster-knockout--${pipsUsed}`}>
-                <SkullIcon weight="bold" />
-                <span className="combat-roster-knockout-label">Knockout</span>
-                <KnockoutPips pips={combatant.knockoutPips} size="sm" inline />
-                <span className="combat-roster-knockout-count">{pipsUsed}/3</span>
-              </div>
-            )}
-            {downed && <span className="combat-roster-status">{combatant.unconscious ? "Unconscious" : "Disabled"}</span>}
-          </>
+        <div className={`combat-roster-bar-track ${combatant.kind === "mecha" ? "combat-roster-bar-track--structure" : ""}`}>
+          <div className="combat-roster-bar-fill" style={{ transform: `scaleX(${fraction})` }} />
+        </div>
+        {combatant.knockoutPips && (
+          <div className={`combat-roster-knockout combat-roster-knockout--${pipsUsed}`}>
+            <SkullIcon weight="bold" />
+            <span className="combat-roster-knockout-label">Knockout</span>
+            <KnockoutPips pips={combatant.knockoutPips} size="sm" inline />
+            <span className="combat-roster-knockout-count">{pipsUsed}/3</span>
+          </div>
         )}
-        {redacted && <span className="combat-roster-guess-hint">Click to guess its slugs</span>}
+        {downed && <span className="combat-roster-status">{combatant.unconscious ? "Unconscious" : "Disabled"}</span>}
+        {combatant.statusEffects && Object.keys(combatant.statusEffects).length > 0 && (
+          <div className="combat-roster-effects">
+            {combatant.statusEffects.burning && (
+              <span className="combat-roster-effect combat-roster-effect--burn">Burning</span>
+            )}
+            {combatant.statusEffects.poison?.stacks > 0 && (
+              <span className="combat-roster-effect combat-roster-effect--poison">
+                Poisoned ×{combatant.statusEffects.poison.stacks}
+              </span>
+            )}
+            {combatant.statusEffects.snared && (
+              <span className="combat-roster-effect combat-roster-effect--snare">Snared</span>
+            )}
+            {combatant.statusEffects.stunned && (
+              <span className="combat-roster-effect combat-roster-effect--stun">Stunned</span>
+            )}
+            {combatant.statusEffects.blinded && (
+              <span className="combat-roster-effect combat-roster-effect--blind">Blinded</span>
+            )}
+            {combatant.statusEffects.confused && (
+              <span className="combat-roster-effect combat-roster-effect--confused">Confused</span>
+            )}
+            {combatant.statusEffects.shocked && (
+              <span className="combat-roster-effect combat-roster-effect--shock">Shocked</span>
+            )}
+            {combatant.statusEffects.jammed && (
+              <span className="combat-roster-effect combat-roster-effect--jam">Jammed</span>
+            )}
+          </div>
+        )}
       </div>
 
       {isDM && (
@@ -72,8 +92,12 @@ function Row({ combatant, isActive, isActing, isDM, onSelect, onRevive, onRemove
   );
 }
 
-export default function CombatRoster({ encounter, isDM, actingCombatantId, onSelect, onRevive, onRemove }) {
+export default function CombatRoster({ encounter, isDM, viewerUserId, actingCombatantId, onSelect, onRevive, onRemove }) {
   const ordered = encounter.combatants
+    // Thugglet's invisibility: same visibility rule as the map (CombatMap.jsx)
+    // -- the DM and the combatant's own player still see the row, everyone
+    // else doesn't get a row for them at all.
+    .filter((c) => !c.statusEffects?.invisible || isDM || (c.kind === "character" && c.refUserId === viewerUserId))
     .slice()
     .sort((a, b) => encounter.turnOrder.indexOf(a.id) - encounter.turnOrder.indexOf(b.id));
 

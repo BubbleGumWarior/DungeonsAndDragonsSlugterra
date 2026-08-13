@@ -8,7 +8,7 @@ import CombatHotbar from "./CombatHotbar.jsx";
 import CombatSlugPanel from "./CombatSlugPanel.jsx";
 import CombatRoster from "./CombatRoster.jsx";
 import CombatLog from "./CombatLog.jsx";
-import NpcGuessModal from "./NpcGuessModal.jsx";
+import SlugActionModal from "./SlugActionModal.jsx";
 import { typeRange } from "./slugData.js";
 import "./Panel.css";
 import "./CombatPage.css";
@@ -308,7 +308,7 @@ export default function CombatPage() {
   const [error, setError] = useState(null);
   const [allSlugs, setAllSlugs] = useState([]);
   const [allBlasters, setAllBlasters] = useState([]);
-  const [guessTarget, setGuessTarget] = useState(null);
+  const [actionPicker, setActionPicker] = useState(null); // slug awaiting an Attack/Break Wall/Make Wall/Build Bridge choice
 
   const isDM = user?.role === "Dungeon Master";
 
@@ -528,17 +528,9 @@ export default function CombatPage() {
   }
 
   function handleRosterRowClick(combatant) {
-    if (isDM) {
-      setActingId(combatant.id);
-      setMode(null);
-      return;
-    }
-    // Combat never hides a combatant -- every NPC present is visible, guess
-    // or not. Whether its stats are shown is decided by the NPC's own
-    // "revealed to players" flag (set on the NPCs tab), not this click.
-    if (combatant.kind === "npc") {
-      setGuessTarget(combatant);
-    }
+    if (!isDM) return;
+    setActingId(combatant.id);
+    setMode(null);
   }
 
   async function handleRevive(id) {
@@ -572,7 +564,27 @@ export default function CombatPage() {
     }
   }
 
-  function handleBackgroundClick() {
+  async function handleBackgroundClick(point) {
+    // Break Wall / Make Wall / Build Bridge target a bare map point, not a
+    // combatant -- a background click during one of those is the shot
+    // itself, not a mode-cancel like every other background click is.
+    if (mode?.type === "shoot" && mode.actionType && mode.actionType !== "attack" && actingCombatant) {
+      setError(null);
+      try {
+        applyEncounter(
+          await postJson(token, "/api/combat/actions/shoot", {
+            attackerId: actingCombatant.id,
+            slugId: mode.slugId,
+            actionType: mode.actionType,
+            targetPoint: point,
+          })
+        );
+      } catch (err) {
+        setError(err.message);
+      }
+      setMode(null);
+      return;
+    }
     if (mode) setMode(null);
   }
 
@@ -601,12 +613,17 @@ export default function CombatPage() {
   async function handleTokenClick(target) {
     if (mode?.type === "shoot" && actingCombatant) {
       setError(null);
+      // A Break Wall / Make Wall / Build Bridge shot targets a map point --
+      // clicking a token while one of those is armed just aims at that
+      // token's spot, same as clicking empty ground there would.
+      const isEnvAction = mode.actionType && mode.actionType !== "attack";
       try {
         applyEncounter(
           await postJson(token, "/api/combat/actions/shoot", {
             attackerId: actingCombatant.id,
-            targetId: target.id,
             slugId: mode.slugId,
+            actionType: mode.actionType || "attack",
+            ...(isEnvAction ? { targetPoint: { x: target.x, y: target.y } } : { targetId: target.id }),
           })
         );
       } catch (err) {
@@ -647,7 +664,20 @@ export default function CombatPage() {
       setMode(null);
       return;
     }
-    setMode({ type: "shoot", slugId: slug.id, slugName: slug.name });
+    // A slug that can also break/make a wall or build a bridge gets a
+    // picker for which of those (plus the always-available Attack) it's
+    // firing for this shot -- a plain slug skips straight to Attack, same
+    // as before.
+    if (slug.breaksWalls || slug.wallMaker || slug.bridgeMaker) {
+      setActionPicker(slug);
+      return;
+    }
+    setMode({ type: "shoot", slugId: slug.id, slugName: slug.name, actionType: "attack" });
+  }
+
+  function handlePickSlugAction(slug, actionType) {
+    setActionPicker(null);
+    setMode({ type: "shoot", slugId: slug.id, slugName: slug.name, actionType });
   }
 
   if (encounter === undefined) return null;
@@ -723,6 +753,7 @@ export default function CombatPage() {
             <CombatMap
               encounter={encounter}
               isDM={isDM}
+              viewerUserId={user?.id}
               drawMode={drawMode}
               onAddWall={handleAddWall}
               onRemoveWall={handleRemoveWall}
@@ -764,6 +795,7 @@ export default function CombatPage() {
           <CombatMap
             encounter={encounter}
             isDM={isDM}
+            viewerUserId={user?.id}
             drawMode={drawMode}
             onAddWall={handleAddWall}
             onRemoveWall={handleRemoveWall}
@@ -796,6 +828,7 @@ export default function CombatPage() {
           <CombatRoster
             encounter={encounter}
             isDM={isDM}
+            viewerUserId={user?.id}
             actingCombatantId={actingCombatant?.id}
             onSelect={handleRosterRowClick}
             onRevive={handleRevive}
@@ -805,7 +838,9 @@ export default function CombatPage() {
         </div>
       </div>
 
-      {guessTarget && <NpcGuessModal combatant={guessTarget} onClose={() => setGuessTarget(null)} />}
+      {actionPicker && (
+        <SlugActionModal slug={actionPicker} onPick={handlePickSlugAction} onClose={() => setActionPicker(null)} />
+      )}
     </div>
   );
 }

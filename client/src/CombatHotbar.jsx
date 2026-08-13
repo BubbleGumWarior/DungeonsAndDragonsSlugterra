@@ -113,6 +113,16 @@ export default function CombatHotbar({ actingCombatant, isActiveTurn, mode, weap
 
       {mode?.type === "mount" && <p className="combat-hotbar-hint">Click a mecha to mount it.</p>}
       {mode?.type === "ram" && <p className="combat-hotbar-hint">Click a target to ram.</p>}
+      {mode?.type === "shoot" && mode.actionType === "attack" && <p className="combat-hotbar-hint">Click a target to attack.</p>}
+      {mode?.type === "shoot" && mode.actionType === "break-wall" && (
+        <p className="combat-hotbar-hint">Click anywhere in range -- the slug breaks the first wall (or bridge) it hits.</p>
+      )}
+      {mode?.type === "shoot" && mode.actionType === "make-wall" && (
+        <p className="combat-hotbar-hint">Click anywhere in range to raise a wall there.</p>
+      )}
+      {mode?.type === "shoot" && mode.actionType === "build-bridge" && (
+        <p className="combat-hotbar-hint">Click anywhere in range to build a bridge there.</p>
+      )}
     </div>
   );
 }

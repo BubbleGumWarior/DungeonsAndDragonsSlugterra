@@ -44,7 +44,7 @@ at the start of your turn.
 **Initiative**: at encounter start, everyone (players, NPCs, mechas) rolls
 `d20 + DEX modifier` (mecha pilots use their own DEX; riderless/DM-puppeted mechas use
 a flat `+0`). Sorted descending, ties broken by DEX modifier then randomly. Fixed order
-for the whole encounter; the DM can drag-reorder manually if needed.
+for the whole encounter.
 
 **Actions** (AP cost in parens):
 
@@ -81,23 +81,64 @@ spread between types (Air long, Rock/Earth short, etc.) is unchanged by that sca
 |---|---|---|---|---|---|
 | Air | Long (32) | +2 | +0 | Fast | — (flies true, long-ranged, accurate) |
 | Dark | Medium (20) | −1 | +0 | Medium | Phases through walls: ignores line-of-sight blocking (a ghost-shot), doesn't damage the wall |
-| Earth | Short (16) | −2 | +1 | Slow | Knockback |
+| Earth | Short (16) | −2 | +1 | Slow | Large knockback, always (doubled if the slug's `causesKnockback` is also set) — see §5 |
 | Electricity | Medium (22) | +1 | +0 | Fast | Chains: 50% power hit to one enemy within 8 units of target |
 | Energy | Medium (20) | +1 | +0 | Fast | Recharge: on a hit, regain 1 spent energy pip on another of your loaded slugs |
-| Fire | Short (18) | +2 | +0 | Fast | Burns: +1 grit dmg over 1 turn (DoT) |
+| Fire | Short (18) | +2 | +0 | Fast | Burns: 50% of the slug's own clashPower (min 1) grit dmg/turn, for 3 turns (DoT; doesn't stack — a fresh hit refreshes duration + damage) |
 | Healing* | Short (18) | +1 | n/a | Medium | Heals instead of harms |
-| Ice | Medium (20) | 0 | +0 | Medium | Roots target (−`MOVE_SPEED_PER_AP` next turn) instead of knockback |
-| Light | Long (28) | +3 | −2 | Very fast | Target's next attack this encounter has disadvantage (blinded) |
-| Metal | Medium (18) | 0 | +1 | Slow | Knockback; can short out one random enemy energy pip on hit |
+| Ice | Medium (20) | 0 | +0 | Medium | Leaves an icy hazard patch on the ground at the shot's impact point — see §5 |
+| Light | Long (28) | +3 | −2 | Very fast | Blinds: the target's very next attack roll is made with disadvantage (roll twice, take the lower), then the effect is consumed |
+| Metal | Medium (18) | 0 | +1 | Slow | Short knockback, always (doubled if the slug's `causesKnockback` is also set) — see §5 |
 | None† | Short (10) | −5 | −10 | Slow | Dud — no combat effect |
-| Plant | Short (18) | −1 | +0 | Slow | Snares: roots target for 2 turns (double Ice's root duration) |
+| Plant | Short (18) | −1 | +0 | Slow | Snares: target can't take the Move action for `SNARE_DURATION_TURNS` (2) of their own turns |
 | Psychic | Medium (18) | 0 | −2 | Medium | Stuns: target loses 1 AP on their next turn |
-| Toxic | Medium (20) | +1 | −1 | Medium | Poison: +1 grit dmg/turn for 3 turns (stacks) |
+| Toxic | Medium (20) | +1 | −1 | Medium | Poison: +1 grit dmg/turn per stack, for 3 turns; stacks (each poisoning hit adds a stack **and** resets the shared duration back to 3 turns) |
 | Unique‡ | — | — | — | — | No default modifiers — fully custom per template |
 | Water | Medium (24) | +1 | +0 | Medium | Douses Fire DoT on hit |
 
 Reaction-speed feeds the counter-clash timer in §6 (Fast = short window for the
 *defender* to react, Slow = long window; Very fast shrinks it further still).
+
+**Knockback** is a type default for exactly two types — Earth (large,
+`KNOCKBACK_LARGE_DISTANCE`) and Metal (short, `KNOCKBACK_SHORT_DISTANCE`) — rather
+than something every type can opt into. The per-slug `causesKnockback` flag doesn't
+turn knockback on for those two (it's already on); it doubles their type's own
+distance instead, so a DM can build a heavier-hitting Rammstone or Armashelt without
+changing every other Earth/Metal slug. For every other type, that same flag is what
+turns knockback on at all, always at the flat short distance, never doubled. See
+`slugKnockbackDistance()` in `combatRules.js`.
+
+**Ice** no longer roots on hit. Instead, firing an Ice slug always leaves a
+circular icy patch (`ICE_PATCH_RADIUS` map units) on the ground at the shot's
+impact point — regardless of whether it goes on to hit, miss, or get countered —
+and that patch persists for the rest of the encounter. Any non-mecha combatant
+whose Move destination lands inside one has a flat `ICE_SLIP_CHANCE` (50%) chance
+of slipping: the move still happens, but their remaining AP is immediately zeroed
+out, ending their turn on the spot. See `findHazardAt()`/`addIceHazard()`.
+
+**Snare** (Plant) is a full movement lock, not an AP surcharge: while
+`SNARE_DURATION_TURNS` is still counting down, the Move action is rejected
+outright. It ticks down once per the target's own turn (same moment burn/poison
+resolve — see below), so a snare landed mid-round blocks movement for that
+target's next two turns.
+
+**Burn and poison are real damage-over-time effects**, not an instant bonus to
+the triggering hit. Getting burned or poisoned only *flags* the target on the
+hit that inflicts it; `tickStatusEffects()` (in `combatRules.js`) applies the
+actual damage at the start of each of the target's own next `BURN_DURATION_TURNS`
+/ `POISON_DURATION_TURNS` (3 each) turns, called from `advanceTurn`, alongside
+snare's countdown.
+
+- **Burn** doesn't stack. Its damage is set once, from the hit that inflicted
+  it, as `BURN_DAMAGE_FRACTION` (50%) of that slug's own `clashPower`, rounded
+  and floored at 1. A second Fire hit while already burning doesn't add a
+  second DoT — it just refreshes the 3-turn clock and recalculates the damage
+  off the new hit's own `clashPower` (so a stronger Fire slug replaces a
+  weaker burn rather than stacking with it).
+- **Poison** stacks instead: each poisoning hit adds a stack (so the per-turn
+  damage grows by `POISON_DAMAGE_PER_STACK`) **and** resets the shared
+  duration back to the full 3 turns, so keeping a target poisoned means it
+  never has a chance to fall off on its own.
 
 \* **Healing** slugs don't attack. A Shoot Slug action with a Healing slug must
 target an ally (or yourself) and restores grit equal to `slug.clashPower` instead of
@@ -114,9 +155,134 @@ hand-adjudicate the special effect described in its Velocity Ability text — or
 promote it to a formal trait later if a specific one comes up often enough to
 deserve one. (Arachnet, Jellyish, Lariat, Mimiceo.)
 
-`breaksWalls` and `knockback` stay two per-slug boolean columns on `slug_templates`/
-`slugs` (not type defaults) — so a DM can flag a specific slug like Grenuke or
-Rammstone as wall-breaking without it applying to every Fire or Earth slug.
+`breaksWalls` stays a per-slug boolean column on `slug_templates`/`slugs` (not a
+type default) — so a DM can flag a specific slug like Grenuke as wall-breaking
+without it applying to every Fire slug. `causesKnockback` is the same column, but
+per the knockback rule above it isn't a plain on/off switch for Earth or Metal —
+see "Knockback" earlier in this section.
+
+### Environment-shaping actions (Break Wall / Make Wall / Build Bridge)
+
+Three more per-slug boolean flags — `wallMaker`, `bridgeMaker`, and `breaksWalls`
+doing double duty — gate three extra choices under the Shoot Slug action, offered
+through a small picker (Attack a Slinger / Break a Wall / Make a Wall / Build a
+Bridge) the moment a slug with any of the three flags is armed; a plain slug skips
+straight to Attack, same as before. The three environment actions target a bare map
+point instead of a combatant, use the same misfire/AP/energy/cooldown economy as an
+Attack, but resolve differently:
+
+- **Attack a Slinger** is unchanged, except `breaksWalls` no longer lets a shot
+  punch through a wall in passing — a wall always fully blocks an Attack now
+  (Dark's phase trait aside). Wall-breaking only happens through the dedicated
+  action below.
+- **Break a Wall**: the slug flies to the clicked point (clamped to range) and
+  breaks the *first* wall or bridge its path actually crosses, stopping exactly
+  there. A DM-drawn wall only loses a `WALL_BREAK_RADIUS` chunk (same as before);
+  a **player-made wall breaks entirely**. If the path is clear, it also checks
+  whether the landing point falls inside a bridge and collapses that instead. Dark
+  slugs always phase through and never break anything, even if flagged.
+- **Make a Wall**: places a `WALL_MAKER_LENGTH`-long line segment at the target
+  point, oriented perpendicular to the shot (facing the shooter, like a raised
+  shield), tinted to the slug's type color, source-tagged `"slug"` (see Break Wall
+  above). Grows in on the client instead of popping up.
+- **Build a Bridge**: places a `BRIDGE_WIDTH` × `BRIDGE_LENGTH` rounded rectangle
+  at the target point — width runs parallel to the shooter (same orientation as a
+  wall), length extends onward, away from the shooter, past the impact point.
+
+All three roll accuracy against a flat `ENV_ACTION_DC` (12) instead of a target's
+DEX-based DC (there's no defender here) — normal accuracy formula, just a fixed
+number to beat. A miss runs the *exact same* placement/break logic against a point
+rotated a few degrees off target (`missDeflection`, same helper an Attack miss
+uses) — so a miss can land a wall somewhere else, break the wrong wall, or find
+nothing at all.
+
+### AOE Blast
+
+A fifth per-slug boolean flag, `aoeBlast`. On a landed Attack hit, every other
+combatant within `AOE_RADIUS` (120 map units) of the primary target's position
+takes the same hit too — full `clashPower` and full trait effect each (burn,
+poison, knockback, the lot), not halved like Electricity's chain arc. Each splash
+hit is its own automatic `dealHit` call: no attack roll, no counter-clash — the
+blast either catches you or it doesn't. Only the primary target's hit goes through
+the normal roll/counter-clash flow.
+
+A **miss still detonates** — it just goes off wherever the deflected shot actually
+landed (`missDeflection`, same point the visual miss uses) instead of on the
+target, and whoever's within `AOE_RADIUS` of *that* point takes the blast, which
+can still include the original target if the deflection didn't carry the shot far
+enough away. A defender-won counter-clash is the one case that doesn't splash — the
+attacker's slug never reaches anywhere near the target there, it gets reflected
+back the other way.
+
+The client sizes an AOE Blast's explosion burst to `AOE_RADIUS` itself (its own
+copy of the number, kept in sync) — visually, the burst *is* the blast radius —
+and grows it in from nothing over a short window instead of popping it in at full
+size, on a hit **or** a miss, since either way something real just detonated there.
+
+### Hazard Maker
+
+A sixth per-slug boolean flag, `hazardMaker` — generalizes Ice's "leaves a patch on
+the ground" pattern (§4) to any type, except this patch actually hurts. On any
+Attack shot from a flagged slug, a `type: "damage"` hazard entry appears at the
+impact point — same unconditional hit/miss/out-of-range trigger as Ice, tagged with
+the firing slug's own type and `clashPower`, `HAZARD_RADIUS` (180 map units).
+Persists for the rest of the encounter, same as Ice's patches. Its actual
+appearance (the DB write and the broadcast) is deferred to land only once the
+shot's flight/explosion animation would have finished playing (see "Delayed
+resolution" below), and it grows in from nothing on the client instead of popping
+up, same treatment as a Wall Maker's wall.
+
+Any non-mecha combatant whose Move destination lands inside one takes
+`HAZARD_DAMAGE_FRACTION` (50%) of that hazard's `clashPower` as Grit damage, plus
+that type's Burn or Poison DoT if it has one (Fire/Toxic) — the exact same
+`status_effects` fields a real hit from that type would write, so `tickStatusEffects`
+picks them up identically. Types without a Burn/Poison trait just deal the flat
+residual damage with no bonus status (a Metal or Earth hazard doesn't reach for a
+status effect that wouldn't make sense as "standing in terrain," e.g. a repeated
+knockback shove).
+
+### Causes Blind / Causes Snare / Causes Shock / Causes Jam
+
+Four more per-slug boolean flags, same "opt a type without this trait by default
+into it" pattern `causesKnockback` already established. Added to give a handful of
+Velocity Abilities whose flavor text didn't match their assigned type's mechanical
+trait (e.g. Tazerling's "stuns targets" on an Electricity slug, whose only trait is
+chain) a real effect instead of silently doing nothing beyond the type's own trait.
+
+- **Causes Blind** reuses Light's `blinded` status verbatim (the target's next
+  attack roll is made with disadvantage) on any type. Negashade, Sand Angler.
+- **Causes Snare** reuses Plant's `snared` status verbatim (Move rejected outright
+  for `SNARE_DURATION_TURNS`) on any type. Sand Angler, Polero.
+- **Causes Shock** is a *new*, stronger status — distinct from Psychic's `stunned`
+  (which only costs 1 AP) — that skips the target's entire next turn: `advanceTurn`
+  still runs their start-of-turn bookkeeping (DoT ticks, slug cooldowns tick down,
+  the `shocked` flag itself is consumed) but refills their AP to 0 and immediately
+  recurses to the next living combatant instead of ever handing them the turn.
+  Tazerling.
+- **Causes Jam** forces the target's *next* Shoot Slug attempt (any action type) to
+  misfire — reuses the existing quality-tier jam outcome exactly (wastes the AP and
+  energy pip already spent, no shot leaves the barrel, self-consuming). Unlike
+  Blind/Snare/Shock it fires on a landed **hit or an ordinary miss alike** — the
+  disabling field reaches the target either way — but never on the attacker's own
+  misfire (the shot never left the barrel to begin with) and never on a shot that
+  fell short out of range (it never got near them). Slicksilver, Xmitter, Hexlet.
+
+None of these four apply to mecha targets (no blaster/attack-roll concept exists
+for Structure). All four are struck by a counter-clash outcome exactly like a
+normal hit, since clash resolution (§6) routes through the same `dealHit`.
+
+### Slug return-to-hand cooldown
+
+A fired slug (shot, or used as a counter) is away in flight/recovering — it can't
+be fired again until it's counted down through `SLUG_RETURN_TURNS` (3) of its
+owner's own turns, independent of and on top of its energy pips (which model ammo,
+not "is the slug physically here to load"). The cooldown starts the moment the slug
+actually leaves the blaster (`spendEnergyPip()`, which also spends the pip), ticks
+down by one at the start of each of the owner's own turns (`tickSlugCooldowns()`,
+called from `advanceTurn`), and blocks both firing it again and offering it as a
+counter-clash option while it's still counting down. Ending the encounter clears
+every combatant's outstanding cooldowns, so nobody carries a stale one into the
+next fight.
 
 ## 5. Shooting resolution
 
@@ -134,8 +300,9 @@ Rammstone as wall-breaking without it applying to every Fire or Earth slug.
    rolling the attack — a successful counter can win outright regardless of the
    attack roll.
 4. On a hit with no counter: grit damage = `slug.clashPower + type.powerMod`,
-   applied to target's current Grit. Trait effects (burn/poison/root/chain/blind)
-   apply per the table above. A **miss** doesn't fly dead-on to the target and
+   applied to target's current Grit. Trait effects (burn/poison/snare/chain/blind/
+   knockback) apply per the table above — burn/poison/snare only *flag* the target
+   here; their actual effect lands later (§4). A **miss** doesn't fly dead-on to the target and
    just fizzle there (used to read as a hit that inexplicably did nothing) --
    `missDeflection()` rotates the true impact point a few degrees around the
    attacker (`MISS_DEFLECTION_DEG = 12`, random left/right, same distance),
@@ -155,9 +322,12 @@ Rammstone as wall-breaking without it applying to every Fire or Earth slug.
    actually reach that point in space (`windowMs * SHOT_FLIGHT_MULTIPLIER *`
    the wall hit's fraction along the shot's path) — not applied instantly on
    resolution, so the wall doesn't vanish before the bolt visually gets there.
-6. If the slug has `knockback` and the hit connects, the target is shoved
-   `KNOCKBACK_DISTANCE` (default 16 units) directly away from the shooter. Same
-   fix as wall-breaking (§5): the destination and hit-wall check are computed
+6. If the hit connects and `slugKnockbackDistance(type, causesKnockback)` (§4's
+   "Knockback" note) is greater than 0, the target is shoved that many units
+   directly away from the shooter — `KNOCKBACK_SHORT_DISTANCE` (16) for Metal,
+   `KNOCKBACK_LARGE_DISTANCE` (32) for Earth, either doubled if `causesKnockback`
+   is also set, or `KNOCKBACK_SHORT_DISTANCE` for any other type with
+   `causesKnockback` set. Same fix as wall-breaking (§5): the destination and hit-wall check are computed
    immediately, but the actual position change (and the broadcast that moves
    the token) is **delayed** to `windowMs * SHOT_FLIGHT_MULTIPLIER` after
    launch (`scheduleKnockback`) — so the shove lands when the client's
@@ -166,6 +336,30 @@ Rammstone as wall-breaking without it applying to every Fire or Earth slug.
    fires **immediately**, independent of whether Grit hit 0 — that's a
    separate mechanic (a DC save prompt) whose sequencing against the
    grit-hits-0 roll depends on staying synchronous.
+
+**Delayed resolution.** Wall-breaking and knockback aren't special cases anymore —
+the whole outcome of a Shoot Slug action (or a counter-clash's resolution, once one
+is chosen) is split into two parts, same idea as the launch/resolve broadcast split
+in §6:
+
+- **The roll happens immediately** — the attack roll (or the clash's power/defense
+  comparison), and the `combat-shot-resolved` reveal telling every client which way
+  the shot actually went (hit/miss/out-of-range, or which side won the clash). This
+  is "the direction" — safe to know and broadcast right away, since the client
+  controls when its own animation actually *shows* that reveal (it always waits for
+  its local flight clock to catch up, per §6's animation notes).
+- **Applying the outcome is delayed** to `firedAt + windowMs * SHOT_FLIGHT_MULTIPLIER`
+  of real time (`scheduleAfterFlight`) — Grit damage, status effects (burn, poison,
+  snare, stun, blind), hazard placement, ejects, the Combat Log entry describing
+  what happened, and the encounter broadcast that pushes it all to every client. If
+  the resolution happens early (a defender counters well before their window
+  closes), it still waits out the rest of the flight; if it happens at or after
+  that point (the counter timeout, a normal uncontested hit), there's nothing left
+  to wait for.
+
+So nobody's Grit bar, status badges, or the Combat Log update before the burst
+that's supposed to explain them has actually played — the roster and the map stay
+in sync.
 
 ## 6. Counter-clash
 

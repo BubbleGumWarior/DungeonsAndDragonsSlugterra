@@ -155,18 +155,61 @@
   color: var(--danger);
 }
 
-.combat-roster-guess-hint {
-  font-size: 10.5px;
-  color: var(--gold-dim);
-  font-style: italic;
-}
-
 .combat-roster-status {
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.4px;
   color: var(--danger);
+}
+
+.combat-roster-effects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.combat-roster-effect {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border: 1px solid currentColor;
+}
+
+.combat-roster-effect--burn {
+  color: #e08a3c;
+}
+
+.combat-roster-effect--poison {
+  color: #7fbf5f;
+}
+
+.combat-roster-effect--snare {
+  color: #6fae53;
+}
+
+.combat-roster-effect--stun {
+  color: var(--gold);
+}
+
+.combat-roster-effect--blind {
+  color: #d9d9d9;
+}
+
+.combat-roster-effect--shock {
+  color: #e0c53f;
+}
+
+.combat-roster-effect--jam {
+  color: #b06fd8;
+}
+
+.combat-roster-effect--confused {
+  color: #e0a83c;
 }
 
 .combat-roster-actions {

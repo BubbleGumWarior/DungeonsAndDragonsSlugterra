@@ -1,9 +1,11 @@
 import { EyeIcon, EyeSlashIcon, UserCircleIcon } from "@phosphor-icons/react";
+import NpcGuessedChips from "./NpcGuessedChips.jsx";
 import "./NpcCard.css";
 
-export default function NpcCard({ npc, slugTemplates, blasterTemplates, mechaTemplates, onClick, actions }) {
+export default function NpcCard({ npc, mechaTemplates, gallery, onClick, onToggleReveal, actions }) {
   const slugCount = npc.slugTemplateIds?.length || 0;
   const blasterCount = npc.blasterTemplateIds?.length || 0;
+  const guessedIds = npc.guessedSlugTemplateIds || [];
   const mecha = mechaTemplates?.find((m) => m.id === npc.mechaTemplateId);
 
   return (
@@ -12,12 +14,7 @@ export default function NpcCard({ npc, slugTemplates, blasterTemplates, mechaTem
         {npc.image ? <img src={npc.image} alt={npc.name} /> : <UserCircleIcon weight="duotone" />}
       </div>
       <div className="npc-card-body">
-        <h3 className="npc-card-name">
-          {npc.name}
-          <span className={`npc-card-reveal ${npc.revealed ? "npc-card-reveal--on" : ""}`} title={npc.revealed ? "Revealed to players" : "Hidden from players"}>
-            {npc.revealed ? <EyeIcon weight="bold" /> : <EyeSlashIcon weight="bold" />}
-          </span>
-        </h3>
+        <h3 className="npc-card-name">{npc.name}</h3>
         <div className="npc-card-stats">
           <span>{npc.maxGrit} Grit</span>
           <span>{npc.maxAp} AP</span>
@@ -28,12 +25,26 @@ export default function NpcCard({ npc, slugTemplates, blasterTemplates, mechaTem
           {mecha && <span>{mecha.name}</span>}
           {slugCount === 0 && blasterCount === 0 && !mecha && <span>No gear assigned</span>}
         </div>
+        {guessedIds.length > 0 && gallery && (
+          <div className="npc-card-guessed">
+            <NpcGuessedChips gallery={gallery} guessedIds={guessedIds} />
+          </div>
+        )}
       </div>
-      {actions && (
-        <div className="npc-card-actions" onClick={(e) => e.stopPropagation()}>
-          {actions}
-        </div>
-      )}
+      <div className="npc-card-actions" onClick={(e) => e.stopPropagation()}>
+        {onToggleReveal && (
+          <button
+            type="button"
+            className={`npc-card-reveal-btn ${npc.revealed ? "npc-card-reveal-btn--on" : ""}`}
+            onClick={() => onToggleReveal(npc)}
+            title={npc.revealed ? "Revealed to players -- click to hide" : "Hidden from players -- click to reveal"}
+          >
+            {npc.revealed ? <EyeIcon weight="bold" /> : <EyeSlashIcon weight="bold" />}
+            {npc.revealed ? "Revealed" : "Hidden"}
+          </button>
+        )}
+        {actions}
+      </div>
     </div>
   );
 }

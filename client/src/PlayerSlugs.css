@@ -6,6 +6,37 @@
   gap: 26px;
 }
 
+.player-slugs-header {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.player-slugs-slugpedia-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 75%);
+  border: 1px solid var(--charcoal-600);
+  color: var(--gold-soft);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
+}
+
+.player-slugs-slugpedia-btn:hover {
+  border-color: var(--gold-dim);
+  transform: translateY(-1px);
+}
+
+.player-slugs-slugpedia-btn svg {
+  width: 17px;
+  height: 17px;
+}
+
 .player-slugs-grid {
   width: 100%;
   max-width: 960px;

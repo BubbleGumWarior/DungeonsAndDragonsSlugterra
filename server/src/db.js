@@ -293,6 +293,96 @@ export async function initSchema() {
     ALTER TABLE slugs ADD COLUMN IF NOT EXISTS causes_knockback BOOLEAN NOT NULL DEFAULT false;
   `);
 
+  // Terrain-shaping flags -- see docs/Slugs - OG Slugs.csv's "Wall Maker"/
+  // "Bridge Maker" columns. Gate the Break Wall/Make Wall/Build Bridge Shoot
+  // Slug actions (same DM-authored, per-slug metadata pattern as
+  // breaks_walls/causes_knockback) -- see routes/combat.js.
+  await pool.query(`
+    ALTER TABLE slug_templates ADD COLUMN IF NOT EXISTS wall_maker BOOLEAN NOT NULL DEFAULT false;
+  `);
+  await pool.query(`
+    ALTER TABLE slug_templates ADD COLUMN IF NOT EXISTS bridge_maker BOOLEAN NOT NULL DEFAULT false;
+  `);
+  await pool.query(`
+    ALTER TABLE slugs ADD COLUMN IF NOT EXISTS wall_maker BOOLEAN NOT NULL DEFAULT false;
+  `);
+  await pool.query(`
+    ALTER TABLE slugs ADD COLUMN IF NOT EXISTS bridge_maker BOOLEAN NOT NULL DEFAULT false;
+  `);
+
+  // On a hit, also splashes every other nearby combatant at full effect --
+  // see AOE_RADIUS/findAoeTargets in routes/combat.js.
+  await pool.query(`
+    ALTER TABLE slug_templates ADD COLUMN IF NOT EXISTS aoe_blast BOOLEAN NOT NULL DEFAULT false;
+  `);
+  await pool.query(`
+    ALTER TABLE slugs ADD COLUMN IF NOT EXISTS aoe_blast BOOLEAN NOT NULL DEFAULT false;
+  `);
+
+  // Leaves a damaging patch of terrain wherever an Attack shot lands -- see
+  // HAZARD_RADIUS/applyHazardEffect in routes/combat.js.
+  await pool.query(`
+    ALTER TABLE slug_templates ADD COLUMN IF NOT EXISTS hazard_maker BOOLEAN NOT NULL DEFAULT false;
+  `);
+  await pool.query(`
+    ALTER TABLE slugs ADD COLUMN IF NOT EXISTS hazard_maker BOOLEAN NOT NULL DEFAULT false;
+  `);
+
+  // "Opt a type without this trait by default into it" flags, same pattern
+  // as causes_knockback -- see docs/Slugs - OG Slugs.csv's "Causes Blind"/
+  // "Causes Snare"/"Causes Shock"/"Causes Jam" columns and dealHit/
+  // resolveNormalHit/advanceTurn in routes/combat.js.
+  await pool.query(`
+    ALTER TABLE slug_templates ADD COLUMN IF NOT EXISTS causes_blind BOOLEAN NOT NULL DEFAULT false;
+  `);
+  await pool.query(`
+    ALTER TABLE slugs ADD COLUMN IF NOT EXISTS causes_blind BOOLEAN NOT NULL DEFAULT false;
+  `);
+  await pool.query(`
+    ALTER TABLE slug_templates ADD COLUMN IF NOT EXISTS causes_snare BOOLEAN NOT NULL DEFAULT false;
+  `);
+  await pool.query(`
+    ALTER TABLE slugs ADD COLUMN IF NOT EXISTS causes_snare BOOLEAN NOT NULL DEFAULT false;
+  `);
+  // Shock is its own status (distinct from Psychic's "stunned" -1 AP) --
+  // a shocked combatant's entire next turn is skipped, see advanceTurn.
+  await pool.query(`
+    ALTER TABLE slug_templates ADD COLUMN IF NOT EXISTS causes_shock BOOLEAN NOT NULL DEFAULT false;
+  `);
+  await pool.query(`
+    ALTER TABLE slugs ADD COLUMN IF NOT EXISTS causes_shock BOOLEAN NOT NULL DEFAULT false;
+  `);
+  // Forces the target's *next* Shoot Slug attempt to misfire (reuses the
+  // existing quality-tier jam outcome) -- triggers on a landed hit or an
+  // ordinary miss, never on the attacker's own misfire (the shot never left
+  // the barrel) and never on an out-of-range shot (it never reached them).
+  await pool.query(`
+    ALTER TABLE slug_templates ADD COLUMN IF NOT EXISTS causes_jam BOOLEAN NOT NULL DEFAULT false;
+  `);
+  await pool.query(`
+    ALTER TABLE slugs ADD COLUMN IF NOT EXISTS causes_jam BOOLEAN NOT NULL DEFAULT false;
+  `);
+
+  // Bespoke one-off Velocity Abilities -- one dedicated flag each, same
+  // per-slug-metadata convention as every column above. See
+  // combatRules.js's "Bespoke unique-slug mechanics" section and
+  // routes/combat.js for what each actually does.
+  const bespokeFlags = [
+    "pierces_walls", // Bladier -- Attack breaks through the first wall in its path instead of being blocked
+    "causes_chain", // Speedstinger -- generalizes Electricity's chain arc to any type
+    "ricochets", // Speedstinger -- a landed hit bounces on to a second target with its own full counter window
+    "ultra_fast", // Zeus -- shrinks the counter window (and bolt flight time) way down
+    "causes_invisible", // Thugglet -- self-targeted, hides the token from other players for 1 turn
+    "causes_fear", // Frightgeist -- target's whole next turn is spent fleeing away from the shooter
+    "causes_confusion", // Fandango -- target's own next shots have a flat chance of firing a full 180 off
+    "trail_wall", // Emberblade / Flaringo -- leaves a wall of fire along the shot's own path
+    "clash_tripled", // Emberblade -- triples this slug's own power/defense specifically while it's in a clash
+  ];
+  for (const col of bespokeFlags) {
+    await pool.query(`ALTER TABLE slug_templates ADD COLUMN IF NOT EXISTS ${col} BOOLEAN NOT NULL DEFAULT false;`);
+    await pool.query(`ALTER TABLE slugs ADD COLUMN IF NOT EXISTS ${col} BOOLEAN NOT NULL DEFAULT false;`);
+  }
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS blaster_templates (
       id SERIAL PRIMARY KEY,
@@ -562,10 +652,23 @@ export async function initSchema() {
   await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS map_image_offset_x DOUBLE PRECISION NOT NULL DEFAULT 0;`);
   await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS map_image_offset_y DOUBLE PRECISION NOT NULL DEFAULT 0;`);
 
-  // Whether players know about this NPC at all -- set once on the template
-  // from the NPCs tab, not per-encounter. Every instance pulled from this
-  // template (Bandit 1, Bandit 2, ...) shares it, and toggling it here
-  // updates all of them immediately, including ones already in combat.
+  // Ground hazards (currently just Ice slugs' icy patches) -- see
+  // addIceHazard/findHazardAt. Same {id, ...} + counter pattern as walls/next_wall_id.
+  await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS hazards JSONB NOT NULL DEFAULT '[]';`);
+  await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS next_hazard_id INTEGER NOT NULL DEFAULT 1;`);
+
+  // Player-made bridges (Bridge Maker slugs) -- rectangles {id, x, y, angle,
+  // width, length, slugType}, see pointInBridge()/BRIDGE_WIDTH/BRIDGE_LENGTH
+  // in combatRules.js. Walls stay on the existing `walls` column -- a
+  // player-made wall is just a normal wall entry with source: "slug".
+  await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS bridges JSONB NOT NULL DEFAULT '[]';`);
+  await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS next_bridge_id INTEGER NOT NULL DEFAULT 1;`);
+
+  // Whether players know about this NPC exists at all -- set on the NPCs
+  // tab, not per-encounter or per-combatant. Combat itself never touches
+  // this: revealing/hiding and slug-guessing are entirely an NPCs-tab
+  // concern (see routes/npcTemplates.js), and pulling a template into a
+  // fight doesn't change or care about it.
   await pool.query(`
     ALTER TABLE npc_templates ADD COLUMN IF NOT EXISTS revealed BOOLEAN NOT NULL DEFAULT false;
   `);
@@ -573,9 +676,10 @@ export async function initSchema() {
   await pool.query(`
     ALTER TABLE combatants ADD COLUMN IF NOT EXISTS ref_npc_template_id INTEGER REFERENCES npc_templates(id) ON DELETE SET NULL;
   `);
-  await pool.query(`
-    ALTER TABLE combatants ADD COLUMN IF NOT EXISTS revealed BOOLEAN NOT NULL DEFAULT false;
-  `);
+  // An earlier design redacted an NPC combatant's stats in combat until
+  // revealed; that's gone (combat always shows everyone fully) so this
+  // per-combatant flag is unused.
+  await pool.query(`ALTER TABLE combatants DROP COLUMN IF EXISTS revealed;`);
 
   // NPC-owned gear isn't tied to a real user account -- it belongs to the
   // specific spawned combatant instance instead, and is cleaned up with it.
@@ -584,16 +688,20 @@ export async function initSchema() {
   await pool.query(`ALTER TABLE blasters ALTER COLUMN user_id DROP NOT NULL;`);
   await pool.query(`ALTER TABLE blasters ADD COLUMN IF NOT EXISTS owner_combatant_id INTEGER REFERENCES combatants(id) ON DELETE CASCADE;`);
 
-  // A player's private "I think this NPC is carrying..." guesses -- pure
-  // flavor/strategy bookkeeping, never consulted by combat resolution.
+  // Collective "what slugs does this NPC have?" guesses -- shared by
+  // everyone (any player or the DM can add/remove any entry), scoped to the
+  // NPC template itself rather than a specific combat instance or a
+  // specific guesser. Pure flavor/strategy bookkeeping; never consulted by
+  // combat resolution. Replaces an earlier per-player, per-combatant design.
+  await pool.query(`DROP TABLE IF EXISTS npc_slug_guesses;`);
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS npc_slug_guesses (
+    CREATE TABLE npc_slug_guesses (
       id SERIAL PRIMARY KEY,
-      combatant_id INTEGER NOT NULL REFERENCES combatants(id) ON DELETE CASCADE,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      npc_template_id INTEGER NOT NULL REFERENCES npc_templates(id) ON DELETE CASCADE,
       slug_template_id INTEGER NOT NULL REFERENCES slug_templates(id) ON DELETE CASCADE,
+      added_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      UNIQUE (combatant_id, user_id, slug_template_id)
+      UNIQUE (npc_template_id, slug_template_id)
     );
   `);
 
@@ -605,6 +713,53 @@ export async function initSchema() {
       encounter_id INTEGER NOT NULL REFERENCES encounters(id) ON DELETE CASCADE,
       body TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
+  // The party's collective "slugpedia" -- every distinct slug *variant* (by
+  // its full stat block, not just its template) that's ever been assigned to
+  // a player or carried by an NPC that's joined combat. Entries are never
+  // deleted when the underlying slug is later removed/edited/deleted -- once
+  // seen, always known. `signature` is a hash of every stat-defining column
+  // below (see slugpediaStore.js), used to dedupe an identical re-assignment
+  // down to a single row while still keeping distinct variants (same name,
+  // different AP cost, etc.) as separate rows grouped by name on the client.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS slugpedia_entries (
+      id SERIAL PRIMARY KEY,
+      signature TEXT NOT NULL UNIQUE,
+      template_id INTEGER REFERENCES slug_templates(id) ON DELETE SET NULL,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      protoform_image TEXT,
+      velocity_image TEXT,
+      clash_power INTEGER NOT NULL,
+      clash_defense INTEGER NOT NULL,
+      ap_cost INTEGER NOT NULL,
+      max_energy_pips INTEGER NOT NULL,
+      loyalty_tier INTEGER NOT NULL,
+      velocity_ability TEXT,
+      protoform_utility TEXT,
+      breaks_walls BOOLEAN NOT NULL DEFAULT false,
+      causes_knockback BOOLEAN NOT NULL DEFAULT false,
+      wall_maker BOOLEAN NOT NULL DEFAULT false,
+      bridge_maker BOOLEAN NOT NULL DEFAULT false,
+      aoe_blast BOOLEAN NOT NULL DEFAULT false,
+      hazard_maker BOOLEAN NOT NULL DEFAULT false,
+      causes_blind BOOLEAN NOT NULL DEFAULT false,
+      causes_snare BOOLEAN NOT NULL DEFAULT false,
+      causes_shock BOOLEAN NOT NULL DEFAULT false,
+      causes_jam BOOLEAN NOT NULL DEFAULT false,
+      pierces_walls BOOLEAN NOT NULL DEFAULT false,
+      causes_chain BOOLEAN NOT NULL DEFAULT false,
+      ricochets BOOLEAN NOT NULL DEFAULT false,
+      ultra_fast BOOLEAN NOT NULL DEFAULT false,
+      causes_invisible BOOLEAN NOT NULL DEFAULT false,
+      causes_fear BOOLEAN NOT NULL DEFAULT false,
+      causes_confusion BOOLEAN NOT NULL DEFAULT false,
+      trail_wall BOOLEAN NOT NULL DEFAULT false,
+      clash_tripled BOOLEAN NOT NULL DEFAULT false,
+      first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
 }

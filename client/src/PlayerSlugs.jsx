@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowClockwiseIcon, TargetIcon } from "@phosphor-icons/react";
+import { ArrowClockwiseIcon, BookOpenIcon, TargetIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import SlugCard from "./SlugCard.jsx";
+import Slugpedia from "./Slugpedia.jsx";
 import "./Panel.css";
 import "./PlayerSlugs.css";
 
@@ -18,6 +19,7 @@ export default function PlayerSlugs() {
   const [dragOverSlot, setDragOverSlot] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [error, setError] = useState(null);
+  const [slugpediaOpen, setSlugpediaOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -180,12 +182,17 @@ export default function PlayerSlugs() {
     return null;
   }
 
-  if (slugs.length === 0) {
-    return <p className="player-slugs-empty">No slugs yet. Your Dungeon Master hasn't given you any.</p>;
-  }
-
   return (
     <div className="player-slugs-page">
+      <div className="player-slugs-header">
+        <button type="button" className="player-slugs-slugpedia-btn" onClick={() => setSlugpediaOpen(true)}>
+          <BookOpenIcon weight="duotone" />
+          Slugpedia
+        </button>
+      </div>
+
+      {slugs.length === 0 && <p className="player-slugs-empty">No slugs yet. Your Dungeon Master hasn't given you any.</p>}
+
       {error && <p className="panel-error">{error}</p>}
       {equippedBlasters.length > 0 && (
         <div className="slug-loadout">
@@ -242,39 +249,43 @@ export default function PlayerSlugs() {
         </div>
       )}
 
-      <div className="player-slugs-grid">
-        {slugs.map((slug) => {
-          const isLoaded = slug.equippedBlasterId != null;
-          const isSelected =
-            isLoaded &&
-            activeWeapon &&
-            slug.equippedBlasterId === activeWeapon.id &&
-            slug.magazineSlot === selectedSlot;
-          const loadedWeapon = isLoaded ? blasters.find((b) => b.id === slug.equippedBlasterId) : null;
-          return (
-            <div
-              key={slug.id}
-              className={`slug-loadout-item ${isSelected ? "slug-loadout-item--selected" : ""} ${isLoaded ? "slug-loadout-item--loaded" : "slug-loadout-item--draggable"}`}
-              draggable={!isLoaded}
-              onDragStart={
-                !isLoaded
-                  ? (e) => {
-                      e.dataTransfer.setData("text/plain", String(slug.id));
-                      e.dataTransfer.effectAllowed = "move";
-                    }
-                  : undefined
-              }
-            >
-              {isLoaded && (
-                <span className="slug-loadout-item-badge">
-                  {loadedWeapon ? `${loadedWeapon.name} · Slot ${slug.magazineSlot + 1}` : `Slot ${slug.magazineSlot + 1}`}
-                </span>
-              )}
-              <SlugCard slug={slug} size="lg" editable={false} />
-            </div>
-          );
-        })}
-      </div>
+      {slugs.length > 0 && (
+        <div className="player-slugs-grid">
+          {slugs.map((slug) => {
+            const isLoaded = slug.equippedBlasterId != null;
+            const isSelected =
+              isLoaded &&
+              activeWeapon &&
+              slug.equippedBlasterId === activeWeapon.id &&
+              slug.magazineSlot === selectedSlot;
+            const loadedWeapon = isLoaded ? blasters.find((b) => b.id === slug.equippedBlasterId) : null;
+            return (
+              <div
+                key={slug.id}
+                className={`slug-loadout-item ${isSelected ? "slug-loadout-item--selected" : ""} ${isLoaded ? "slug-loadout-item--loaded" : "slug-loadout-item--draggable"}`}
+                draggable={!isLoaded}
+                onDragStart={
+                  !isLoaded
+                    ? (e) => {
+                        e.dataTransfer.setData("text/plain", String(slug.id));
+                        e.dataTransfer.effectAllowed = "move";
+                      }
+                    : undefined
+                }
+              >
+                {isLoaded && (
+                  <span className="slug-loadout-item-badge">
+                    {loadedWeapon ? `${loadedWeapon.name} · Slot ${slug.magazineSlot + 1}` : `Slot ${slug.magazineSlot + 1}`}
+                  </span>
+                )}
+                <SlugCard slug={slug} size="lg" editable={false} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {slugpediaOpen && <Slugpedia onClose={() => setSlugpediaOpen(false)} />}
     </div>
   );
 }

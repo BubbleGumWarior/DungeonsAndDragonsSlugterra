@@ -73,6 +73,29 @@ const SLOW_PHASE_DISTANCE_FRACTION = 0.2;
 // so the launch is visibly simultaneous with the sound.
 const LAUNCH_KICK_FRACTION = 0.08;
 
+// Explosion burst sizing -- three clearly distinct tiers so a glance at the
+// map tells you what kind of hit just landed. An AOE Blast slug's burst is
+// sized to its actual blast radius (mirrors server/src/combatRules.js's
+// AOE_RADIUS -- keep in sync) so it visually reads as "everyone in this
+// circle got hit," on a genuine hit *or* a miss (an AOE shot still
+// detonates wherever it lands, see the server's resolveNormalHit). A normal
+// hit's burst stays well below that, but well above a miss's, so the three
+// never get confused for one another.
+const AOE_BURST_RADIUS = 120;
+const HIT_BURST_RADIUS = 35;
+const MISS_BURST_RADIUS = 11;
+
+// An AOE burst specifically grows in from nothing instead of just popping
+// up at full size and fading -- at this size a static circle doesn't read
+// as an explosion. BURST_GROW_MS is how long that expansion takes; growth
+// is measured from the same trigger point (b.growAt) fadeAfter already
+// fades from, so the two animate on the same clock.
+const BURST_GROW_MS = 260;
+function burstGrowScale(elapsedMs, triggerAt) {
+  const t = Math.max(0, Math.min(1, (elapsedMs - triggerAt) / BURST_GROW_MS));
+  return 1 - Math.pow(1 - t, 3); // ease-out cubic -- fast start, gentle settle
+}
+
 // Maps elapsed-time-into-a-leg -> fraction of that leg's distance covered,
 // with a slow start capped to SLOW_PHASE_MS (or the whole leg, if the leg
 // resolves before that) followed by a fast burst for the remainder. If a leg
@@ -172,6 +195,29 @@ function ShotEffect({ fx, onDone }) {
     return Math.max(0, 1 - (elapsed - triggerAt) / BURST_LINGER_MS);
   }
 
+  // The chain arc's own bolt: a quick, forced-yellow dart that just snaps
+  // straight to its target (plain lerp, not phasedFraction's slow-crawl
+  // launch -- there's no sound/transform beat to sync up with here, unlike
+  // a real shot), then a small spark. Never counterable, so there's no
+  // clash branch to handle -- outcome is always already "hit" by the time
+  // this ever renders.
+  if (fx.chain) {
+    const chainColor = "#ffe066";
+    if (elapsed < totalMs) {
+      const pos = lerp(fx.attackerPos, fx.impactPoint, Math.min(1, elapsed / totalMs));
+      return <circle className="shot-fx-bolt shot-fx-bolt--chain" cx={pos.x} cy={pos.y} r={5} style={{ "--fx-color": chainColor }} />;
+    }
+    return (
+      <circle
+        className="shot-fx-burst shot-fx-burst--hit"
+        cx={fx.impactPoint.x}
+        cy={fx.impactPoint.y}
+        r={MISS_BURST_RADIUS + 4}
+        style={{ "--fx-color": chainColor, opacity: fadeAfter(totalMs) }}
+      />
+    );
+  }
+
   const bolts = [];
   const bursts = [];
 
@@ -179,7 +225,7 @@ function ShotEffect({ fx, onDone }) {
     if (elapsed < totalMs) {
       bolts.push({ pos: lerp(fx.attackerPos, fx.impactPoint, phasedFraction(elapsed, totalMs)), color });
     } else if (fx.outcome) {
-      bursts.push({ pos: fx.impactPoint, color, kind: fx.outcome, opacity: fadeAfter(totalMs) });
+      bursts.push({ pos: fx.impactPoint, color, kind: fx.outcome, opacity: fadeAfter(totalMs), aoe: fx.aoe, growAt: totalMs });
     } else {
       // The resolve update hasn't landed yet -- keep the bolt parked at its
       // last known impact point instead of guessing "hit" here. A miss's
@@ -209,14 +255,28 @@ function ShotEffect({ fx, onDone }) {
           // already up to speed, no slow launch-out to reproduce.
           bolts.push({ pos: lerp(mid, fx.impactPoint, aftermathElapsed / aftermathMs), color });
         } else {
-          bursts.push({ pos: fx.impactPoint, color, kind: "hit", opacity: fadeAfter(clashAt + aftermathMs) });
+          bursts.push({
+            pos: fx.impactPoint,
+            color,
+            kind: "hit",
+            opacity: fadeAfter(clashAt + aftermathMs),
+            aoe: fx.aoe,
+            growAt: clashAt + aftermathMs,
+          });
         }
       } else if (fx.outcome === "defender-wins") {
         const aftermathElapsed = elapsed - clashAt;
         if (aftermathElapsed < aftermathMs) {
           bolts.push({ pos: lerp(mid, fx.attackerPos, aftermathElapsed / aftermathMs), color: counterColor });
         } else {
-          bursts.push({ pos: fx.attackerPos, color: counterColor, kind: "hit", opacity: fadeAfter(clashAt + aftermathMs) });
+          bursts.push({
+            pos: fx.attackerPos,
+            color: counterColor,
+            kind: "hit",
+            opacity: fadeAfter(clashAt + aftermathMs),
+            aoe: fx.aoe,
+            growAt: clashAt + aftermathMs,
+          });
         }
       }
     }
@@ -241,10 +301,16 @@ function ShotEffect({ fx, onDone }) {
         ) : (
           <circle
             key={`burst-${i}`}
-            className={`shot-fx-burst shot-fx-burst--${b.kind}`}
+            className={`shot-fx-burst shot-fx-burst--${b.kind} ${b.aoe ? "shot-fx-burst--aoe" : ""}`}
             cx={b.pos.x}
             cy={b.pos.y}
-            r={b.kind === "hit" ? 20 * 5 : 11}
+            r={
+              b.aoe
+                ? AOE_BURST_RADIUS * burstGrowScale(elapsed, b.growAt)
+                : b.kind === "hit"
+                  ? HIT_BURST_RADIUS
+                  : MISS_BURST_RADIUS
+            }
             style={{ "--fx-color": b.color, opacity: b.opacity }}
           />
         )
@@ -269,8 +335,29 @@ function tokenRadius(kind) {
   return kind === "mecha" ? 24 : 16;
 }
 
-function Token({ combatant, isActive, isSelected, isActing, draggable, pos, onMouseDown, redacted }) {
+// Small colored dots hovering above a token's active ring, one per active
+// status effect -- burn/poison/snare/stun/blind are otherwise invisible on
+// the map itself (burn and poison in particular don't deal their damage
+// until the target's own next turn, so without this a hit that inflicted
+// one reads as if nothing happened at all). Hover for the exact effect via
+// the <title> tooltip.
+function statusEffectBadges(statusEffects) {
+  if (!statusEffects) return [];
+  const badges = [];
+  if (statusEffects.burning) badges.push({ key: "burn", label: "Burning" });
+  if (statusEffects.poison?.stacks > 0) {
+    badges.push({ key: "poison", label: `Poisoned ×${statusEffects.poison.stacks}` });
+  }
+  if (statusEffects.snared) badges.push({ key: "snare", label: "Snared" });
+  if (statusEffects.stunned) badges.push({ key: "stun", label: "Stunned" });
+  if (statusEffects.blinded) badges.push({ key: "blind", label: "Blinded" });
+  if (statusEffects.confused) badges.push({ key: "confused", label: "Confused -- shots may fire wildly off target" });
+  return badges;
+}
+
+function Token({ combatant, isActive, isSelected, isActing, draggable, pos, onMouseDown, dimmed }) {
   const r = tokenRadius(combatant.kind);
+  const badges = statusEffectBadges(combatant.statusEffects);
   const fraction =
     combatant.kind === "mecha"
       ? combatant.maxStructure > 0
@@ -284,7 +371,7 @@ function Token({ combatant, isActive, isSelected, isActing, draggable, pos, onMo
 
   return (
     <g
-      className={`combat-token combat-token--${combatant.kind} ${downed ? "combat-token--down" : ""} ${isActing ? "combat-token--acting" : ""} ${draggable ? "combat-token--draggable" : ""}`}
+      className={`combat-token combat-token--${combatant.kind} ${downed ? "combat-token--down" : ""} ${isActing ? "combat-token--acting" : ""} ${draggable ? "combat-token--draggable" : ""} ${dimmed ? "combat-token--invisible" : ""}`}
       transform={`translate(${pos.x}, ${pos.y})`}
       onMouseDown={(e) => {
         e.stopPropagation();
@@ -293,7 +380,7 @@ function Token({ combatant, isActive, isSelected, isActing, draggable, pos, onMo
     >
       {isActive && <circle className="combat-token-active-ring" r={r + 7} />}
       {isSelected && <circle className="combat-token-selected-ring" r={r + 4} />}
-      {!redacted && <circle className="combat-token-grit-ring" r={r + 3} style={{ stroke: gritColor(fraction) }} />}
+      <circle className="combat-token-grit-ring" r={r + 3} style={{ stroke: gritColor(fraction) }} />
       {combatant.portrait ? (
         <>
           <clipPath id={clipId}>
@@ -314,6 +401,16 @@ function Token({ combatant, isActive, isSelected, isActing, draggable, pos, onMo
       )}
       <circle className="combat-token-border" r={r} />
       {combatant.mountedOn != null && <circle className="combat-token-mounted-dot" r={4} cx={r - 4} cy={r - 4} />}
+      {badges.length > 0 && (
+        <g className="combat-token-effects" transform={`translate(0, ${-(r + 14)})`}>
+          {badges.map((b, i) => (
+            <g key={b.key} transform={`translate(${(i - (badges.length - 1) / 2) * 13}, 0)`}>
+              <circle className={`combat-token-effect-dot combat-token-effect-dot--${b.key}`} r={5} />
+              <title>{b.label}</title>
+            </g>
+          ))}
+        </g>
+      )}
       <text className="combat-token-label" y={r + 16}>
         {combatant.name}
       </text>
@@ -341,6 +438,7 @@ export default function CombatMap({
   estimateApCost,
   onTokenDragEnd,
   isDM = false,
+  viewerUserId = null,
   shotFx,
   shotResolved,
   onMapUpdate,
@@ -354,6 +452,63 @@ export default function CombatMap({
   const [missFlash, setMissFlash] = useState(false);
   const lastFxId = useRef(null);
   const lastResolvedId = useRef(null);
+
+  // A Wall Maker's wall grows in instead of just popping up. Only walls that
+  // *appear* after this component has already rendered once get the
+  // animation -- walls already on the map when the page loads (or drawn by
+  // the DM) render statically from the start.
+  const knownWallIds = useRef(null);
+  const [growingWallIds, setGrowingWallIds] = useState(() => new Set());
+  useEffect(() => {
+    const currentIds = new Set(encounter.walls.map((w) => w.id));
+    if (knownWallIds.current !== null) {
+      const newSlugWallIds = encounter.walls
+        .filter((w) => w.source === "slug" && !knownWallIds.current.has(w.id))
+        .map((w) => w.id);
+      if (newSlugWallIds.length > 0) {
+        setGrowingWallIds((prev) => new Set([...prev, ...newSlugWallIds]));
+        const timer = setTimeout(() => {
+          setGrowingWallIds((prev) => {
+            const next = new Set(prev);
+            newSlugWallIds.forEach((id) => next.delete(id));
+            return next;
+          });
+        }, 550);
+        knownWallIds.current = currentIds;
+        return () => clearTimeout(timer);
+      }
+    }
+    knownWallIds.current = currentIds;
+  }, [encounter.walls]);
+
+  // Same idea for hazards (Ice patches, Hazard Maker's damaging terrain) --
+  // one that appears mid-encounter grows in from nothing instead of just
+  // popping up; ones already there on first render (or restored on
+  // reconnect) don't replay the animation. The server already delays a
+  // hazard's actual appearance until its shot's explosion would have
+  // played (see scheduleAfterFlight in routes/combat.js), so this animation
+  // starts right as that burst does.
+  const knownHazardIds = useRef(null);
+  const [growingHazardIds, setGrowingHazardIds] = useState(() => new Set());
+  useEffect(() => {
+    const currentIds = new Set((encounter.hazards || []).map((h) => h.id));
+    if (knownHazardIds.current !== null) {
+      const newIds = (encounter.hazards || []).filter((h) => !knownHazardIds.current.has(h.id)).map((h) => h.id);
+      if (newIds.length > 0) {
+        setGrowingHazardIds((prev) => new Set([...prev, ...newIds]));
+        const timer = setTimeout(() => {
+          setGrowingHazardIds((prev) => {
+            const next = new Set(prev);
+            newIds.forEach((id) => next.delete(id));
+            return next;
+          });
+        }, 550);
+        knownHazardIds.current = currentIds;
+        return () => clearTimeout(timer);
+      }
+    }
+    knownHazardIds.current = currentIds;
+  }, [encounter.hazards]);
 
   // DM-only battle-map background: upload, pan ("move" mode drags the
   // background instead of drawing/selecting), and zoom.
@@ -609,24 +764,47 @@ export default function CombatMap({
           />
         )}
 
+        {(encounter.hazards || []).map((hz) => (
+          <circle
+            key={hz.id}
+            className={`combat-map-hazard combat-map-hazard--${hz.type} ${growingHazardIds.has(hz.id) ? "combat-map-hazard--growing" : ""}`}
+            cx={hz.x}
+            cy={hz.y}
+            r={hz.radius}
+            style={hz.type === "damage" ? { "--hazard-color": typeColor(hz.slugType) } : undefined}
+          />
+        ))}
+
+        {(encounter.bridges || []).map((b) => (
+          <g key={b.id} className="combat-map-bridge" transform={`translate(${b.x} ${b.y}) rotate(${b.angle})`} style={{ "--bridge-color": typeColor(b.slugType) }}>
+            <rect x={0} y={-b.width / 2} width={b.length} height={b.width} rx={18} ry={18} />
+          </g>
+        ))}
+
         {rangeRing && (
           <circle className="combat-map-range-ring" cx={rangeRing.x} cy={rangeRing.y} r={rangeRing.r} />
         )}
 
-        {encounter.walls.map((w) => (
-          <line
-            key={w.id}
-            className="combat-map-wall"
-            x1={w.x1}
-            y1={w.y1}
-            x2={w.x2}
-            y2={w.y2}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              onRemoveWall?.(w.id);
-            }}
-          />
-        ))}
+        {encounter.walls.map((w) => {
+          const isSlugWall = w.source === "slug";
+          const isGrowing = growingWallIds.has(w.id);
+          return (
+            <line
+              key={w.id}
+              className={`combat-map-wall ${isSlugWall ? "combat-map-wall--slug" : ""} ${isGrowing ? "combat-map-wall--growing" : ""}`}
+              x1={w.x1}
+              y1={w.y1}
+              x2={w.x2}
+              y2={w.y2}
+              pathLength={isGrowing ? 1 : undefined}
+              style={isSlugWall ? { "--wall-color": typeColor(w.slugType) } : undefined}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                onRemoveWall?.(w.id);
+              }}
+            />
+          );
+        })}
 
         {drawing && (
           <line className="combat-map-wall combat-map-wall--pending" x1={drawing.x1} y1={drawing.y1} x2={drawing.x2} y2={drawing.y2} />
@@ -643,18 +821,27 @@ export default function CombatMap({
           </g>
         )}
 
-        {encounter.combatants.map((c) => (
-          <Token
-            key={c.id}
-            combatant={c}
-            pos={drag && drag.combatant.id === c.id ? { x: drag.x, y: drag.y } : { x: c.x, y: c.y }}
-            isActive={c.id === activeCombatantId}
-            isActing={c.id === actingCombatantId}
-            draggable={!dragLocked && Boolean(isDraggable?.(c))}
-            onMouseDown={handleTokenMouseDown}
-            redacted={c.kind === "npc" && !isDM && !c.npcRevealed}
-          />
-        ))}
+        {encounter.combatants
+          .filter((c) => {
+            // Thugglet's invisibility: the DM and the combatant's own player
+            // still see the token (dimmed, see `dimmed` below) -- every
+            // other player never gets it rendered at all, so there's
+            // nothing on the map for them to click/target either.
+            if (!c.statusEffects?.invisible) return true;
+            return isDM || (c.kind === "character" && c.refUserId === viewerUserId);
+          })
+          .map((c) => (
+            <Token
+              key={c.id}
+              combatant={c}
+              pos={drag && drag.combatant.id === c.id ? { x: drag.x, y: drag.y } : { x: c.x, y: c.y }}
+              isActive={c.id === activeCombatantId}
+              isActing={c.id === actingCombatantId}
+              draggable={!dragLocked && Boolean(isDraggable?.(c))}
+              onMouseDown={handleTokenMouseDown}
+              dimmed={Boolean(c.statusEffects?.invisible)}
+            />
+          ))}
 
         {activeShots.map((fx) => (
           <ShotEffect key={fx.id} fx={fx} onDone={() => removeShot(fx.id)} />

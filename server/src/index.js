@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import "dotenv/config";
 import { initSchema, pool } from "./db.js";
+import { seedDefaultSlugTemplates } from "./seedDefaultSlugs.js";
 import authRouter from "./routes/auth.js";
 import adminRouter from "./routes/admin.js";
 import charactersRouter from "./routes/characters.js";
@@ -22,6 +23,7 @@ import challengeRouter from "./routes/challenge.js";
 import diceRollRouter from "./routes/diceRoll.js";
 import combatRouter from "./routes/combat.js";
 import npcTemplatesRouter from "./routes/npcTemplates.js";
+import slugpediaRouter from "./routes/slugpedia.js";
 import { requireAuth } from "./middleware/auth.js";
 import { setupWebSocket, getOnlineUserIds } from "./ws.js";
 
@@ -48,6 +50,7 @@ app.use("/api/challenge", challengeRouter);
 app.use("/api/dice-roll", diceRollRouter);
 app.use("/api/combat", combatRouter);
 app.use("/api/npc-templates", npcTemplatesRouter);
+app.use("/api/slugpedia", slugpediaRouter);
 
 app.get("/api/presence/online", requireAuth, (req, res) => {
   res.json({ onlineUserIds: getOnlineUserIds() });
@@ -83,6 +86,7 @@ const server = http.createServer(app);
 setupWebSocket(server);
 
 initSchema()
+  .then(() => seedDefaultSlugTemplates())
   .then(() => {
     server.listen(port, () => console.log(`Server listening on port ${port}`));
   })

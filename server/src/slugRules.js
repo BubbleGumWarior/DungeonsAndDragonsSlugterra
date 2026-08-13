@@ -64,6 +64,23 @@ export function validateSlugFields({
   protoformUtility,
   breaksWalls,
   causesKnockback,
+  wallMaker,
+  bridgeMaker,
+  aoeBlast,
+  hazardMaker,
+  causesBlind,
+  causesSnare,
+  causesShock,
+  causesJam,
+  piercesWalls,
+  causesChain,
+  ricochets,
+  ultraFast,
+  causesInvisible,
+  causesFear,
+  causesConfusion,
+  trailWall,
+  clashTripled,
 }) {
   if (typeof name !== "string" || !name.trim() || name.trim().length > 40) {
     return { valid: false, error: "Name must be a non-empty string of 40 characters or fewer." };
@@ -110,6 +127,45 @@ export function validateSlugFields({
   }
   if (causesKnockback !== undefined && typeof causesKnockback !== "boolean") {
     return { valid: false, error: "Causes Knockback must be a boolean." };
+  }
+  if (wallMaker !== undefined && typeof wallMaker !== "boolean") {
+    return { valid: false, error: "Wall Maker must be a boolean." };
+  }
+  if (bridgeMaker !== undefined && typeof bridgeMaker !== "boolean") {
+    return { valid: false, error: "Bridge Maker must be a boolean." };
+  }
+  if (aoeBlast !== undefined && typeof aoeBlast !== "boolean") {
+    return { valid: false, error: "AOE Blast must be a boolean." };
+  }
+  if (hazardMaker !== undefined && typeof hazardMaker !== "boolean") {
+    return { valid: false, error: "Hazard Maker must be a boolean." };
+  }
+  if (causesBlind !== undefined && typeof causesBlind !== "boolean") {
+    return { valid: false, error: "Causes Blind must be a boolean." };
+  }
+  if (causesSnare !== undefined && typeof causesSnare !== "boolean") {
+    return { valid: false, error: "Causes Snare must be a boolean." };
+  }
+  if (causesShock !== undefined && typeof causesShock !== "boolean") {
+    return { valid: false, error: "Causes Shock must be a boolean." };
+  }
+  if (causesJam !== undefined && typeof causesJam !== "boolean") {
+    return { valid: false, error: "Causes Jam must be a boolean." };
+  }
+  for (const [key, label] of [
+    [piercesWalls, "Pierces Walls"],
+    [causesChain, "Causes Chain"],
+    [ricochets, "Ricochets"],
+    [ultraFast, "Ultra Fast"],
+    [causesInvisible, "Causes Invisible"],
+    [causesFear, "Causes Fear"],
+    [causesConfusion, "Causes Confusion"],
+    [trailWall, "Trail Wall"],
+    [clashTripled, "Clash Tripled"],
+  ]) {
+    if (key !== undefined && typeof key !== "boolean") {
+      return { valid: false, error: `${label} must be a boolean.` };
+    }
   }
 
   return { valid: true };

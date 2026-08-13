@@ -101,6 +101,10 @@ export default function Dashboard() {
                 <SwordIcon weight="bold" />
                 <span className="nav-label">Combat</span>
               </Link>
+              <Link className="dashboard-admin-link" to="/npcs">
+                <MaskHappyIcon weight="bold" />
+                <span className="nav-label">NPCs</span>
+              </Link>
             </>
           )}
           {isDungeonMaster && (
@@ -109,10 +113,6 @@ export default function Dashboard() {
                 {slugterraRevealed ? <EyeSlashIcon weight="bold" /> : <EyeIcon weight="bold" />}
                 <span className="nav-label">{slugterraRevealed ? "Hide Slugterra" : "Reveal Slugterra"}</span>
               </button>
-              <Link className="dashboard-admin-link" to="/npcs">
-                <MaskHappyIcon weight="bold" />
-                <span className="nav-label">NPCs</span>
-              </Link>
               <Link className="dashboard-admin-link" to="/admin">
                 <ShieldCheckIcon weight="bold" />
                 <span className="nav-label">Admin</span>

@@ -58,9 +58,6 @@
 
 .npc-card-name {
   margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 7px;
   font-family: var(--font-display);
   font-weight: 700;
   color: var(--gold-soft);
@@ -68,21 +65,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.npc-card-reveal {
-  display: inline-flex;
-  color: var(--ink-dim);
-  flex-shrink: 0;
-}
-
-.npc-card-reveal svg {
-  width: 13px;
-  height: 13px;
-}
-
-.npc-card-reveal--on {
-  color: var(--success);
 }
 
 .npc-card-stats {
@@ -107,8 +89,50 @@
   border: 1px solid var(--charcoal-700);
 }
 
+.npc-card-guessed {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--charcoal-700);
+}
+
 .npc-card-actions {
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
   flex-shrink: 0;
+}
+
+.npc-card-reveal-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+  color: var(--ink-dim);
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+
+.npc-card-reveal-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.npc-card-reveal-btn:hover {
+  border-color: var(--gold-dim);
+}
+
+.npc-card-reveal-btn--on {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.npc-card-actions-row {
+  display: flex;
+  gap: 6px;
 }

@@ -15,7 +15,6 @@ function defaultFields() {
     slugTemplateIds: [],
     blasterTemplateIds: [],
     mechaTemplateId: null,
-    revealed: false,
   };
 }
 
@@ -115,13 +114,6 @@ export default function NpcForm({ initialValues, slugTemplates, blasterTemplates
             </button>
           ))}
         </div>
-      </div>
-
-      <div className="slug-form-checkboxes">
-        <label className="slug-form-checkbox">
-          <input type="checkbox" checked={fields.revealed} onChange={(e) => update("revealed", e.target.checked)} />
-          Revealed to players (their stats show in combat instead of just name/photo)
-        </label>
       </div>
 
       <div className="slug-form-field">

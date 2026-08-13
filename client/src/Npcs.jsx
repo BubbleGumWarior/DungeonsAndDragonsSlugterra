@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeftIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import NpcManagement from "./NpcManagement.jsx";
+import NpcPlayerBoard from "./NpcPlayerBoard.jsx";
 import "./PlaceholderPage.css";
 
 export default function Npcs() {
@@ -17,11 +18,7 @@ export default function Npcs() {
 
       <h1 className="slugs-page-title">NPCs</h1>
 
-      {isDungeonMaster ? (
-        <NpcManagement />
-      ) : (
-        <p className="slug-management-empty">Only the Dungeon Master can manage NPCs.</p>
-      )}
+      {isDungeonMaster ? <NpcManagement /> : <NpcPlayerBoard />}
     </div>
   );
 }

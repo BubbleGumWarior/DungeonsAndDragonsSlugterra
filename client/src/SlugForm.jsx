@@ -186,7 +186,143 @@ export default function SlugForm({ mode, initialValues, players, slugId, onSubmi
             checked={Boolean(fields.causesKnockback)}
             onChange={(e) => update("causesKnockback", e.target.checked)}
           />
-          Causes knockback (a wall collision triggers a knockout roll)
+          Causes knockback (doubles Metal/Earth's built-in shove, or gives any other type a short one)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.wallMaker)}
+            onChange={(e) => update("wallMaker", e.target.checked)}
+          />
+          Wall maker (can raise a barrier on the field, e.g. an ice or crystal wall)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.bridgeMaker)}
+            onChange={(e) => update("bridgeMaker", e.target.checked)}
+          />
+          Bridge maker (can create a crossable path, e.g. an ice bridge or vine swing)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.aoeBlast)}
+            onChange={(e) => update("aoeBlast", e.target.checked)}
+          />
+          AOE blast (also hits every other combatant near the impact point, at full effect)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.hazardMaker)}
+            onChange={(e) => update("hazardMaker", e.target.checked)}
+          />
+          Hazard maker (leaves a damaging patch of terrain wherever it lands, e.g. a burning pool or acid cloud)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.causesBlind)}
+            onChange={(e) => update("causesBlind", e.target.checked)}
+          />
+          Causes blind (gives a type without a blind trait Light's disadvantage-on-next-attack effect)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.causesSnare)}
+            onChange={(e) => update("causesSnare", e.target.checked)}
+          />
+          Causes snare (gives a type without a snare trait Plant's can't-Move-for-2-turns effect)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.causesShock)}
+            onChange={(e) => update("causesShock", e.target.checked)}
+          />
+          Causes shock (a stronger stun -- the target's entire next turn is skipped, not just 1 AP)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.causesJam)}
+            onChange={(e) => update("causesJam", e.target.checked)}
+          />
+          Causes jam (fries the target's blaster on a hit or miss -- their next shot automatically misfires)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.piercesWalls)}
+            onChange={(e) => update("piercesWalls", e.target.checked)}
+          />
+          Pierces walls (an Attack breaks through the first wall in its path instead of being blocked -- Bladier)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.causesChain)}
+            onChange={(e) => update("causesChain", e.target.checked)}
+          />
+          Causes chain (generalizes Electricity's uncounterable half-power arc to any type)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.ricochets)}
+            onChange={(e) => update("ricochets", e.target.checked)}
+          />
+          Ricochets (a landed hit bounces on to a second target, with their own full counter-clash chance)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.ultraFast)}
+            onChange={(e) => update("ultraFast", e.target.checked)}
+          />
+          Ultra fast (shrinks the counter window -- and speeds up the bolt itself -- way down)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.causesInvisible)}
+            onChange={(e) => update("causesInvisible", e.target.checked)}
+          />
+          Causes invisible (self/ally-targeted -- hides the token from other players for 1 turn)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.causesFear)}
+            onChange={(e) => update("causesFear", e.target.checked)}
+          />
+          Causes fear (the target's entire next turn is spent fleeing away from the shooter)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.causesConfusion)}
+            onChange={(e) => update("causesConfusion", e.target.checked)}
+          />
+          Causes confusion (the target's own shots risk firing a full 180 off target for a few turns)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.trailWall)}
+            onChange={(e) => update("trailWall", e.target.checked)}
+          />
+          Trail wall (leaves a wall of fire along the exact path the shot traveled)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.clashTripled)}
+            onChange={(e) => update("clashTripled", e.target.checked)}
+          />
+          Clash tripled (this slug's own power/defense triple specifically while it's in a clash)
         </label>
       </div>
 

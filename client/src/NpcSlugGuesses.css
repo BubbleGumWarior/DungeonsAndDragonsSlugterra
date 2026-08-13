@@ -1,0 +1,143 @@
+.npc-guess-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.npc-guess-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 6px;
+  border-radius: 10px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), background 0.15s var(--ease-out);
+}
+
+.npc-guess-item:hover:not(:disabled) {
+  border-color: var(--gold-dim);
+}
+
+.npc-guess-item:disabled {
+  cursor: default;
+}
+
+.npc-guess-item--picked {
+  border-color: var(--gold);
+  background: rgba(201, 162, 75, 0.1);
+}
+
+.npc-guess-item-portrait {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-600);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold-dim);
+}
+
+.npc-guess-item-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.npc-guess-item-portrait svg {
+  width: 55%;
+  height: 55%;
+}
+
+.npc-guess-item-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.npc-guessed-chips-empty {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  font-style: italic;
+}
+
+.npc-guessed-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.npc-guessed-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 3px;
+  border-radius: 999px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+}
+
+.npc-guessed-chip-portrait {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--charcoal-950);
+  color: var(--gold-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.npc-guessed-chip-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.npc-guessed-chip-portrait svg {
+  width: 60%;
+  height: 60%;
+}
+
+.npc-guessed-chip-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.npc-guessed-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.npc-guessed-chip-remove:hover {
+  color: var(--danger);
+}
+
+.npc-guessed-chip-remove svg {
+  width: 10px;
+  height: 10px;
+}

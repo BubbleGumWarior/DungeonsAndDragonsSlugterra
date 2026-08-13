@@ -1,0 +1,75 @@
+.slug-action-modal {
+  max-width: 440px;
+}
+
+.slug-action-modal-hint {
+  margin: -10px 0 18px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+
+.slug-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.slug-action-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 10px;
+  border-radius: 12px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), background 0.15s var(--ease-out), transform 0.15s var(--ease-out);
+}
+
+.slug-action-item:hover:not(.slug-action-item--disabled) {
+  border-color: var(--gold);
+  background: rgba(201, 162, 75, 0.1);
+  transform: translateY(-1px);
+}
+
+.slug-action-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold-soft);
+}
+
+.slug-action-item-icon svg {
+  width: 30px;
+  height: 30px;
+}
+
+.slug-action-item-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+  text-align: center;
+}
+
+.slug-action-item--disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.slug-action-item--disabled .slug-action-item-icon {
+  color: var(--ink-dim);
+}
+
+.slug-action-item-note {
+  font-size: 9.5px;
+  font-style: italic;
+  color: var(--ink-dim);
+  text-align: center;
+}
+
+.slug-action-modal-close {
+  width: 100%;
+  margin-top: 16px;
+}

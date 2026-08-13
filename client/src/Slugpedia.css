@@ -1,0 +1,79 @@
+.slug-modal--wide {
+  max-width: 920px;
+}
+
+.slugpedia-hint {
+  margin: -10px 0 18px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+
+.slugpedia-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.slugpedia-expand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+  color: var(--ink-dim);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+
+.slugpedia-expand:hover {
+  border-color: var(--gold-dim);
+  color: var(--ink);
+}
+
+.slugpedia-expand-caret {
+  display: inline-flex;
+  transition: transform 0.15s var(--ease-out);
+}
+
+.slugpedia-expand-caret svg {
+  width: 12px;
+  height: 12px;
+}
+
+.slugpedia-expand-caret--open {
+  transform: rotate(180deg);
+}
+
+.slugpedia-variants {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-700);
+}
+
+.slugpedia-close {
+  width: 100%;
+  margin-top: 20px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out);
+}
+
+.slugpedia-close:hover {
+  border-color: var(--gold-dim);
+}

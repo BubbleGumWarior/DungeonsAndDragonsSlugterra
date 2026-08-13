@@ -33,6 +33,8 @@ export default function AccessSocket({ children }) {
   const [shotFx, setShotFx] = useState(null);
   const [shotResolved, setShotResolved] = useState(null);
   const [combatLogEntry, setCombatLogEntry] = useState(null);
+  const [npcTemplatesUpdate, setNpcTemplatesUpdate] = useState(null);
+  const [slugpediaUpdate, setSlugpediaUpdate] = useState(null);
 
   useEffect(() => {
     if (!token) return;
@@ -183,6 +185,16 @@ export default function AccessSocket({ children }) {
 
       if (data.type === "combat-log-entry") {
         setCombatLogEntry({ encounterId: data.encounterId, entry: data.entry, at: Date.now() });
+        return;
+      }
+
+      if (data.type === "npc-templates-updated") {
+        setNpcTemplatesUpdate(Date.now());
+        return;
+      }
+
+      if (data.type === "slugpedia-updated") {
+        setSlugpediaUpdate(Date.now());
       }
     };
 
@@ -212,6 +224,8 @@ export default function AccessSocket({ children }) {
         shotFx,
         shotResolved,
         combatLogEntry,
+        npcTemplatesUpdate,
+        slugpediaUpdate,
       }}
     >
       {children}
