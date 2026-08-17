@@ -26,33 +26,6 @@
   flex-wrap: wrap;
 }
 
-.combat-topbar-back {
-  /* Same fixed top-left placement as .placeholder-back (Slugs, Inventory,
-     NPCs, ...) so it sits in the exact same spot on every page instead of
-     just looking similar while living inline in this page's own topbar
-     row. */
-  position: fixed;
-  top: 28px;
-  left: 32px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--ink-dim);
-  text-decoration: none;
-  font-size: 13.5px;
-  font-weight: 500;
-  transition: color 0.15s var(--ease-out);
-}
-
-.combat-topbar-back svg {
-  width: 15px;
-  height: 15px;
-}
-
-.combat-topbar-back:hover {
-  color: var(--gold-soft);
-}
-
 .combat-topbar-title {
   display: flex;
   align-items: baseline;
@@ -192,4 +165,26 @@
   font-size: 12px;
   color: var(--ink-dim);
   font-style: italic;
+}
+
+/* A red flash across the whole screen when this player's own combatant
+   takes a Pressure Tick pod hit -- deliberately viewport-fixed, not tied to
+   the map's own scroll/zoom, so it reads regardless of what's on screen.
+   See CombatPage.jsx's damageFlash/flashActive. */
+.combat-damage-flash {
+  position: fixed;
+  inset: 0;
+  background: rgba(200, 30, 30, 0.35);
+  pointer-events: none;
+  z-index: 999;
+  animation: combat-damage-flash-fade 1s ease-out forwards;
+}
+
+@keyframes combat-damage-flash-fade {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }

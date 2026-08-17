@@ -14,6 +14,51 @@ function requireDungeonMaster(req, res, next) {
   next();
 }
 
+// Personal display/audio preferences -- every signed-in user tunes their
+// own, no DM gate. See index.css's [data-theme] blocks for what each theme
+// id maps to and CombatMap.jsx for where sound_volume gets applied.
+const THEMES = ["burgundy", "navy", "green", "purple"];
+
+router.post("/preferences", async (req, res) => {
+  const { theme, soundVolume } = req.body ?? {};
+  const updates = [];
+  const values = [];
+
+  if (theme !== undefined) {
+    if (!THEMES.includes(theme)) {
+      return res.status(400).json({ error: "Unknown theme." });
+    }
+    values.push(theme);
+    updates.push(`theme = $${values.length}`);
+  }
+
+  if (soundVolume !== undefined) {
+    const volume = Number(soundVolume);
+    if (!Number.isFinite(volume) || volume < 0 || volume > 1) {
+      return res.status(400).json({ error: "Sound volume must be between 0 and 1." });
+    }
+    values.push(volume);
+    updates.push(`sound_volume = $${values.length}`);
+  }
+
+  if (updates.length === 0) {
+    return res.status(400).json({ error: "Nothing to update." });
+  }
+
+  values.push(req.user.sub);
+  try {
+    const { rows } = await pool.query(
+      `UPDATE users SET ${updates.join(", ")} WHERE id = $${values.length} RETURNING theme, sound_volume`,
+      values
+    );
+    const row = rows[0];
+    res.json({ theme: row.theme, soundVolume: row.sound_volume });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not update preferences." });
+  }
+});
+
 router.get("/", async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT slugterra_revealed FROM campaign_settings WHERE id = 1");

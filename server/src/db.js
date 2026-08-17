@@ -204,6 +204,18 @@ export async function initSchema() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT false;
   `);
 
+  // Per-user display/audio preferences -- theme swaps the app's red accent
+  // for another hue (black/gold stay constant, see index.css's [data-theme]
+  // blocks); sound_volume (0-1) scales the combat shoot sound. Both persist
+  // across sign-ins but never gate access, so they're plain user columns
+  // rather than their own table.
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS theme TEXT NOT NULL DEFAULT 'burgundy';
+  `);
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS sound_volume REAL NOT NULL DEFAULT 0.5;
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS characters (
       id SERIAL PRIMARY KEY,
@@ -377,6 +389,11 @@ export async function initSchema() {
     "causes_confusion", // Fandango -- target's own next shots have a flat chance of firing a full 180 off
     "trail_wall", // Emberblade / Flaringo -- leaves a wall of fire along the shot's own path
     "clash_tripled", // Emberblade -- triples this slug's own power/defense specifically while it's in a clash
+    "cone_blast", // Thornlash -- travels to its target, then a cone of spikes fans out beyond the impact point at reduced power
+    "spawns_pods", // Pressure Tick -- scatters 3 permanent, independently-timed steam pods that periodically fire a damaging line
+    "mirage_decoy", // Mirage Coil -- self-targeted, spawns 2 decoys that mimic the owner until hit
+    "star_wall", // Regulator -- forms a 5-point damaging wall burst on impact, then the segments persist as normal walls
+    "anchor_zone", // Anchorage -- creates a zone that suppresses knockback and wall-breaking for anyone/anything inside it
   ];
   for (const col of bespokeFlags) {
     await pool.query(`ALTER TABLE slug_templates ADD COLUMN IF NOT EXISTS ${col} BOOLEAN NOT NULL DEFAULT false;`);
@@ -663,6 +680,21 @@ export async function initSchema() {
   // player-made wall is just a normal wall entry with source: "slug".
   await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS bridges JSONB NOT NULL DEFAULT '[]';`);
   await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS next_bridge_id INTEGER NOT NULL DEFAULT 1;`);
+
+  // Pressure Tick's steam pods -- {id, x, y, angle, counter, ownerCombatantId,
+  // clashPower}, see spawnPods/tickPods in routes/combat.js and
+  // POD_MIN_TIMER/POD_MAX_TIMER/POD_LINE_LENGTH in combatRules.js. Permanent
+  // for the rest of the encounter -- a pod re-arms (new random counter)
+  // after it fires instead of being removed.
+  await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS pods JSONB NOT NULL DEFAULT '[]';`);
+  await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS next_pod_id INTEGER NOT NULL DEFAULT 1;`);
+
+  // Anchorage's protective zones -- {id, x, y, radius, turnsLeft}, see
+  // isInsideAnyZone/ANCHOR_RADIUS/ANCHOR_DURATION_ROUNDS in combatRules.js.
+  // Ticks down once per full round (round wrap in advanceTurn), not per
+  // combatant turn -- it's a battlefield fixture, not a status on a person.
+  await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS zones JSONB NOT NULL DEFAULT '[]';`);
+  await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS next_zone_id INTEGER NOT NULL DEFAULT 1;`);
 
   // Whether players know about this NPC exists at all -- set on the NPCs
   // tab, not per-encounter or per-combatant. Combat itself never touches

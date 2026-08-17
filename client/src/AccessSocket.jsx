@@ -35,6 +35,7 @@ export default function AccessSocket({ children }) {
   const [combatLogEntry, setCombatLogEntry] = useState(null);
   const [npcTemplatesUpdate, setNpcTemplatesUpdate] = useState(null);
   const [slugpediaUpdate, setSlugpediaUpdate] = useState(null);
+  const [damageFlash, setDamageFlash] = useState(null);
 
   useEffect(() => {
     if (!token) return;
@@ -195,6 +196,15 @@ export default function AccessSocket({ children }) {
 
       if (data.type === "slugpedia-updated") {
         setSlugpediaUpdate(Date.now());
+        return;
+      }
+
+      // Only ever sent via notifyUser to the specific player whose
+      // combatant took the hit (see combat.js's tickPods) -- this socket
+      // only receives it at all if it's meant for this player, no userId
+      // check needed client-side.
+      if (data.type === "combat-damage-flash") {
+        setDamageFlash({ combatantId: data.combatantId, at: Date.now() });
       }
     };
 
@@ -226,6 +236,7 @@ export default function AccessSocket({ children }) {
         combatLogEntry,
         npcTemplatesUpdate,
         slugpediaUpdate,
+        damageFlash,
       }}
     >
       {children}

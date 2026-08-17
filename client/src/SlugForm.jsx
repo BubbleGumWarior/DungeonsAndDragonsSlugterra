@@ -324,6 +324,46 @@ export default function SlugForm({ mode, initialValues, players, slugId, onSubmi
           />
           Clash tripled (this slug's own power/defense triple specifically while it's in a clash)
         </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.coneBlast)}
+            onChange={(e) => update("coneBlast", e.target.checked)}
+          />
+          Cone blast (travels to its target as a normal hit, then a cone of spikes beyond it deals reduced damage)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.spawnsPods)}
+            onChange={(e) => update("spawnsPods", e.target.checked)}
+          />
+          Spawns pods (scatters 3 permanent timed pods that periodically fire a damaging line)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.mirageDecoy)}
+            onChange={(e) => update("mirageDecoy", e.target.checked)}
+          />
+          Mirage decoy (self-targeted, spawns 2 decoys that mimic the owner until hit)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.starWall)}
+            onChange={(e) => update("starWall", e.target.checked)}
+          />
+          Star wall (forms a 5-point damaging wall burst on impact that then persists as normal walls)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.anchorZone)}
+            onChange={(e) => update("anchorZone", e.target.checked)}
+          />
+          Anchor zone (creates a zone that suppresses knockback and wall-breaking inside it)
+        </label>
       </div>
 
       <div className="slug-form-field">

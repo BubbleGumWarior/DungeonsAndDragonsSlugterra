@@ -61,6 +61,11 @@ function toClientTemplate(row) {
     causesConfusion: row.causes_confusion,
     trailWall: row.trail_wall,
     clashTripled: row.clash_tripled,
+    coneBlast: row.cone_blast,
+    spawnsPods: row.spawns_pods,
+    mirageDecoy: row.mirage_decoy,
+    starWall: row.star_wall,
+    anchorZone: row.anchor_zone,
     createdAt: row.created_at,
   };
 }
@@ -152,6 +157,11 @@ router.post("/", async (req, res) => {
     causesConfusion,
     trailWall,
     clashTripled,
+    coneBlast,
+    spawnsPods,
+    mirageDecoy,
+    starWall,
+    anchorZone,
   } = req.body || {};
 
   const validation = validateSlugFields({
@@ -195,8 +205,9 @@ router.post("/", async (req, res) => {
       `INSERT INTO slug_templates
         (name, type, protoform_image, velocity_image, clash_power, clash_defense, ap_cost, max_energy_pips, loyalty_tier, velocity_ability, protoform_utility, breaks_walls, causes_knockback, wall_maker, bridge_maker, aoe_blast, hazard_maker,
          causes_blind, causes_snare, causes_shock, causes_jam,
-         pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion, trail_wall, clash_tripled)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+         pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion, trail_wall, clash_tripled,
+         cone_blast, spawns_pods, mirage_decoy, star_wall, anchor_zone)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
        RETURNING *`,
       [
         name.trim(),
@@ -229,6 +240,11 @@ router.post("/", async (req, res) => {
         Boolean(causesConfusion),
         Boolean(trailWall),
         Boolean(clashTripled),
+        Boolean(coneBlast),
+        Boolean(spawnsPods),
+        Boolean(mirageDecoy),
+        Boolean(starWall),
+        Boolean(anchorZone),
       ]
     );
     res.status(201).json({ template: toClientTemplate(rows[0]) });
@@ -271,6 +287,11 @@ router.patch("/:id", async (req, res) => {
     causesConfusion,
     trailWall,
     clashTripled,
+    coneBlast,
+    spawnsPods,
+    mirageDecoy,
+    starWall,
+    anchorZone,
   } = req.body || {};
 
   const validation = validateSlugFields({
@@ -318,8 +339,9 @@ router.patch("/:id", async (req, res) => {
         wall_maker = $14, bridge_maker = $15, aoe_blast = $16, hazard_maker = $17,
         causes_blind = $18, causes_snare = $19, causes_shock = $20, causes_jam = $21,
         pierces_walls = $22, causes_chain = $23, ricochets = $24, ultra_fast = $25,
-        causes_invisible = $26, causes_fear = $27, causes_confusion = $28, trail_wall = $29, clash_tripled = $30
-       WHERE id = $31
+        causes_invisible = $26, causes_fear = $27, causes_confusion = $28, trail_wall = $29, clash_tripled = $30,
+        cone_blast = $31, spawns_pods = $32, mirage_decoy = $33, star_wall = $34, anchor_zone = $35
+       WHERE id = $36
        RETURNING *`,
       [
         name.trim(),
@@ -352,6 +374,11 @@ router.patch("/:id", async (req, res) => {
         Boolean(causesConfusion),
         Boolean(trailWall),
         Boolean(clashTripled),
+        Boolean(coneBlast),
+        Boolean(spawnsPods),
+        Boolean(mirageDecoy),
+        Boolean(starWall),
+        Boolean(anchorZone),
         id,
       ]
     );

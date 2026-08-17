@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { applyTheme } from "./theme.js";
 
 const AuthContext = createContext(null);
 
@@ -23,6 +24,10 @@ export function AuthProvider({ children }) {
     } else {
       localStorage.removeItem("user");
     }
+    // Login/logout, AuthGate's /api/me refresh, and Settings.jsx saving a
+    // new theme all flow through here -- one place to keep the painted
+    // accent in sync with whatever the user object currently says.
+    applyTheme(user?.theme);
   }, [user]);
 
   function login(nextToken, nextUser) {

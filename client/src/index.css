@@ -63,6 +63,9 @@
 }
 
 :root {
+  /* Burgundy (default) -- every other theme below is this exact ramp with
+     only its hue rotated (same saturation/lightness per step), so the
+     accent swaps without changing how "loud" or readable anything is. */
   --maroon-950: #1a0509;
   --maroon-900: #2b070d;
   --maroon-800: #3d0c14;
@@ -94,6 +97,51 @@
   font-family: var(--font-body);
 }
 
+/* Alternate accents -- picked on the Settings page (Settings.jsx) and
+   persisted per-user. Black (--charcoal-*) and gold stay identical across
+   every theme; only the --maroon-* ramp rotates hue, so every existing
+   var(--maroon-*) reference across the app (buttons, borders, the page
+   background) repaints automatically with no per-component changes.
+
+   These ramps are NOT a plain HSL hue-rotation of burgundy -- that read as
+   neon for green and muddy/washed-out for the others, because the same
+   saturation/lightness numbers mean very different things per hue. Each
+   ramp instead holds burgundy's exact OKLCH *lightness* per step (equal
+   perceptual darkness) and its chroma at the same *fraction of that hue's
+   own sRGB gamut ceiling* that burgundy uses of its own -- reproducing
+   burgundy's actual "wine" richness in every hue instead of its raw
+   numbers. See client/scripts/generate-theme-ramps.mjs, which generated
+   every hex value below (and the identical copies in theme.js's THEMES). */
+:root[data-theme="navy"] {
+  --maroon-950: #040c1c;
+  --maroon-900: #05152e;
+  --maroon-800: #081f41;
+  --maroon-700: #0d3062;
+  --maroon-600: #114182;
+  --maroon-500: #1854a7;
+  --maroon-400: #2868c4;
+}
+
+:root[data-theme="green"] {
+  --maroon-950: #041007;
+  --maroon-900: #061b0c;
+  --maroon-800: #0a2714;
+  --maroon-700: #103c20;
+  --maroon-600: #15502b;
+  --maroon-500: #1c6739;
+  --maroon-400: #2e7d4a;
+}
+
+:root[data-theme="purple"] {
+  --maroon-950: #13061c;
+  --maroon-900: #20082e;
+  --maroon-800: #2e0d41;
+  --maroon-700: #461363;
+  --maroon-600: #5e1a83;
+  --maroon-500: #7922a8;
+  --maroon-400: #9035c5;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -107,7 +155,12 @@ body,
 
 body {
   position: relative;
-  background: radial-gradient(circle at top, var(--maroon-900) 0%, var(--maroon-950) 65%, #0c0203 100%);
+  background: radial-gradient(
+    circle at top,
+    var(--maroon-900) 0%,
+    var(--maroon-950) 65%,
+    color-mix(in srgb, var(--maroon-950) 35%, black) 100%
+  );
   color: var(--ink);
   min-height: 100vh;
   overflow-x: hidden;
@@ -132,7 +185,7 @@ body::after {
   pointer-events: none;
   background:
     radial-gradient(ellipse 60% 40% at 15% 8%, rgba(201, 162, 75, 0.08), transparent 60%),
-    radial-gradient(ellipse 50% 35% at 88% 92%, rgba(156, 32, 51, 0.14), transparent 60%);
+    radial-gradient(ellipse 50% 35% at 88% 92%, color-mix(in srgb, var(--maroon-500) 14%, transparent), transparent 60%);
 }
 
 #root {

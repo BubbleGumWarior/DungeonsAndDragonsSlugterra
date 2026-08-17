@@ -20,6 +20,11 @@ import {
   FireIcon,
   TrendUpIcon,
   XIcon,
+  TriangleIcon,
+  DropIcon,
+  CopyIcon,
+  StarIcon,
+  ShieldIcon,
 } from "@phosphor-icons/react";
 import { SLUG_TYPES } from "./slugData.js";
 import "./SlugToolbar.css";
@@ -54,6 +59,11 @@ const FLAGS = [
   { key: "causesConfusion", label: "Causes Confusion", icon: ShuffleIcon },
   { key: "trailWall", label: "Trail Wall", icon: FireIcon },
   { key: "clashTripled", label: "Clash Tripled", icon: TrendUpIcon },
+  { key: "coneBlast", label: "Cone Blast", icon: TriangleIcon },
+  { key: "spawnsPods", label: "Spawns Pods", icon: DropIcon },
+  { key: "mirageDecoy", label: "Mirage Decoy", icon: CopyIcon },
+  { key: "starWall", label: "Star Wall", icon: StarIcon },
+  { key: "anchorZone", label: "Anchor Zone", icon: ShieldIcon },
 ];
 
 export function sortTemplates(list, sortKey) {

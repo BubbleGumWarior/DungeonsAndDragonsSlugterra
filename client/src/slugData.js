@@ -98,5 +98,10 @@ export function defaultSlugFields() {
     causesConfusion: false,
     trailWall: false,
     clashTripled: false,
+    coneBlast: false,
+    spawnsPods: false,
+    mirageDecoy: false,
+    starWall: false,
+    anchorZone: false,
   };
 }

@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeftIcon } from "@phosphor-icons/react";
+import { Fragment, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
+import NavBar from "./NavBar.jsx";
 import CharacterSheetView from "./CharacterSheetView.jsx";
 import "./CharacterSheet.css";
 
@@ -42,13 +42,11 @@ export default function CharacterSheet() {
   }
 
   return (
-    <div className="sheet-page">
-      <Link className="sheet-back" to="/dashboard">
-        <ArrowLeftIcon weight="bold" />
-        Back to Dashboard
-      </Link>
-
-      <CharacterSheetView character={character} />
-    </div>
+    <Fragment>
+      <NavBar />
+      <div className="sheet-page">
+        <CharacterSheetView character={character} />
+      </div>
+    </Fragment>
   );
 }

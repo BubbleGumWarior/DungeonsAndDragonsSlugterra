@@ -1,15 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import {
-  DiceFiveIcon,
-  ArrowLeftIcon,
-  CheckCircleIcon,
-  ProhibitIcon,
-  KeyReturnIcon,
-  TrashIcon,
-} from "@phosphor-icons/react";
+import { CheckCircleIcon, ProhibitIcon, KeyReturnIcon, TrashIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
-import "./Dashboard.css";
+import NavBar from "./NavBar.jsx";
+import "./Panel.css";
 import "./Admin.css";
 
 export default function Admin() {
@@ -88,16 +81,7 @@ export default function Admin() {
 
   return (
     <div className="dashboard-page">
-      <nav className="dashboard-nav">
-        <span className="dashboard-brand">
-          <DiceFiveIcon weight="duotone" />
-          Dungeon Lair
-        </span>
-        <Link className="dashboard-back" to="/dashboard">
-          <ArrowLeftIcon weight="bold" />
-          Back to Dashboard
-        </Link>
-      </nav>
+      <NavBar />
 
       <div className="admin-body">
         <div className="admin-card">

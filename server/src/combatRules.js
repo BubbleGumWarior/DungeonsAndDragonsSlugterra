@@ -587,3 +587,121 @@ export function confusedDeflection(attackerPos, trueImpactPoint, walls = []) {
 // uncountered hit) -- see clash_tripled in routes/combat.js's
 // resolveCounterOffer.
 export const CLASH_TRIPLE_MULTIPLIER = 3;
+
+// -- Thornlash: not a circular AOE Blast -- the shot travels to its target
+// as an ordinary hit (full clashPower), then a cone of spikes fans out
+// *beyond* the impact point, continuing the same line of travel, dealing
+// CONE_DAMAGE_FRACTION of clashPower to anyone else it catches. See
+// cone_blast in dealHit's routes/combat.js.
+export const CONE_HALF_ANGLE_DEG = 30; // total cone width is double this
+export const CONE_LENGTH = 160; // map units, measured from the impact point
+export const CONE_DAMAGE_FRACTION = 0.5;
+
+// Is `point` inside the cone whose apex is `apex`, opening away from `from`
+// (i.e. continuing the from->apex line), `halfAngleDeg` to each side, out to
+// `length`. Used for Thornlash's cone (apex = impact point, from = shooter).
+export function pointInCone(apex, from, point, halfAngleDeg, length) {
+  const dirX = apex.x - from.x;
+  const dirY = apex.y - from.y;
+  const dirLen = Math.hypot(dirX, dirY) || 1;
+  const vx = point.x - apex.x;
+  const vy = point.y - apex.y;
+  const vLen = Math.hypot(vx, vy);
+  if (vLen > length) return false;
+  if (vLen < 1e-6) return true; // right on the apex
+  const cos = (dirX * vx + dirY * vy) / (dirLen * vLen);
+  const angle = (Math.acos(Math.max(-1, Math.min(1, cos))) * 180) / Math.PI;
+  return angle <= halfAngleDeg;
+}
+
+// -- Pressure Tick: drops 3 permanent, independently-timed steam pods
+// scattered near the impact point. Each pod gets a random fixed direction
+// (set once, at creation) and a random counter -- ticking down on *every*
+// combatant's turn-start, not just its owner's (see spawnPods/tickPods in
+// routes/combat.js). At 0, it fires a damaging line along its own fixed
+// direction, then re-arms with a fresh random counter instead of being
+// consumed -- it stays live for the rest of the encounter.
+export const POD_COUNT = 3;
+export const POD_SCATTER_RADIUS = 60; // map units around the impact point
+export const POD_MIN_TIMER = 3;
+export const POD_MAX_TIMER = 10;
+export const POD_LINE_LENGTH = 200; // map units the steam line reaches
+export const POD_LINE_HIT_TOLERANCE = 24; // how close a combatant must be to the line to be caught in it
+
+export function rollPodTimer() {
+  return POD_MIN_TIMER + Math.floor(Math.random() * (POD_MAX_TIMER - POD_MIN_TIMER + 1));
+}
+
+// A point scattered within POD_SCATTER_RADIUS of `center`.
+export function scatterPoint(center, radius) {
+  const angle = Math.random() * 2 * Math.PI;
+  const dist = Math.random() * radius;
+  return { x: center.x + Math.cos(angle) * dist, y: center.y + Math.sin(angle) * dist };
+}
+
+// Shortest distance from `point` to the line SEGMENT from `from` to `to`.
+export function distanceToSegment(point, from, to) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq < 1e-9) return distance(point, from);
+  let t = ((point.x - from.x) * dx + (point.y - from.y) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  const proj = { x: from.x + t * dx, y: from.y + t * dy };
+  return distance(point, proj);
+}
+
+// The line segment a pod fires along, given its fixed angle (degrees).
+export function podLineEnd(pod) {
+  const rad = (pod.angle * Math.PI) / 180;
+  return { x: pod.x + Math.cos(rad) * POD_LINE_LENGTH, y: pod.y + Math.sin(rad) * POD_LINE_LENGTH };
+}
+
+// -- Regulator: on impact, forms a STAR_POINTS-segment star of fire walls
+// radiating from the impact point. Anyone caught in a segment as it forms
+// takes full clashPower damage (unconditional, once) -- after that the
+// segments persist as ordinary walls, same as any other player-made wall
+// (no further damage-on-touch). See formStarWall in routes/combat.js.
+export const STAR_POINTS = 5;
+export const STAR_SEGMENT_LENGTH = WALL_MAKER_LENGTH; // reuse the same wall-segment scale
+export const STAR_HIT_TOLERANCE = 24;
+
+// The STAR_POINTS line segments (each {x1,y1,x2,y2}) of a star centered on
+// `center`, evenly spaced around the full circle.
+export function starSegments(center, length = STAR_SEGMENT_LENGTH, points = STAR_POINTS) {
+  const segments = [];
+  for (let i = 0; i < points; i++) {
+    const angle = (i * 2 * Math.PI) / points;
+    segments.push({
+      x1: center.x,
+      y1: center.y,
+      x2: center.x + Math.cos(angle) * length,
+      y2: center.y + Math.sin(angle) * length,
+    });
+  }
+  return segments;
+}
+
+// -- Anchorage: creates a zone that suppresses knockback and wall-breaking
+// for anyone/anything inside it for its duration. Ticks down once per full
+// round (not per combatant turn) -- it's a battlefield fixture, not a status
+// on a person. See addAnchorZone/isInsideAnyZone in routes/combat.js.
+export const ANCHOR_RADIUS = 140; // map units
+export const ANCHOR_DURATION_ROUNDS = 3;
+
+// True if `point` falls inside any active zone (each {x, y, radius}).
+export function isInsideAnyZone(zones, point) {
+  return (zones || []).some((z) => distance(point, z) <= z.radius);
+}
+
+// -- Mirage Coil: self-targeted, spawns DECOY_COUNT decoys that mimic the
+// owner's movement and (visually) their shots, until one of the three (a
+// decoy or the real owner) is actually hit. A decoy popping removes just
+// that one decoy; the real owner being hit clears all remaining decoys at
+// once. See spawnMirageDecoys/moveDecoysWith in routes/combat.js.
+export const DECOY_COUNT = 2;
+// Fixed offsets (map units) from the owner each decoy sits at/mimics to.
+export const DECOY_OFFSETS = [
+  { dx: -50, dy: -30 },
+  { dx: 50, dy: -30 },
+];

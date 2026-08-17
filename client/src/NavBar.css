@@ -1,0 +1,270 @@
+.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 32px;
+  height: 68px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, var(--charcoal-800), var(--charcoal-950));
+  border-bottom: 1px solid var(--charcoal-600);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  position: relative;
+  z-index: 20;
+}
+
+.navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.4px;
+  color: var(--gold-soft);
+  text-decoration: none;
+}
+
+.navbar-brand--back {
+  transition: color 0.15s var(--ease-out), gap 0.15s var(--ease-out);
+}
+
+.navbar-brand--back:hover {
+  color: var(--gold);
+  gap: 12px;
+}
+
+.navbar-brand svg {
+  width: 19px;
+  height: 19px;
+  color: var(--gold);
+  flex-shrink: 0;
+}
+
+.navbar-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* On desktop this wrapper doesn't exist as far as layout is concerned --
+   its children are direct flex items of .navbar-actions, same as before
+   the wrapper was introduced. Mobile (below) turns it into a real box,
+   since the grid-rows reveal trick needs exactly one sizable child to
+   clip/expand. */
+.navbar-actions-inner {
+  display: contents;
+}
+
+.navbar-link,
+.navbar-action,
+.navbar-logout {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: transparent;
+  border: 1px solid var(--charcoal-600);
+  color: var(--ink);
+  padding: 9px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 500;
+  font-family: inherit;
+  text-decoration: none;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out), color 0.15s var(--ease-out),
+    transform 0.12s var(--ease-out);
+}
+
+.navbar-link svg,
+.navbar-action svg,
+.navbar-logout svg {
+  width: 15px;
+  height: 15px;
+}
+
+.navbar-link,
+.navbar-action {
+  color: var(--gold-soft);
+}
+
+.navbar-link:hover,
+.navbar-action:hover,
+.navbar-logout:hover {
+  background: var(--charcoal-700);
+  border-color: var(--gold);
+  color: var(--ink);
+}
+
+.navbar-link:active,
+.navbar-action:active,
+.navbar-logout:active {
+  transform: scale(0.97);
+}
+
+/* The current page: filled gold rather than just outlined, so it reads at
+   a glance among six-plus siblings. Color carries the signal on its own
+   (including in the mobile dropdown, where the sliding bar below doesn't
+   apply); the bar underneath is the reinforcing, desktop-only flourish. */
+.navbar-link--active {
+  background: rgba(201, 162, 75, 0.16);
+  border-color: var(--gold);
+  color: var(--gold-soft);
+}
+
+.navbar-link--active:hover {
+  background: rgba(201, 162, 75, 0.22);
+  color: var(--gold-soft);
+}
+
+.navbar-logout {
+  color: var(--ink-dim);
+}
+
+/* The active-tab bar. Absolutely positioned against .navbar-actions (the
+   real flex row on desktop -- .navbar-actions-inner is `display: contents`
+   there) so it can glide independently of the links' own layout. left/
+   width are only ever set to move it between two already-visible
+   positions -- switching tabs slides it sideways, it never sweeps in from
+   a corner or a collapsed state. */
+.navbar-indicator {
+  position: absolute;
+  left: 0;
+  bottom: -9px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  box-shadow: 0 0 8px rgba(201, 162, 75, 0.6);
+  pointer-events: none;
+  transition: left 0.32s var(--ease-out), width 0.32s var(--ease-out), opacity 0.2s var(--ease-out);
+}
+
+.navbar-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--charcoal-600);
+  color: var(--ink);
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+}
+
+.navbar-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.navbar-toggle:hover {
+  background: var(--charcoal-700);
+  border-color: var(--gold);
+}
+
+/* Below 950px there are simply too many nav items (up to eight, for a DM)
+   to fit in a row at any size without either overflowing or shrinking to
+   illegible icon-only buttons. Instead the row becomes a hamburger button
+   that drops the actions down as a full-width, vertically stacked panel --
+   plenty of room to keep every label readable. */
+@media (max-width: 950px) {
+  .navbar {
+    padding: 12px 16px;
+  }
+
+  .navbar-toggle {
+    display: inline-flex;
+  }
+
+  .navbar-actions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 15;
+    /* Animating to an unknown/intrinsic content height without either
+       hardcoding a max-height guess or thrashing layout on `height: auto`
+       -- a 0fr/1fr grid track does that cleanly. Still a layout-affecting
+       property, but it's the standard technique for this exact case
+       (max-height would need a large, height-independent-of-content value
+       and still looks janky snapping open past the real content height). */
+    display: grid;
+    grid-template-rows: 0fr;
+    background: var(--charcoal-900);
+    border-bottom: 1px solid var(--charcoal-600);
+    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: grid-template-rows 0.2s var(--ease-out), opacity 0.15s var(--ease-out);
+  }
+
+  .navbar-actions--open {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .navbar-actions-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    min-height: 0;
+    overflow: hidden auto;
+    padding: 10px 16px 16px;
+    max-height: calc(100vh - 68px);
+  }
+
+  .navbar-link,
+  .navbar-action,
+  .navbar-logout {
+    width: 100%;
+    padding: 12px 14px;
+  }
+
+  .navbar-indicator {
+    display: none;
+  }
+
+  .navbar-actions .nav-label {
+    display: inline;
+  }
+}
+
+@media (min-width: 1300px) {
+  .navbar {
+    padding: 20px 40px;
+  }
+
+  .navbar-brand {
+    font-size: 20px;
+  }
+
+  .navbar-brand svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .navbar-actions {
+    gap: 12px;
+  }
+
+  .navbar-link,
+  .navbar-action,
+  .navbar-logout {
+    padding: 10px 18px;
+    font-size: 14px;
+  }
+
+  .navbar-link svg,
+  .navbar-action svg,
+  .navbar-logout svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .navbar-indicator {
+    bottom: -11px;
+  }
+}

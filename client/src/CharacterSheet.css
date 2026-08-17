@@ -1,33 +1,9 @@
 .sheet-page {
-  min-height: 100vh;
+  min-height: calc(100vh - 68px);
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 40px 20px 60px;
-}
-
-.sheet-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  align-self: flex-start;
-  margin: 0 auto 20px;
-  max-width: 560px;
-  width: 100%;
-  color: var(--ink-dim);
-  text-decoration: none;
-  font-size: 13.5px;
-  font-weight: 500;
-  transition: color 0.15s var(--ease-out);
-}
-
-.sheet-back svg {
-  width: 15px;
-  height: 15px;
-}
-
-.sheet-back:hover {
-  color: var(--gold-soft);
 }
 
 .sheet-card {
@@ -211,10 +187,6 @@
 }
 
 @media (min-width: 860px) {
-  .sheet-back {
-    max-width: 960px;
-  }
-
   .sheet-card {
     max-width: 960px;
     padding: 40px 44px;
@@ -241,10 +213,6 @@
 }
 
 @media (min-width: 1240px) {
-  .sheet-back {
-    max-width: 1100px;
-  }
-
   .sheet-card {
     max-width: 1100px;
   }

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { ArrowLeftIcon, PlusIcon, SwordIcon, XIcon } from "@phosphor-icons/react";
+import { PlusIcon, SwordIcon, XIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
+import NavBar from "./NavBar.jsx";
 import CombatMap from "./CombatMap.jsx";
 import CombatHotbar from "./CombatHotbar.jsx";
 import CombatSlugPanel from "./CombatSlugPanel.jsx";
@@ -60,10 +60,6 @@ function estimateApCost(combatant, dist) {
 function TopBar({ title, subtitle, children }) {
   return (
     <div className="combat-topbar">
-      <Link to="/dashboard" className="combat-topbar-back">
-        <ArrowLeftIcon weight="bold" />
-        <span>Dashboard</span>
-      </Link>
       {title && (
         <div className="combat-topbar-title">
           <span className="combat-topbar-title-main">{title}</span>
@@ -297,7 +293,8 @@ function PullNpcForm({ npcTemplates, onPull }) {
 
 export default function CombatPage() {
   const { token, user } = useAuth();
-  const { encounter: liveEncounter, slugUpdate, blasterUpdate, shotFx, shotResolved } = useLiveState();
+  const { encounter: liveEncounter, slugUpdate, blasterUpdate, shotFx, shotResolved, damageFlash } = useLiveState();
+  const [flashActive, setFlashActive] = useState(false);
   const [encounter, setEncounter] = useState(undefined);
   const [players, setPlayers] = useState([]);
   const [mechas, setMechas] = useState([]);
@@ -323,6 +320,16 @@ export default function CombatPage() {
     if (liveEncounter === null || liveEncounter === undefined) return;
     setEncounter(liveEncounter.status === "finished" ? null : liveEncounter);
   }, [liveEncounter]);
+
+  // A red flash across this player's own screen when their combatant takes
+  // a Pressure Tick pod hit (see combat-damage-flash in AccessSocket.jsx) --
+  // deliberately not tied to whether the map is even scrolled to that spot.
+  useEffect(() => {
+    if (!damageFlash) return;
+    setFlashActive(true);
+    const timer = setTimeout(() => setFlashActive(false), 1000);
+    return () => clearTimeout(timer);
+  }, [damageFlash]);
 
   useEffect(() => {
     if (!isDM) return;
@@ -684,25 +691,29 @@ export default function CombatPage() {
 
   if (!encounter) {
     return (
-      <div className="combat-page combat-page--empty">
-        <TopBar />
-        {isDM ? (
-          <NewEncounterForm onCreate={handleCreate} />
-        ) : (
-          <div className="panel panel--quiet combat-empty-card">
-            <div className="panel-body">
-              <p>No encounter in progress. Your Dungeon Master hasn't started combat yet.</p>
+      <>
+        <NavBar />
+        <div className="combat-page combat-page--empty">
+          {isDM ? (
+            <NewEncounterForm onCreate={handleCreate} />
+          ) : (
+            <div className="panel panel--quiet combat-empty-card">
+              <div className="panel-body">
+                <p>No encounter in progress. Your Dungeon Master hasn't started combat yet.</p>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      </>
     );
   }
 
   if (encounter.status === "setup") {
     return (
-      <div className="combat-page">
-        <TopBar title={encounter.name} subtitle="Setting up" />
+      <>
+        <NavBar />
+        <div className="combat-page">
+          <TopBar title={encounter.name} subtitle="Setting up" />
         <div className="panel combat-setup-panel">
           <div className="panel-header">
             <span className="panel-header-icon">
@@ -765,12 +776,16 @@ export default function CombatPage() {
             />
           </div>
         )}
-      </div>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="combat-page combat-page--active">
+    <>
+      <NavBar />
+      {flashActive && <div className="combat-damage-flash" />}
+      <div className="combat-page combat-page--active">
       <TopBar title={encounter.name} subtitle={`Round ${encounter.round}`}>
         {isDM && (
           <>
@@ -841,6 +856,7 @@ export default function CombatPage() {
       {actionPicker && (
         <SlugActionModal slug={actionPicker} onPick={handlePickSlugAction} onClose={() => setActionPicker(null)} />
       )}
-    </div>
+      </div>
+    </>
   );
 }

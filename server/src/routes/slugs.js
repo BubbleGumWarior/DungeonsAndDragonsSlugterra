@@ -52,6 +52,11 @@ export function toClientSlug(row) {
     causesConfusion: row.causes_confusion,
     trailWall: row.trail_wall,
     clashTripled: row.clash_tripled,
+    coneBlast: row.cone_blast,
+    spawnsPods: row.spawns_pods,
+    mirageDecoy: row.mirage_decoy,
+    starWall: row.star_wall,
+    anchorZone: row.anchor_zone,
     ownerCombatantId: row.owner_combatant_id,
     equippedBlasterId: row.equipped_blaster_id,
     magazineSlot: row.magazine_slot,
@@ -117,6 +122,11 @@ router.post("/", requireDungeonMaster, async (req, res) => {
     causesConfusion,
     trailWall,
     clashTripled,
+    coneBlast,
+    spawnsPods,
+    mirageDecoy,
+    starWall,
+    anchorZone,
   } = req.body || {};
 
   const validation = validateSlugFields({
@@ -166,8 +176,9 @@ router.post("/", requireDungeonMaster, async (req, res) => {
       `INSERT INTO slugs
         (template_id, user_id, name, type, protoform_image, velocity_image, clash_power, clash_defense, ap_cost, max_energy_pips, energy_pips, loyalty_tier, velocity_ability, protoform_utility, breaks_walls, causes_knockback, wall_maker, bridge_maker, aoe_blast, hazard_maker,
          causes_blind, causes_snare, causes_shock, causes_jam,
-         pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion, trail_wall, clash_tripled)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
+         pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion, trail_wall, clash_tripled,
+         cone_blast, spawns_pods, mirage_decoy, star_wall, anchor_zone)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38)
        RETURNING *`,
       [
         Number.isInteger(templateId) ? templateId : null,
@@ -203,6 +214,11 @@ router.post("/", requireDungeonMaster, async (req, res) => {
         Boolean(causesConfusion),
         Boolean(trailWall),
         Boolean(clashTripled),
+        Boolean(coneBlast),
+        Boolean(spawnsPods),
+        Boolean(mirageDecoy),
+        Boolean(starWall),
+        Boolean(anchorZone),
       ]
     );
 
@@ -249,6 +265,11 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
     causesConfusion,
     trailWall,
     clashTripled,
+    coneBlast,
+    spawnsPods,
+    mirageDecoy,
+    starWall,
+    anchorZone,
   } = req.body || {};
 
   const validation = validateSlugFields({
@@ -306,8 +327,9 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
         breaks_walls = $13, causes_knockback = $14, wall_maker = $15, bridge_maker = $16, aoe_blast = $17, hazard_maker = $18,
         causes_blind = $19, causes_snare = $20, causes_shock = $21, causes_jam = $22,
         pierces_walls = $23, causes_chain = $24, ricochets = $25, ultra_fast = $26,
-        causes_invisible = $27, causes_fear = $28, causes_confusion = $29, trail_wall = $30, clash_tripled = $31
-       WHERE id = $32
+        causes_invisible = $27, causes_fear = $28, causes_confusion = $29, trail_wall = $30, clash_tripled = $31,
+        cone_blast = $32, spawns_pods = $33, mirage_decoy = $34, star_wall = $35, anchor_zone = $36
+       WHERE id = $37
        RETURNING *`,
       [
         name.trim(),
@@ -341,6 +363,11 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
         Boolean(causesConfusion),
         Boolean(trailWall),
         Boolean(clashTripled),
+        Boolean(coneBlast),
+        Boolean(spawnsPods),
+        Boolean(mirageDecoy),
+        Boolean(starWall),
+        Boolean(anchorZone),
         id,
       ]
     );

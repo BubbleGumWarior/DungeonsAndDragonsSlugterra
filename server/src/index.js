@@ -59,7 +59,7 @@ app.get("/api/presence/online", requireAuth, (req, res) => {
 app.get("/api/me", requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT id, username, role, status, must_change_password FROM users WHERE id = $1",
+      "SELECT id, username, role, status, must_change_password, theme, sound_volume FROM users WHERE id = $1",
       [req.user.sub]
     );
     const row = rows[0];
@@ -73,6 +73,8 @@ app.get("/api/me", requireAuth, async (req, res) => {
         role: row.role,
         status: row.status,
         mustChangePassword: row.must_change_password,
+        theme: row.theme,
+        soundVolume: row.sound_volume,
       },
     });
   } catch (err) {

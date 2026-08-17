@@ -292,6 +292,72 @@
   }
 }
 
+/* Anchorage's zone -- a shimmering field, distinct from a Hazard's dashed
+   danger-marking (this is protective, not harmful). */
+.combat-map-zone {
+  fill: rgba(120, 190, 255, 0.08);
+  stroke: rgba(160, 210, 255, 0.6);
+  stroke-width: 2;
+  stroke-dasharray: 2 6;
+  pointer-events: none;
+  animation: combat-hazard-grow 0.5s var(--ease-out);
+}
+
+/* Pressure Tick's pod -- a small dot marking where it sits, a dashed line
+   drawn all the way out to where its blast actually reaches, and an
+   arrowhead at that far end -- unambiguous about which way it's aimed,
+   tinted to match the slug's type. */
+.combat-map-pod-aim {
+  stroke: var(--pod-color, var(--gold));
+  stroke-width: 2;
+  stroke-dasharray: 5 5;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.combat-map-pod {
+  pointer-events: none;
+}
+
+.combat-map-pod circle {
+  fill: var(--pod-color, var(--gold));
+}
+
+.combat-map-pod-arrow {
+  pointer-events: none;
+}
+
+.combat-map-pod-arrow path {
+  fill: var(--pod-color, var(--gold));
+  opacity: 0.85;
+}
+
+.combat-map-pod-counter {
+  fill: var(--parchment, #f1e6c8);
+  font-size: 24px;
+  font-weight: 400;
+  text-anchor: middle;
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: var(--ink, #1a1410);
+  stroke-width: 2px;
+}
+
+/* The player-visible version of a pod -- just a small bending semicircle
+   hinting at the direction it's facing, no exact line and no countdown
+   (those are DM-only, see combat-map-pod-aim/-arrow/-counter above). */
+.combat-map-pod-hint {
+  pointer-events: none;
+}
+
+.combat-map-pod-hint path {
+  fill: none;
+  stroke: var(--pod-color, var(--gold));
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  opacity: 0.85;
+}
+
 .combat-map-range-ring {
   fill: rgba(201, 162, 75, 0.05);
   stroke: var(--gold-dim);
@@ -455,6 +521,24 @@
   stroke-width: 1.5;
   filter: drop-shadow(0 0 8px var(--fx-color, var(--gold)));
   pointer-events: none;
+}
+
+/* Pressure Tick's pod firing -- appears instantly (no travel), holds, then
+   fades via the opacity CombatMap.jsx drives on this group. */
+.shot-fx-pod-line {
+  pointer-events: none;
+}
+
+.shot-fx-pod-line line {
+  stroke: #cfeaff;
+  stroke-width: 4;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 6px #cfeaff);
+}
+
+.shot-fx-pod-line path {
+  fill: #cfeaff;
+  filter: drop-shadow(0 0 6px #cfeaff);
 }
 
 .shot-fx-burst {

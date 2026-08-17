@@ -46,8 +46,9 @@ export async function seedDefaultSlugTemplates() {
           (name, type, protoform_image, velocity_image, clash_power, clash_defense, ap_cost, max_energy_pips,
            loyalty_tier, velocity_ability, protoform_utility, breaks_walls, causes_knockback, wall_maker, bridge_maker, aoe_blast, hazard_maker,
            causes_blind, causes_snare, causes_shock, causes_jam,
-           pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion, trail_wall, clash_tripled)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)`,
+           pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion, trail_wall, clash_tripled,
+           cone_blast, spawns_pods, mirage_decoy, star_wall, anchor_zone)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35)`,
         [
           t.name,
           t.type,
@@ -79,6 +80,11 @@ export async function seedDefaultSlugTemplates() {
           Boolean(t.causesConfusion),
           Boolean(t.trailWall),
           Boolean(t.clashTripled),
+          Boolean(t.coneBlast),
+          Boolean(t.spawnsPods),
+          Boolean(t.mirageDecoy),
+          Boolean(t.starWall),
+          Boolean(t.anchorZone),
         ]
       );
       seeded++;

@@ -1,7 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { UploadSimpleIcon, ArrowsOutCardinalIcon, XIcon } from "@phosphor-icons/react";
 import { typeColor } from "./slugData.js";
+import { useAuth } from "./AuthContext.jsx";
+import { volumeToGain } from "./soundVolume.js";
 import "./CombatMap.css";
+
+// Launch sound for a fired slug -- shared by the fresh-shot and counter-shot
+// call sites below. Volume comes from the Sound setting on Settings.jsx
+// (persisted per-user; defaults to 0.5 -- full volume was the "can be loud"
+// complaint that setting exists to fix). Run through volumeToGain rather
+// than applied directly -- see soundVolume.js for why.
+function playShotSound(sliderVolume) {
+  const audio = new Audio("/slugterra-velocity.mp3");
+  audio.volume = volumeToGain(sliderVolume);
+  audio.play().catch(() => {});
+}
 
 // The DM's map image is stored at whatever resolution it was uploaded --
 // this caps it before it ever reaches the server, so a phone photo doesn't
@@ -84,6 +97,23 @@ const LAUNCH_KICK_FRACTION = 0.08;
 const AOE_BURST_RADIUS = 120;
 const HIT_BURST_RADIUS = 35;
 const MISS_BURST_RADIUS = 11;
+
+// Pressure Tick's pod line reach -- mirrors combatRules.js's
+// POD_LINE_LENGTH so the dashed aim-line drawn below exactly matches where
+// the pod's blast will actually reach server-side. Keep the two in sync.
+const POD_LINE_LENGTH = 200;
+
+// How quickly a pod's fire line draws itself out end-to-end (fast, not a
+// projectile travel time), and how long it then stays fully opaque before
+// it starts fading -- the remainder of its windowMs (broadcastPodFx's
+// POD_FX_MS, currently 1200ms) is the fade.
+const POD_FX_DRAW_MS = 150;
+const POD_FX_HOLD_MS = 700;
+
+function podLineEnd(pod) {
+  const rad = (pod.angle * Math.PI) / 180;
+  return { x: pod.x + Math.cos(rad) * POD_LINE_LENGTH, y: pod.y + Math.sin(rad) * POD_LINE_LENGTH };
+}
 
 // An AOE burst specifically grows in from nothing instead of just popping
 // up at full size and fading -- at this size a static circle doesn't read
@@ -215,6 +245,35 @@ function ShotEffect({ fx, onDone }) {
         r={MISS_BURST_RADIUS + 4}
         style={{ "--fx-color": chainColor, opacity: fadeAfter(totalMs) }}
       />
+    );
+  }
+
+  // Pressure Tick's pod firing -- not a projectile that flies out (the
+  // "shot" already happened the instant the pod's counter hit 0), but not a
+  // flat instant pop-in either: the line draws itself out along its length
+  // over POD_FX_DRAW_MS (quick, not a travel time), the arrowhead appears
+  // once it's reached the end, both hold at full opacity through
+  // POD_FX_HOLD_MS, then fade out over what's left of totalMs.
+  if (fx.pod) {
+    const drawProgress = Math.min(1, elapsed / POD_FX_DRAW_MS);
+    const opacity = elapsed < POD_FX_HOLD_MS ? 1 : Math.max(0, 1 - (elapsed - POD_FX_HOLD_MS) / Math.max(1, totalMs - POD_FX_HOLD_MS));
+    const angleDeg = (Math.atan2(fx.impactPoint.y - fx.attackerPos.y, fx.impactPoint.x - fx.attackerPos.x) * 180) / Math.PI;
+    return (
+      <g className="shot-fx-pod-line" style={{ opacity }}>
+        <line
+          x1={fx.attackerPos.x}
+          y1={fx.attackerPos.y}
+          x2={fx.impactPoint.x}
+          y2={fx.impactPoint.y}
+          pathLength={1}
+          style={{ strokeDasharray: 1, strokeDashoffset: 1 - drawProgress }}
+        />
+        {drawProgress >= 1 && (
+          <g transform={`translate(${fx.impactPoint.x} ${fx.impactPoint.y}) rotate(${angleDeg})`}>
+            <path d="M -12 -8 L 8 0 L -12 8 Z" />
+          </g>
+        )}
+      </g>
     );
   }
 
@@ -443,6 +502,8 @@ export default function CombatMap({
   shotResolved,
   onMapUpdate,
 }) {
+  const { user } = useAuth();
+  const soundVolume = user?.soundVolume;
   const svgRef = useRef(null);
   const mapFileInputRef = useRef(null);
   const [drawing, setDrawing] = useState(null); // {x1,y1,x2,y2} while dragging a wall
@@ -555,7 +616,7 @@ export default function CombatMap({
     } else {
       // The slug actually left the blaster -- play the launch sound. Not on
       // a jam/misfire, since then it never went anywhere.
-      new Audio("/slugterra-velocity.mp3").play().catch(() => {});
+      playShotSound(soundVolume);
     }
   }, [shotFx]);
 
@@ -572,7 +633,7 @@ export default function CombatMap({
     if (shotResolved.countered) {
       // The counter-slug fires too, right as it's chosen -- give it the same
       // launch sound the original shot got.
-      new Audio("/slugterra-velocity.mp3").play().catch(() => {});
+      playShotSound(soundVolume);
     }
     setActiveShots((prev) =>
       prev.map((s) =>
@@ -780,6 +841,49 @@ export default function CombatMap({
             <rect x={0} y={-b.width / 2} width={b.length} height={b.width} rx={18} ry={18} />
           </g>
         ))}
+
+        {/* Anchorage's zones -- a shimmering field suppressing knockback and
+            wall-breaking for anyone/anything inside it. */}
+        {(encounter.zones || []).map((z) => (
+          <circle key={`zone-${z.id}`} className="combat-map-zone" cx={z.x} cy={z.y} r={z.radius} />
+        ))}
+
+        {/* Pressure Tick's pods -- the DM gets the full read (a dashed line
+            drawn out to exactly where the blast reaches, an arrowhead, and
+            the live countdown); everyone else just gets a small bending
+            semicircle hinting at the direction, no exact line and no
+            timer -- the DM should know precisely what's coming, players
+            should only get a hint. */}
+        {(encounter.pods || []).map((pod) =>
+          isDM ? (
+            (() => {
+              const end = podLineEnd(pod);
+              return (
+                <g key={`pod-${pod.id}`} style={{ "--pod-color": typeColor(pod.slugType) }}>
+                  <line className="combat-map-pod-aim" x1={pod.x} y1={pod.y} x2={end.x} y2={end.y} />
+                  <g className="combat-map-pod" transform={`translate(${pod.x} ${pod.y})`}>
+                    <circle r={6} />
+                  </g>
+                  <g className="combat-map-pod-arrow" transform={`translate(${end.x} ${end.y}) rotate(${pod.angle})`}>
+                    <path d="M -7 -5 L 5 0 L -7 5 Z" />
+                  </g>
+                  <text className="combat-map-pod-counter" x={pod.x} y={pod.y - 16}>
+                    {pod.counter}
+                  </text>
+                </g>
+              );
+            })()
+          ) : (
+            <g
+              key={`pod-${pod.id}`}
+              className="combat-map-pod-hint"
+              transform={`translate(${pod.x} ${pod.y}) rotate(${pod.angle})`}
+              style={{ "--pod-color": typeColor(pod.slugType) }}
+            >
+              <path d="M 0 -9 A 9 9 0 0 1 0 9" />
+            </g>
+          )
+        )}
 
         {rangeRing && (
           <circle className="combat-map-range-ring" cx={rangeRing.x} cy={rangeRing.y} r={rangeRing.r} />

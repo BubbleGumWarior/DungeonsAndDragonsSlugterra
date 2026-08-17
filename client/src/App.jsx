@@ -18,6 +18,7 @@ import Slugs from "./Slugs.jsx";
 import Mechas from "./Mechas.jsx";
 import CombatPage from "./CombatPage.jsx";
 import Npcs from "./Npcs.jsx";
+import Settings from "./Settings.jsx";
 
 function PublicOnlyRoute({ children }) {
   const { token } = useAuth();
@@ -63,6 +64,7 @@ function App() {
             <Route path="/combat" element={<CombatPage />} />
             <Route path="/npcs" element={<Npcs />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/settings" element={<Settings />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/login" replace />} />

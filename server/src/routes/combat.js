@@ -67,6 +67,24 @@ import {
   confusedDeflection,
   clampToMapBounds,
   CLASH_TRIPLE_MULTIPLIER,
+  CONE_HALF_ANGLE_DEG,
+  CONE_LENGTH,
+  CONE_DAMAGE_FRACTION,
+  pointInCone,
+  POD_COUNT,
+  POD_SCATTER_RADIUS,
+  POD_LINE_HIT_TOLERANCE,
+  rollPodTimer,
+  scatterPoint,
+  distanceToSegment,
+  podLineEnd,
+  STAR_HIT_TOLERANCE,
+  starSegments,
+  ANCHOR_RADIUS,
+  ANCHOR_DURATION_ROUNDS,
+  isInsideAnyZone,
+  DECOY_COUNT,
+  DECOY_OFFSETS,
 } from "../combatRules.js";
 
 const router = Router();
@@ -126,6 +144,8 @@ function toClientEncounter(row, combatants) {
     walls: row.walls,
     hazards: row.hazards,
     bridges: row.bridges,
+    pods: row.pods,
+    zones: row.zones,
     turnOrder: row.turn_order,
     activeTurnIndex: row.active_turn_index,
     activeCombatantId: row.turn_order?.[row.active_turn_index] ?? null,
@@ -632,8 +652,9 @@ router.post("/encounters/:id/npc-combatants", requireDungeonMaster, async (req, 
            breaks_walls, causes_knockback, wall_maker, bridge_maker, aoe_blast, hazard_maker,
            causes_blind, causes_snare, causes_shock, causes_jam,
            pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion,
-           trail_wall, clash_tripled, equipped_blaster_id, magazine_slot)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35)
+           trail_wall, clash_tripled, cone_blast, spawns_pods, mirage_decoy, star_wall, anchor_zone,
+           equipped_blaster_id, magazine_slot)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40)
          RETURNING *`,
         [
           st.id,
@@ -669,6 +690,11 @@ router.post("/encounters/:id/npc-combatants", requireDungeonMaster, async (req, 
           st.causes_confusion,
           st.trail_wall,
           st.clash_tripled,
+          st.cone_blast,
+          st.spawns_pods,
+          st.mirage_decoy,
+          st.star_wall,
+          st.anchor_zone,
           equippedBlasterId,
           magazineSlot,
         ]
@@ -773,6 +799,11 @@ async function advanceTurn(encounterId) {
   }
   if (wrapped) round += 1;
 
+  // Pressure Tick's pods tick down once every time *any* combatant's turn
+  // starts (not just their owner's) -- see tickPods/POD_MIN_TIMER's comment
+  // in combatRules.js.
+  await tickPods(encounterId);
+
   const nextCombatant = await getCombatant(turnOrder[nextIndex]);
   let shocked = false;
   let fledLog = null;
@@ -835,6 +866,9 @@ async function advanceTurn(encounterId) {
   }
   if (wrapped) {
     await pool.query("UPDATE combatants SET rammed_this_round = false WHERE encounter_id = $1", [encounterId]);
+    // Anchorage's zones are a battlefield fixture, not a status on a
+    // person -- they tick down once per full round, not per combatant turn.
+    await tickAnchorZones(encounterId);
   }
 
   await pool.query("UPDATE encounters SET active_turn_index = $1, round = $2 WHERE id = $3", [nextIndex, round, encounterId]);
@@ -947,6 +981,17 @@ router.post("/actions/move", async (req, res) => {
       y,
       current_ap: slipped ? 0 : combatant.current_ap - apNeeded,
     });
+
+    // Mirage Coil's decoys mimic the owner's position on every Move, at
+    // their own fixed offset -- see DECOY_OFFSETS/spawnMirageDecoys.
+    const decoyIds = combatant.status_effects?.mirage?.decoyIds;
+    if (decoyIds && decoyIds.length > 0) {
+      for (let i = 0; i < decoyIds.length; i++) {
+        const offset = DECOY_OFFSETS[i] || DECOY_OFFSETS[0];
+        await updateCombatant(decoyIds[i], { x: x + offset.dx, y: y + offset.dy });
+      }
+    }
+
     if (slipped) {
       await pushCombatLog(combatant.encounter_id, `${combatant.name} slips on the ice -- their turn ends abruptly!`);
     }
@@ -1179,6 +1224,9 @@ async function findChainTarget(encounterId, fromCombatantId, excludeCombatantId)
   let nearest = null;
   let nearestDist = Infinity;
   for (const c of rows) {
+    // A decoy only ever pops from being directly targeted (see dealHit) --
+    // it's not a legitimate incidental chain/splash target.
+    if (c.kind === "decoy") continue;
     if (c.current_grit === null && c.current_structure === null) continue;
     const d = distance({ x: from.x, y: from.y }, { x: c.x, y: c.y });
     if (d <= CHAIN_RADIUS && d < nearestDist) {
@@ -1201,6 +1249,7 @@ async function findAoeTargets(encounterId, origin, excludeIds) {
   );
   return rows.filter((c) => {
     if (excludeIds.includes(c.id)) return false;
+    if (c.kind === "decoy") return false; // only pops from a direct hit, see dealHit
     if (c.current_grit === null && c.current_structure === null) return false;
     return distance(origin, { x: c.x, y: c.y }) <= AOE_RADIUS;
   });
@@ -1367,20 +1416,18 @@ async function addDamageHazard(encounterId, point, slug) {
   }
 }
 
-// Called from /actions/move when a non-mecha combatant's destination lands
-// inside a "damage"-type hazard (see findHazardAt). Deals
-// HAZARD_DAMAGE_FRACTION of the leaving slug's own clashPower as Grit
-// damage, plus that type's Burn/Poison DoT if it has one -- the exact same
-// status_effects fields dealHit itself writes, so tickStatusEffects picks
-// them up identically. Returns the damage dealt and a short log fragment;
-// the caller (the Move route) handles the knockout-roll check.
-async function applyHazardEffect(hazard, combatant) {
-  const tb = typeBallistics(hazard.slugType);
-  const amount = Math.max(1, Math.floor(hazard.clashPower * HAZARD_DAMAGE_FRACTION));
+// Shared by any source of flat, type-tagged environmental damage (a
+// Hazard Maker patch, Pressure Tick's pod lines, Regulator's star-wall
+// formation) -- applies the type's Burn/Poison DoT (if it has one) the exact
+// same way dealHit itself would, on top of a flat Grit hit. Returns the
+// damage dealt and a short log fragment; callers handle their own
+// knockout-roll check.
+async function applyEnvironmentalDamage(combatant, amount, slugType) {
+  const tb = typeBallistics(slugType);
   const nextStatus = { ...(combatant.status_effects || {}) };
   let note = "";
   if (tb.trait === "burn") {
-    const burnDamage = computeBurnDamage(hazard.clashPower);
+    const burnDamage = computeBurnDamage(amount);
     nextStatus.burning = { turnsLeft: BURN_DURATION_TURNS, damage: burnDamage };
     note = " and catches fire";
   } else if (tb.trait === "poison") {
@@ -1396,6 +1443,237 @@ async function applyHazardEffect(hazard, combatant) {
   });
   await syncCharacterFromCombatant(updated);
   return { amount, newGrit, note };
+}
+
+// Called from /actions/move when a non-mecha combatant's destination lands
+// inside a "damage"-type hazard (see findHazardAt). Deals
+// HAZARD_DAMAGE_FRACTION of the leaving slug's own clashPower as Grit
+// damage, plus that type's Burn/Poison DoT if it has one. The caller (the
+// Move route) handles the knockout-roll check.
+async function applyHazardEffect(hazard, combatant) {
+  const amount = Math.max(1, Math.floor(hazard.clashPower * HAZARD_DAMAGE_FRACTION));
+  return applyEnvironmentalDamage(combatant, amount, hazard.slugType);
+}
+
+// Pressure Tick's steam pods -- 3 scattered near the impact point, each with
+// a fixed random direction and an independently rolled 3-10 counter. See
+// POD_* in combatRules.js and tickPods below (where they actually fire).
+// Called once, unconditional on hit/miss, same trigger rule as Ice's patch.
+async function spawnPods(encounterId, point, slug) {
+  try {
+    const { rows } = await pool.query("SELECT pods, next_pod_id FROM encounters WHERE id = $1", [encounterId]);
+    if (!rows[0]) return;
+    let podId = rows[0].next_pod_id;
+    const pods = [...(rows[0].pods || [])];
+    for (let i = 0; i < POD_COUNT; i++) {
+      const pos = scatterPoint(point, POD_SCATTER_RADIUS);
+      pods.push({
+        id: podId,
+        x: pos.x,
+        y: pos.y,
+        angle: Math.random() * 360,
+        counter: rollPodTimer(),
+        slugType: slug.type,
+        clashPower: slug.clash_power,
+      });
+      podId += 1;
+    }
+    await pool.query("UPDATE encounters SET pods = $1, next_pod_id = $2 WHERE id = $3", [
+      JSON.stringify(pods),
+      podId,
+      encounterId,
+    ]);
+    await pushCombatLog(encounterId, `${slug.name} leaves ${POD_COUNT} steam pods hissing on the ground.`);
+    await broadcastEncounter(encounterId);
+  } catch (err) {
+    console.error("Could not spawn pods:", err);
+  }
+}
+
+// Decrements every pod's counter by 1 -- called once per advanceTurn
+// invocation, i.e. once every time *any* combatant's turn starts (not just
+// a pod's own owner). Any pod that hits 0 fires its damaging line along its
+// own fixed direction, then re-arms with a fresh random counter instead of
+// being consumed -- pods are permanent for the rest of the encounter.
+async function tickPods(encounterId) {
+  try {
+    const { rows } = await pool.query("SELECT pods FROM encounters WHERE id = $1", [encounterId]);
+    const pods = rows[0]?.pods || [];
+    if (pods.length === 0) return;
+
+    const { rows: combatantRows } = await pool.query(
+      "SELECT * FROM combatants WHERE encounter_id = $1 AND unconscious = false AND disabled = false",
+      [encounterId]
+    );
+
+    const nextPods = [];
+    for (const pod of pods) {
+      const counter = pod.counter - 1;
+      if (counter > 0) {
+        nextPods.push({ ...pod, counter });
+        continue;
+      }
+      // Fires: anyone within POD_LINE_HIT_TOLERANCE of the line from the pod
+      // out to podLineEnd(pod) takes flat clashPower damage. Always fires
+      // its visual (see broadcastPodFx below), hit or not.
+      const end = podLineEnd(pod);
+      broadcastPodFx({ fromPos: { x: pod.x, y: pod.y }, toPos: end });
+      for (const c of combatantRows) {
+        if (c.kind === "mecha" || c.kind === "decoy") continue; // Grit-only hazard, same as any other; a decoy only pops from a direct shot (see dealHit), not incidental splash
+        if (c.current_grit === null) continue;
+        if (distanceToSegment({ x: c.x, y: c.y }, pod, end) > POD_LINE_HIT_TOLERANCE) continue;
+        const hit = await applyEnvironmentalDamage(c, pod.clashPower, pod.slugType);
+        await pushCombatLog(
+          encounterId,
+          `A steam pod erupts, catching ${c.name} in its blast -- ${hit.amount} Grit damage${hit.note}.`
+        );
+        // A red flash on the taken-damage player's own screen -- their own
+        // client, not the map, so it reads even if they're not looking at
+        // this particular corner of it. DM/NPCs have no ref_user_id to
+        // notify, so this only ever reaches an actual player.
+        if (c.kind === "character" && c.ref_user_id) {
+          notifyUser(c.ref_user_id, { type: "combat-damage-flash", combatantId: c.id });
+        }
+        if (hit.newGrit === 0 && !c.unconscious) await triggerKnockoutRoll(c.id, "grit");
+      }
+      nextPods.push({ ...pod, counter: rollPodTimer() });
+    }
+    await pool.query("UPDATE encounters SET pods = $1 WHERE id = $2", [JSON.stringify(nextPods), encounterId]);
+    // Pod damage doesn't otherwise reach clients until whatever later
+    // broadcastEncounter call happens to follow (e.g. advanceTurn's own,
+    // once the rest of the turn-start bookkeeping finishes) -- broadcast
+    // right away so the Grit hit is visible the moment it lands, in step
+    // with the fx above instead of trailing behind it.
+    await broadcastEncounter(encounterId);
+  } catch (err) {
+    console.error("Could not tick pods:", err);
+  }
+}
+
+// Regulator: a STAR_POINTS-segment star of fire walls radiating from the
+// impact point. Anyone caught in a segment as it forms takes full
+// clashPower damage, once -- after that the segments persist as ordinary
+// walls (no further damage on touch). Unconditional on hit/miss, same
+// trigger rule as Ice's patch/addTrailWall.
+async function formStarWall(encounterId, point, slug) {
+  try {
+    const segments = starSegments(point);
+    const { rows } = await pool.query("SELECT walls, next_wall_id FROM encounters WHERE id = $1", [encounterId]);
+    if (!rows[0]) return;
+    let wallId = rows[0].next_wall_id;
+    const walls = [...(rows[0].walls || [])];
+    for (const seg of segments) {
+      walls.push({ id: wallId, source: "slug", slugType: slug.type, ...seg });
+      wallId += 1;
+    }
+    await pool.query("UPDATE encounters SET walls = $1, next_wall_id = $2 WHERE id = $3", [
+      JSON.stringify(walls),
+      wallId,
+      encounterId,
+    ]);
+
+    const { rows: combatantRows } = await pool.query(
+      "SELECT * FROM combatants WHERE encounter_id = $1 AND unconscious = false AND disabled = false",
+      [encounterId]
+    );
+    for (const c of combatantRows) {
+      if (c.kind === "mecha" || c.kind === "decoy") continue;
+      if (c.current_grit === null) continue;
+      // seg is {x1,y1,x2,y2} (starSegments' own shape) -- distanceToSegment
+      // wants two {x,y} points, not the segment object itself.
+      const caught = segments.some(
+        (seg) => distanceToSegment({ x: c.x, y: c.y }, { x: seg.x1, y: seg.y1 }, { x: seg.x2, y: seg.y2 }) <= STAR_HIT_TOLERANCE
+      );
+      if (!caught) continue;
+      const hit = await applyEnvironmentalDamage(c, slug.clash_power, slug.type);
+      await pushCombatLog(encounterId, `The bursting star of fire walls catches ${c.name} -- ${hit.amount} Grit damage${hit.note}.`);
+      if (hit.newGrit === 0 && !c.unconscious) await triggerKnockoutRoll(c.id, "grit");
+    }
+
+    await pushCombatLog(encounterId, `${slug.name} bursts into a star-shaped wall of fire!`);
+    await broadcastEncounter(encounterId);
+  } catch (err) {
+    console.error("Could not form star wall:", err);
+  }
+}
+
+// Anchorage: a zone that suppresses knockback and wall-breaking for anyone
+// inside it, for ANCHOR_DURATION_ROUNDS rounds. Unconditional on hit/miss,
+// same trigger rule as Ice's patch.
+async function addAnchorZone(encounterId, point) {
+  try {
+    const { rows } = await pool.query("SELECT zones, next_zone_id FROM encounters WHERE id = $1", [encounterId]);
+    if (!rows[0]) return;
+    const zoneId = rows[0].next_zone_id;
+    const zones = [
+      ...(rows[0].zones || []),
+      { id: zoneId, x: point.x, y: point.y, radius: ANCHOR_RADIUS, turnsLeft: ANCHOR_DURATION_ROUNDS },
+    ];
+    await pool.query("UPDATE encounters SET zones = $1, next_zone_id = $2 WHERE id = $3", [
+      JSON.stringify(zones),
+      zoneId + 1,
+      encounterId,
+    ]);
+    await pushCombatLog(encounterId, "A shimmering field settles over the ground -- nothing here can be knocked back or broken.");
+    await broadcastEncounter(encounterId);
+  } catch (err) {
+    console.error("Could not add anchor zone:", err);
+  }
+}
+
+// Ticks every zone's duration down by 1 (once per full round -- see
+// advanceTurn's `wrapped` branch), dropping any that expire.
+async function tickAnchorZones(encounterId) {
+  try {
+    const { rows } = await pool.query("SELECT zones FROM encounters WHERE id = $1", [encounterId]);
+    const zones = rows[0]?.zones || [];
+    if (zones.length === 0) return;
+    const next = zones.map((z) => ({ ...z, turnsLeft: z.turnsLeft - 1 })).filter((z) => z.turnsLeft > 0);
+    await pool.query("UPDATE encounters SET zones = $1 WHERE id = $2", [JSON.stringify(next), encounterId]);
+  } catch (err) {
+    console.error("Could not tick anchor zones:", err);
+  }
+}
+
+// Mirage Coil: self-targeted, spawns DECOY_COUNT lightweight combatant rows
+// (kind: "decoy") next to the owner. They mimic the owner's position on
+// every Move (see /actions/move) and the owner's own shots visually (see
+// causes_jam-style broadcast in the shoot route) but have no real stats --
+// a shot "landing" on one just pops it (see dealHit's decoy branch). Hitting
+// the real owner clears all remaining decoys at once (see
+// clearMirageDecoys below).
+async function spawnMirageDecoys(owner) {
+  const decoyIds = [];
+  for (const offset of DECOY_OFFSETS.slice(0, DECOY_COUNT)) {
+    const { rows } = await pool.query(
+      // max_grit/current_grit are copied from the owner (not left null) so
+      // the token's Grit ring reads full/healthy instead of the 0%-red ring
+      // a null maxGrit produces -- a decoy is meant to be visually
+      // indistinguishable from the real thing, not obviously fake.
+      `INSERT INTO combatants (encounter_id, kind, name, portrait, x, y, max_ap, current_ap, max_grit, current_grit, data)
+       VALUES ($1, 'decoy', $2, $3, $4, $5, 0, 0, $6, $7, $8)
+       RETURNING *`,
+      [
+        owner.encounter_id,
+        `${owner.name} (mirage)`,
+        owner.portrait,
+        owner.x + offset.dx,
+        owner.y + offset.dy,
+        owner.max_grit,
+        owner.current_grit,
+        JSON.stringify({ decoyOwnerId: owner.id }),
+      ]
+    );
+    decoyIds.push(rows[0].id);
+  }
+  return decoyIds;
+}
+
+// Removes every decoy tied to `ownerCombatantId` (used both when a decoy is
+// popped down to none and when the real owner is hit -- see dealHit).
+async function removeDecoys(encounterId, decoyIds) {
+  if (!decoyIds || decoyIds.length === 0) return;
+  await pool.query("DELETE FROM combatants WHERE id = ANY($1::int[])", [decoyIds]);
 }
 
 // The core damage/heal/trait/wall-break/knockback resolver, shared by normal
@@ -1421,14 +1699,43 @@ async function dealHit(
   // resolveCounterOffer, which pass offer.attackerPos or offer.targetPos.
   const knockbackOrigin = originPos || { x: shooter.x, y: shooter.y };
 
+  // Mirage Coil: a shot resolved against a decoy never actually lands --
+  // the decoy just pops (revealing it was fake), no damage. Popping one
+  // decoy doesn't end the mirage (see the real-owner branch below for
+  // that) -- it just shrinks the illusion by one.
+  if (target.kind === "decoy") {
+    const ownerId = target.data?.decoyOwnerId;
+    if (ownerId) {
+      const owner = await getCombatant(ownerId);
+      if (owner) {
+        const remaining = (owner.status_effects?.mirage?.decoyIds || []).filter((id) => id !== target.id);
+        const nextStatus = { ...(owner.status_effects || {}) };
+        if (remaining.length > 0) nextStatus.mirage = { decoyIds: remaining };
+        else delete nextStatus.mirage;
+        await updateCombatant(owner.id, { status_effects: JSON.stringify(nextStatus) });
+      }
+    }
+    await removeDecoys(encounterId, [target.id]);
+    await broadcastEncounter(encounterId);
+    return `it was a decoy! ${target.name} vanishes in a shimmer.`;
+  }
+
+  let log;
+  // Healing (and None) don't go through the normal Grit/Structure damage
+  // resolution below at all -- but a Healing slug can still be flagged
+  // aoe_blast (Sapheart: "heals all slingers in its range"), so instead of
+  // returning immediately it just sets skipDamageResolution and falls
+  // through to the aoe_blast splash block at the end of this function.
+  let skipDamageResolution = false;
+
   if (slug.type === "Healing") {
     const amount = slug.clash_power;
     const newGrit = Math.min(target.max_grit ?? amount, (target.current_grit ?? 0) + amount);
     const updated = await updateCombatant(target.id, { current_grit: newGrit });
     await syncCharacterFromCombatant(updated);
-    return `${target.name} is healed for ${amount} Grit.`;
-  }
-  if (slug.type === "None") {
+    log = `${target.name} is healed for ${amount} Grit.`;
+    skipDamageResolution = true;
+  } else if (slug.type === "None") {
     return "it bounces off harmlessly.";
   }
 
@@ -1436,9 +1743,9 @@ async function dealHit(
   let amount = Math.max(0, slug.clash_power + tb.powerMod);
   if (half) amount = Math.floor(amount / 2);
 
-  let log;
-
-  if (target.kind === "mecha") {
+  if (skipDamageResolution) {
+    // fall through to the aoe_blast block below
+  } else if (target.kind === "mecha") {
     const armor = target.data?.armor ?? 0;
     const dmg = Math.max(0, amount - armor);
     const newStructure = Math.max(0, (target.current_structure ?? 0) - dmg);
@@ -1451,6 +1758,16 @@ async function dealHit(
   } else {
     const newGrit = Math.max(0, (target.current_grit ?? 0) - amount);
     const nextStatus = { ...(target.status_effects || {}) };
+    // A self-targeted shot (Thugglet's invisibility, Mirage Coil's decoys,
+    // or anyone deliberately shooting themselves) is meant to be a pure
+    // self-buff -- none of a type's own negative traits (burn/poison/
+    // snare/stun/blind) or the analogous "Causes X" flags should land on
+    // the shooter just because their slug's *type* happens to carry one
+    // (e.g. Mirage Coil is Light, whose trait is "blind"; Thugglet is
+    // Psychic, whose trait is "stun"). Computed up front, before any of
+    // those checks, so every one of them can gate on it -- same rule
+    // causes_jam already followed on its own further down.
+    const isSelfTarget = shooter.id === target.id;
     // Burn/poison don't hit right now -- they land at the start of the
     // target's own next turn (see tickStatusEffects, called from
     // advanceTurn). Snare fully blocks Move (see /actions/move) instead of
@@ -1458,35 +1775,42 @@ async function dealHit(
     const wasBurning = Boolean(target.status_effects?.burning);
     const wasDoused = tb.trait === "douse" && wasBurning;
     let burnDamage = 0;
-    if (tb.trait === "burn") {
+    if (tb.trait === "burn" && !isSelfTarget) {
       // Doesn't stack -- a fresh Fire hit just refreshes the duration and
       // recalculates the damage off this hit's own clashPower.
       burnDamage = computeBurnDamage(slug.clash_power);
       nextStatus.burning = { turnsLeft: BURN_DURATION_TURNS, damage: burnDamage };
     }
     let poisonStacks = 0;
-    if (tb.trait === "poison") {
+    if (tb.trait === "poison" && !isSelfTarget) {
       // Stacks -- each poisoning hit adds a stack (more damage/turn) and
       // resets the shared duration back to the full length.
       poisonStacks = (nextStatus.poison?.stacks || 0) + 1;
       nextStatus.poison = { stacks: poisonStacks, turnsLeft: POISON_DURATION_TURNS };
     }
-    if (tb.trait === "snare") nextStatus.snared = { turnsLeft: SNARE_DURATION_TURNS };
-    if (tb.trait === "stun") nextStatus.stunned = true;
-    if (tb.trait === "blind") nextStatus.blinded = true;
+    if (tb.trait === "snare" && !isSelfTarget) nextStatus.snared = { turnsLeft: SNARE_DURATION_TURNS };
+    if (tb.trait === "stun" && !isSelfTarget) nextStatus.stunned = true;
+    if (tb.trait === "blind" && !isSelfTarget) nextStatus.blinded = true;
     if (tb.trait === "douse") delete nextStatus.burning;
+    // Mirage Coil -- the real owner (never a decoy; those are intercepted
+    // above before reaching here) taking any hit collapses the whole
+    // illusion at once, unlike a decoy being hit (which only pops that one
+    // decoy, see the decoy branch near the top of this function).
+    let mirageLog = "";
+    if (nextStatus.mirage) {
+      await removeDecoys(encounterId, nextStatus.mirage.decoyIds);
+      delete nextStatus.mirage;
+      mirageLog = ` The mirage collapses -- ${target.name}'s decoys vanish!`;
+    }
     // Per-slug flags that opt a type without the trait by default into it --
     // same "Causes X" pattern as causes_knockback. Shock is its own status,
     // distinct from Psychic's stun: it skips the target's entire next turn
-    // (see advanceTurn) rather than costing 1 AP.
-    if (slug.causes_blind) nextStatus.blinded = true;
-    if (slug.causes_snare) nextStatus.snared = { turnsLeft: SNARE_DURATION_TURNS };
-    if (slug.causes_shock) nextStatus.shocked = true;
-    // Thugglet is the one slug with both causes_jam and causes_invisible --
-    // firing it at yourself (self-targeted, see causes_invisible below)
-    // should only turn you invisible, never jam your own gun; firing it at
-    // someone else should only jam theirs, never turn *them* invisible.
-    const isSelfTarget = shooter.id === target.id;
+    // (see advanceTurn) rather than costing 1 AP. All gated on !isSelfTarget
+    // (declared above) -- same reasoning as the type-trait checks above and
+    // causes_jam below: a self-targeted shot is a pure self-buff.
+    if (slug.causes_blind && !isSelfTarget) nextStatus.blinded = true;
+    if (slug.causes_snare && !isSelfTarget) nextStatus.snared = { turnsLeft: SNARE_DURATION_TURNS };
+    if (slug.causes_shock && !isSelfTarget) nextStatus.shocked = true;
     // Fries the target's blaster regardless of hit/miss (see resolveNormalHit
     // for the miss case) -- consumed the next time they attempt to fire, see
     // /actions/shoot.
@@ -1494,11 +1818,11 @@ async function dealHit(
     // Frightgeist -- records *where the shot came from*, not just that fear
     // landed, so advanceTurn knows which direction to run the target away
     // from when their turn comes up (see FEAR_FLEE_AP_EQUIVALENT there).
-    if (slug.causes_fear) nextStatus.feared = { x: shooter.x, y: shooter.y };
+    if (slug.causes_fear && !isSelfTarget) nextStatus.feared = { x: shooter.x, y: shooter.y };
     // Fandango -- only the combatant actually hit gets confused; it's a
     // debuff on *their* future shots, not a field-wide effect (see
     // CONFUSION_CHANCE/confusedDeflection in the shoot route).
-    if (slug.causes_confusion) nextStatus.confused = { turnsLeft: CONFUSION_DURATION_TURNS };
+    if (slug.causes_confusion && !isSelfTarget) nextStatus.confused = { turnsLeft: CONFUSION_DURATION_TURNS };
     // Thugglet, self-targeted only -- hides the token from every other
     // player (see CombatMap.jsx) until it's consumed below by getting hit
     // (any hit, not just an AOE splash -- "AOE reveals" is just the general
@@ -1510,6 +1834,11 @@ async function dealHit(
     // invisible target; getting struck gives your position away regardless
     // of what actually hit you.
     if (nextStatus.invisible && !slug.causes_invisible) delete nextStatus.invisible;
+    // Mirage Coil, self-targeted only (same isSelfTarget convention as
+    // Thugglet's invisibility) -- the actual decoy rows get spawned further
+    // down, after this combatant's own status_effects write lands, so their
+    // ids are on hand to store into it.
+    const spawnMirage = Boolean(slug.mirage_decoy && isSelfTarget);
 
     const updated = await updateCombatant(target.id, {
       current_grit: newGrit,
@@ -1517,46 +1846,57 @@ async function dealHit(
       status_effects: JSON.stringify(nextStatus),
     });
     await syncCharacterFromCombatant(updated);
-    log = `${target.name} takes ${amount} Grit damage${newGrit === 0 ? " and is at 0 Grit!" : ""}.`;
+    log = `${target.name} takes ${amount} Grit damage${newGrit === 0 ? " and is at 0 Grit!" : ""}.${mirageLog}`;
+
+    // Mirage Coil, self-targeted -- spawn the decoys now that `updated`
+    // (this combatant's just-written status_effects) is on hand, then layer
+    // the mirage entry on top of it with a second, small write.
+    if (spawnMirage) {
+      const decoyIds = await spawnMirageDecoys(updated);
+      await updateCombatant(target.id, {
+        status_effects: JSON.stringify({ ...(updated.status_effects || {}), mirage: { decoyIds } }),
+      });
+      log += ` ${DECOY_COUNT} decoys shimmer into being around ${target.name}!`;
+    }
 
     // The status effect itself never deals damage on this same hit (see
     // tickStatusEffects) -- without an explicit log line here, inflicting
     // one reads as if nothing happened until it actually ticks on the
     // target's next turn.
-    if (tb.trait === "burn") {
+    if (tb.trait === "burn" && !isSelfTarget) {
       log += ` ${target.name} catches fire -- ${burnDamage} Grit damage at the start of each of their next ${BURN_DURATION_TURNS} turns.`;
     }
-    if (tb.trait === "poison") {
+    if (tb.trait === "poison" && !isSelfTarget) {
       log += ` ${target.name} is poisoned (${poisonStacks * POISON_DAMAGE_PER_STACK} Grit/turn for ${POISON_DURATION_TURNS} turns${poisonStacks > 1 ? `, ${poisonStacks} stacks` : ""}).`;
     }
-    if (tb.trait === "snare") {
+    if (tb.trait === "snare" && !isSelfTarget) {
       log += ` ${target.name} is snared -- can't Move for ${SNARE_DURATION_TURNS} of their own turns.`;
     }
-    if (tb.trait === "stun") {
+    if (tb.trait === "stun" && !isSelfTarget) {
       log += ` ${target.name} is stunned -- they'll lose 1 AP on their next turn.`;
     }
-    if (tb.trait === "blind") {
+    if (tb.trait === "blind" && !isSelfTarget) {
       log += ` ${target.name} is blinded -- their next attack roll has disadvantage.`;
     }
     if (wasDoused) {
       log += ` The water douses ${target.name}'s flames.`;
     }
-    if (slug.causes_blind && tb.trait !== "blind") {
+    if (slug.causes_blind && !isSelfTarget && tb.trait !== "blind") {
       log += ` ${target.name} is blinded -- their next attack roll has disadvantage.`;
     }
-    if (slug.causes_snare && tb.trait !== "snare") {
+    if (slug.causes_snare && !isSelfTarget && tb.trait !== "snare") {
       log += ` ${target.name} is snared -- can't Move for ${SNARE_DURATION_TURNS} of their own turns.`;
     }
-    if (slug.causes_shock) {
+    if (slug.causes_shock && !isSelfTarget) {
       log += ` ${target.name} is shocked -- their entire next turn is skipped.`;
     }
     if (slug.causes_jam && !isSelfTarget) {
       log += ` ${target.name}'s blaster is fried -- their next shot misfires.`;
     }
-    if (slug.causes_fear) {
+    if (slug.causes_fear && !isSelfTarget) {
       log += ` ${target.name} is terrified -- their entire next turn is spent fleeing.`;
     }
-    if (slug.causes_confusion) {
+    if (slug.causes_confusion && !isSelfTarget) {
       log += ` ${target.name} is rattled -- their own shots risk firing wildly off target for ${CONFUSION_DURATION_TURNS} turns.`;
     }
     if (slug.causes_invisible && isSelfTarget) {
@@ -1589,14 +1929,19 @@ async function dealHit(
     let knockedIntoWall = false;
     // Metal/Earth always shove on hit; any other type only does if its
     // template has causes_knockback ticked -- see slugKnockbackDistance.
-    const kbDistance = slugKnockbackDistance(slug.type, slug.causes_knockback);
+    const kbDistance = isSelfTarget ? 0 : slugKnockbackDistance(slug.type, slug.causes_knockback);
     if (kbDistance > 0) {
-      const encRow = (await pool.query("SELECT walls FROM encounters WHERE id = $1", [encounterId])).rows[0];
-      const kb = knockbackTarget(knockbackOrigin, { x: target.x, y: target.y }, encRow?.walls || [], kbDistance);
-      scheduleKnockback(encounterId, target.id, kb.point, windowMs, firedAt);
-      if (kb.hitWall) {
-        log += ` ${target.name} is knocked into a wall!`;
-        knockedIntoWall = true;
+      const encRow = (await pool.query("SELECT walls, zones FROM encounters WHERE id = $1", [encounterId])).rows[0];
+      // Anchorage's zone suppresses knockback entirely for anyone inside it.
+      if (isInsideAnyZone(encRow?.zones, { x: target.x, y: target.y })) {
+        log += ` ${target.name} doesn't budge -- something is anchoring them in place!`;
+      } else {
+        const kb = knockbackTarget(knockbackOrigin, { x: target.x, y: target.y }, encRow?.walls || [], kbDistance);
+        scheduleKnockback(encounterId, target.id, kb.point, windowMs, firedAt);
+        if (kb.hitWall) {
+          log += ` ${target.name} is knocked into a wall!`;
+          knockedIntoWall = true;
+        }
       }
     }
     // A hard wall impact can knock a target out on its own, independent of
@@ -1619,6 +1964,28 @@ async function dealHit(
     for (const other of nearby) {
       const splashLog = await dealHit(encounterId, shooter.id, other.id, slug, { windowMs, firedAt, isSplash: true });
       log += ` The blast also catches ${other.name}: ${splashLog}`;
+    }
+  }
+
+  // Thornlash: not a circular splash -- the primary target already took a
+  // full, ordinary hit above. A cone of spikes then fans out *beyond* the
+  // impact point, continuing the shot's own line of travel (apex = the
+  // target's position, "from" = wherever the shot came from), dealing
+  // CONE_DAMAGE_FRACTION of clashPower to anyone else it catches.
+  if (slug.cone_blast && !isSplash) {
+    const apex = { x: target.x, y: target.y };
+    const { rows: coneCandidates } = await pool.query(
+      "SELECT * FROM combatants WHERE encounter_id = $1 AND id != $2 AND id != $3 AND unconscious = false AND disabled = false",
+      [encounterId, shooter.id, target.id]
+    );
+    const coneAmount = Math.max(1, Math.round(slug.clash_power * CONE_DAMAGE_FRACTION));
+    for (const c of coneCandidates) {
+      if (c.kind === "decoy") continue; // only pops from a direct hit, see dealHit
+      if (c.current_grit === null && c.current_structure === null) continue;
+      if (!pointInCone(apex, knockbackOrigin, { x: c.x, y: c.y }, CONE_HALF_ANGLE_DEG, CONE_LENGTH)) continue;
+      const hit = await applyEnvironmentalDamage(c, coneAmount, slug.type);
+      log += ` The cone of spikes also catches ${c.name} -- ${hit.amount} Grit damage${hit.note}.`;
+      if (hit.newGrit === 0 && !c.unconscious) await triggerKnockoutRoll(c.id, "grit");
     }
   }
 
@@ -1690,6 +2057,34 @@ function broadcastChainFx({ fromPos, toPos }) {
       outcome: "hit",
       aoe: false,
       chain: true,
+    },
+  });
+}
+
+// Pressure Tick's pod firing -- unlike the chain arc's traveling bolt, this
+// draws instantly (the line + arrowhead just appear, they don't fly out),
+// lingers fully visible, then fades -- see the fx.pod branch in
+// CombatMap.jsx's ShotEffect. Same self-contained, non-counterable
+// broadcast pattern as the chain arc otherwise (the outcome's already
+// known, there's no window for anyone to react). See tickPods.
+const POD_FX_MS = 1200;
+function broadcastPodFx({ fromPos, toPos }) {
+  broadcastAll({
+    type: "combat-shot-fx",
+    fx: {
+      id: `pod-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      attackerId: null,
+      targetId: null,
+      attackerPos: fromPos,
+      targetPos: toPos,
+      impactPoint: toPos,
+      slugType: null,
+      windowMs: POD_FX_MS,
+      countered: false,
+      counterSlugType: null,
+      outcome: "hit",
+      aoe: false,
+      pod: true,
     },
   });
 }
@@ -2131,6 +2526,11 @@ async function resolveShooterSlugAndBlaster(attacker, req, { slugId, npcSlug, np
       causes_confusion: Boolean(npcSlug?.causesConfusion),
       trail_wall: Boolean(npcSlug?.trailWall),
       clash_tripled: Boolean(npcSlug?.clashTripled),
+      cone_blast: Boolean(npcSlug?.coneBlast),
+      spawns_pods: Boolean(npcSlug?.spawnsPods),
+      mirage_decoy: Boolean(npcSlug?.mirageDecoy),
+      star_wall: Boolean(npcSlug?.starWall),
+      anchor_zone: Boolean(npcSlug?.anchorZone),
       energy_pips: [true],
       user_id: null,
     };
@@ -2164,11 +2564,15 @@ async function applyEnvironmentEffect({ actionType, attacker, slug, tb, attacker
       // nothing for a Break Wall action to actually do.
       log = `${attacker.name}'s ${slug.name} phases straight through -- there's nothing solid enough for it to break.`;
     } else {
-      const row = (await pool.query("SELECT walls, bridges, next_wall_id FROM encounters WHERE id = $1", [encounterId])).rows[0];
+      const row = (await pool.query("SELECT walls, bridges, next_wall_id, zones FROM encounters WHERE id = $1", [encounterId])).rows[0];
       const walls = row?.walls || [];
       const bridges = row?.bridges || [];
       const wallHit = firstWallHit(attackerPos, finalPoint, walls);
-      if (wallHit) {
+      if (wallHit && isInsideAnyZone(row?.zones, wallHit.hit)) {
+        // Anchorage's zone -- nothing here can be broken while it's up.
+        impactPoint = wallHit.hit;
+        log = `${attacker.name}'s ${slug.name} slams into the wall, but some anchoring force keeps it standing!`;
+      } else if (wallHit) {
         impactPoint = wallHit.hit;
         if (wallHit.wall.source === "slug") {
           // A player-made wall breaks outright -- unlike a DM wall, there's
@@ -2492,16 +2896,46 @@ router.post("/actions/shoot", async (req, res) => {
       });
     }
 
+    // Pressure Tick: 3 permanent, independently-timed steam pods scattered
+    // near the impact point -- unconditional on hit/miss, same trigger rule
+    // as Ice's patch above.
+    if (slug.spawns_pods) {
+      scheduleAfterFlight(firedAt, windowMs, async () => {
+        await spawnPods(attacker.encounter_id, impactPoint, slug);
+      });
+    }
+
+    // Regulator: a star-shaped burst of damaging fire walls on impact.
+    if (slug.star_wall) {
+      scheduleAfterFlight(firedAt, windowMs, async () => {
+        await formStarWall(attacker.encounter_id, impactPoint, slug);
+      });
+    }
+
+    // Anchorage: a zone suppressing knockback/wall-breaking around impact.
+    if (slug.anchor_zone) {
+      scheduleAfterFlight(firedAt, windowMs, async () => {
+        await addAnchorZone(attacker.encounter_id, impactPoint);
+      });
+    }
+
     // Bladier: the wall actually breaks once the bolt's flight would have
     // reached it, same delayed-resolution treatment as every other
     // terrain mutation tied to a shot (see WALL_BREAK_RADIUS's comment,
     // applyEnvironmentEffect's break-wall branch, which this mirrors).
     if (pierces) {
       scheduleAfterFlight(firedAt, windowMs, async () => {
-        const row = (await pool.query("SELECT walls, next_wall_id FROM encounters WHERE id = $1", [attacker.encounter_id])).rows[0];
+        const row = (await pool.query("SELECT walls, next_wall_id, zones FROM encounters WHERE id = $1", [attacker.encounter_id])).rows[0];
         const walls = row?.walls || [];
         const stillThere = walls.find((w) => w.id === wallHit.wall.id);
         if (!stillThere) return; // already gone by the time the bolt got there
+        if (isInsideAnyZone(row?.zones, wallHit.hit)) {
+          // Anchorage's zone -- the dagger still hits the target (the shot
+          // already resolved as a normal hit above), the wall just holds.
+          await pushCombatLog(attacker.encounter_id, `${attacker.name}'s ${slug.name} punches the wall, but some anchoring force keeps it standing!`);
+          await broadcastEncounter(attacker.encounter_id);
+          return;
+        }
         if (stillThere.source === "slug") {
           const nextWalls = walls.filter((w) => w.id !== stillThere.id);
           await pool.query("UPDATE encounters SET walls = $1 WHERE id = $2", [JSON.stringify(nextWalls), attacker.encounter_id]);

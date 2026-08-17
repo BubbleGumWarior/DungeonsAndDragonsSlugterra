@@ -34,7 +34,7 @@ router.post("/register", async (req, res) => {
     const { rows } = await client.query(
       `INSERT INTO users (username, password_hash, role, status)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, username, role, status, must_change_password`,
+       RETURNING id, username, role, status, must_change_password, theme, sound_volume`,
       [trimmedUsername, passwordHash, role, status]
     );
 
@@ -55,6 +55,8 @@ router.post("/register", async (req, res) => {
         role: row.role,
         status: row.status,
         mustChangePassword: row.must_change_password,
+        theme: row.theme,
+        soundVolume: row.sound_volume,
       },
     });
   } catch (err) {
@@ -77,7 +79,7 @@ router.post("/login", async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      "SELECT id, username, password_hash, role, status, must_change_password FROM users WHERE username = $1",
+      "SELECT id, username, password_hash, role, status, must_change_password, theme, sound_volume FROM users WHERE username = $1",
       [username.trim()]
     );
     const user = rows[0];
@@ -104,6 +106,8 @@ router.post("/login", async (req, res) => {
         role: user.role,
         status: user.status,
         mustChangePassword: user.must_change_password,
+        theme: user.theme,
+        soundVolume: user.sound_volume,
       },
     });
   } catch (err) {

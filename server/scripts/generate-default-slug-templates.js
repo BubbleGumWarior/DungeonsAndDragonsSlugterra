@@ -148,6 +148,11 @@ async function main() {
       causesConfusion: toBool(r[col("Causes Confusion")]),
       trailWall: toBool(r[col("Trail Wall")]),
       clashTripled: toBool(r[col("Clash Tripled")]),
+      coneBlast: toBool(r[col("Cone Blast")]),
+      spawnsPods: toBool(r[col("Spawns Pods")]),
+      mirageDecoy: toBool(r[col("Mirage Decoy")]),
+      starWall: toBool(r[col("Star Wall")]),
+      anchorZone: toBool(r[col("Anchor Zone")]),
       protoformImage,
       velocityImage,
     });
