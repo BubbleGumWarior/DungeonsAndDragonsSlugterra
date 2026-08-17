@@ -168,7 +168,7 @@ export default function Settings() {
               </span>
               <div className="panel-header-text">
                 <h2>Sound</h2>
-                <p>Controls the Shoot Slug launch sound in Combat.</p>
+                <p>Controls the sound volume being played.</p>
               </div>
             </div>
             <div className="panel-body">
@@ -216,7 +216,7 @@ export default function Settings() {
             </div>
             <div className="panel-body">
               <div className="preview-row">
-                <h3 className="preview-heading">The Slugterra Chronicles</h3>
+                <h3 className="preview-heading">The Testing Chronicles</h3>
                 <span className="panel-header-badge">Loyalty Tier III</span>
               </div>
               <p className="preview-copy">
