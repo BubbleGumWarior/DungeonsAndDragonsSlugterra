@@ -345,6 +345,46 @@ export function shotFlightMs(dist, weaponRange) {
 // CombatMap.jsx's own copy of the number.
 export const SHOT_FLIGHT_MULTIPLIER = 1;
 
+// A bolt's two-phase speed profile, as a fraction (0..1) of the
+// attacker->target distance covered after `elapsedMs` of a flight that
+// takes `flightMs` end to end: a slow crawl out capped at SHOT_SLOW_PHASE_MS
+// (with a small instant kick so it visibly leaves the barrel), then a fast
+// linear burst for the rest. Mirrors client/src/CombatMap.jsx's
+// phasedFraction exactly -- keep the two in sync. Used server-side to work
+// out where an incoming shot actually was when a counter launched, so the
+// clash lands where the two bolts really meet rather than always at the
+// geometric midpoint.
+export const SHOT_LAUNCH_KICK_FRACTION = 0.08;
+export const SHOT_SLOW_PHASE_DISTANCE_FRACTION = 0.2;
+
+export function shotDistanceFraction(elapsedMs, flightMs) {
+  if (elapsedMs <= 0) return 0;
+  if (elapsedMs >= flightMs) return 1;
+  const slowMs = Math.min(SHOT_SLOW_PHASE_MS, flightMs);
+  const fastMs = flightMs - slowMs;
+  if (fastMs <= 0) return elapsedMs / flightMs;
+  if (elapsedMs <= slowMs) {
+    const t = elapsedMs / slowMs;
+    return SHOT_LAUNCH_KICK_FRACTION + t * (SHOT_SLOW_PHASE_DISTANCE_FRACTION - SHOT_LAUNCH_KICK_FRACTION);
+  }
+  const fastElapsed = elapsedMs - slowMs;
+  return SHOT_SLOW_PHASE_DISTANCE_FRACTION + (1 - SHOT_SLOW_PHASE_DISTANCE_FRACTION) * (fastElapsed / fastMs);
+}
+
+// Straight-line interpolation between two map points, t in 0..1.
+export function lerpPoint(a, b, t) {
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+}
+
+// A supportive shot helps whoever it lands on rather than hurting them -- a
+// Healing slug, or an inert None slug. Fired at an ally (or yourself) it's a
+// boon, not an attack: it never offers the target a counter-clash and never
+// lands a type's negative trait effects, whoever it hits. Keyed on type
+// alone so it holds for custom slugs too.
+export function isSupportiveSlug(slug) {
+  return slug?.type === "Healing" || slug?.type === "None";
+}
+
 // Mutual clash resolution. Returns one of:
 //  "double-break" | "attacker-wins" | "defender-wins" | "bounce"
 export function resolveClash({ attackerPower, attackerDefense, defenderPower, defenderDefense }) {
@@ -622,7 +662,7 @@ export function pointInCone(apex, from, point, halfAngleDeg, length) {
 // direction, then re-arms with a fresh random counter instead of being
 // consumed -- it stays live for the rest of the encounter.
 export const POD_COUNT = 3;
-export const POD_SCATTER_RADIUS = 60; // map units around the impact point
+export const POD_SCATTER_RADIUS = 180; // map units around the impact point -- wide enough that the 3 pods land clearly apart, not stacked
 export const POD_MIN_TIMER = 3;
 export const POD_MAX_TIMER = 10;
 export const POD_LINE_LENGTH = 200; // map units the steam line reaches
@@ -632,10 +672,13 @@ export function rollPodTimer() {
   return POD_MIN_TIMER + Math.floor(Math.random() * (POD_MAX_TIMER - POD_MIN_TIMER + 1));
 }
 
-// A point scattered within POD_SCATTER_RADIUS of `center`.
+// A point scattered within `radius` of `center`. The distance is
+// sqrt-weighted so points spread evenly across the whole disc -- a plain
+// Math.random() * radius biases hard toward the center, which is what made
+// the pods pile up on top of each other.
 export function scatterPoint(center, radius) {
   const angle = Math.random() * 2 * Math.PI;
-  const dist = Math.random() * radius;
+  const dist = Math.sqrt(Math.random()) * radius;
   return { x: center.x + Math.cos(angle) * dist, y: center.y + Math.sin(angle) * dist };
 }
 
@@ -700,8 +743,18 @@ export function isInsideAnyZone(zones, point) {
 // that one decoy; the real owner being hit clears all remaining decoys at
 // once. See spawnMirageDecoys/moveDecoysWith in routes/combat.js.
 export const DECOY_COUNT = 2;
-// Fixed offsets (map units) from the owner each decoy sits at/mimics to.
-export const DECOY_OFFSETS = [
-  { dx: -50, dy: -30 },
-  { dx: 50, dy: -30 },
-];
+// Each decoy sits at its own random offset from the owner -- a random angle
+// and a random distance in [DECOY_MIN_RADIUS, DECOY_MAX_RADIUS], rolled
+// independently per decoy. They scatter unpredictably (they can both land on
+// the same side, or roughly in a line with the owner) instead of snapping
+// into a fixed formation that gives away which token is the real one. The
+// offset is fixed once, at spawn, and the decoy keeps it as it mimics the
+// owner's movement -- see spawnMirageDecoys/moveDecoysWith in routes/combat.js.
+export const DECOY_MIN_RADIUS = 40;
+export const DECOY_MAX_RADIUS = 95;
+
+export function randomDecoyOffset() {
+  const angle = Math.random() * 2 * Math.PI;
+  const dist = DECOY_MIN_RADIUS + Math.random() * (DECOY_MAX_RADIUS - DECOY_MIN_RADIUS);
+  return { dx: Math.cos(angle) * dist, dy: Math.sin(angle) * dist };
+}

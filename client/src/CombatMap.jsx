@@ -52,6 +52,19 @@ const BURST_LINGER_MS = 400;
 // see stillWaiting in ShotEffect.
 const RESOLUTION_GRACE_MS = 2000;
 
+// A miss's real (deflected) impact point usually reaches the client well
+// before the bolt lands, so the bolt just flies its normal curve straight
+// there. But a shot the target could have countered and didn't only
+// resolves when that reaction window times out -- right as the flight ends,
+// sometimes a frame or two after. By then the bolt has already coasted to a
+// stop on the target, so rather than letting the burst pop in off to one
+// side with nothing connecting the two, the bolt makes a quick final skid
+// to the true impact point and bursts once it arrives. This is how long
+// that skid lasts, scaled a little by how far it has to travel.
+const RESOLVE_SETTLE_MIN_MS = 160;
+const RESOLVE_SETTLE_MAX_MS = 380;
+const RESOLVE_SETTLE_PX_MS = 3.2; // ms of skid per px of gap, before clamping
+
 function lerp(a, b, t) {
   return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
 }
@@ -152,9 +165,38 @@ function ShotEffect({ fx, onDone }) {
   const startRef = useRef(null);
   const rafRef = useRef(null);
   const doneRef = useRef(false);
+  // The last on-screen position of an uncontested shot's bolt, and the
+  // moment (elapsed ms) the real outcome first reached us -- both frozen at
+  // the reveal so a late resolve can skid the bolt to the true impact point
+  // instead of the burst teleporting there. See the !fx.countered branch.
+  const lastBoltPosRef = useRef(null);
+  const revealElapsedRef = useRef(null);
+  const settleFromRef = useRef(null);
 
   const isJam = fx.outcome === "jam";
   const totalMs = Math.max(400, (fx.windowMs || SHOT_FLIGHT_MS) * SHOT_FLIGHT_MULTIPLIER);
+
+  // Freeze the reveal state the first frame the outcome is known (for an
+  // ordinary, uncontested shot -- a jam is self-contained, and a countered
+  // shot has its own choreography).
+  if (fx.outcome != null && !isJam && !fx.countered && revealElapsedRef.current == null) {
+    revealElapsedRef.current = elapsed;
+    settleFromRef.current = lastBoltPosRef.current;
+  }
+  // How long the bolt's final skid to a late-revealed impact point takes,
+  // and when the burst therefore lands. `skidMode` is true only when the
+  // outcome arrived too close to (or after) the landing for the bolt to
+  // reach the real point on its normal curve.
+  const settleFrom = settleFromRef.current;
+  const revealElapsed = revealElapsedRef.current;
+  const settleMs = settleFrom
+    ? Math.max(
+        RESOLVE_SETTLE_MIN_MS,
+        Math.min(RESOLVE_SETTLE_MAX_MS, Math.hypot(fx.impactPoint.x - settleFrom.x, fx.impactPoint.y - settleFrom.y) * RESOLVE_SETTLE_PX_MS)
+      )
+    : RESOLVE_SETTLE_MIN_MS;
+  const skidMode = revealElapsed != null && settleFrom != null && revealElapsed > totalMs - settleMs;
+  const burstAt = skidMode ? revealElapsed + settleMs : totalMs;
   // The clash (if any) always lands right at the end of the approach leg --
   // see SHOT_FLIGHT_MULTIPLIER's comment. Both bolts meet at the geometric
   // midpoint, not the target, so the counter-slug visibly launches out and
@@ -177,7 +219,7 @@ function ShotEffect({ fx, onDone }) {
       ? clashAt + aftermathMs + BURST_LINGER_MS
       : stillWaiting
         ? totalMs + RESOLUTION_GRACE_MS
-        : totalMs + BURST_LINGER_MS;
+        : burstAt + BURST_LINGER_MS;
   // The tick loop below only starts once (empty deps, so its own timer isn't
   // restarted every time a resolve update swaps in a new `fx`) -- but
   // lifetimeMs can shrink once resolved (e.g. a pending shot defaults to the
@@ -281,30 +323,52 @@ function ShotEffect({ fx, onDone }) {
   const bursts = [];
 
   if (!fx.countered) {
-    if (elapsed < totalMs) {
-      bolts.push({ pos: lerp(fx.attackerPos, fx.impactPoint, phasedFraction(elapsed, totalMs)), color });
-    } else if (fx.outcome) {
-      bursts.push({ pos: fx.impactPoint, color, kind: fx.outcome, opacity: fadeAfter(totalMs), aoe: fx.aoe, growAt: totalMs });
+    let boltPos = null;
+    if (!fx.outcome) {
+      // The resolve update hasn't landed yet -- ride the phased curve to the
+      // last known impact point and hold there (phasedFraction saturates at
+      // 1 past totalMs). Never guess a burst here: a miss's real, deflected
+      // landing spot isn't known until that update arrives, and bursting on
+      // this stale point is exactly what used to show an explosion at the
+      // target on a shot that really missed. See stillWaiting below.
+      boltPos = lerp(fx.attackerPos, fx.impactPoint, phasedFraction(elapsed, totalMs));
+    } else if (skidMode && elapsed < burstAt) {
+      // The outcome arrived too late for the bolt to reach the real impact
+      // point on its normal curve -- skid it there from wherever it had
+      // stopped, ease-out, then burst on arrival.
+      const t = Math.min(1, (elapsed - revealElapsed) / settleMs);
+      boltPos = lerp(settleFrom, fx.impactPoint, 1 - Math.pow(1 - t, 3));
+    } else if (elapsed < burstAt) {
+      boltPos = lerp(fx.attackerPos, fx.impactPoint, phasedFraction(elapsed, totalMs));
     } else {
-      // The resolve update hasn't landed yet -- keep the bolt parked at its
-      // last known impact point instead of guessing "hit" here. A miss's
-      // actual (deflected) landing spot isn't known until that update
-      // arrives, and bursting early on this stale point is exactly what
-      // used to show an explosion at the target on a shot that really
-      // missed. See stillWaiting/RESOLUTION_GRACE_MS above.
-      bolts.push({ pos: fx.impactPoint, color });
+      bursts.push({ pos: fx.impactPoint, color, kind: fx.outcome, opacity: fadeAfter(burstAt), aoe: fx.aoe, growAt: burstAt });
+    }
+    if (boltPos) {
+      lastBoltPosRef.current = boltPos;
+      bolts.push({ pos: boltPos, color });
     }
   } else {
-    // Both slugs actually travel to meet in the middle -- the counter
-    // launches out from the target and closes the distance, same as the
-    // incoming shot does from the attacker, so the interception reads as
-    // two things colliding, not one sitting still.
-    const mid = lerp(fx.attackerPos, fx.impactPoint, 0.5);
+    // The counter doesn't launch until the defender reacts -- until then the
+    // incoming shot keeps flying toward the target on its own, exactly as it
+    // was already being drawn above, with no jump back toward the attacker.
+    // Once the counter is away, both bolts close the remaining gap and
+    // collide at fx.clashPoint (server-computed: the later the reaction, the
+    // closer to the defender -- see broadcastShotResolved). fx.counterAtMs is
+    // how far into the flight that reaction landed.
     const counterColor = typeColor(fx.counterSlugType);
+    const counterAtMs = Math.max(0, Math.min(clashAt, fx.counterAtMs ?? clashAt / 2));
+    const mid = fx.clashPoint ?? lerp(fx.attackerPos, fx.impactPoint, 0.5);
+    const shotPosAtCounter = lerp(fx.attackerPos, fx.impactPoint, phasedFraction(counterAtMs, totalMs));
     if (elapsed < clashAt) {
-      const t = phasedFraction(elapsed, clashAt);
-      bolts.push({ pos: lerp(fx.attackerPos, mid, t), color });
-      bolts.push({ pos: lerp(fx.targetPos, mid, t), color: counterColor });
+      if (elapsed < counterAtMs) {
+        bolts.push({ pos: lerp(fx.attackerPos, fx.impactPoint, phasedFraction(elapsed, totalMs)), color });
+      } else {
+        // Linear from each bolt's position when the counter fired -- both are
+        // up to speed by now, no slow launch-out to reproduce.
+        const t = (elapsed - counterAtMs) / Math.max(1, clashAt - counterAtMs);
+        bolts.push({ pos: lerp(shotPosAtCounter, mid, t), color });
+        bolts.push({ pos: lerp(fx.targetPos, mid, t), color: counterColor });
+      }
     } else {
       bursts.push({ pos: mid, kind: "clash", opacity: fadeAfter(clashAt), color, mixColor: counterColor });
       if (fx.outcome === "attacker-wins") {
@@ -511,8 +575,18 @@ export default function CombatMap({
   const [activeShots, setActiveShots] = useState([]);
   const [misfireFlash, setMisfireFlash] = useState(false);
   const [missFlash, setMissFlash] = useState(false);
-  const lastFxId = useRef(null);
-  const lastResolvedId = useRef(null);
+  // Seeded from whatever shotFx/shotResolved is already current at mount --
+  // that state lives in AccessSocket, one level up, and outlives any single
+  // battle. Without this, a fresh CombatMap (new encounter, or a reconnect)
+  // would see the previous battle's last shot as "new" and immediately
+  // replay its flight animation and launch sound.
+  const lastFxId = useRef(shotFx?.id ?? null);
+  const lastResolvedId = useRef(shotResolved?.id ?? null);
+  // When each in-flight shot launched (client clock) and how long its flight
+  // runs -- so the "miss" map-glow can be held back until the bolt actually
+  // lands, instead of flashing the outcome while the shot is still crossing
+  // the map. Keyed by shot id; cleared in removeShot.
+  const shotFlightMeta = useRef(new Map());
 
   // A Wall Maker's wall grows in instead of just popping up. Only walls that
   // *appear* after this component has already rendered once get the
@@ -610,6 +684,10 @@ export default function CombatMap({
     if (!shotFx || shotFx.id === lastFxId.current) return;
     lastFxId.current = shotFx.id;
     setActiveShots((prev) => [...prev, shotFx]);
+    shotFlightMeta.current.set(shotFx.id, {
+      at: performance.now(),
+      totalMs: Math.max(400, (shotFx.windowMs || SHOT_FLIGHT_MS) * SHOT_FLIGHT_MULTIPLIER),
+    });
     if (shotFx.outcome === "jam") {
       setMisfireFlash(true);
       setTimeout(() => setMisfireFlash(false), 3000);
@@ -627,8 +705,17 @@ export default function CombatMap({
     if (!shotResolved || shotResolved.id === lastResolvedId.current) return;
     lastResolvedId.current = shotResolved.id;
     if (shotResolved.outcome === "miss") {
-      setMissFlash(true);
-      setTimeout(() => setMissFlash(false), 3000);
+      // Hold the glow until the bolt would actually land -- for a shot that
+      // resolves at launch (the common case) that's the whole flight away;
+      // for one that resolves at the end of a counter window it's now.
+      const meta = shotFlightMeta.current.get(shotResolved.id);
+      const remaining = meta ? Math.max(0, meta.totalMs - (performance.now() - meta.at)) : 0;
+      const flash = () => {
+        setMissFlash(true);
+        setTimeout(() => setMissFlash(false), 3000);
+      };
+      if (remaining <= 0) flash();
+      else setTimeout(flash, remaining);
     }
     if (shotResolved.countered) {
       // The counter-slug fires too, right as it's chosen -- give it the same
@@ -643,6 +730,13 @@ export default function CombatMap({
               outcome: shotResolved.outcome,
               countered: shotResolved.countered,
               counterSlugType: shotResolved.counterSlugType,
+              // Where the incoming shot and the counter actually collide, and
+              // how far into the flight the counter launched -- sent only for
+              // a countered shot. The clash point rides how late the counter
+              // was: a snappy one meets the shot well out from the defender,
+              // a last-instant one almost on top of them (server clamps it).
+              ...(shotResolved.clashPoint ? { clashPoint: shotResolved.clashPoint } : null),
+              ...(shotResolved.counterAtMs != null ? { counterAtMs: shotResolved.counterAtMs } : null),
               // A miss carries a deflected impactPoint (see missDeflection
               // server-side) so the bolt visibly goes wide instead of
               // stopping dead-on the target -- only sent when it applies.
@@ -655,6 +749,7 @@ export default function CombatMap({
 
   function removeShot(id) {
     setActiveShots((prev) => prev.filter((s) => s.id !== id));
+    shotFlightMeta.current.delete(id);
   }
 
   const mapWidth = encounter.mapWidth;

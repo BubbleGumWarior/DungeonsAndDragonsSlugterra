@@ -216,6 +216,18 @@ export async function initSchema() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS sound_volume REAL NOT NULL DEFAULT 0.5;
   `);
 
+  // Voice chat preferences -- voice_input_mode picks how the mic activates
+  // (always-live vs. push-to-talk, chosen in Settings.jsx); voice_peer_volumes
+  // is a { [otherUserId]: 0-1 } mixer map so a "how loud I hear them" slider
+  // in VoicePanel.jsx survives across sessions, same JSONB-map shape as
+  // status_effects/data elsewhere in this schema.
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS voice_input_mode TEXT NOT NULL DEFAULT 'live';
+  `);
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS voice_peer_volumes JSONB NOT NULL DEFAULT '{}';
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS characters (
       id SERIAL PRIMARY KEY,
@@ -238,6 +250,23 @@ export async function initSchema() {
   `);
   await pool.query(`
     INSERT INTO campaign_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+  `);
+
+  // The party's current location for the dashboard Slug Hunt panel -- an
+  // index (0-7) into the eight layers of the Deep (see slugHuntOdds.json).
+  // The DM sets it from the panel's dropdown; players see it and hunt in it.
+  await pool.query(`
+    ALTER TABLE campaign_settings ADD COLUMN IF NOT EXISTS slug_hunt_area INTEGER NOT NULL DEFAULT 0;
+  `);
+
+  // One "Try Hunt" attempt per player per rest -- a row here means that user
+  // has already hunted and the button stays disabled for them until the DM's
+  // next "Heal All" (characters.js POST /heal-all) clears the whole table.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS slug_hunt_locks (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      locked_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
   `);
 
   await pool.query(`

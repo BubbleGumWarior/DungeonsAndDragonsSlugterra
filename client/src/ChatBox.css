@@ -59,7 +59,7 @@
 }
 
 .chatbox-message--dm {
-  background: rgba(92, 18, 29, 0.35);
+  background: color-mix(in srgb, var(--maroon-600) 35%, transparent);
   border-color: var(--maroon-600);
 }
 

@@ -16,6 +16,14 @@
       "port": 4000,
       "cwd": "server",
       "autoPort": true
+    },
+    {
+      "name": "slugterra-client-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "preview", "--", "--host"],
+      "port": 4173,
+      "cwd": "client",
+      "autoPort": true
     }
   ]
 }

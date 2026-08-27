@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ArrowLeftIcon, PencilSimpleIcon, XIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
@@ -8,7 +8,7 @@ import "./DMCharacterViewer.css";
 
 export default function DMCharacterViewer({ userId, onDeselect }) {
   const { token } = useAuth();
-  const { characterUpdate } = useLiveState();
+  const { characterUpdate, partyHealed } = useLiveState();
   const [character, setCharacter] = useState(undefined);
   const [mode, setMode] = useState("view");
 
@@ -16,22 +16,35 @@ export default function DMCharacterViewer({ userId, onDeselect }) {
     setMode("view");
   }, [userId]);
 
+  const fetchCharacter = useCallback(
+    ({ clear = false } = {}) => {
+      if (clear) setCharacter(undefined);
+      fetch(`/api/characters/${userId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => res.json())
+        .then((data) => setCharacter(data.character ?? null))
+        .catch(() => setCharacter(null));
+    },
+    [userId, token]
+  );
+
   useEffect(() => {
     if (mode !== "view") return;
-    setCharacter(undefined);
-    fetch(`/api/characters/${userId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.json())
-      .then((data) => setCharacter(data.character ?? null))
-      .catch(() => setCharacter(null));
-  }, [userId, token, mode]);
+    fetchCharacter({ clear: true });
+  }, [fetchCharacter, mode]);
 
   useEffect(() => {
     if (mode === "view" && characterUpdate && characterUpdate.userId === userId) {
       setCharacter(characterUpdate.character);
     }
   }, [characterUpdate, mode, userId]);
+
+  // A per-character heal broadcast can be coalesced away in the Heal All
+  // burst (see AccessSocket's single-slot note); re-sync from the server.
+  useEffect(() => {
+    if (mode === "view" && partyHealed) fetchCharacter();
+  }, [partyHealed, mode, fetchCharacter]);
 
   function handleSaved(updated) {
     setCharacter(updated);

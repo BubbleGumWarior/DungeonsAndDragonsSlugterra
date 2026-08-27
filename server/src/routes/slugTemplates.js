@@ -28,7 +28,7 @@ router.get("/gallery", requireAuth, async (req, res) => {
 
 router.use(requireAuth, requireDungeonMaster);
 
-function toClientTemplate(row) {
+export function toClientTemplate(row) {
   return {
     id: row.id,
     name: row.name,

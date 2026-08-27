@@ -18,7 +18,7 @@ import "./Dashboard.css";
 export default function Dashboard() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
-  const { slugterraRevealed, characterUpdate } = useLiveState();
+  const { slugterraRevealed, characterUpdate, partyHealed } = useLiveState();
   const [character, setCharacter] = useState(undefined);
   const [selectedUserId, setSelectedUserId] = useState(null);
   const isDungeonMaster = user?.role === "Dungeon Master";
@@ -43,6 +43,22 @@ export default function Dashboard() {
       setCharacter(characterUpdate.character);
     }
   }, [characterUpdate, user]);
+
+  // The Heal All broadcast burst can drop this character's update
+  // (see AccessSocket's single-slot note); re-sync from the server.
+  useEffect(() => {
+    if (user?.role !== "Player" || !partyHealed) return;
+    let cancelled = false;
+    fetch("/api/characters/me", { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setCharacter(data.character);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [partyHealed, user, token]);
 
   const showSlugterraTabs = isDungeonMaster || slugterraRevealed;
 

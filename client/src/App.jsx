@@ -1,8 +1,11 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./AuthContext.jsx";
 import AccessSocket from "./AccessSocket.jsx";
+import VoiceChatProvider from "./VoiceChatContext.jsx";
+import VoiceWidget from "./VoiceWidget.jsx";
 import ChallengeResultOverlay from "./ChallengeResultOverlay.jsx";
 import DiceRollPrompt from "./DiceRollPrompt.jsx";
+import SlugHuntPrompt from "./SlugHuntPrompt.jsx";
 import CounterClashPrompt from "./CounterClashPrompt.jsx";
 import KnockoutRollPrompt from "./KnockoutRollPrompt.jsx";
 import AuthGate from "./AuthGate.jsx";
@@ -25,14 +28,29 @@ function PublicOnlyRoute({ children }) {
   return token ? <Navigate to="/dashboard" replace /> : children;
 }
 
+// Gates the voice chat layer on being signed in -- otherwise the floating
+// button/panel would show up on the public login/register screens, where
+// there's no socket connection (and no party) to join.
+function AuthedVoiceChat() {
+  const { token } = useAuth();
+  if (!token) return null;
+  return (
+    <VoiceChatProvider>
+      <VoiceWidget />
+    </VoiceChatProvider>
+  );
+}
+
 function App() {
   return (
     <AuthProvider>
       <AccessSocket>
         <ChallengeResultOverlay />
         <DiceRollPrompt />
+        <SlugHuntPrompt />
         <CounterClashPrompt />
         <KnockoutRollPrompt />
+        <AuthedVoiceChat />
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route

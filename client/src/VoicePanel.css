@@ -1,0 +1,324 @@
+/* Docked utility card, not a takeover modal: no backdrop, anchored to the
+   widget's bottom-right corner via normal flex stacking in VoiceWidget.css
+   (this file only needs its own size + entrance, not its own fixed
+   position). Entrance grows out of that same corner instead of Panel.css's
+   centered dashboard-rise. */
+.voice-panel {
+  width: 340px;
+  max-width: calc(100vw - 28px);
+  max-height: min(560px, calc(100vh - 110px));
+  transform-origin: bottom right;
+  animation: voice-panel-enter 0.18s var(--ease-out);
+}
+
+@keyframes voice-panel-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.voice-panel-close {
+  margin-left: auto;
+  align-self: flex-start;
+}
+
+.voice-panel-body {
+  overflow-y: auto;
+}
+
+.voice-panel-empty-hint {
+  margin: 0;
+  padding: 6px 0;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+  text-align: center;
+}
+
+.voice-preview-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.voice-preview-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+  color: var(--ink-dim);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.voice-preview-chip svg {
+  width: 12px;
+  height: 12px;
+}
+
+.voice-join-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.voice-leave-btn {
+  width: 100%;
+  justify-content: center;
+  margin-top: 4px;
+  color: var(--danger);
+  border-color: rgba(255, 122, 107, 0.35);
+}
+
+.voice-leave-btn:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* --- Rows: self row + each connected participant --- */
+
+.voice-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+}
+
+.voice-row--self {
+  background: var(--charcoal-800);
+}
+
+.voice-row-avatar {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(160deg, var(--maroon-600), var(--maroon-800));
+  color: var(--gold-soft);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.voice-row-avatar--self {
+  background: linear-gradient(160deg, var(--gold-dim), var(--maroon-800));
+}
+
+.voice-row-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid var(--gold);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.voice-row--speaking .voice-row-ring {
+  animation: voice-row-speaking-pulse 0.9s var(--ease-out) infinite;
+}
+
+@keyframes voice-row-speaking-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.16);
+    opacity: 0.9;
+  }
+}
+
+.voice-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.voice-row-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-row-muted-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.voice-row-muted-tag svg {
+  width: 10px;
+  height: 10px;
+}
+
+.voice-row-hint {
+  font-size: 10.5px;
+  color: var(--ink-dim);
+  font-style: italic;
+}
+
+.voice-row-volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.voice-slider-icon {
+  width: 13px;
+  height: 13px;
+  color: var(--gold-dim);
+  flex-shrink: 0;
+}
+
+/* Same gold-on-charcoal slider recipe as Settings.css's .volume-slider,
+   kept as its own compact class here so this always-mounted panel doesn't
+   need to pull in Settings.css's page-level rules just for the track. */
+.voice-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gold) var(--volume-fill, 100%), var(--charcoal-700) var(--volume-fill, 100%));
+  outline: none;
+  cursor: pointer;
+}
+
+.voice-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--gold-soft);
+  border: 2px solid var(--charcoal-950);
+  cursor: pointer;
+}
+
+.voice-slider::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--gold-soft);
+  border: 2px solid var(--charcoal-950);
+  cursor: pointer;
+}
+
+.voice-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.voice-slider::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--gold);
+}
+
+.voice-row-percent {
+  min-width: 30px;
+  text-align: right;
+  font-size: 10.5px;
+  color: var(--ink-dim);
+}
+
+.voice-mute-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-600);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), background 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+
+.voice-mute-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.voice-mute-btn:hover {
+  border-color: var(--gold);
+}
+
+.voice-mute-btn--muted {
+  background: rgba(255, 122, 107, 0.12);
+  border-color: rgba(255, 122, 107, 0.5);
+  color: var(--danger);
+}
+
+.voice-ptt-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--charcoal-900);
+  border: 1px dashed var(--charcoal-600);
+  color: var(--ink-dim);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+  transition: border-color 0.12s var(--ease-out), background 0.12s var(--ease-out), color 0.12s var(--ease-out);
+}
+
+.voice-ptt-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.voice-ptt-btn--held {
+  border-style: solid;
+  border-color: var(--gold);
+  background: rgba(201, 162, 75, 0.14);
+  color: var(--gold-soft);
+}
+
+.voice-participants {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (max-width: 480px) {
+  .voice-panel {
+    width: min(340px, calc(100vw - 28px));
+  }
+}

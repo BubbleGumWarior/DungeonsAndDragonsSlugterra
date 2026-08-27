@@ -15,10 +15,167 @@
   font-size: 14px;
 }
 
+.slughunt-location-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* --- Area picker + help button --- */
+.slughunt-area-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.slughunt-area-picker select {
+  flex: 1;
+  min-width: 0;
+}
+
+.slughunt-info-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 999px;
+  background: rgba(201, 162, 75, 0.12);
+  border: 1px solid rgba(201, 162, 75, 0.4);
+  color: var(--gold-soft);
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out),
+    transform 0.15s var(--ease-out);
+}
+
+.slughunt-info-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.slughunt-info-btn:hover {
+  background: rgba(201, 162, 75, 0.22);
+  border-color: var(--gold);
+  transform: translateY(-1px);
+}
+
+/* --- Try Hunt (players) --- */
+.slughunt-hunt {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--charcoal-700);
+}
+
+.slughunt-hunt-btn {
+  width: 100%;
+}
+
+.slughunt-hunt-result {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  text-align: center;
+}
+
+.slughunt-hunt-result strong {
+  color: var(--gold-soft);
+}
+
+.slughunt-hunt-result--good {
+  color: var(--ink);
+}
+
+/* --- Area description modal --- */
+.slughunt-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.6);
+  overflow-y: auto;
+}
+
+.slughunt-area-modal {
+  position: relative;
+  width: 100%;
+  max-width: 540px;
+  margin: auto;
+  padding: 28px 30px;
+  border-radius: 16px;
+  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 75%);
+  border: 1px solid var(--charcoal-600);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+}
+
+.slughunt-area-modal h2 {
+  margin: 0 0 14px;
+  padding-right: 28px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--gold-soft);
+}
+
+.slughunt-area-modal-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-dim);
+}
+
+.slughunt-area-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid var(--charcoal-600);
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition: color 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+}
+
+.slughunt-area-modal-close:hover {
+  color: var(--ink);
+  border-color: var(--gold);
+}
+
+.slughunt-area-modal-close svg {
+  width: 14px;
+  height: 14px;
+}
+
 .slughunt-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.slughunt-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.slughunt-list::-webkit-scrollbar-thumb {
+  background: var(--charcoal-700);
+  border-radius: 999px;
 }
 
 .slughunt-row {
@@ -59,7 +216,7 @@
 }
 
 .slughunt-chance {
-  width: 36px;
+  width: 44px;
   flex-shrink: 0;
   text-align: right;
   font-size: 12.5px;
@@ -91,7 +248,7 @@
   }
 
   .slughunt-chance {
-    width: 42px;
+    width: 48px;
     font-size: 13.5px;
   }
 }

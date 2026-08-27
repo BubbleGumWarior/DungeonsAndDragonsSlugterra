@@ -35,6 +35,22 @@
   }
 }
 
+.dice-prompt-card--out {
+  animation: dice-prompt-out 0.4s var(--ease-out) forwards;
+  pointer-events: none;
+}
+
+@keyframes dice-prompt-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+}
+
 .dice-prompt-close {
   position: absolute;
   top: 10px;
@@ -116,6 +132,9 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .dice-group {

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { applyTheme } from "./theme.js";
 
 const AuthContext = createContext(null);
@@ -30,19 +30,29 @@ export function AuthProvider({ children }) {
     applyTheme(user?.theme);
   }, [user]);
 
-  function login(nextToken, nextUser) {
+  // Stable identities are load-bearing, not just tidiness: AccessSocket.jsx's
+  // /ws connection effect lists updateUser/logout as dependencies, and
+  // updateUser gets called on every route change (AuthGate.jsx's /api/me
+  // refresh) and every preference save (theme, sound volume, voice
+  // settings). Plain functions here would get a new identity on every one
+  // of those, tearing the WebSocket down and reopening it each time -- fast
+  // enough to be invisible on a local connection, but over a slower
+  // connection (a tunnel, a friend on another network) each reconnect can
+  // lose the race against the next teardown and never actually finish
+  // establishing, which is exactly the failure this fixes.
+  const login = useCallback((nextToken, nextUser) => {
     setToken(nextToken);
     setUser(nextUser);
-  }
+  }, []);
 
-  function logout() {
+  const logout = useCallback(() => {
     setToken(null);
     setUser(null);
-  }
+  }, []);
 
-  function updateUser(nextUser) {
+  const updateUser = useCallback((nextUser) => {
     setUser(nextUser);
-  }
+  }, []);
 
   return (
     <AuthContext.Provider value={{ token, user, login, logout, updateUser }}>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { HeartStraightIcon, UserCircleIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
@@ -10,16 +10,27 @@ import "./Roster.css";
 
 export default function Roster({ selectable = false, selectedUserId, onSelect, healable = false }) {
   const { token } = useAuth();
-  const { onlineUserIds, characterUpdate } = useLiveState();
+  const { onlineUserIds, characterUpdate, partyHealed } = useLiveState();
   const [characters, setCharacters] = useState([]);
   const [healing, setHealing] = useState(false);
 
-  useEffect(() => {
+  const refetch = useCallback(() => {
     fetch("/api/characters", { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => res.json())
       .then((data) => setCharacters(data.characters || []))
       .catch(() => {});
   }, [token]);
+
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  // Heal All (from this or any other DM's client) re-syncs the whole roster
+  // from the server -- the per-character broadcasts it also fires can be
+  // coalesced away in the burst (see AccessSocket's single-slot note).
+  useEffect(() => {
+    if (partyHealed) refetch();
+  }, [partyHealed, refetch]);
 
   useEffect(() => {
     if (!characterUpdate) return;
@@ -60,8 +71,12 @@ export default function Roster({ selectable = false, selectedUserId, onSelect, h
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
+      // The server's "party-healed" broadcast drives the actual roster
+      // re-sync (see the effect above); refetch here too so the DM who
+      // clicked sees it immediately without waiting on the socket.
+      refetch();
     } catch {
-      // character-updated broadcasts (or a retry) will catch it up either way
+      // the party-healed broadcast will catch it up either way
     } finally {
       setHealing(false);
     }

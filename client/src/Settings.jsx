@@ -6,14 +6,24 @@ import {
   SpeakerLowIcon,
   SpeakerXIcon,
   PlayIcon,
+  StopIcon,
   EyeIcon,
+  WaveformIcon,
+  MicrophoneIcon,
+  HandPalmIcon,
 } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import NavBar from "./NavBar.jsx";
 import { THEMES, DEFAULT_THEME } from "./theme.js";
 import { volumeToGain } from "./soundVolume.js";
+import { useMicLevel } from "./useMicLevel.js";
 import "./Panel.css";
 import "./Settings.css";
+
+const VOICE_INPUT_MODES = [
+  { id: "live", label: "Live Mic", icon: MicrophoneIcon },
+  { id: "push_to_talk", label: "Push to Talk", icon: HandPalmIcon },
+];
 
 // Same file CombatMap.jsx's shot fires -- kept as its own constant here so
 // the Test button's disabled window doesn't reach into combat internals.
@@ -33,14 +43,32 @@ export default function Settings() {
   const saveTimer = useRef(null);
   const testTimer = useRef(null);
 
+  const [voiceInputMode, setVoiceInputMode] = useState(user?.voiceInputMode || "live");
+  const [savingVoiceMode, setSavingVoiceMode] = useState(false);
+  const [voiceModeError, setVoiceModeError] = useState("");
+
+  const [micStream, setMicStream] = useState(null);
+  const [micError, setMicError] = useState("");
+  const micLevel = useMicLevel(micStream);
+
   useEffect(() => {
     if (typeof user?.soundVolume === "number") setVolume(user.soundVolume);
   }, [user?.soundVolume]);
 
   useEffect(() => {
+    if (user?.voiceInputMode) setVoiceInputMode(user.voiceInputMode);
+  }, [user?.voiceInputMode]);
+
+  useEffect(() => {
     return () => {
       clearTimeout(saveTimer.current);
       clearTimeout(testTimer.current);
+      // Leaving the page mid-test shouldn't leave the mic hot in the
+      // background -- release whatever stream the test button opened.
+      setMicStream((prev) => {
+        prev?.getTracks().forEach((track) => track.stop());
+        return null;
+      });
     };
   }, []);
 
@@ -91,6 +119,37 @@ export default function Settings() {
     audio.play().catch(() => {});
     clearTimeout(testTimer.current);
     testTimer.current = setTimeout(() => setTesting(false), SHOT_SOUND_DURATION_MS);
+  }
+
+  async function handlePickVoiceMode(modeId) {
+    if (modeId === voiceInputMode || savingVoiceMode) return;
+    const previousMode = voiceInputMode;
+    setVoiceModeError("");
+    setSavingVoiceMode(true);
+    setVoiceInputMode(modeId);
+    updateUser({ ...user, voiceInputMode: modeId });
+    const result = await savePreferences({ voiceInputMode: modeId });
+    if (!result) {
+      setVoiceInputMode(previousMode);
+      updateUser({ ...user, voiceInputMode: previousMode });
+      setVoiceModeError("Couldn't save your input mode. Try again.");
+    }
+    setSavingVoiceMode(false);
+  }
+
+  async function handleToggleMicTest() {
+    if (micStream) {
+      micStream.getTracks().forEach((track) => track.stop());
+      setMicStream(null);
+      return;
+    }
+    setMicError("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setMicStream(stream);
+    } catch {
+      setMicError("Couldn't access your microphone. Check your browser's site permissions.");
+    }
   }
 
   const volumePercent = Math.round(volume * 100);
@@ -201,6 +260,64 @@ export default function Settings() {
                   </button>
                 </div>
               </div>
+            </div>
+          </section>
+
+          <section className="panel settings-voice">
+            <div className="panel-header">
+              <span className="panel-header-icon">
+                <MicrophoneIcon weight="duotone" />
+              </span>
+              <div className="panel-header-text">
+                <h2>Voice</h2>
+                <p>How your mic activates in party voice chat, and a way to check it works.</p>
+              </div>
+            </div>
+            <div className="panel-body">
+              <div className="voice-mode-row">
+                <span className="voice-mode-label">Mic activation</span>
+                <div className="dm-console-toggle">
+                  {VOICE_INPUT_MODES.map((mode) => {
+                    const ModeIcon = mode.icon;
+                    return (
+                      <button
+                        key={mode.id}
+                        type="button"
+                        className={`dm-console-toggle-btn${voiceInputMode === mode.id ? " dm-console-toggle-btn--active" : ""}`}
+                        onClick={() => handlePickVoiceMode(mode.id)}
+                        disabled={savingVoiceMode}
+                        aria-pressed={voiceInputMode === mode.id}
+                      >
+                        <ModeIcon weight="bold" />
+                        {mode.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <p className="voice-mode-hint">
+                {voiceInputMode === "push_to_talk"
+                  ? "Hold Space (or the panel's talk button) to transmit -- release to go quiet."
+                  : "Your mic stays live whenever you're in a call, unless you self-mute."}
+              </p>
+              {voiceModeError && <p className="panel-error">{voiceModeError}</p>}
+
+              <div className="mic-check">
+                <div className={`mic-check-meter${micStream ? " mic-check-meter--live" : ""}`} style={{ "--mic-level": micLevel }}>
+                  <span className="mic-check-ring" />
+                  <WaveformIcon weight="bold" className="mic-check-icon" />
+                </div>
+                <div className="mic-check-controls">
+                  <button type="button" className="panel-btn panel-btn--test" onClick={handleToggleMicTest}>
+                    {micStream ? <StopIcon weight="fill" /> : <PlayIcon weight="fill" />}
+                    {micStream ? "Stop Test" : "Test Microphone"}
+                  </button>
+                  <span className="mic-check-hint">
+                    {micStream ? "Speak up -- the ring should pulse with your voice." : "Checks that your mic is picked up before you join a call."}
+                  </span>
+                </div>
+              </div>
+              {micError && <p className="panel-error">{micError}</p>}
             </div>
           </section>
 

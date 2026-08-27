@@ -34,6 +34,9 @@ import {
   typeBallistics,
   COUNTER_WINDOW_MS,
   shotFlightMs,
+  shotDistanceFraction,
+  lerpPoint,
+  isSupportiveSlug,
   resolveClash,
   rangePenalty,
   KNOCKBACK_DISTANCE,
@@ -84,7 +87,7 @@ import {
   ANCHOR_DURATION_ROUNDS,
   isInsideAnyZone,
   DECOY_COUNT,
-  DECOY_OFFSETS,
+  randomDecoyOffset,
 } from "../combatRules.js";
 
 const router = Router();
@@ -982,13 +985,14 @@ router.post("/actions/move", async (req, res) => {
       current_ap: slipped ? 0 : combatant.current_ap - apNeeded,
     });
 
-    // Mirage Coil's decoys mimic the owner's position on every Move, at
-    // their own fixed offset -- see DECOY_OFFSETS/spawnMirageDecoys.
+    // Mirage Coil's decoys mimic the owner's position on every Move, each
+    // holding the random offset it was spawned with -- see spawnMirageDecoys.
     const decoyIds = combatant.status_effects?.mirage?.decoyIds;
     if (decoyIds && decoyIds.length > 0) {
-      for (let i = 0; i < decoyIds.length; i++) {
-        const offset = DECOY_OFFSETS[i] || DECOY_OFFSETS[0];
-        await updateCombatant(decoyIds[i], { x: x + offset.dx, y: y + offset.dy });
+      for (const decoyId of decoyIds) {
+        const decoy = await getCombatant(decoyId);
+        const offset = decoy?.data?.offset || { dx: 0, dy: 0 };
+        await updateCombatant(decoyId, { x: x + offset.dx, y: y + offset.dy });
       }
     }
 
@@ -1644,7 +1648,10 @@ async function tickAnchorZones(encounterId) {
 // clearMirageDecoys below).
 async function spawnMirageDecoys(owner) {
   const decoyIds = [];
-  for (const offset of DECOY_OFFSETS.slice(0, DECOY_COUNT)) {
+  for (let i = 0; i < DECOY_COUNT; i++) {
+    // Rolled per decoy and stored on the decoy row -- moveDecoysWith reads it
+    // back so each one tracks the owner from its own scattered spot.
+    const offset = randomDecoyOffset();
     const { rows } = await pool.query(
       // max_grit/current_grit are copied from the owner (not left null) so
       // the token's Grit ring reads full/healthy instead of the 0%-red ring
@@ -1661,7 +1668,7 @@ async function spawnMirageDecoys(owner) {
         owner.y + offset.dy,
         owner.max_grit,
         owner.current_grit,
-        JSON.stringify({ decoyOwnerId: owner.id }),
+        JSON.stringify({ decoyOwnerId: owner.id, offset }),
       ]
     );
     decoyIds.push(rows[0].id);
@@ -2094,10 +2101,13 @@ function broadcastPodFx({ fromPos, toPos }) {
 // up to windowMs later for a shot that offered a counter) and tells the
 // client what the already-playing animation should reveal -- without ever
 // having delayed that animation's start.
-function broadcastShotResolved(offer, { outcome, countered = false, counterSlugType = null, impactPoint = null }) {
+function broadcastShotResolved(
+  offer,
+  { outcome, countered = false, counterSlugType = null, impactPoint = null, clashPoint = null, counterAtMs = null }
+) {
   broadcastAll({
     type: "combat-shot-resolved",
-    resolved: { id: offer.fxId, outcome, countered, counterSlugType, impactPoint },
+    resolved: { id: offer.fxId, outcome, countered, counterSlugType, impactPoint, clashPoint, counterAtMs },
   });
 }
 
@@ -2125,6 +2135,36 @@ function scheduleAfterFlight(firedAt, windowMs, fn) {
   }, delayMs);
 }
 
+// Every terrain mark a shot leaves at -- or, for a fire trail, along the way
+// to -- wherever it actually ends up: ice/damage patches, Regulator's star
+// of fire walls, Anchorage's zone, a fire trail, Pressure Tick's steam pods.
+// `endPoint` is where the shot really stopped, which is the whole point of
+// routing these through here rather than scheduling them at fire time: the
+// target for an uncontested shot (or one that smashed through a counter),
+// the fizzle point for one that fell short, or the clash point for one that
+// lost -- or merely bounced off -- a counter and so never reached the
+// target. A ricochet leg leaves nothing, matching fireSecondaryShot's
+// deliberately effect-free bounce.
+async function applyShotTerrain(offer, endPoint) {
+  if (offer.isRicochetLeg) return;
+  const { slug } = offer;
+  const eid = offer.encounterId;
+  if (slug.type === "Ice") await addIceHazard(eid, endPoint);
+  if (slug.hazard_maker) await addDamageHazard(eid, endPoint, slug);
+  if (slug.trail_wall) await addTrailWall(eid, offer.attackerPos, endPoint, slug.type);
+  if (slug.star_wall) await formStarWall(eid, endPoint, slug);
+  if (slug.anchor_zone) await addAnchorZone(eid, endPoint);
+  if (slug.spawns_pods) await spawnPods(eid, endPoint, slug);
+}
+
+// Same, deferred to land with the shot's own flight/burst rather than the
+// instant it's computed. Used for every path except a countered shot, whose
+// resolveCounterOffer is already running inside a post-flight callback and
+// calls applyShotTerrain directly.
+function scheduleShotTerrain(offer, endPoint) {
+  scheduleAfterFlight(offer.firedAt, offer.windowMs, () => applyShotTerrain(offer, endPoint));
+}
+
 // Shared shot-resolution tail: broadcasts the launch, offers the target a
 // counter if they have one available, otherwise resolves immediately.
 // Factored out of /actions/shoot's own tail so Speedstinger's ricochet leg
@@ -2137,7 +2177,10 @@ function scheduleAfterFlight(firedAt, windowMs, fn) {
 async function launchAndOfferCounter(offer) {
   broadcastShotFx({ ...offer, outcome: null });
   const target = await getCombatant(offer.targetCombatantId);
-  const eligible = target ? await findEligibleCounterSlugs(target) : [];
+  // A supportive slug (a heal, an inert None) is a boon, not an attack --
+  // there's nothing to clash with, so it never offers the target a counter,
+  // whoever it was aimed at. It goes straight to resolution.
+  const eligible = target && !isSupportiveSlug(offer.slug) ? await findEligibleCounterSlugs(target) : [];
   if (target && eligible.length > 0) {
     const timeoutHandle = setTimeout(() => resolveCounterOffer(offer.fxId, null), offer.windowMs);
     pendingCounters.set(offer.fxId, { ...offer, userId: target.ref_user_id, eligibleSlugRows: eligible, timeoutHandle });
@@ -2371,7 +2414,10 @@ async function resolveCounterOffer(id, chosenSlugId) {
   const counterSlugRow = chosenSlugId ? offer.eligibleSlugRows.find((s) => s.id === chosenSlugId) : null;
 
   if (!counterSlugRow) {
+    // No counter (declined, or the window timed out) -- the shot flies on to
+    // the target untouched, terrain and all, exactly as if none had been offered.
     await resolveNormalHit(offer);
+    scheduleShotTerrain(offer, offer.impactPoint);
     return { pending: false, countered: false };
   }
 
@@ -2391,11 +2437,28 @@ async function resolveCounterOffer(id, chosenSlugId) {
     defenderDefense: counterSlugRow.clash_defense * defenderClashMultiplier,
   });
 
+  // Where the two bolts actually meet. The incoming shot has been in the
+  // air for counterAtMs by the time the counter launches (clamped to the
+  // flight window); from wherever it had got to, both bolts close the
+  // remaining gap and collide halfway. A snappy reaction meets the shot far
+  // from the defender, a last-instant one almost on top of them -- instead
+  // of always colliding at the geometric midpoint. Drives both where the
+  // clash renders (client) and where a losing pod-spawner drops its pods.
+  const counterAtMs = Math.max(0, Math.min(offer.windowMs, Date.now() - offer.firedAt));
+  const shotPosAtCounter = lerpPoint(offer.attackerPos, offer.impactPoint, shotDistanceFraction(counterAtMs, offer.windowMs));
+  const clashPoint = lerpPoint(shotPosAtCounter, offer.impactPoint, 0.5);
+
   // The clash math (who wins) is "the direction" -- fine to know and reveal
   // right away. What it actually *does* (ejects, damage) is held back for
   // scheduleAfterFlight so it lands with the clash/aftermath burst instead
   // of before it, same as a normal hit.
-  broadcastShotResolved(offer, { countered: true, counterSlugType: counterSlugRow.type, outcome });
+  broadcastShotResolved(offer, {
+    countered: true,
+    counterSlugType: counterSlugRow.type,
+    outcome,
+    clashPoint,
+    counterAtMs,
+  });
 
   scheduleAfterFlight(offer.firedAt, offer.windowMs, async () => {
     let log;
@@ -2446,14 +2509,23 @@ async function resolveCounterOffer(id, chosenSlugId) {
     // never for an ordinary uncontested hit, which never reaches this
     // function at all (see the !counterSlugRow early return above).
     // Whichever side has the flag gets a wall along *its own* slug's
-    // trajectory -- the attacker's shot travels attacker -> target, the
-    // counter travels target -> attacker.
+    // trajectory. The attacker's shot only travelled as far as it got: the
+    // target if it smashed through, otherwise the clash point. The counter
+    // always travels its full target -> attacker line.
+    const attackerShotEnd = outcome === "attacker-wins" ? offer.impactPoint : clashPoint;
     if (offer.slug.clash_tripled) {
-      await addTrailWall(offer.encounterId, offer.attackerPos, offer.impactPoint, offer.slug.type);
+      await addTrailWall(offer.encounterId, offer.attackerPos, attackerShotEnd, offer.slug.type);
     }
     if (counterSlugRow.clash_tripled) {
       await addTrailWall(offer.encounterId, offer.targetPos, offer.attackerPos, counterSlugRow.type);
     }
+
+    // Every other terrain mark the attacker's slug leaves (ice/damage patch,
+    // star wall, anchor zone, fire trail, steam pods) lands wherever the shot
+    // was actually stopped -- the target only if it smashed clean through the
+    // counter, otherwise the clash point (it lost, bounced, or both slugs
+    // flew). Already inside the post-flight callback, so applied directly.
+    await applyShotTerrain(offer, attackerShotEnd);
 
     await pushCombatLog(offer.encounterId, log);
     await broadcastEncounter(offer.encounterId);
@@ -2875,49 +2947,15 @@ router.post("/actions/shoot", async (req, res) => {
     // below -- kept there so it's shared with Speedstinger's ricochet leg,
     // which launches the exact same way but isn't a real HTTP request.)
 
-    // A hazard's own appearance is a *result* of the shot landing, same as
-    // damage or a status effect -- it shouldn't pop up before the explosion
-    // that's supposed to leave it there. Delayed and grown-in client-side
-    // (see the encounter.hazards diff in CombatMap.jsx) instead of applied
-    // instantly.
-    if (slug.type === "Ice" || slug.hazard_maker) {
-      scheduleAfterFlight(firedAt, windowMs, async () => {
-        if (slug.type === "Ice") await addIceHazard(attacker.encounter_id, impactPoint);
-        if (slug.hazard_maker) await addDamageHazard(attacker.encounter_id, impactPoint, slug);
-      });
-    }
-
-    // Emberblade / Flaringo: a wall of fire along the exact line the shot
-    // traveled, unconditional on hit/miss/out-of-range -- same trigger rule
-    // as Ice's patch above.
-    if (slug.trail_wall) {
-      scheduleAfterFlight(firedAt, windowMs, async () => {
-        await addTrailWall(attacker.encounter_id, attackerPos, impactPoint, slug.type);
-      });
-    }
-
-    // Pressure Tick: 3 permanent, independently-timed steam pods scattered
-    // near the impact point -- unconditional on hit/miss, same trigger rule
-    // as Ice's patch above.
-    if (slug.spawns_pods) {
-      scheduleAfterFlight(firedAt, windowMs, async () => {
-        await spawnPods(attacker.encounter_id, impactPoint, slug);
-      });
-    }
-
-    // Regulator: a star-shaped burst of damaging fire walls on impact.
-    if (slug.star_wall) {
-      scheduleAfterFlight(firedAt, windowMs, async () => {
-        await formStarWall(attacker.encounter_id, impactPoint, slug);
-      });
-    }
-
-    // Anchorage: a zone suppressing knockback/wall-breaking around impact.
-    if (slug.anchor_zone) {
-      scheduleAfterFlight(firedAt, windowMs, async () => {
-        await addAnchorZone(attacker.encounter_id, impactPoint);
-      });
-    }
+    // Any terrain the slug leaves -- ice/damage patch, Regulator's star
+    // wall, Anchorage's zone, a fire trail, Pressure Tick's steam pods -- is
+    // a *result* of the shot landing, so it's delayed to the end of the
+    // flight (and grown in client-side, see the encounter diffs in
+    // CombatMap.jsx) rather than popping up mid-flight. Where it lands
+    // depends on how the shot ends: scheduled here at impactPoint for a shot
+    // no counter is offered for, but handed to resolveCounterOffer when one
+    // is -- a countered slug that loses (or bounces) marks the clash point,
+    // not a target it never reached. See applyShotTerrain / scheduleShotTerrain.
 
     // Bladier: the wall actually breaks once the bolt's flight would have
     // reached it, same delayed-resolution treatment as every other
@@ -2969,14 +3007,22 @@ router.post("/actions/shoot", async (req, res) => {
         await pushCombatLog(attacker.encounter_id, `${attacker.name}'s ${slug.name} goes wide of ${target.name}.`);
         await broadcastEncounter(attacker.encounter_id);
       });
+      // A shot that falls short still leaves its terrain where it fizzled
+      // out (impactPoint is already clamped to that spot) -- matches the old
+      // unconditional behaviour, and no counter is ever offered here.
+      scheduleShotTerrain(offer, impactPoint);
       const encounter = await broadcastEncounter(attacker.encounter_id);
       return res.json({ pending: false, encounter });
     }
 
     const result = await launchAndOfferCounter(offer);
     if (result.pending) {
+      // A counter was offered -- resolveCounterOffer owns the terrain now
+      // (clash point if the slug loses, target if it smashes through).
       return res.json({ pending: true, counterId: fxId, windowMs });
     }
+    // No counter available: the shot flies straight to the target, terrain lands there.
+    scheduleShotTerrain(offer, impactPoint);
     const encounter = await broadcastEncounter(attacker.encounter_id);
     res.json({ pending: false, encounter });
   } catch (err) {

@@ -9,6 +9,8 @@ import "./DiceRollPrompt.css";
 
 const ROLL_ANIMATION_MS = 900;
 const ROLL_TICK_MS = 45;
+const RESULT_LINGER_MS = 15000;
+const FADE_OUT_MS = 400;
 
 function randomDie(pair) {
   return pair
@@ -22,9 +24,27 @@ function PromptCard({ offer, onDismiss }) {
   const [displayDice, setDisplayDice] = useState([]);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [fadingOut, setFadingOut] = useState(false);
   const tickRef = useRef(null);
+  const fadeTimerRef = useRef(null);
+  const dismissRef = useRef(onDismiss);
+  dismissRef.current = onDismiss;
 
   useEffect(() => () => clearInterval(tickRef.current), []);
+
+  // Once the result is in, auto-dismiss the card after a linger period so a
+  // large multi-roll that overflows the screen still clears itself.
+  useEffect(() => {
+    if (!result) return undefined;
+    const lingerTimer = setTimeout(() => {
+      setFadingOut(true);
+      fadeTimerRef.current = setTimeout(() => dismissRef.current(), FADE_OUT_MS);
+    }, RESULT_LINGER_MS);
+    return () => {
+      clearTimeout(lingerTimer);
+      clearTimeout(fadeTimerRef.current);
+    };
+  }, [result]);
 
   function handleRoll() {
     if (rolling || result) return;
@@ -67,7 +87,7 @@ function PromptCard({ offer, onDismiss }) {
   const typeLabel = offer.rollType === "advantage" ? "Advantage" : offer.rollType === "disadvantage" ? "Disadvantage" : null;
 
   return (
-    <div className="dice-prompt-card">
+    <div className={`dice-prompt-card${fadingOut ? " dice-prompt-card--out" : ""}`}>
       <button type="button" className="dice-prompt-close" onClick={onDismiss} aria-label="Dismiss">
         <XIcon weight="bold" />
       </button>

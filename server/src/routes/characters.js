@@ -205,6 +205,10 @@ router.post("/heal-all", requireDungeonMaster, async (req, res) => {
       if (updatedSlug[0]) broadcastAll({ type: "slug-updated", userId: s.user_id, slug: toClientSlug(updatedSlug[0]) });
     }
 
+    // A rest also refreshes everyone's once-per-rest Slug Hunt attempt.
+    await pool.query("DELETE FROM slug_hunt_locks");
+    broadcastAll({ type: "slug-hunt-lock", all: true, locked: false });
+
     const activeEncounter = await getActiveEncounterRow();
     if (activeEncounter) {
       await pool.query(
@@ -215,6 +219,13 @@ router.post("/heal-all", requireDungeonMaster, async (req, res) => {
       );
       await broadcastEncounter(activeEncounter.id);
     }
+
+    // A single authoritative "it happened" signal, sent once after every
+    // row is committed. The per-character/per-slug broadcasts above arrive
+    // as a rapid burst and some get coalesced away client-side (see the
+    // single-slot signal note in AccessSocket); views listen for this and
+    // re-sync from the server so nothing is left showing stale Grit/pips.
+    broadcastAll({ type: "party-healed", at: Date.now() });
 
     res.json({ healed: characters.length });
   } catch (err) {

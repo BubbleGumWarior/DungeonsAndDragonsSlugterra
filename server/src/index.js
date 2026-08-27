@@ -24,6 +24,8 @@ import diceRollRouter from "./routes/diceRoll.js";
 import combatRouter from "./routes/combat.js";
 import npcTemplatesRouter from "./routes/npcTemplates.js";
 import slugpediaRouter from "./routes/slugpedia.js";
+import slugHuntRouter from "./routes/slugHunt.js";
+import voiceRouter from "./routes/voice.js";
 import { requireAuth } from "./middleware/auth.js";
 import { setupWebSocket, getOnlineUserIds } from "./ws.js";
 
@@ -51,6 +53,8 @@ app.use("/api/dice-roll", diceRollRouter);
 app.use("/api/combat", combatRouter);
 app.use("/api/npc-templates", npcTemplatesRouter);
 app.use("/api/slugpedia", slugpediaRouter);
+app.use("/api/slug-hunt", slugHuntRouter);
+app.use("/api/voice", voiceRouter);
 
 app.get("/api/presence/online", requireAuth, (req, res) => {
   res.json({ onlineUserIds: getOnlineUserIds() });
@@ -59,7 +63,7 @@ app.get("/api/presence/online", requireAuth, (req, res) => {
 app.get("/api/me", requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT id, username, role, status, must_change_password, theme, sound_volume FROM users WHERE id = $1",
+      "SELECT id, username, role, status, must_change_password, theme, sound_volume, voice_input_mode, voice_peer_volumes FROM users WHERE id = $1",
       [req.user.sub]
     );
     const row = rows[0];
@@ -75,6 +79,8 @@ app.get("/api/me", requireAuth, async (req, res) => {
         mustChangePassword: row.must_change_password,
         theme: row.theme,
         soundVolume: row.sound_volume,
+        voiceInputMode: row.voice_input_mode,
+        voicePeerVolumes: row.voice_peer_volumes,
       },
     });
   } catch (err) {

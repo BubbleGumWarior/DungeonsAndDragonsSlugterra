@@ -11,7 +11,7 @@ const SLOT_LABELS = ["Primary", "Secondary"];
 
 export default function PlayerSlugs() {
   const { token, user } = useAuth();
-  const { slugUpdate, blasterUpdate } = useLiveState();
+  const { slugUpdate, blasterUpdate, partyHealed } = useLiveState();
   const [slugs, setSlugs] = useState([]);
   const [blasters, setBlasters] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -47,6 +47,17 @@ export default function PlayerSlugs() {
       return [...prev, slugUpdate.slug];
     });
   }, [slugUpdate, user]);
+
+  // Heal All recharges every slug's energy and fires a per-slug broadcast
+  // burst that can be coalesced away (see AccessSocket's single-slot note);
+  // re-sync this player's slugs from the server when it happens.
+  useEffect(() => {
+    if (!partyHealed) return;
+    fetch("/api/slugs/me", { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => res.json())
+      .then((data) => setSlugs(data.slugs || []))
+      .catch(() => {});
+  }, [partyHealed, token]);
 
   useEffect(() => {
     if (!blasterUpdate || blasterUpdate.userId !== user?.id) return;

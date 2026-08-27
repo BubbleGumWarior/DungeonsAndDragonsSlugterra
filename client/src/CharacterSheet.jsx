@@ -8,7 +8,7 @@ import "./CharacterSheet.css";
 
 export default function CharacterSheet() {
   const { token, user } = useAuth();
-  const { characterUpdate } = useLiveState();
+  const { characterUpdate, partyHealed } = useLiveState();
   const navigate = useNavigate();
   const [character, setCharacter] = useState(undefined);
 
@@ -36,6 +36,22 @@ export default function CharacterSheet() {
       setCharacter(characterUpdate.character);
     }
   }, [characterUpdate, user]);
+
+  // The Heal All broadcast burst can drop this character's update
+  // (see AccessSocket's single-slot note); re-sync from the server.
+  useEffect(() => {
+    if (!partyHealed) return;
+    let cancelled = false;
+    fetch("/api/characters/me", { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled && data.character) setCharacter(data.character);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [partyHealed, token]);
 
   if (!character) {
     return null;
