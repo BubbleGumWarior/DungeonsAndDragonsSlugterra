@@ -1,4 +1,4 @@
-// Regenerates the navy/green/purple ramps in ../src/theme.js (and the
+// Regenerates the non-burgundy accent ramps in ../src/theme.js (and the
 // matching [data-theme] blocks in ../src/index.css) from burgundy's own
 // ramp, so every theme reads as a genuine "wine" variant of its hue instead
 // of a flat, neon-prone hue rotation. Run with `node generate-theme-ramps.mjs`
@@ -32,7 +32,7 @@ const BURGUNDY_HEX = {
 // Target hue (OKLCH degrees) for each theme. Picked by eye against the
 // computed ramp, not derived -- nudge and re-run if a theme needs to lean
 // warmer/cooler.
-const THEME_HUES = { navy: 258, green: 152, purple: 310 };
+const THEME_HUES = { navy: 258, green: 152, purple: 310, orange: 55, pink: 355, teal: 200, indigo: 280 };
 
 function srgbToLinear(c) {
   c /= 255;

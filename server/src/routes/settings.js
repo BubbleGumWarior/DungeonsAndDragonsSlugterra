@@ -17,7 +17,7 @@ function requireDungeonMaster(req, res, next) {
 // Personal display/audio preferences -- every signed-in user tunes their
 // own, no DM gate. See index.css's [data-theme] blocks for what each theme
 // id maps to and CombatMap.jsx for where sound_volume gets applied.
-const THEMES = ["burgundy", "navy", "green", "purple"];
+const THEMES = ["burgundy", "navy", "green", "purple", "orange", "pink", "teal", "indigo"];
 const VOICE_INPUT_MODES = ["live", "push_to_talk"];
 
 router.post("/preferences", async (req, res) => {
