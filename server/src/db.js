@@ -227,6 +227,27 @@ export async function initSchema() {
   await pool.query(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS voice_peer_volumes JSONB NOT NULL DEFAULT '{}';
   `);
+  // voice_cue_volume (0-1) scales the Join/Leave chimes every client in a
+  // call hears when someone enters or leaves it -- its own slider in
+  // Settings.jsx, independent of sound_volume (the combat shoot sound).
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS voice_cue_volume REAL NOT NULL DEFAULT 0.5;
+  `);
+  // master_volume (0-1) is a convenience control only -- moving it writes
+  // its value into every individual sound level at once (sound_volume,
+  // voice_cue_volume, every combat_sfx_volumes entry). It never scales
+  // playback itself, so once the individual sliders are nudged apart from it
+  // they simply differ. Stored so the slider remembers where it was left.
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS master_volume REAL NOT NULL DEFAULT 0.5;
+  `);
+  // combat_sfx_volumes -- a { fail|miss|hit|break|hazard: 0-1 } map, one
+  // level per non-launch combat sound (see CombatMap.jsx's COMBAT_SFX). A
+  // sparse map: a missing key means "use the 0.5 default", so a new sound
+  // needs no migration here. Same JSONB-map shape as voice_peer_volumes.
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS combat_sfx_volumes JSONB NOT NULL DEFAULT '{}';
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS characters (
@@ -266,6 +287,16 @@ export async function initSchema() {
     CREATE TABLE IF NOT EXISTS slug_hunt_locks (
       user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       locked_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
+  // Consecutive slug-hunt misses per player, tracked across rests (unlike
+  // slug_hunt_locks, "Heal All" does NOT clear this) -- a pity counter so a
+  // run of bad luck doesn't compound forever. See routes/slugHunt.js.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS slug_hunt_streaks (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      misses INTEGER NOT NULL DEFAULT 0
     );
   `);
 
@@ -732,6 +763,16 @@ export async function initSchema() {
   // fight doesn't change or care about it.
   await pool.query(`
     ALTER TABLE npc_templates ADD COLUMN IF NOT EXISTS revealed BOOLEAN NOT NULL DEFAULT false;
+  `);
+
+  // NPC AP and Grit are no longer hand-set fields -- they're derived from
+  // the DEX/CON modifiers on the same curves players use (see npcActionPoints
+  // / npcMaxGrit in characterRules.js). Recompute them for every existing
+  // template so old rows stop showing stale, manually-entered values.
+  await pool.query(`
+    UPDATE npc_templates SET
+      max_ap = GREATEST(8, 6 + 3 * dex_modifier),
+      max_grit = GREATEST(1, 20 + con_modifier * 5 + dex_modifier);
   `);
 
   await pool.query(`

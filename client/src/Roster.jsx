@@ -10,7 +10,7 @@ import "./Roster.css";
 
 export default function Roster({ selectable = false, selectedUserId, onSelect, healable = false }) {
   const { token } = useAuth();
-  const { onlineUserIds, characterUpdate, partyHealed } = useLiveState();
+  const { onlineUserIds, characterUpdate, characterCreated, partyHealed } = useLiveState();
   const [characters, setCharacters] = useState([]);
   const [healing, setHealing] = useState(false);
 
@@ -31,6 +31,12 @@ export default function Roster({ selectable = false, selectedUserId, onSelect, h
   useEffect(() => {
     if (partyHealed) refetch();
   }, [partyHealed, refetch]);
+
+  // A newly created character isn't in the list yet, so the per-character
+  // "character-updated" patch can't surface it -- pull a fresh roster.
+  useEffect(() => {
+    if (characterCreated) refetch();
+  }, [characterCreated, refetch]);
 
   useEffect(() => {
     if (!characterUpdate) return;

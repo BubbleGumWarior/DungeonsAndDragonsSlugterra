@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { PlusIcon, TrashIcon, UserPlusIcon, DownloadSimpleIcon } from "@phosphor-icons/react";
+import { PlusIcon, TrashIcon, UserPlusIcon, DownloadSimpleIcon, CaretDownIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import SlugCard from "./SlugCard.jsx";
 import SlugForm from "./SlugForm.jsx";
@@ -18,6 +18,11 @@ export default function SlugManagement() {
   const [sortKey, setSortKey] = useState("name-asc");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkStatus, setBulkStatus] = useState(null);
+  // The default roster can run to dozens of templates -- collapsed by
+  // default so the page opens on the (usually much shorter) player roster
+  // below instead of a wall of cards, with a toggle for the DM to expand it
+  // back out when they actually need to browse/edit templates.
+  const [templatesOpen, setTemplatesOpen] = useState(false);
 
   function toggleType(type) {
     setSelectedTypes((prev) => {
@@ -193,7 +198,16 @@ export default function SlugManagement() {
     <div className="slug-management">
       <section className="slug-management-section">
         <div className="slug-management-section-header">
-          <h2>Slug Templates</h2>
+          <button
+            type="button"
+            className="slug-management-collapse-toggle"
+            onClick={() => setTemplatesOpen((v) => !v)}
+            aria-expanded={templatesOpen}
+          >
+            <CaretDownIcon weight="bold" className={`slug-management-collapse-caret ${templatesOpen ? "slug-management-collapse-caret--open" : ""}`} />
+            <h2>Slug Templates</h2>
+            <span className="slug-management-count">{templates.length}</span>
+          </button>
           <div className="slug-management-header-actions">
             <button
               type="button"
@@ -222,58 +236,59 @@ export default function SlugManagement() {
 
         {bulkStatus && <p className="slug-management-bulk-status">{bulkStatus}</p>}
 
-        {templates.length === 0 ? (
-          <p className="slug-management-empty">No templates yet. Create one to start assigning slugs.</p>
-        ) : (
-          <>
-            <SlugToolbar
-              query={query}
-              onQueryChange={setQuery}
-              selectedTypes={selectedTypes}
-              onToggleType={toggleType}
-              selectedFlags={selectedFlags}
-              onToggleFlag={toggleFlag}
-              sortKey={sortKey}
-              onSortChange={setSortKey}
-              resultCount={visibleTemplates.length}
-              totalCount={templates.length}
-              onClear={clearFilters}
-            />
-            {visibleTemplates.length === 0 ? (
-              <p className="slug-management-empty">No slugs match those filters.</p>
-            ) : (
-              <div className="slug-management-grid">
-                {visibleTemplates.map((template) => (
-                  <SlugCard
-                    key={template.id}
-                    slug={template}
-                    onClick={() => setModal({ type: "edit-template", template })}
-                    actions={
-                      <>
-                        <button
-                          type="button"
-                          className="slug-management-icon-btn"
-                          onClick={() => setModal({ type: "assign", template })}
-                          title="Assign to player"
-                        >
-                          <UserPlusIcon weight="bold" />
-                        </button>
-                        <button
-                          type="button"
-                          className="slug-management-icon-btn slug-management-icon-btn--danger"
-                          onClick={() => deleteTemplate(template.id)}
-                          title="Delete template"
-                        >
-                          <TrashIcon weight="bold" />
-                        </button>
-                      </>
-                    }
-                  />
-                ))}
-              </div>
-            )}
-          </>
-        )}
+        {templatesOpen &&
+          (templates.length === 0 ? (
+            <p className="slug-management-empty">No templates yet. Create one to start assigning slugs.</p>
+          ) : (
+            <>
+              <SlugToolbar
+                query={query}
+                onQueryChange={setQuery}
+                selectedTypes={selectedTypes}
+                onToggleType={toggleType}
+                selectedFlags={selectedFlags}
+                onToggleFlag={toggleFlag}
+                sortKey={sortKey}
+                onSortChange={setSortKey}
+                resultCount={visibleTemplates.length}
+                totalCount={templates.length}
+                onClear={clearFilters}
+              />
+              {visibleTemplates.length === 0 ? (
+                <p className="slug-management-empty">No slugs match those filters.</p>
+              ) : (
+                <div className="slug-management-grid">
+                  {visibleTemplates.map((template) => (
+                    <SlugCard
+                      key={template.id}
+                      slug={template}
+                      onClick={() => setModal({ type: "edit-template", template })}
+                      actions={
+                        <>
+                          <button
+                            type="button"
+                            className="slug-management-icon-btn"
+                            onClick={() => setModal({ type: "assign", template })}
+                            title="Assign to player"
+                          >
+                            <UserPlusIcon weight="bold" />
+                          </button>
+                          <button
+                            type="button"
+                            className="slug-management-icon-btn slug-management-icon-btn--danger"
+                            onClick={() => deleteTemplate(template.id)}
+                            title="Delete template"
+                          >
+                            <TrashIcon weight="bold" />
+                          </button>
+                        </>
+                      }
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          ))}
       </section>
 
       <section className="slug-management-section">

@@ -163,11 +163,26 @@ export function computeMaxGrit(stats) {
 // Mirrors client/src/characterData.js -- kept here too since the server is
 // the authority when building combatants / rolling initiative for combat.
 export function actionPoints(stats) {
-  return Math.max(3, 3 * statModifier(stats.dexterity));
+  return Math.max(8, 6 + 3 * statModifier(stats.dexterity));
 }
 
 export function initiativeBonus(stats) {
   return statModifier(stats.dexterity);
+}
+
+// NPCs are defined by bare DEX/CON modifiers rather than a full stat block,
+// so derive their AP and Grit straight from those modifiers on the same
+// curves players use (see actionPoints / computeMaxGrit above) -- the DM
+// never sets an NPC's AP or Grit by hand.
+export function npcActionPoints(dexModifier) {
+  const mod = Number.isInteger(dexModifier) ? dexModifier : 0;
+  return Math.max(8, 6 + 3 * mod);
+}
+
+export function npcMaxGrit(conModifier, dexModifier) {
+  const con = Number.isInteger(conModifier) ? conModifier : 0;
+  const dex = Number.isInteger(dexModifier) ? dexModifier : 0;
+  return Math.max(1, 20 + con * 5 + dex);
 }
 
 export function validateCurrentGrit(value, stats) {

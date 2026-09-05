@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { XIcon } from "@phosphor-icons/react";
 import ImageCropper from "./ImageCropper.jsx";
 import { typeColor } from "./slugData.js";
 import "./SlugForm.css";
@@ -8,8 +9,6 @@ function defaultFields() {
   return {
     name: "",
     image: null,
-    maxGrit: 20,
-    maxAp: 2,
     dexModifier: 0,
     conModifier: 0,
     slugTemplateIds: [],
@@ -33,6 +32,16 @@ export default function NpcForm({ initialValues, slugTemplates, blasterTemplates
       const next = list.includes(id) ? list.filter((v) => v !== id) : [...list, id];
       return { ...prev, [key]: next };
     });
+  }
+
+  // Slugs stack: each click adds another copy of that slug to the NPC's
+  // loadout, and the X on the chip clears every copy at once.
+  function addSlug(id) {
+    setFields((prev) => ({ ...prev, slugTemplateIds: [...prev.slugTemplateIds, id] }));
+  }
+
+  function removeSlug(id) {
+    setFields((prev) => ({ ...prev, slugTemplateIds: prev.slugTemplateIds.filter((v) => v !== id) }));
   }
 
   async function handleSubmit(e) {
@@ -62,14 +71,6 @@ export default function NpcForm({ initialValues, slugTemplates, blasterTemplates
 
       <div className="slug-form-steppers npc-form-stats">
         <div className="panel-field">
-          <label>Max Grit</label>
-          <input type="number" min={1} max={500} value={fields.maxGrit} onChange={(e) => update("maxGrit", Number(e.target.value))} />
-        </div>
-        <div className="panel-field">
-          <label>Max AP</label>
-          <input type="number" min={1} max={10} value={fields.maxAp} onChange={(e) => update("maxAp", Number(e.target.value))} />
-        </div>
-        <div className="panel-field">
           <label>DEX Modifier</label>
           <input type="number" min={-5} max={10} value={fields.dexModifier} onChange={(e) => update("dexModifier", Number(e.target.value))} />
         </div>
@@ -78,23 +79,52 @@ export default function NpcForm({ initialValues, slugTemplates, blasterTemplates
           <input type="number" min={-5} max={10} value={fields.conModifier} onChange={(e) => update("conModifier", Number(e.target.value))} />
         </div>
       </div>
+      <p className="npc-form-hint">Max Grit and Max AP are derived from these modifiers, the same way a player character's are.</p>
 
       <div className="npc-form-picker">
-        <label>Slugs</label>
+        <label>
+          Slugs <span className="npc-form-picker-note">click to add &mdash; click again for another copy</span>
+        </label>
         <div className="npc-form-picker-list">
           {slugTemplates.length === 0 && <p className="npc-form-picker-empty">No slug templates yet.</p>}
-          {slugTemplates.map((t) => (
-            <button
-              type="button"
-              key={t.id}
-              className={`npc-form-picker-item npc-form-picker-item--slug ${fields.slugTemplateIds.includes(t.id) ? "npc-form-picker-item--picked" : ""}`}
-              style={{ "--type-color": typeColor(t.type) }}
-              onClick={() => toggleId("slugTemplateIds", t.id)}
-            >
-              {t.protoformImage ? <img src={t.protoformImage} alt="" /> : <span className="npc-form-picker-placeholder" />}
-              <span>{t.name}</span>
-            </button>
-          ))}
+          {slugTemplates.map((t) => {
+            const count = fields.slugTemplateIds.filter((v) => v === t.id).length;
+            return (
+              <button
+                type="button"
+                key={t.id}
+                className={`npc-form-picker-item npc-form-picker-item--slug ${count > 0 ? "npc-form-picker-item--picked" : ""}`}
+                style={{ "--type-color": typeColor(t.type) }}
+                onClick={() => addSlug(t.id)}
+              >
+                {t.protoformImage ? <img src={t.protoformImage} alt="" /> : <span className="npc-form-picker-placeholder" />}
+                <span className="npc-form-picker-item-label">{t.name}</span>
+                {count > 1 && <span className="npc-form-picker-item-count">&times;{count}</span>}
+                {count > 0 && (
+                  <span
+                    className="npc-form-picker-item-x"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Remove all ${t.name}`}
+                    title={`Remove all ${t.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeSlug(t.id);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        removeSlug(t.id);
+                      }
+                    }}
+                  >
+                    <XIcon weight="bold" />
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 

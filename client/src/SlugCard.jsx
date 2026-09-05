@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LOYALTY_TIER_LABELS, typeColor } from "./slugData.js";
+import { LOYALTY_TIER_LABELS, LOYALTY_TIERS, typeColor, loyaltyClashModifier, loyaltyAccuracyModifier, loyaltyTierColor } from "./slugData.js";
 import { useTypewriter } from "./useTypewriter.js";
 import SlugImage from "./SlugImage.jsx";
 import EnergyPips from "./EnergyPips.jsx";
@@ -11,6 +11,17 @@ export default function SlugCard({ slug, size = "sm", editable = false, onToggle
   const abilityLabel = face === "velocity" ? "Velocity Ability" : "Protoform Utility";
   const typedAbility = useTypewriter(abilityText);
   const typedLabel = useTypewriter(abilityLabel);
+  // Loyalty tier shifts this slug's effective clash power/defense and its
+  // shooter's accuracy in combat (see loyaltyClashModifier/
+  // loyaltyAccuracyModifier in server/src/combatRules.js) -- shown as a
+  // small +/- tag so the base stat above isn't the whole story.
+  const clashMod = loyaltyClashModifier(slug.loyaltyTier);
+  const clashModLabel = clashMod > 0 ? `+${clashMod}` : `${clashMod}`;
+  const clashModClass = `slug-card-loyalty-mod slug-card-loyalty-mod--${clashMod > 0 ? "positive" : "negative"}`;
+  const accuracyMod = loyaltyAccuracyModifier(slug.loyaltyTier);
+  const accuracyModLabel = accuracyMod > 0 ? `+${accuracyMod}` : `${accuracyMod}`;
+  const accuracyModClass = `slug-card-loyalty-mod slug-card-loyalty-mod--${accuracyMod > 0 ? "positive" : "negative"}`;
+  const loyaltyColor = loyaltyTierColor(slug.loyaltyTier);
 
   return (
     <div className={`slug-card slug-card--${size} ${onClick ? "slug-card--clickable" : ""}`} onClick={onClick}>
@@ -31,20 +42,41 @@ export default function SlugCard({ slug, size = "sm", editable = false, onToggle
 
       <div className="slug-card-stats">
         <div className="slug-card-stat">
-          <span className="slug-card-stat-value">{slug.clashPower}</span>
+          <span className="slug-card-stat-value">
+            {slug.clashPower}
+            {clashMod !== 0 && <span className={clashModClass}>{clashModLabel}</span>}
+          </span>
           <span className="slug-card-stat-label">Clash Power</span>
         </div>
         <div className="slug-card-stat">
-          <span className="slug-card-stat-value">{slug.clashDefense}</span>
+          <span className="slug-card-stat-value">
+            {slug.clashDefense}
+            {clashMod !== 0 && <span className={clashModClass}>{clashModLabel}</span>}
+          </span>
           <span className="slug-card-stat-label">Clash Defense</span>
         </div>
         <div className="slug-card-stat">
           <span className="slug-card-stat-value">{slug.apCost}</span>
           <span className="slug-card-stat-label">AP Cost</span>
         </div>
-        <div className="slug-card-stat">
-          <span className="slug-card-stat-value">{LOYALTY_TIER_LABELS[slug.loyaltyTier]}</span>
+        <div className="slug-card-stat slug-card-stat--loyalty" tabIndex={0}>
+          <span className="slug-card-stat-value" style={{ color: loyaltyColor }}>
+            {LOYALTY_TIER_LABELS[slug.loyaltyTier]}
+            {accuracyMod !== 0 && <span className={accuracyModClass}>{accuracyModLabel} ACC</span>}
+          </span>
           <span className="slug-card-stat-label">Loyalty</span>
+
+          <div className="slug-card-loyalty-legend" role="tooltip">
+            <p className="slug-card-loyalty-legend-title">Loyalty Tiers</p>
+            {LOYALTY_TIERS.map((tier) => (
+              <div key={tier.value} className="slug-card-loyalty-legend-row">
+                <span className="slug-card-loyalty-legend-swatch" style={{ background: tier.color, color: tier.color }} />
+                <span className="slug-card-loyalty-legend-name" style={{ color: tier.color }}>
+                  {tier.label}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 

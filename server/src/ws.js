@@ -25,8 +25,39 @@ function broadcastVoiceRoster() {
   broadcastAll(voiceRosterPayload());
 }
 
+// Cloudflare's proxy (both the regular CDN edge and Tunnel, now that
+// run_tunnel.bat routes through one -- see CLOUDFLARE_TUNNEL_SETUP.md)
+// drops a WebSocket that's gone quiet for roughly 100s. Pinging well under
+// that keeps every connection alive indefinitely.
+//
+// This is a plain app-level {type:"ping"}/{type:"pong"} JSON exchange, not
+// the WebSocket protocol's own ping/pong control frames -- tried that
+// first, and it backfired: those control frames don't reliably survive
+// Vite's dev proxy + Cloudflare Tunnel path, so pongs kept silently going
+// missing, the "no pong = dead" check below kept firing on perfectly
+// healthy connections, and each forced reconnect re-sent voice-join,
+// producing a phantom leave+rejoin (and its sound effect) roughly every
+// 30s. A plain JSON message is ordinary data traffic, not a control frame
+// a proxy might reinterpret, so it doesn't have that failure mode -- at
+// the cost of needing the small reply handler in AccessSocket.jsx below.
+const HEARTBEAT_INTERVAL_MS = 30000;
+const HEARTBEAT_MESSAGE = JSON.stringify({ type: "ping" });
+
 export function setupWebSocket(server) {
   const wss = new WebSocketServer({ server, path: "/ws" });
+
+  const heartbeat = setInterval(() => {
+    wss.clients.forEach((ws) => {
+      if (ws.isAlive === false) {
+        ws.terminate();
+        return;
+      }
+      ws.isAlive = false;
+      if (ws.readyState === ws.OPEN) ws.send(HEARTBEAT_MESSAGE);
+    });
+  }, HEARTBEAT_INTERVAL_MS);
+
+  wss.on("close", () => clearInterval(heartbeat));
 
   // Fires for every attempted WS upgrade that reaches this process, before
   // any auth/app logic -- the fastest way to tell whether a failing
@@ -52,6 +83,8 @@ export function setupWebSocket(server) {
       ws.close(4001, "Unauthorized");
       return;
     }
+
+    ws.isAlive = true;
 
     const isFirstSocket = !userSockets.has(userId);
     if (isFirstSocket) {
@@ -99,6 +132,11 @@ export function setupWebSocket(server) {
         const to = Number(data.to);
         if (!Number.isInteger(to) || !data.signal) return;
         notifyUser(to, { type: "voice-signal", from: userId, signal: data.signal });
+        return;
+      }
+
+      if (data.type === "pong") {
+        ws.isAlive = true;
       }
     });
 

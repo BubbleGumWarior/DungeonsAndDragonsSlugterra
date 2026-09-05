@@ -42,10 +42,11 @@ function CounterCard({ offer, onDone }) {
     }
   }
 
-  // Mirrors PlayerSlugs.jsx's magazine-slot hotkeys: 1-9 picks the
-  // corresponding eligible slug (in the same order as the buttons below),
-  // Escape takes the hit. Only wired up for the window, same as there --
-  // this prompt has no particular element to focus.
+  // The number key for a slug is its magazine slot (slot 1 -> "1"), the same
+  // number shown on that slug in the combat slug panel -- so the muscle
+  // memory carries over. Escape takes the hit. Only wired up for the window,
+  // same as the panel -- this prompt has no particular element to focus.
+  const hotkeyFor = (s, i) => (Number.isInteger(s.magazineSlot) ? s.magazineSlot + 1 : i + 1);
   const respondRef = useRef(respond);
   respondRef.current = respond;
   useEffect(() => {
@@ -56,7 +57,7 @@ function CounterCard({ offer, onDone }) {
       }
       const num = Number(e.key);
       if (!Number.isInteger(num) || num < 1 || num > 9) return;
-      const slug = offer.eligibleSlugs[num - 1];
+      const slug = offer.eligibleSlugs.find((s, i) => hotkeyFor(s, i) === num);
       if (!slug) return;
       respondRef.current(slug.id);
     }
@@ -73,8 +74,16 @@ function CounterCard({ offer, onDone }) {
           <ShieldWarningIcon weight="duotone" />
         </span>
         <div>
-          <p className="counter-prompt-kicker">{offer.attackerName} fires {offer.slugName}!</p>
-          <h3 className="counter-prompt-title">Counter with a slug?</h3>
+          <p className="counter-prompt-kicker">
+            {offer.attackerName} fires {offer.slugName}
+            {offer.forNpc && offer.defenderName ? ` at ${offer.defenderName}` : ""}!
+          </p>
+          <h3 className="counter-prompt-title">
+            {offer.forNpc ? `Counter for ${offer.defenderName || "the NPC"}?` : "Counter with a slug?"}
+          </h3>
+          {offer.availableAp != null && (
+            <p className="counter-prompt-ap">{offer.availableAp} AP left to spend on a counter</p>
+          )}
         </div>
         <button type="button" className="counter-prompt-close" onClick={() => respond(null)} aria-label="No counter">
           <XIcon weight="bold" />
@@ -82,27 +91,31 @@ function CounterCard({ offer, onDone }) {
       </div>
 
       <div className="counter-prompt-timer">
-        <div className="counter-prompt-timer-fill" style={{ width: `${percent}%` }} />
+        <div className="counter-prompt-timer-fill" style={{ transform: `scaleX(${percent / 100})` }} />
       </div>
 
       <div className="counter-prompt-slugs">
-        {offer.eligibleSlugs.map((s, i) => (
-          <button
-            key={s.id}
-            type="button"
-            className="counter-prompt-slug"
-            style={{ "--type-color": typeColor(s.type) }}
-            disabled={resolving}
-            onClick={() => respond(s.id)}
-          >
-            {i < 9 && <span className="counter-prompt-slug-key">{i + 1}</span>}
-            <span className="counter-prompt-slug-name">{s.name}</span>
-            <span className="counter-prompt-slug-type">{s.type}</span>
-            <span className="counter-prompt-slug-stats">
-              PWR {s.clashPower} / DEF {s.clashDefense}
-            </span>
-          </button>
-        ))}
+        {offer.eligibleSlugs.map((s, i) => {
+          const hotkey = hotkeyFor(s, i);
+          return (
+            <button
+              key={s.id}
+              type="button"
+              className="counter-prompt-slug"
+              style={{ "--type-color": typeColor(s.type) }}
+              disabled={resolving}
+              onClick={() => respond(s.id)}
+            >
+              {hotkey <= 9 && <span className="counter-prompt-slug-key">{hotkey}</span>}
+              <span className="counter-prompt-slug-name">{s.name}</span>
+              <span className="counter-prompt-slug-type">{s.type}</span>
+              <span className="counter-prompt-slug-stats">
+                PWR {s.clashPower} / DEF {s.clashDefense}
+                {s.apCost != null && ` · ${s.apCost} AP`}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       <button type="button" className="panel-btn panel-btn--ghost counter-prompt-skip" disabled={resolving} onClick={() => respond(null)}>

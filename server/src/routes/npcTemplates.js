@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { broadcastAll } from "../ws.js";
+import { npcActionPoints, npcMaxGrit } from "../characterRules.js";
 
 const router = Router();
 
@@ -51,7 +52,7 @@ function toPlayerTemplate(row) {
   };
 }
 
-function validate({ name, image, maxGrit, maxAp, dexModifier, conModifier, slugTemplateIds, blasterTemplateIds, mechaTemplateId }) {
+function validate({ name, image, dexModifier, conModifier, slugTemplateIds, blasterTemplateIds, mechaTemplateId }) {
   if (typeof name !== "string" || !name.trim() || name.trim().length > 40) {
     return "Name must be a non-empty string of 40 characters or fewer.";
   }
@@ -60,15 +61,12 @@ function validate({ name, image, maxGrit, maxAp, dexModifier, conModifier, slugT
     if (image.length > MAX_IMAGE_BYTES) return "Image is too large.";
   }
   for (const [value, label] of [
-    [maxGrit, "Max Grit"],
-    [maxAp, "Max AP"],
     [dexModifier, "DEX Modifier"],
     [conModifier, "CON Modifier"],
   ]) {
     if (!Number.isInteger(value)) return `${label} must be a whole number.`;
+    if (value < -5 || value > 10) return `${label} must be between -5 and 10.`;
   }
-  if (maxGrit < 1 || maxGrit > 500) return "Max Grit must be between 1 and 500.";
-  if (maxAp < 1 || maxAp > 10) return "Max AP must be between 1 and 10.";
   if (!Array.isArray(slugTemplateIds) || !slugTemplateIds.every(Number.isInteger)) {
     return "Slug Template Ids must be an array of integers.";
   }
@@ -106,8 +104,8 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", requireDungeonMaster, async (req, res) => {
-  const { name, image, maxGrit, maxAp, dexModifier, conModifier, slugTemplateIds, blasterTemplateIds, mechaTemplateId, revealed } = req.body || {};
-  const error = validate({ name, image, maxGrit, maxAp, dexModifier, conModifier, slugTemplateIds, blasterTemplateIds, mechaTemplateId });
+  const { name, image, dexModifier, conModifier, slugTemplateIds, blasterTemplateIds, mechaTemplateId, revealed } = req.body || {};
+  const error = validate({ name, image, dexModifier, conModifier, slugTemplateIds, blasterTemplateIds, mechaTemplateId });
   if (error) return res.status(400).json({ error });
 
   try {
@@ -119,8 +117,8 @@ router.post("/", requireDungeonMaster, async (req, res) => {
       [
         name.trim(),
         image ?? null,
-        maxGrit,
-        maxAp,
+        npcMaxGrit(conModifier, dexModifier),
+        npcActionPoints(dexModifier),
         dexModifier,
         conModifier,
         JSON.stringify(slugTemplateIds),
@@ -139,8 +137,8 @@ router.post("/", requireDungeonMaster, async (req, res) => {
 
 router.patch("/:id", requireDungeonMaster, async (req, res) => {
   const id = Number(req.params.id);
-  const { name, image, maxGrit, maxAp, dexModifier, conModifier, slugTemplateIds, blasterTemplateIds, mechaTemplateId } = req.body || {};
-  const error = validate({ name, image, maxGrit, maxAp, dexModifier, conModifier, slugTemplateIds, blasterTemplateIds, mechaTemplateId });
+  const { name, image, dexModifier, conModifier, slugTemplateIds, blasterTemplateIds, mechaTemplateId } = req.body || {};
+  const error = validate({ name, image, dexModifier, conModifier, slugTemplateIds, blasterTemplateIds, mechaTemplateId });
   if (error) return res.status(400).json({ error });
 
   try {
@@ -153,8 +151,8 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
       [
         name.trim(),
         image ?? null,
-        maxGrit,
-        maxAp,
+        npcMaxGrit(conModifier, dexModifier),
+        npcActionPoints(dexModifier),
         dexModifier,
         conModifier,
         JSON.stringify(slugTemplateIds),

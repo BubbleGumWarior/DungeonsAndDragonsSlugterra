@@ -150,9 +150,26 @@
   gap: 8px;
 }
 
+.combat-slug-panel-card-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 5px;
+  background: var(--charcoal-800);
+  border: 1px solid var(--charcoal-600);
+  color: var(--ink-dim);
+  font-size: 10.5px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
 .combat-slug-panel-card-name {
   font-size: 13px;
   font-weight: 700;
+  margin-right: auto;
 }
 
 .combat-slug-panel-card-ap {
@@ -186,6 +203,23 @@
   gap: 12px;
   font-size: 11px;
   color: var(--ink-dim);
+}
+
+/* Loyalty tier's +/- swing on this slug's base power/defense (see
+   loyaltyClashModifier) -- a small tag riding right next to the base
+   number rather than a separate stat row, since it's a modifier on that
+   number, not a stat of its own. */
+.combat-slug-panel-card-loyalty-mod {
+  margin-left: 3px;
+  font-weight: 700;
+}
+
+.combat-slug-panel-card-loyalty-mod--positive {
+  color: var(--success);
+}
+
+.combat-slug-panel-card-loyalty-mod--negative {
+  color: var(--danger);
 }
 
 .combat-slug-panel-hint {

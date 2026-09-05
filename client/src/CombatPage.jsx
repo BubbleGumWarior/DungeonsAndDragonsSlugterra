@@ -49,7 +49,7 @@ async function del(token, url) {
 // Mirrors server/src/combatRules.js -- client-side estimate only, shown as a
 // live preview while dragging. The server is always the authority on the
 // real AP cost when the move is actually submitted.
-const MOVE_SPEED_PER_AP = 200; // 10x the original 20 -- walking distance only, shooting range/speed untouched
+const MOVE_SPEED_PER_AP = 80; // mirrors server combatRules.js -- walking distance only; a given walk costs 2.5x the AP vs. the old 200
 const MECHA_SPEED_UNIT = 12;
 
 function estimateApCost(combatant, dist) {
@@ -128,8 +128,6 @@ function AddCombatantForm({ players, mechas, onAdd }) {
   const [refUserId, setRefUserId] = useState(players[0]?.id ?? "");
   const [refMechaId, setRefMechaId] = useState(mechas[0]?.id ?? "");
   const [name, setName] = useState("");
-  const [maxAp, setMaxAp] = useState(2);
-  const [maxGrit, setMaxGrit] = useState(20);
   const [dexModifier, setDexModifier] = useState(0);
   const [conModifier, setConModifier] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -152,8 +150,6 @@ function AddCombatantForm({ players, mechas, onAdd }) {
           name,
           x: px,
           y: py,
-          maxAp: Number(maxAp),
-          maxGrit: Number(maxGrit),
           dexModifier: Number(dexModifier),
           conModifier: Number(conModifier),
         });
@@ -215,24 +211,19 @@ function AddCombatantForm({ players, mechas, onAdd }) {
       </div>
 
       {kind === "npc" && (
-        <div className="panel-row">
-          <div className="panel-field">
-            <label>Max AP</label>
-            <input type="number" value={maxAp} min={1} max={6} onChange={(e) => setMaxAp(e.target.value)} />
+        <>
+          <div className="panel-row">
+            <div className="panel-field">
+              <label>DEX Mod</label>
+              <input type="number" value={dexModifier} min={-5} max={10} onChange={(e) => setDexModifier(e.target.value)} />
+            </div>
+            <div className="panel-field">
+              <label>CON Mod</label>
+              <input type="number" value={conModifier} min={-5} max={10} onChange={(e) => setConModifier(e.target.value)} />
+            </div>
           </div>
-          <div className="panel-field">
-            <label>Max Grit</label>
-            <input type="number" value={maxGrit} min={1} max={200} onChange={(e) => setMaxGrit(e.target.value)} />
-          </div>
-          <div className="panel-field">
-            <label>DEX Mod</label>
-            <input type="number" value={dexModifier} min={-5} max={10} onChange={(e) => setDexModifier(e.target.value)} />
-          </div>
-          <div className="panel-field">
-            <label>CON Mod</label>
-            <input type="number" value={conModifier} min={-5} max={10} onChange={(e) => setConModifier(e.target.value)} />
-          </div>
-        </div>
+          <p className="combat-add-form-hint">Grit and AP are derived from these, same as player characters.</p>
+        </>
       )}
 
       {error && <p className="panel-error">{error}</p>}
@@ -405,20 +396,24 @@ export default function CombatPage() {
   const eligibleSlugs = useMemo(() => {
     if (!actingCombatant || (actingCombatant.kind !== "character" && actingCombatant.kind !== "npc")) return [];
     const activeSlot = actingCombatant.data?.activeWeaponSlot ?? 0;
-    return allSlugs.filter((s) => {
-      const owned =
-        actingCombatant.kind === "character"
-          ? s.userId === actingCombatant.refUserId
-          : s.ownerCombatantId === actingCombatant.id;
-      if (!owned) return false;
-      if (!s.equippedBlasterId) return false;
-      const blaster = allBlasters.find((b) => b.id === s.equippedBlasterId);
-      if (!blaster || blaster.equipSlot == null) return false;
-      // Only characters carry two weapon slots -- an NPC's single loadout
-      // has no "other" slot to be holstered in.
-      if (actingCombatant.kind === "character" && blaster.equipSlot !== activeSlot) return false;
-      return true;
-    });
+    return allSlugs
+      .filter((s) => {
+        const owned =
+          actingCombatant.kind === "character"
+            ? s.userId === actingCombatant.refUserId
+            : s.ownerCombatantId === actingCombatant.id;
+        if (!owned) return false;
+        if (!s.equippedBlasterId) return false;
+        const blaster = allBlasters.find((b) => b.id === s.equippedBlasterId);
+        if (!blaster || blaster.equipSlot == null) return false;
+        // Only characters carry two weapon slots -- an NPC's single loadout
+        // has no "other" slot to be holstered in.
+        if (actingCombatant.kind === "character" && blaster.equipSlot !== activeSlot) return false;
+        return true;
+      })
+      // Magazine-slot order, so the panel (and its 1-9 hotkeys) matches the
+      // loadout screen and the counter-clash prompt.
+      .sort((a, b) => (a.magazineSlot ?? 99) - (b.magazineSlot ?? 99) || a.id - b.id);
   }, [actingCombatant, allSlugs, allBlasters]);
 
   // Drives the hotbar's Switch Weapon button: which slot is active now, and
@@ -804,7 +799,13 @@ export default function CombatPage() {
       </TopBar>
 
       <div className="combat-page-columns">
-        <CombatSlugPanel actingCombatant={actingCombatant} slugs={eligibleSlugs} armedSlugId={mode?.type === "shoot" ? mode.slugId : null} onPickSlug={handlePickSlug} />
+        <CombatSlugPanel
+          actingCombatant={actingCombatant}
+          slugs={eligibleSlugs}
+          armedSlugId={mode?.type === "shoot" ? mode.slugId : null}
+          onPickSlug={handlePickSlug}
+          hotkeysActive={actingCombatant?.id === encounter.activeCombatantId}
+        />
 
         <div className="combat-page-center">
           <CombatMap
@@ -830,6 +831,7 @@ export default function CombatPage() {
           <CombatHotbar
             actingCombatant={actingCombatant}
             isActiveTurn={actingCombatant?.id === encounter.activeCombatantId}
+            isDM={isDM}
             mode={mode}
             weaponSwitch={weaponSwitch}
             onArmMode={setMode}

@@ -2,9 +2,10 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { broadcastAll, notifyUser } from "../ws.js";
-import { statModifier, computeMaxGrit, actionPoints, initiativeBonus } from "../characterRules.js";
-import { QUALITY_TIERS } from "../itemRules.js";
+import { statModifier, computeMaxGrit, actionPoints, initiativeBonus, npcActionPoints, npcMaxGrit } from "../characterRules.js";
+import { QUALITY_TIERS, BASE_TYPES } from "../itemRules.js";
 import { TIER_LABELS as MECHA_TIER_LABELS } from "../mechaRules.js";
+import { LOYALTY_TIER_MAX } from "../slugRules.js";
 import { toClientSlug } from "./slugs.js";
 import { toClientBlaster } from "./blasters.js";
 import { recordSlugpediaEntry } from "../slugpediaStore.js";
@@ -88,6 +89,8 @@ import {
   isInsideAnyZone,
   DECOY_COUNT,
   randomDecoyOffset,
+  loyaltyAccuracyModifier,
+  applyLoyaltyToSlug,
 } from "../combatRules.js";
 
 const router = Router();
@@ -502,11 +505,13 @@ router.post("/encounters/:id/combatants", requireDungeonMaster, async (req, res)
       fields.current_structure = maxStructure;
       fields.data = { dexMod: 0, speed: mecha.speed, handling: mecha.handling, armor: mecha.armor, rammingPower: mecha.ramming_power, tier: mecha.tier };
     } else {
-      // npc: DM supplies a lightweight ad-hoc stat block
-      const { maxAp, maxGrit, currentGrit, dexModifier, conModifier } = req.body || {};
-      fields.max_ap = Number.isInteger(maxAp) ? maxAp : 2;
-      fields.max_grit = Number.isInteger(maxGrit) ? maxGrit : 20;
-      fields.current_grit = Number.isInteger(currentGrit) ? currentGrit : fields.max_grit;
+      // npc: DM supplies a lightweight ad-hoc stat block. AP and Grit are
+      // derived from the DEX/CON modifiers on the same curves players use --
+      // never set by hand.
+      const { dexModifier, conModifier } = req.body || {};
+      fields.max_ap = npcActionPoints(dexModifier);
+      fields.max_grit = npcMaxGrit(conModifier, dexModifier);
+      fields.current_grit = fields.max_grit;
       fields.knockout_pips = JSON.stringify([false, false, false]);
       fields.data = { dexMod: Number.isInteger(dexModifier) ? dexModifier : 0, conMod: Number.isInteger(conModifier) ? conModifier : 0 };
     }
@@ -599,8 +604,8 @@ router.post("/encounters/:id/npc-combatants", requireDungeonMaster, async (req, 
         template.image,
         Number.isFinite(x) ? x : 100,
         Number.isFinite(y) ? y : 100,
-        template.max_ap,
-        template.max_grit,
+        npcActionPoints(template.dex_modifier),
+        npcMaxGrit(template.con_modifier, template.dex_modifier),
         JSON.stringify([false, false, false]),
         JSON.stringify({ dexMod: template.dex_modifier, conMod: template.con_modifier }),
       ]
@@ -631,23 +636,61 @@ router.post("/encounters/:id/npc-combatants", requireDungeonMaster, async (req, 
     }
 
     // Spawn independent slug copies, auto-loaded into whichever spawned
-    // blaster still has a free magazine slot.
+    // blaster still has a free magazine slot -- an NPC joins the fight with
+    // its slugs already loaded, exactly like a player joins on a ready
+    // primary weapon.
     const slotCursor = spawnedBlasters.map(() => 0);
+
+    // Next free (equipped-blaster, magazine-slot) pair, or null if every
+    // equipped weapon is full.
+    function nextFreeMagazineSlot() {
+      for (let i = 0; i < spawnedBlasters.length; i++) {
+        if (spawnedBlasters[i].equip_slot === null) continue;
+        if (slotCursor[i] < spawnedBlasters[i].magazine_size) {
+          const slot = { equippedBlasterId: spawnedBlasters[i].id, magazineSlot: slotCursor[i] };
+          slotCursor[i] += 1;
+          return slot;
+        }
+      }
+      return null;
+    }
+
+    // The DM gave this NPC slugs but not enough weapon to hold them (no
+    // blaster at all, or one whose magazine is already full). Give it a
+    // plain Standard Blaster in the next open equip slot so nothing joins
+    // combat stranded and unfirable. Returns false once both slots are used.
+    async function spawnFallbackBlaster() {
+      const equippedCount = spawnedBlasters.filter((b) => b.equip_slot !== null).length;
+      if (equippedCount >= 2) return false;
+      const base = BASE_TYPES.Pistol;
+      const { rows } = await pool.query(
+        `INSERT INTO blasters
+          (template_id, owner_combatant_id, name, base_type, image, accuracy, reload_ap_cost, range, mod_slots, magazine_size, quality, equip_slot)
+         VALUES (NULL,$1,$2,$3,NULL,$4,$5,$6,$7,$8,$9,$10)
+         RETURNING *`,
+        [combatant.id, "Standard Blaster", "Pistol", base.accuracy, base.reloadApCost, base.range, base.modSlots, base.magazineSize, 1, equippedCount]
+      );
+      spawnedBlasters.push(rows[0]);
+      slotCursor.push(0);
+      broadcastAll({ type: "blaster-updated", userId: null, blaster: toClientBlaster(rows[0]) });
+      return true;
+    }
+
+    // An NPC's slugs spawn already at the second-highest loyalty tier
+    // (Loyal, one below max Bonded) instead of whatever tier the template
+    // itself happens to store -- these are the DM's own creatures showing
+    // up with a slug they've already bonded with, not a wild-caught one at
+    // the template's default tier.
+    const NPC_SLUG_LOYALTY_TIER = LOYALTY_TIER_MAX - 1;
+
     for (const slugTemplateId of template.slug_template_ids) {
       const stResult = await pool.query("SELECT * FROM slug_templates WHERE id = $1", [slugTemplateId]);
       const st = stResult.rows[0];
       if (!st) continue;
-      let equippedBlasterId = null;
-      let magazineSlot = null;
-      for (let i = 0; i < spawnedBlasters.length; i++) {
-        if (spawnedBlasters[i].equip_slot === null) continue;
-        if (slotCursor[i] < spawnedBlasters[i].magazine_size) {
-          equippedBlasterId = spawnedBlasters[i].id;
-          magazineSlot = slotCursor[i];
-          slotCursor[i] += 1;
-          break;
-        }
-      }
+      let slot = nextFreeMagazineSlot();
+      if (!slot && (await spawnFallbackBlaster())) slot = nextFreeMagazineSlot();
+      const equippedBlasterId = slot ? slot.equippedBlasterId : null;
+      const magazineSlot = slot ? slot.magazineSlot : null;
       const { rows: slugRows } = await pool.query(
         `INSERT INTO slugs
           (template_id, owner_combatant_id, name, type, protoform_image, velocity_image, clash_power, clash_defense,
@@ -671,7 +714,7 @@ router.post("/encounters/:id/npc-combatants", requireDungeonMaster, async (req, 
           st.ap_cost,
           st.max_energy_pips,
           JSON.stringify(Array(st.max_energy_pips).fill(true)),
-          st.loyalty_tier,
+          NPC_SLUG_LOYALTY_TIER,
           st.velocity_ability,
           st.protoform_utility,
           st.breaks_walls,
@@ -757,16 +800,18 @@ router.post("/encounters/:id/start", requireDungeonMaster, async (req, res) => {
     for (const c of combatantRows) {
       const dexMod = c.data?.dexMod ?? 0;
       const initiative = rollD20() + dexMod;
-      await pool.query("UPDATE combatants SET initiative = $1, current_ap = 0, damaged_this_turn = false, rammed_this_round = false WHERE id = $2", [
-        initiative,
-        c.id,
-      ]);
+      // Everyone starts the encounter at full AP, not just whoever goes
+      // first -- a counter-clash now spends leftover AP (see
+      // resolveCounterOffer), so a player shouldn't be unable to react in
+      // round 1 purely because their initiative slot is late.
+      await pool.query(
+        "UPDATE combatants SET initiative = $1, current_ap = max_ap, damaged_this_turn = false, rammed_this_round = false WHERE id = $2",
+        [initiative, c.id]
+      );
       rolled.push({ id: c.id, name: c.name, initiative, dexMod });
     }
     rolled.sort((a, b) => b.initiative - a.initiative || b.dexMod - a.dexMod || Math.random() - 0.5);
     const turnOrder = rolled.map((c) => c.id);
-
-    await pool.query("UPDATE combatants SET current_ap = max_ap WHERE id = $1", [turnOrder[0]]);
     await pool.query(
       "UPDATE encounters SET status = 'active', turn_order = $1, active_turn_index = 0, round = 1 WHERE id = $2",
       [JSON.stringify(turnOrder), id]
@@ -901,6 +946,16 @@ router.post("/actions/end-turn", async (req, res) => {
     if (!combatant) return res.status(404).json({ error: "Combatant not found." });
     if (req.user.role !== "Dungeon Master" && combatant.ref_user_id !== req.user.sub) {
       return res.status(403).json({ error: "That isn't your combatant." });
+    }
+    // A player may only end their own combatant's turn, and only while it's
+    // actually that combatant's turn -- otherwise "End Turn" fired off-turn
+    // would just skip whoever *is* active. The DM can still advance the turn
+    // for anyone (nudging a stuck player, running NPCs).
+    if (req.user.role !== "Dungeon Master") {
+      const { rows } = await pool.query("SELECT * FROM encounters WHERE id = $1", [combatant.encounter_id]);
+      if (rows[0] && !requireOwnTurn(rows[0], combatant)) {
+        return res.status(400).json({ error: "It isn't your turn." });
+      }
     }
     const encounter = await advanceTurn(combatant.encounter_id);
     res.json({ encounter });
@@ -1200,17 +1255,47 @@ async function rechargeAnotherSlug(userId, excludeSlugId) {
 }
 
 async function findEligibleCounterSlugs(target) {
-  if (target.kind !== "character" || target.unconscious || !target.ref_user_id) return [];
+  if (target.unconscious || target.disabled) return [];
   // Only the slug(s) loaded into whichever weapon slot is currently active
   // can counter -- same rule as firing on your own turn (see /actions/shoot).
   const activeSlot = target.data?.activeWeaponSlot ?? PRIMARY_WEAPON_SLOT;
-  const { rows } = await pool.query(
-    `SELECT s.* FROM slugs s
-     JOIN blasters b ON b.id = s.equipped_blaster_id
-     WHERE s.user_id = $1 AND b.equip_slot = $2`,
-    [target.ref_user_id, activeSlot]
-  );
-  return rows.filter((s) => Array.isArray(s.energy_pips) && s.energy_pips.some(Boolean) && (s.cooldown_turns_left || 0) === 0);
+  // A player's slugs are keyed to their user; an NPC's to its combatant row
+  // (see the NPC spawn in /encounters/:id/npc-combatants). Either way the
+  // DM answers the NPC's counter -- see launchAndOfferCounter.
+  let rows;
+  if (target.kind === "character" && target.ref_user_id) {
+    ({ rows } = await pool.query(
+      `SELECT s.* FROM slugs s
+       JOIN blasters b ON b.id = s.equipped_blaster_id
+       WHERE s.user_id = $1 AND b.equip_slot = $2
+       ORDER BY s.magazine_slot ASC NULLS LAST, s.id ASC`,
+      [target.ref_user_id, activeSlot]
+    ));
+  } else if (target.kind === "npc") {
+    ({ rows } = await pool.query(
+      `SELECT s.* FROM slugs s
+       JOIN blasters b ON b.id = s.equipped_blaster_id
+       WHERE s.owner_combatant_id = $1 AND b.equip_slot = $2
+       ORDER BY s.magazine_slot ASC NULLS LAST, s.id ASC`,
+      [target.id, activeSlot]
+    ));
+  } else {
+    return [];
+  }
+  // A counter now costs the slug's own apCost out of the defender's leftover
+  // (unspent) AP -- so you can only counter with something you can afford,
+  // and spending your whole turn leaves you unable to react. See
+  // resolveCounterOffer, which actually charges it.
+  const availableAp = target.current_ap || 0;
+  return rows
+    .filter(
+      (s) =>
+        Array.isArray(s.energy_pips) &&
+        s.energy_pips.some(Boolean) &&
+        (s.cooldown_turns_left || 0) === 0 &&
+        (s.ap_cost || 0) <= availableAp
+    )
+    .map(applyLoyaltyToSlug);
 }
 
 // Bug fix bundled with the Speedstinger work below: this was still using a
@@ -1272,7 +1357,13 @@ async function triggerKnockoutRoll(combatantId, reason) {
   const combatant = await getCombatant(combatantId);
   if (!combatant || combatant.unconscious) return;
 
-  if (combatant.kind !== "character") {
+  // Both player characters and NPCs make a Constitution save to stay
+  // conscious -- an NPC's is answered by the DM (see dmControlled below),
+  // same convention as a counter-clash. Anything without a knockout-pip
+  // track (a mecha) just drops.
+  const makesKnockoutSave =
+    (combatant.kind === "character" || combatant.kind === "npc") && Array.isArray(combatant.knockout_pips);
+  if (!makesKnockoutSave) {
     if (combatant.current_grit !== null) {
       await updateCombatant(combatantId, { unconscious: true });
       await pushCombatLog(combatant.encounter_id, `${combatant.name} is knocked out.`);
@@ -1294,9 +1385,14 @@ async function triggerKnockoutRoll(combatantId, reason) {
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const dc = knockoutDC(pipsUsed);
   const conMod = combatant.data?.conMod ?? 0;
+  // A player character's own player makes the roll; an NPC's has no
+  // ref_user_id, so it's handed to the DM (every DM, same as counter-clash
+  // offers for NPCs).
+  const dmControlled = !combatant.ref_user_id;
   pendingKnockouts.set(id, {
     combatantId,
     userId: combatant.ref_user_id,
+    dmControlled,
     name: combatant.name,
     dc,
     conMod,
@@ -1304,10 +1400,11 @@ async function triggerKnockoutRoll(combatantId, reason) {
     createdAt: Date.now(),
   });
 
-  if (combatant.ref_user_id) {
-    notifyUser(combatant.ref_user_id, {
+  const recipients = dmControlled ? await getDungeonMasterIds() : [combatant.ref_user_id];
+  for (const recipientId of recipients) {
+    notifyUser(recipientId, {
       type: "knockout-roll-offered",
-      offer: { id, name: combatant.name, dc, reason, conMod },
+      offer: { id, name: combatant.name, dc, reason, conMod, forNpc: dmControlled },
     });
   }
   await pushCombatLog(
@@ -1747,6 +1844,11 @@ async function dealHit(
   }
 
   const tb = typeBallistics(slug.type);
+  // slug.clash_power already has its loyalty tier's modifier folded in (see
+  // applyLoyaltyToSlug) by the time it reaches here -- this, the Healing
+  // amount above, and every burn/cone/hazard/pod calc below that reads
+  // slug.clash_power all get the effective number for free, with no extra
+  // loyalty lookup needed at each of those sites.
   let amount = Math.max(0, slug.clash_power + tb.powerMod);
   if (half) amount = Math.floor(amount / 2);
 
@@ -1763,18 +1865,19 @@ async function dealHit(
       log += ` ${target.name} is disabled!`;
     }
   } else {
-    const newGrit = Math.max(0, (target.current_grit ?? 0) - amount);
-    const nextStatus = { ...(target.status_effects || {}) };
     // A self-targeted shot (Thugglet's invisibility, Mirage Coil's decoys,
-    // or anyone deliberately shooting themselves) is meant to be a pure
-    // self-buff -- none of a type's own negative traits (burn/poison/
-    // snare/stun/blind) or the analogous "Causes X" flags should land on
-    // the shooter just because their slug's *type* happens to carry one
-    // (e.g. Mirage Coil is Light, whose trait is "blind"; Thugglet is
-    // Psychic, whose trait is "stun"). Computed up front, before any of
-    // those checks, so every one of them can gate on it -- same rule
-    // causes_jam already followed on its own further down.
+    // or a custom buff slug fired at yourself) is a pure self-buff -- it
+    // applies whatever it does but never costs the shooter Grit, and none
+    // of a type's own negative traits (burn/poison/snare/stun/blind) or the
+    // analogous "Causes X" flags should land on the shooter just because
+    // their slug's *type* happens to carry one (e.g. Mirage Coil is Light,
+    // whose trait is "blind"; Thugglet is Psychic, whose trait is "stun").
+    // Computed up front, before any of those checks, so every one of them
+    // can gate on it -- same rule causes_jam already followed further down.
     const isSelfTarget = shooter.id === target.id;
+    const gritDamage = isSelfTarget ? 0 : amount;
+    const newGrit = Math.max(0, (target.current_grit ?? 0) - gritDamage);
+    const nextStatus = { ...(target.status_effects || {}) };
     // Burn/poison don't hit right now -- they land at the start of the
     // target's own next turn (see tickStatusEffects, called from
     // advanceTurn). Snare fully blocks Move (see /actions/move) instead of
@@ -1849,11 +1952,15 @@ async function dealHit(
 
     const updated = await updateCombatant(target.id, {
       current_grit: newGrit,
-      damaged_this_turn: true,
+      // A self-buff isn't "taking damage" -- don't let it trip anything that
+      // keys off having been hit this turn (hunker eligibility, etc.).
+      damaged_this_turn: isSelfTarget ? target.damaged_this_turn : true,
       status_effects: JSON.stringify(nextStatus),
     });
     await syncCharacterFromCombatant(updated);
-    log = `${target.name} takes ${amount} Grit damage${newGrit === 0 ? " and is at 0 Grit!" : ""}.${mirageLog}`;
+    log = isSelfTarget
+      ? `${shooter.name} braces behind ${slug.name}.${mirageLog}`
+      : `${target.name} takes ${gritDamage} Grit damage${newGrit === 0 ? " and is at 0 Grit!" : ""}.${mirageLog}`;
 
     // Mirage Coil, self-targeted -- spawn the decoys now that `updated`
     // (this combatant's just-written status_effects) is on hand, then layer
@@ -1955,7 +2062,7 @@ async function dealHit(
     // whether Grit also hit 0 on this same hit -- see
     // docs/combat-system-design.md §5/§7. Only one roll ever fires per hit:
     // grit-hits-0 takes priority for the reason text when both are true.
-    if (newGrit === 0 && !target.unconscious) {
+    if (newGrit === 0 && !isSelfTarget && !target.unconscious) {
       await triggerKnockoutRoll(target.id, knockedIntoWall ? "knockback" : "grit");
     } else if (knockedIntoWall && !target.unconscious) {
       await triggerKnockoutRoll(target.id, "knockback");
@@ -2029,6 +2136,10 @@ function broadcastShotFx(fx) {
       targetPos: fx.targetPos,
       impactPoint: fx.impactPoint,
       slugType: fx.slug.type,
+      // The slug's own name, so the client can play a slug-specific sound
+      // (Zeus's thunderclap) -- the type alone ("Electricity") isn't unique
+      // to it.
+      slugName: fx.slug.name || null,
       windowMs: fx.windowMs,
       countered: Boolean(fx.countered),
       counterSlugType: fx.counterSlugType || null,
@@ -2103,11 +2214,11 @@ function broadcastPodFx({ fromPos, toPos }) {
 // having delayed that animation's start.
 function broadcastShotResolved(
   offer,
-  { outcome, countered = false, counterSlugType = null, impactPoint = null, clashPoint = null, counterAtMs = null }
+  { outcome, countered = false, counterSlugType = null, counterSlugName = null, impactPoint = null, clashPoint = null, counterAtMs = null }
 ) {
   broadcastAll({
     type: "combat-shot-resolved",
-    resolved: { id: offer.fxId, outcome, countered, counterSlugType, impactPoint, clashPoint, counterAtMs },
+    resolved: { id: offer.fxId, outcome, countered, counterSlugType, counterSlugName, impactPoint, clashPoint, counterAtMs },
   });
 }
 
@@ -2174,35 +2285,67 @@ function scheduleShotTerrain(offer, endPoint) {
 // Returns { pending: boolean } -- true if a counter was offered (and is now
 // sitting in pendingCounters, resolved later by timeout or the defender's
 // choice), false if it was resolved immediately inside this call.
+async function getDungeonMasterIds() {
+  const { rows } = await pool.query("SELECT id FROM users WHERE role = 'Dungeon Master'");
+  return rows.map((r) => r.id);
+}
+
 async function launchAndOfferCounter(offer) {
   broadcastShotFx({ ...offer, outcome: null });
   const target = await getCombatant(offer.targetCombatantId);
   // A supportive slug (a heal, an inert None) is a boon, not an attack --
   // there's nothing to clash with, so it never offers the target a counter,
-  // whoever it was aimed at. It goes straight to resolution.
-  const eligible = target && !isSupportiveSlug(offer.slug) ? await findEligibleCounterSlugs(target) : [];
+  // whoever it was aimed at. A self-targeted shot (a self-buff) is the same:
+  // you don't clash with your own slug. Both go straight to resolution.
+  const isSelfShot = offer.attackerCombatantId === offer.targetCombatantId;
+  const eligible =
+    target && !isSupportiveSlug(offer.slug) && !isSelfShot ? await findEligibleCounterSlugs(target) : [];
   if (target && eligible.length > 0) {
+    // A player-controlled target answers their own counter; an NPC's (no
+    // ref_user_id) is handed to the DM to answer on its behalf.
+    const dmControlled = !target.ref_user_id;
+    const recipients = dmControlled ? await getDungeonMasterIds() : [target.ref_user_id];
+
     const timeoutHandle = setTimeout(() => resolveCounterOffer(offer.fxId, null), offer.windowMs);
-    pendingCounters.set(offer.fxId, { ...offer, userId: target.ref_user_id, eligibleSlugRows: eligible, timeoutHandle });
-    if (target.ref_user_id) {
-      notifyUser(target.ref_user_id, {
-        type: "counter-offered",
-        offer: {
-          id: offer.fxId,
-          windowMs: offer.windowMs,
-          attackerName: offer.attackerName,
-          slugName: offer.slug.name,
-          slugType: offer.slug.type,
-          eligibleSlugs: eligible.map((s) => ({
-            id: s.id,
-            name: s.name,
-            type: s.type,
-            clashPower: s.clash_power,
-            clashDefense: s.clash_defense,
-          })),
-        },
-      });
-    }
+    pendingCounters.set(offer.fxId, {
+      ...offer,
+      userId: target.ref_user_id,
+      dmControlled,
+      eligibleSlugRows: eligible,
+      timeoutHandle,
+    });
+
+    const counterPayload = {
+      type: "counter-offered",
+      offer: {
+        id: offer.fxId,
+        windowMs: offer.windowMs,
+        attackerName: offer.attackerName,
+        slugName: offer.slug.name,
+        slugType: offer.slug.type,
+        // Who's being shot at -- the DM may be fielding counters for several
+        // NPCs at once, so the prompt names the defender.
+        defenderName: offer.targetName,
+        forNpc: dmControlled,
+        eligibleSlugs: eligible.map((s) => ({
+          id: s.id,
+          name: s.name,
+          type: s.type,
+          clashPower: s.clash_power,
+          clashDefense: s.clash_defense,
+          apCost: s.ap_cost || 0,
+          // Magazine slot the slug sits in (0-based). The counter prompt
+          // shows slot+1 as the hotkey and lists slugs in this order, so it
+          // lines up with the player's own slug panel.
+          magazineSlot: s.magazine_slot,
+        })),
+        // The defender's leftover AP right now -- lets the prompt show what
+        // a counter will cost against what they have.
+        availableAp: target.current_ap || 0,
+      },
+    };
+    for (const recipientId of recipients) notifyUser(recipientId, counterPayload);
+
     await broadcastEncounter(offer.encounterId);
     await pushCombatLog(offer.encounterId, `${offer.attackerName} fires ${offer.slug.name} at ${offer.targetName}...`);
     return { pending: true };
@@ -2342,9 +2485,17 @@ async function resolveNormalHit(offer) {
       status_effects: JSON.stringify({ ...attacker.status_effects, blinded: false }),
     });
   }
-  const attackTotal = roll + offer.blaster.accuracy + quality.accuracyBonus + tb.accuracyMod + penalty;
+  const attackTotal =
+    roll +
+    offer.blaster.accuracy +
+    quality.accuracyBonus +
+    tb.accuracyMod +
+    penalty +
+    loyaltyAccuracyModifier(offer.slug.loyalty_tier);
   const dc = 10 + targetDexMod;
-  const hit = attackTotal >= dc;
+  // You never fumble a slug fired at yourself -- a self-buff always lands.
+  const isSelfShot = attacker.id === target.id;
+  const hit = isSelfShot || attackTotal >= dc;
   // Went wide instead of stopping dead-on the target -- see missDeflection.
   // Only computed for a miss; a hit's reveal doesn't need it.
   const deflected = hit ? null : missDeflection(offer.attackerPos, offer.impactPoint, walls);
@@ -2366,7 +2517,9 @@ async function resolveNormalHit(offer) {
         originPos: offer.attackerPos,
         isRicochetLeg: offer.isRicochetLeg,
       });
-      log = `${attacker.name}'s ${offer.slug.name} hits ${target.name} (${attackTotal} vs DC ${dc})! ${hitLog}`;
+      log = isSelfShot
+        ? `${attacker.name} fires ${offer.slug.name} at themselves. ${hitLog}`
+        : `${attacker.name}'s ${offer.slug.name} hits ${target.name} (${attackTotal} vs DC ${dc})! ${hitLog}`;
       await maybeRicochet(offer, target.id);
     } else {
       log = `${attacker.name}'s ${offer.slug.name} misses ${target.name} (${attackTotal} vs DC ${dc}).`;
@@ -2413,21 +2566,38 @@ async function resolveCounterOffer(id, chosenSlugId) {
 
   const counterSlugRow = chosenSlugId ? offer.eligibleSlugRows.find((s) => s.id === chosenSlugId) : null;
 
-  if (!counterSlugRow) {
-    // No counter (declined, or the window timed out) -- the shot flies on to
-    // the target untouched, terrain and all, exactly as if none had been offered.
+  // Re-check the defender's AP against a fresh row -- eligibleSlugRows was
+  // snapshotted when the offer went out, and an earlier counter this same
+  // turn may have drained the AP since. Can't afford it -> treat exactly
+  // like a decline.
+  const defender = counterSlugRow ? await getCombatant(offer.targetCombatantId) : null;
+  const canAffordCounter = defender && (counterSlugRow.ap_cost || 0) <= (defender.current_ap || 0);
+
+  if (!counterSlugRow || !canAffordCounter) {
+    // No counter (declined, timed out, or no longer affordable) -- the shot
+    // flies on to the target untouched, terrain and all, exactly as if none
+    // had been offered.
     await resolveNormalHit(offer);
     scheduleShotTerrain(offer, offer.impactPoint);
     return { pending: false, countered: false };
   }
 
-  // Spending the counter slug's own energy pip is the cost of the *choice*
-  // to counter, same as the attacker's own AP/energy at fire time -- it
-  // isn't a result of the clash, so it isn't held back for the animation.
+  // Countering costs the slug's own apCost out of the defender's leftover
+  // AP, plus one of its energy pips -- both are the price of the *choice* to
+  // counter (same as the attacker's own AP/energy at fire time), so neither
+  // is held back for the animation. Broadcast right away so the defender's
+  // token shows the spent AP the instant they commit, not when the clash
+  // resolves ~a flight later.
+  await updateCombatant(defender.id, { current_ap: (defender.current_ap || 0) - (counterSlugRow.ap_cost || 0) });
   await spendEnergyPip(counterSlugRow.id);
+  await broadcastEncounter(offer.encounterId);
   // Emberblade: power and defense triple specifically while it's the slug on
   // either side of a clash (not on an ordinary uncountered hit) -- applies
-  // to whichever side actually has it, attacker or defender.
+  // to whichever side actually has it, attacker or defender. offer.slug and
+  // counterSlugRow both already have their loyalty tier's clash modifier
+  // baked into clash_power/clash_defense (see applyLoyaltyToSlug, applied
+  // back in resolveShooterSlugAndBlaster/findEligibleCounterSlugs), so the
+  // tripling below multiplies the already-effective numbers.
   const attackerClashMultiplier = offer.slug.clash_tripled ? CLASH_TRIPLE_MULTIPLIER : 1;
   const defenderClashMultiplier = counterSlugRow.clash_tripled ? CLASH_TRIPLE_MULTIPLIER : 1;
   const outcome = resolveClash({
@@ -2455,6 +2625,7 @@ async function resolveCounterOffer(id, chosenSlugId) {
   broadcastShotResolved(offer, {
     countered: true,
     counterSlugType: counterSlugRow.type,
+    counterSlugName: counterSlugRow.name,
     outcome,
     clashPoint,
     counterAtMs,
@@ -2498,6 +2669,11 @@ async function resolveCounterOffer(id, chosenSlugId) {
         originPos: offer.targetPos,
       });
       log = `${offer.targetName}'s ${counterSlugRow.name} reflects the shot back at ${offer.attackerName}! ${hitLog}`;
+    }
+
+    const counterApCost = counterSlugRow.ap_cost || 0;
+    if (counterApCost > 0) {
+      log += ` (${offer.targetName} spends ${counterApCost} AP.)`;
     }
 
     // Emberblade's wall of fire forms specifically when it's *involved in a
@@ -2572,7 +2748,7 @@ async function resolveShooterSlugAndBlaster(attacker, req, { slugId, npcSlug, np
     if (!Array.isArray(slug.energy_pips) || !slug.energy_pips.some(Boolean)) {
       return { error: "That slug is out of energy -- it needs to recharge." };
     }
-    return { slug, blaster };
+    return { slug: applyLoyaltyToSlug(slug), blaster };
   } else if (attacker.kind === "npc" && req.user.role === "Dungeon Master") {
     const slug = {
       id: null,
@@ -2724,7 +2900,8 @@ async function resolveEnvironmentShot({ actionType, attacker, slug, blaster, tb,
   // to compute a real DC from.
   const quality = QUALITY_TIERS[blaster.quality] || QUALITY_TIERS[0];
   const penalty = rangePenalty(dist, Math.max(blaster.range, tb.range));
-  const attackTotal = rollD20() + blaster.accuracy + quality.accuracyBonus + tb.accuracyMod + penalty;
+  const attackTotal =
+    rollD20() + blaster.accuracy + quality.accuracyBonus + tb.accuracyMod + penalty + loyaltyAccuracyModifier(slug.loyalty_tier);
   const hit = attackTotal >= ENV_ACTION_DC;
   // A miss runs the exact same effect logic, just a few degrees off target
   // -- a wall might land somewhere else, a different wall gets broken, or
@@ -3036,7 +3213,8 @@ router.post("/counters/:id/resolve", async (req, res) => {
   const { slugId } = req.body || {};
   const offer = pendingCounters.get(id);
   if (!offer) return res.status(404).json({ error: "This counter window has already closed." });
-  if (offer.userId !== req.user.sub) return res.status(403).json({ error: "This counter isn't yours to make." });
+  const authorized = offer.dmControlled ? req.user.role === "Dungeon Master" : offer.userId === req.user.sub;
+  if (!authorized) return res.status(403).json({ error: "This counter isn't yours to make." });
   try {
     const result = await resolveCounterOffer(id, Number.isInteger(slugId) ? slugId : null);
     res.json(result || { pending: false });
@@ -3054,7 +3232,8 @@ router.post("/knockout/:id/resolve", async (req, res) => {
   const { id } = req.params;
   const offer = pendingKnockouts.get(id);
   if (!offer) return res.status(404).json({ error: "This knockout roll has expired or was already made." });
-  if (offer.userId !== req.user.sub) return res.status(403).json({ error: "This roll isn't yours to make." });
+  const authorized = offer.dmControlled ? req.user.role === "Dungeon Master" : offer.userId === req.user.sub;
+  if (!authorized) return res.status(403).json({ error: "This roll isn't yours to make." });
   pendingKnockouts.delete(id);
 
   try {

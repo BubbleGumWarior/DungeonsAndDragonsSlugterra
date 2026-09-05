@@ -2039,7 +2039,7 @@
     "type": "Healing",
     "protoformUtility": "This slug's feces is very commonly used in medicine for its healing properties.",
     "velocityAbility": "On landing creates a mist cloud that heals all slingers in its range.",
-    "clashPower": 4,
+    "clashPower": 8,
     "clashDefense": 1,
     "apCost": 3,
     "maxEnergyPips": 3,

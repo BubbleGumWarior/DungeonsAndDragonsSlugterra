@@ -38,8 +38,10 @@ Freeform vector canvas, not a grid.
 
 ## 3. Turn structure & action points
 
-`AP = max(3, 3 * DEX modifier)`, refills to full
-at the start of your turn.
+`AP = max(8, 6 + 3 * DEX modifier)`, refills to full at the start of your
+turn. Whatever AP you don't spend carries with you until then, and is what
+pays for a counter-clash (below) — so spending your whole turn leaves you
+unable to react until your next one.
 
 **Initiative**: at encounter start, everyone (players, NPCs, mechas) rolls
 `d20 + DEX modifier` (mecha pilots use their own DEX; riderless/DM-puppeted mechas use
@@ -50,8 +52,8 @@ for the whole encounter.
 
 | Action | AP cost | Effect |
 |---|---|---|
-| Move | 1 per use | Move up to `MOVE_SPEED_PER_AP` (**200** map units — 10x the original 20) in any direction/path, blocked by walls. Multiple Move actions in a turn chain together. Intentionally independent of `RANGE_SCALE` (shooting range/speed), so retuning one never silently changes the other. |
-| Shoot Slug | `slug.apCost` (1–3, already on the slug) | Fire the slug currently chambered in the active weapon's selected magazine slot at a target in range + line of sight. Triggers the counter-clash window (§6) if the target has a loaded slug available to react with. |
+| Move | 1 per use | Move up to `MOVE_SPEED_PER_AP` (**80** map units) in any direction/path, blocked by walls. Multiple Move actions in a turn chain together. Intentionally independent of `RANGE_SCALE` (shooting range/speed), so retuning one never silently changes the other. |
+| Shoot Slug | `slug.apCost` (1–3, already on the slug) | Fire the slug currently chambered in the active weapon's selected magazine slot at a target in range + line of sight. Triggers the counter-clash window (§6) if the target has a loaded slug they can both react with *and* afford (its `apCost` ≤ their leftover AP). |
 | Reload | `blaster.reloadApCost` | Chamber a fresh slug into the blaster (swap the active magazine slot's slug), or clear a "jammed" (failed-quality) shot. |
 | Swap Active Weapon | 0 (free, once per turn) | Switch which equipped blaster (Primary/Secondary) is active, matching the existing weapon-cycling UI. |
 | Hunker Down | 2 | No movement/attack this turn; heal Grit equal to `HUNKER_HEAL` (default **1d4 + CON modifier**, min 1). Cannot be done the same turn you were hit. |
@@ -59,9 +61,10 @@ for the whole encounter.
 | Ram (mecha) | 2 | Drive a mecha into an adjacent target; see §8. |
 | Free custom action (DM only) | DM sets cost | Escape hatch for narrative actions the system doesn't model. |
 
-Reactions (counter-clash, knockout roll) don't consume the owner's AP — they happen
-on the *attacker's* turn, out of the normal economy, same as an opportunity reaction
-in most tactical RPGs.
+The **knockout roll** reaction doesn't consume AP. A **counter-clash** does: firing
+a slug to counter costs its `apCost` out of your leftover (unspent) AP, and you can
+only counter with a slug you can afford. It still happens on the *attacker's* turn,
+but it's no longer free — holding a couple of AP back is how you stay able to react.
 
 ## 4. Slug type ballistics
 
@@ -290,17 +293,19 @@ next fight.
    (simplify: use the **larger** of the two, since the blaster is what actually
    launches the slug) and not blocked by a wall the slug can't break or phase
    through (Dark).
-2. Attack roll: `d20 + blaster.accuracy + quality.accuracyBonus + type.accuracyMod`
-   vs a target DC of `10 + target DEX modifier + range penalty` (range penalty:
-   −1 per `RANGE_PENALTY_STEP`, default 8 units, past half the weapon's range).
-   Roll the quality tier's `failRate` first (jam chance) — a jam wastes the shot and
-   the AP but the magazine slot needs a Reload to clear.
+2. Attack roll: `d20 + blaster.accuracy + quality.accuracyBonus + type.accuracyMod +
+   loyaltyAccuracyModifier(slug.loyaltyTier)` vs a target DC of `10 + target DEX
+   modifier + range penalty` (range penalty: −1 per `RANGE_PENALTY_STEP`, default 8
+   units, past half the weapon's range). See "Loyalty tier modifiers" below for the
+   last term. Roll the quality tier's `failRate` first (jam chance) — a jam wastes
+   the shot and the AP but the magazine slot needs a Reload to clear.
 3. If the target has an available (energy-charged) loaded slug and hasn't already
    used their counter this round, open the counter-clash window (§6) **before**
    rolling the attack — a successful counter can win outright regardless of the
    attack roll.
-4. On a hit with no counter: grit damage = `slug.clashPower + type.powerMod`,
-   applied to target's current Grit. Trait effects (burn/poison/snare/chain/blind/
+4. On a hit with no counter: grit damage = `slug.clashPower + type.powerMod`, where
+   `slug.clashPower` already has `loyaltyClashModifier(slug.loyaltyTier)` folded in
+   (see "Loyalty tier modifiers" below) — applied to target's current Grit. Trait effects (burn/poison/snare/chain/blind/
    knockback) apply per the table above — burn/poison/snare only *flag* the target
    here; their actual effect lands later (§4). A **miss** doesn't fly dead-on to the target and
    just fizzle there (used to read as a hit that inexplicably did nothing) --
@@ -361,11 +366,48 @@ So nobody's Grit bar, status badges, or the Combat Log update before the burst
 that's supposed to explain them has actually played — the roster and the map stay
 in sync.
 
+### Loyalty tier modifiers
+
+A slug's loyalty tier (0-4: Wild, Indifferent, Friendly, Loyal, Bonded) isn't just
+flavor — it shifts the slug's own effective Clash Power/Defense, and its shooter's
+accuracy, everywhere in combat:
+
+```
+tier:                0        1             2          3       4
+label:               Wild     Indifferent   Friendly   Loyal   Bonded
+clash modifier:      -2       0             +2         +4      +6
+accuracy modifier:   -2       0             +2         +3      +5
+```
+
+Tier 1 ("Indifferent") is the neutral baseline (both modifiers 0) — a slug that
+hasn't been bonded with performs exactly per its base stats. Tier 0 ("Wild")
+actively works against you, below that baseline. The clash modifier is applied to
+*both* Clash Power and Clash Defense equally, and can push either stat above
+`CLASH_POWER_MAX`/`CLASH_DEFENSE_MAX` (10) once added to an already-maxed base
+stat — that's intentional, not a bug, since it's the whole point of bonding with a
+slug. The accuracy modifier folds into the attack roll (§5) exactly like
+`blaster.accuracy`/`quality.accuracyBonus`/`type.accuracyMod` already do.
+
+Implementation-wise, this is applied exactly once server-side, right where a raw
+slug row first enters combat math (`applyLoyaltyToSlug` in `combatRules.js`, called
+from `resolveShooterSlugAndBlaster`/`findEligibleCounterSlugs` in
+`routes/combat.js`) — everything downstream (grit damage, burn/poison/cone/hazard/
+pod damage, the clash power/defense comparison in §6, the counter-offer prompt's
+own PWR/DEF display) just reads `clash_power`/`clash_defense` normally and gets the
+effective number for free, including through Emberblade's clash-tripling, which
+multiplies whatever it's handed.
+
 ## 6. Counter-clash
 
-When you're the target of a Shoot Slug action and you have a charged, loaded slug,
-a countdown window opens on your screen: pick a slug to fire back, or let it expire
-(no counter — the shot resolves as a normal hit per §5).
+When you're the target of a Shoot Slug action and you have a charged, loaded slug
+you can afford, a countdown window opens on your screen: pick a slug to fire back,
+or let it expire (no counter — the shot resolves as a normal hit per §5).
+
+**Cost**: countering with a slug spends its `apCost` out of your leftover (unspent)
+AP, on top of the energy pip below. Only slugs whose `apCost ≤ your current AP` are
+offered; if you can't afford any, no window opens at all. This is why the AP formula
+(§3) is generous — you're expected to hold a few points back each turn to stay able
+to react.
 
 **Window duration** is now a flat constant, the same for every shot — no more
 type/quality/dex-driven variability:
@@ -437,7 +479,8 @@ slow phase, so the launch reads as visibly simultaneous with the sound. See
 **Resolution**, once a counter slug is chosen (or the window lapses with no counter):
 
 - **No counter** → normal hit resolution, §5.
-- **Counter chosen** → mutual clash:
+- **Counter chosen** → mutual clash (both sides' `clashPower`/`clashDefense` already
+  include their own loyalty tier's modifier — see "Loyalty tier modifiers" above):
   - `attackerWins = attacker.clashPower > defender.clashDefense`
   - `defenderWins = defender.clashPower > attacker.clashDefense`
   - Both true → **double break**: both slugs bounce off, no damage either way, both
@@ -593,7 +636,7 @@ Each phase is independently testable and playable before moving to the next.
 Everything above is a reasonable default, but these are the ones most likely to need
 your house-rule instinct:
 
-- `MOVE_SPEED_PER_AP = 20` map units, mecha at `12×speed` — depends entirely on how
+- `MOVE_SPEED_PER_AP = 80` map units, mecha at `12×speed` — depends entirely on how
   big you draw maps; easy to retune once you see a real map.
 - Counter-clash `BASE_WINDOW = 3200ms` — is a few seconds the right feel, or should
   it be snappier/more forgiving?

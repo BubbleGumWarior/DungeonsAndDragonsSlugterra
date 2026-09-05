@@ -80,6 +80,19 @@ async function fetchIceServers(token) {
   return [STUN_SERVER];
 }
 
+// Join/leave chimes, played on every client that's already in the call when
+// the roster changes. Files live in client/public/ (served from the web
+// root), same as slugterra-velocity.mp3. Volume runs through volumeToGain
+// off the per-user Sound setting, exactly like playShotSound in CombatMap.
+const JOIN_SOUND_SRC = "/Join.mp3";
+const LEAVE_SOUND_SRC = "/Leave.mp3";
+
+function playCue(src, sliderVolume) {
+  const audio = new Audio(src);
+  audio.volume = volumeToGain(typeof sliderVolume === "number" ? sliderVolume : 0.5);
+  audio.play().catch(() => {});
+}
+
 function setsEqual(a, b) {
   if (a.size !== b.size) return false;
   for (const item of a) {
@@ -121,6 +134,8 @@ export default function VoiceChatProvider({ children }) {
   const selfMutedRef = useRef(false);
   const pttHeldRef = useRef(false);
   const peerVolumesRef = useRef(peerVolumes);
+  const cueVolumeRef = useRef(user?.voiceCueVolume);
+  const prevRosterIdsRef = useRef(null); // Set<userId> from the last roster snapshot, or null before the first
   const iceServersRef = useRef([STUN_SERVER]); // replaced with Metered's array once fetchIceServers resolves in joinCall
 
   useEffect(() => {
@@ -140,6 +155,40 @@ export default function VoiceChatProvider({ children }) {
   useEffect(() => {
     if (user?.voicePeerVolumes) setPeerVolumes(user.voicePeerVolumes);
   }, [user?.voicePeerVolumes]);
+  useEffect(() => {
+    cueVolumeRef.current = user?.voiceCueVolume;
+  }, [user?.voiceCueVolume]);
+
+  // ---------------------------------------------------------------- join/leave chimes
+  // Every client already in the call plays a short sound when the roster
+  // gains or loses someone else. The first snapshot after joining just seeds
+  // the baseline (nobody in it "just joined" from this client's point of
+  // view), and self is filtered out here -- your own join/leave chime is
+  // fired directly from joinCall/leaveCall instead, so it plays even though
+  // by then this effect has torn its baseline down. Fires at most one join
+  // and one leave sound per roster change even if several people come or go
+  // at once.
+  useEffect(() => {
+    if (!inCall) {
+      prevRosterIdsRef.current = null;
+      return;
+    }
+    const currentIds = new Set(voiceRoster.map((p) => p.userId));
+    const prev = prevRosterIdsRef.current;
+    prevRosterIdsRef.current = currentIds;
+    if (prev == null) return;
+
+    let joined = false;
+    let left = false;
+    for (const id of currentIds) {
+      if (id !== selfId && !prev.has(id)) joined = true;
+    }
+    for (const id of prev) {
+      if (id !== selfId && !currentIds.has(id)) left = true;
+    }
+    if (joined) playCue(JOIN_SOUND_SRC, cueVolumeRef.current);
+    if (left) playCue(LEAVE_SOUND_SRC, cueVolumeRef.current);
+  }, [voiceRoster, inCall, selfId]);
 
   // ---------------------------------------------------------------- local track gating
   const applyLocalTrackState = useCallback(() => {
@@ -416,6 +465,9 @@ export default function VoiceChatProvider({ children }) {
     if (wsConnectedAt == null || !inCallRef.current) return;
     for (const peerId of [...peersRef.current.keys()]) closePeerConnection(peerId);
     setConnectedPeerIds([]);
+    // The roster round-trips away and back during a reconnect -- reseed the
+    // chime baseline so that churn doesn't fire spurious join/leave sounds.
+    prevRosterIdsRef.current = null;
     sendMessage({ type: "voice-join" });
     sendMessage({ type: "voice-mute-state", muted: selfMutedRef.current });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -484,6 +536,7 @@ export default function VoiceChatProvider({ children }) {
       applyLocalTrackState();
       sendMessage({ type: "voice-join" });
       setInCall(true);
+      playCue(JOIN_SOUND_SRC, cueVolumeRef.current);
     } catch (err) {
       console.error("Could not join voice chat:", err);
       setError("Couldn't access your microphone. Check your browser's site permissions and try again.");
@@ -494,6 +547,7 @@ export default function VoiceChatProvider({ children }) {
 
   const leaveCall = useCallback(() => {
     if (!inCallRef.current) return;
+    playCue(LEAVE_SOUND_SRC, cueVolumeRef.current);
     sendMessage({ type: "voice-leave" });
 
     for (const peerId of [...peersRef.current.keys()]) closePeerConnection(peerId);

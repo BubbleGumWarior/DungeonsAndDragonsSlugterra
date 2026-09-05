@@ -10,7 +10,7 @@ export { statModifier };
 
 // ---- Movement -------------------------------------------------------------
 
-export const MOVE_SPEED_PER_AP = 200; // map units moved per Move action (10x the original 20 -- walking distance only, shooting range/speed untouched)
+export const MOVE_SPEED_PER_AP = 80; // map units moved per Move action -- walking distance only, shooting range/speed untouched (was 200; cut to 80 so a given walk costs 2.5x the AP)
 export const MECHA_SPEED_UNIT = 12; // map units per point of `speed`, per Move action
 export const MOUNT_RANGE = 5; // max distance to mount/dismount a mecha
 
@@ -30,6 +30,45 @@ export const SWITCH_WEAPON_AP_COST = 1;
 // the *currently active* slot's blaster can be fired.
 export const PRIMARY_WEAPON_SLOT = 0;
 export const SECONDARY_WEAPON_SLOT = 1;
+
+// ---- Loyalty tier modifiers -------------------------------------------
+
+// A slug's loyalty tier (0-4, see LOYALTY_TIER_MIN/MAX in slugRules.js) isn't
+// just flavor -- it shifts the slug's own effective clash power/defense, and
+// its shooter's accuracy, everywhere in combat. Tier 1 ("Indifferent") is the
+// neutral baseline (both modifiers 0); tier 0 ("Wild") actively works against
+// you, and each tier above 1 scales the bonus further, topping out at tier 4
+// ("Bonded"). Both tables index directly on the tier number.
+export const LOYALTY_CLASH_MODIFIERS = [-2, 0, 2, 4, 6];
+export const LOYALTY_ACCURACY_MODIFIERS = [-2, 0, 2, 3, 5];
+
+export function loyaltyClashModifier(tier) {
+  return LOYALTY_CLASH_MODIFIERS[tier] ?? 0;
+}
+
+export function loyaltyAccuracyModifier(tier) {
+  return LOYALTY_ACCURACY_MODIFIERS[tier] ?? 0;
+}
+
+// Clones a raw slug row (or ad-hoc DM stat block) with its clash_power/
+// clash_defense bumped by its own loyalty tier's modifier -- applied exactly
+// once, right where a slug first enters combat math (see
+// resolveShooterSlugAndBlaster/findEligibleCounterSlugs in routes/combat.js),
+// so everything downstream (dealHit, burn/poison/cone/hazard/pod damage,
+// resolveClash, the counter-offer prompt) just reads clash_power/
+// clash_defense normally and gets the effective number for free -- including
+// through Emberblade's clash-tripling, which multiplies whatever it's handed.
+// The result can end up above CLASH_POWER_MAX/CLASH_DEFENSE_MAX (10) once
+// this is added on top of an already-maxed base stat -- that's intentional,
+// not a bug. loyalty_tier itself is left untouched on the clone, since
+// loyaltyAccuracyModifier is looked up separately, off the original tier,
+// wherever an attack roll is made.
+export function applyLoyaltyToSlug(slug) {
+  if (!slug) return slug;
+  const mod = loyaltyClashModifier(slug.loyalty_tier);
+  if (!mod) return slug;
+  return { ...slug, clash_power: slug.clash_power + mod, clash_defense: slug.clash_defense + mod };
+}
 
 // ---- Slug cooldown --------------------------------------------------------
 

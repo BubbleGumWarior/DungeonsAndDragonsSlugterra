@@ -250,10 +250,6 @@
 
 /* --- Voice: mic activation mode + a way to check the mic works --- */
 
-.settings-voice {
-  grid-column: 1 / -1;
-}
-
 .voice-mode-row {
   display: flex;
   align-items: center;
@@ -341,8 +337,35 @@
   color: var(--ink-dim);
 }
 
-/* --- Preview: live sample of the current theme's buttons/text --- */
+/* Second (and any later) volume bar stacked in the Sound panel -- a
+   top-border divider sets it off from the one above. */
+.volume-control--divided {
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px solid var(--charcoal-700);
+}
 
+.volume-sub {
+  margin: -2px 0 0;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+/* Master "set them all" bar at the top of the Sound panel -- its label
+   reads gold rather than dim to mark it as the control that drives the
+   others, and it sits a little lower to open up the gap above the first
+   individual level's divider. */
+.volume-control--master {
+  padding-bottom: 4px;
+}
+
+.volume-control--master .voice-mode-label {
+  color: var(--gold-soft);
+}
+
+/* --- Appearance + Preview: full-width rows below the Voice/Sound pair --- */
+
+.settings-appearance,
 .settings-preview {
   grid-column: 1 / -1;
 }
@@ -385,20 +408,10 @@
   margin-top: 2px;
 }
 
-/* Appearance runs taller than Sound (four swatches vs. one slider) --
-   stretch (the grid default, restated for clarity) matches both panels to
-   the row's tallest, and centering Sound's single control in the result
-   reads as "this panel is just shorter on content," not a layout bug. */
-@media (min-width: 640px) {
-  .settings-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    align-items: stretch;
-  }
-}
-
-.settings-sound .panel-body {
-  justify-content: center;
-}
+/* One panel per row, top to bottom: Voice, Sound, Appearance, Preview --
+   sound-related settings first. Sound carries a slider per game sound now,
+   so a two-up layout would leave whatever sits beside it stretched half-
+   empty; a single column keeps every panel its natural height. */
 
 @media (min-width: 1300px) {
   .settings-title {

@@ -98,7 +98,7 @@ export function initiativeBonus(stats) {
 }
 
 export function actionPoints(stats) {
-  return Math.max(3, 3 * statModifier(stats.dexterity));
+  return Math.max(8, 6 + 3 * statModifier(stats.dexterity));
 }
 
 export function defaultKnockoutPips() {

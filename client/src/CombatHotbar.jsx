@@ -26,7 +26,7 @@ function HotbarButton({ icon, label, apCost, active, disabled, onClick }) {
   );
 }
 
-export default function CombatHotbar({ actingCombatant, isActiveTurn, mode, weaponSwitch, onArmMode, onCancelMode, onAction }) {
+export default function CombatHotbar({ actingCombatant, isActiveTurn, isDM = false, mode, weaponSwitch, onArmMode, onCancelMode, onAction }) {
   if (!actingCombatant) return null;
 
   const ap = actingCombatant.currentAp;
@@ -102,7 +102,12 @@ export default function CombatHotbar({ actingCombatant, isActiveTurn, mode, weap
           />
         )}
 
-        <HotbarButton icon={<ArrowRightIcon weight="bold" />} label="End Turn" onClick={() => onAction("end-turn")} />
+        <HotbarButton
+          icon={<ArrowRightIcon weight="bold" />}
+          label="End Turn"
+          disabled={!isActiveTurn && !isDM}
+          onClick={() => onAction("end-turn")}
+        />
 
         {mode && (
           <button type="button" className="combat-hotbar-cancel" onClick={onCancelMode} title="Cancel">

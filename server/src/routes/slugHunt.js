@@ -34,6 +34,7 @@ try {
 
 const SUCCESS_THRESHOLD = 15; // total must be strictly above this
 const PENDING_TTL_MS = 30 * 60 * 1000;
+const PITY_MISS_LIMIT = 5; // this many misses in a row guarantees the next hunt
 
 // Player succeeded on the hunt roll, waiting on the DM to approve/reroll the
 // slug it turned up. In-memory and short-lived, same as diceRoll.js's
@@ -49,6 +50,28 @@ function cleanupExpired() {
 
 function rollD20() {
   return 1 + Math.floor(Math.random() * 20);
+}
+
+// Consecutive-miss pity counter -- persists across rests (unlike the
+// per-rest lock) so a long dry spell is eventually guaranteed a hit.
+async function getMissStreak(userId) {
+  const { rows } = await pool.query("SELECT misses FROM slug_hunt_streaks WHERE user_id = $1", [userId]);
+  return rows[0]?.misses ?? 0;
+}
+
+async function resetMissStreak(userId) {
+  await pool.query(
+    "INSERT INTO slug_hunt_streaks (user_id, misses) VALUES ($1, 0) ON CONFLICT (user_id) DO UPDATE SET misses = 0",
+    [userId]
+  );
+}
+
+async function incrementMissStreak(userId) {
+  await pool.query(
+    `INSERT INTO slug_hunt_streaks (user_id, misses) VALUES ($1, 1)
+     ON CONFLICT (user_id) DO UPDATE SET misses = slug_hunt_streaks.misses + 1`,
+    [userId]
+  );
 }
 
 function areaName(areaIndex) {
@@ -164,7 +187,12 @@ router.post("/attempt", async (req, res) => {
     const modifier = skillModifier(character.stats, character.proficiencies, "survival");
     const roll = rollD20();
     const total = roll + modifier;
-    const success = total > SUCCESS_THRESHOLD;
+
+    // Pity rule: five misses in a row guarantees the next hunt succeeds,
+    // regardless of the roll, so a bad-luck streak can't run forever.
+    const missStreak = await getMissStreak(req.user.sub);
+    const pityBreak = missStreak >= PITY_MISS_LIMIT;
+    const success = pityBreak || total > SUCCESS_THRESHOLD;
 
     // Burn the attempt now -- win or lose, they don't get another until a rest.
     await pool.query(
@@ -174,12 +202,15 @@ router.post("/attempt", async (req, res) => {
     notifyUser(req.user.sub, { type: "slug-hunt-lock", userId: req.user.sub, locked: true });
 
     if (!success) {
+      await incrementMissStreak(req.user.sub);
       await postChatMessage(
         "Player",
         `${character.name} tried a slug hunt in ${areaName(area)} but found nothing.`
       );
       return res.json({ success: false, roll, modifier, total, area, areaName: areaName(area) });
     }
+
+    await resetMissStreak(req.user.sub);
 
     const template = await pickSlugForArea(area);
     if (!template) {
@@ -205,7 +236,7 @@ router.post("/attempt", async (req, res) => {
 
     await notifyDungeonMasters({ type: "slug-hunt-offered", hunt: huntPayload(hunt, template) });
 
-    res.status(201).json({ success: true, roll, modifier, total, area, areaName: areaName(area) });
+    res.status(201).json({ success: true, roll, modifier, total, area, areaName: areaName(area), pityBreak });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not attempt the hunt." });

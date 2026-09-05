@@ -1,7 +1,13 @@
 .energy-pips {
-  display: flex;
-  align-items: center;
+  /* A slug can carry up to 16 energy pips (ENERGY_PIPS_MAX) -- a grid capped
+     at 8 columns wraps that into two neat rows of 8 instead of one overlong
+     line, while a slug with 8 or fewer still reads as a single row exactly
+     like before. */
+  display: grid;
+  grid-template-columns: repeat(8, auto);
   gap: 5px;
+  justify-content: start;
+  align-content: center;
 }
 
 .energy-pip {

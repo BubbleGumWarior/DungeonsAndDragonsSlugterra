@@ -123,6 +123,13 @@
   border: 1px solid var(--charcoal-700);
 }
 
+.combat-add-form-hint {
+  margin: -4px 0 0;
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  line-height: 1.3;
+}
+
 .combat-setup-list {
   display: flex;
   flex-direction: column;

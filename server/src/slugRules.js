@@ -22,11 +22,11 @@ export const CLASH_POWER_MAX = 10;
 export const CLASH_DEFENSE_MIN = 1;
 export const CLASH_DEFENSE_MAX = 10;
 export const AP_COST_MIN = 1;
-export const AP_COST_MAX = 3;
+export const AP_COST_MAX = 5;
 export const ENERGY_PIPS_MIN = 1;
-export const ENERGY_PIPS_MAX = 8;
+export const ENERGY_PIPS_MAX = 16;
 export const LOYALTY_TIER_MIN = 0;
-export const LOYALTY_TIER_MAX = 3;
+export const LOYALTY_TIER_MAX = 4;
 
 const MAX_TEXT_LENGTH = 500;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;

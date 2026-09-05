@@ -280,6 +280,24 @@ export default function PlayerSlugs() {
                     ? (e) => {
                         e.dataTransfer.setData("text/plain", String(slug.id));
                         e.dataTransfer.effectAllowed = "move";
+                        // The weapon slots to drop onto live at the top of the
+                        // page -- with a long slug list, a card picked up
+                        // from near the bottom is a long drag back up there,
+                        // and the browser's own drag-to-edge auto-scroll is
+                        // slow and easy to overshoot. Jump straight to the
+                        // top instead, so the slots are already in view to
+                        // drop onto. Deferred a tick: scrolling (or any other
+                        // DOM/layout change) *synchronously* inside dragstart
+                        // runs before the browser has finished snapshotting
+                        // the drag ghost from this element's current
+                        // position, and yanking that position out from under
+                        // it mid-snapshot aborts the drag entirely -- the
+                        // card never actually picks up. Letting dragstart
+                        // finish first, then scrolling on the next tick,
+                        // keeps the already-captured drag alive.
+                        if (equippedBlasters.length > 0) {
+                          setTimeout(() => window.scrollTo({ top: 0, behavior: "auto" }), 0);
+                        }
                       }
                     : undefined
                 }

@@ -19,9 +19,12 @@ function requireDungeonMaster(req, res, next) {
 // id maps to and CombatMap.jsx for where sound_volume gets applied.
 const THEMES = ["burgundy", "navy", "green", "purple", "orange", "pink", "teal", "indigo"];
 const VOICE_INPUT_MODES = ["live", "push_to_talk"];
+// Keys allowed in the combat_sfx_volumes map -- mirrors CombatMap.jsx's
+// COMBAT_SFX / Settings.jsx's COMBAT_SFX list.
+const COMBAT_SFX_KEYS = ["fail", "miss", "hit", "break", "hazard", "geyser", "zeus"];
 
 router.post("/preferences", async (req, res) => {
-  const { theme, soundVolume, voiceInputMode } = req.body ?? {};
+  const { theme, soundVolume, voiceInputMode, voiceCueVolume, masterVolume, combatSfxVolumes } = req.body ?? {};
   const updates = [];
   const values = [];
 
@@ -50,6 +53,48 @@ router.post("/preferences", async (req, res) => {
     updates.push(`voice_input_mode = $${values.length}`);
   }
 
+  if (voiceCueVolume !== undefined) {
+    const volume = Number(voiceCueVolume);
+    if (!Number.isFinite(volume) || volume < 0 || volume > 1) {
+      return res.status(400).json({ error: "Voice cue volume must be between 0 and 1." });
+    }
+    values.push(volume);
+    updates.push(`voice_cue_volume = $${values.length}`);
+  }
+
+  if (masterVolume !== undefined) {
+    const volume = Number(masterVolume);
+    if (!Number.isFinite(volume) || volume < 0 || volume > 1) {
+      return res.status(400).json({ error: "Master volume must be between 0 and 1." });
+    }
+    values.push(volume);
+    updates.push(`master_volume = $${values.length}`);
+  }
+
+  if (combatSfxVolumes !== undefined) {
+    if (typeof combatSfxVolumes !== "object" || combatSfxVolumes === null || Array.isArray(combatSfxVolumes)) {
+      return res.status(400).json({ error: "combatSfxVolumes must be an object." });
+    }
+    const clean = {};
+    for (const [key, raw] of Object.entries(combatSfxVolumes)) {
+      if (!COMBAT_SFX_KEYS.includes(key)) {
+        return res.status(400).json({ error: `Unknown combat sound "${key}".` });
+      }
+      const volume = Number(raw);
+      if (!Number.isFinite(volume) || volume < 0 || volume > 1) {
+        return res.status(400).json({ error: "Each combat sound volume must be between 0 and 1." });
+      }
+      clean[key] = volume;
+    }
+    if (Object.keys(clean).length > 0) {
+      // Merge the sent keys into whatever's already stored (jsonb ||, right
+      // side wins) so a single-slider save never wipes the others -- same
+      // reason /voice-peer-volume uses a targeted write.
+      values.push(JSON.stringify(clean));
+      updates.push(`combat_sfx_volumes = combat_sfx_volumes || $${values.length}::jsonb`);
+    }
+  }
+
   if (updates.length === 0) {
     return res.status(400).json({ error: "Nothing to update." });
   }
@@ -57,11 +102,18 @@ router.post("/preferences", async (req, res) => {
   values.push(req.user.sub);
   try {
     const { rows } = await pool.query(
-      `UPDATE users SET ${updates.join(", ")} WHERE id = $${values.length} RETURNING theme, sound_volume, voice_input_mode`,
+      `UPDATE users SET ${updates.join(", ")} WHERE id = $${values.length} RETURNING theme, sound_volume, voice_input_mode, voice_cue_volume, master_volume, combat_sfx_volumes`,
       values
     );
     const row = rows[0];
-    res.json({ theme: row.theme, soundVolume: row.sound_volume, voiceInputMode: row.voice_input_mode });
+    res.json({
+      theme: row.theme,
+      soundVolume: row.sound_volume,
+      voiceInputMode: row.voice_input_mode,
+      voiceCueVolume: row.voice_cue_volume,
+      masterVolume: row.master_volume,
+      combatSfxVolumes: row.combat_sfx_volumes,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not update preferences." });

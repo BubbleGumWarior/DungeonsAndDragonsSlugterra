@@ -19,21 +19,67 @@ export const SLUG_TYPES = [
 
 export const LOYALTY_TIER_LABELS = {
   0: "Wild",
-  1: "Bonded",
-  2: "Trusted",
-  3: "Fused",
+  1: "Indifferent",
+  2: "Friendly",
+  3: "Loyal",
+  4: "Bonded",
 };
+
+// A fixed, theme-independent color per loyalty tier -- deliberately its own
+// palette rather than the app's theme gold, so a slug's tier reads at a
+// glance and stays legible/consistent no matter which accent theme the DM
+// has picked in Settings (unlike --gold-soft, --maroon-*, etc., which rotate
+// per theme). Rising, game-rarity-style ramp: gray -> green -> blue ->
+// violet -> gold, low tier to high.
+export const LOYALTY_TIER_COLORS = {
+  0: "#9aa0a8", // Wild -- dull steel gray
+  1: "#7fd99a", // Indifferent -- green
+  2: "#5ac8e0", // Friendly -- cyan-blue
+  3: "#b07adb", // Loyal -- violet
+  4: "#f0c419", // Bonded -- radiant gold
+};
+
+export function loyaltyTierColor(tier) {
+  return LOYALTY_TIER_COLORS[tier] ?? LOYALTY_TIER_COLORS[1];
+}
+
+// Ordered {value, label, color} list for rendering the tier legend (see
+// SlugCard's loyalty tooltip) -- Object.keys on the maps above would sort
+// numeric-looking string keys correctly anyway, but this keeps the render
+// side from caring about that.
+export const LOYALTY_TIERS = [0, 1, 2, 3, 4].map((value) => ({
+  value,
+  label: LOYALTY_TIER_LABELS[value],
+  color: LOYALTY_TIER_COLORS[value],
+}));
+
+// Mirrors LOYALTY_CLASH_MODIFIERS/LOYALTY_ACCURACY_MODIFIERS in
+// server/src/combatRules.js -- client-side estimate only, used to preview a
+// slug's effective combat stats before firing. The server is always the
+// authority on the real modifier when a shot actually resolves. Tier 1
+// ("Indifferent") is the neutral baseline (both 0); tier 0 ("Wild") is
+// actively worse than an untrained slug.
+export const LOYALTY_CLASH_MODIFIERS = { 0: -2, 1: 0, 2: 2, 3: 4, 4: 6 };
+export const LOYALTY_ACCURACY_MODIFIERS = { 0: -2, 1: 0, 2: 2, 3: 3, 4: 5 };
+
+export function loyaltyClashModifier(tier) {
+  return LOYALTY_CLASH_MODIFIERS[tier] ?? 0;
+}
+
+export function loyaltyAccuracyModifier(tier) {
+  return LOYALTY_ACCURACY_MODIFIERS[tier] ?? 0;
+}
 
 export const CLASH_POWER_MIN = 1;
 export const CLASH_POWER_MAX = 10;
 export const CLASH_DEFENSE_MIN = 1;
 export const CLASH_DEFENSE_MAX = 10;
 export const AP_COST_MIN = 1;
-export const AP_COST_MAX = 3;
+export const AP_COST_MAX = 5;
 export const ENERGY_PIPS_MIN = 1;
-export const ENERGY_PIPS_MAX = 8;
+export const ENERGY_PIPS_MAX = 16;
 export const LOYALTY_TIER_MIN = 0;
-export const LOYALTY_TIER_MAX = 3;
+export const LOYALTY_TIER_MAX = 4;
 
 export function typeColor(type) {
   return SLUG_TYPES.find((t) => t.key === type)?.color ?? "#c9a24b";

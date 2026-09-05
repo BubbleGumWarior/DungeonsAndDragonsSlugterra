@@ -121,7 +121,13 @@ export default function SlugHuntPanel({ isDungeonMaster = false }) {
       if (!res.ok) throw new Error(data.error || "Could not attempt the hunt.");
       setLocked(true);
       if (data.success) {
-        setHunt({ state: "pending", roll: data.roll, modifier: data.modifier, total: data.total });
+        setHunt({
+          state: "pending",
+          roll: data.roll,
+          modifier: data.modifier,
+          total: data.total,
+          pityBreak: data.pityBreak,
+        });
       } else {
         setHunt({ state: "fail", roll: data.roll, modifier: data.modifier, total: data.total });
       }
@@ -276,8 +282,14 @@ export default function SlugHuntPanel({ isDungeonMaster = false }) {
             )}
             {hunt?.state === "pending" && (
               <p className="slughunt-hunt-result">
-                Rolled <strong>{hunt.total}</strong> ({hunt.roll} {formatModifier(hunt.modifier)} Survival) — something's
-                out there. The DM is confirming what you found.
+                {hunt.pityBreak ? (
+                  <>Your instincts finally catch a break — </>
+                ) : (
+                  <>
+                    Rolled <strong>{hunt.total}</strong> ({hunt.roll} {formatModifier(hunt.modifier)} Survival) —{" "}
+                  </>
+                )}
+                something's out there. The DM is confirming what you found.
               </p>
             )}
             {hunt?.state === "found" && (

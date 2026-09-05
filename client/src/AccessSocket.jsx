@@ -16,6 +16,7 @@ export default function AccessSocket({ children }) {
   const [onlineUserIds, setOnlineUserIds] = useState(() => new Set());
   const [slugterraRevealed, setSlugterraRevealed] = useState(false);
   const [characterUpdate, setCharacterUpdate] = useState(null);
+  const [characterCreated, setCharacterCreated] = useState(null);
   const [partyHealed, setPartyHealed] = useState(null);
   const [slugUpdate, setSlugUpdate] = useState(null);
   const [blasterUpdate, setBlasterUpdate] = useState(null);
@@ -156,6 +157,13 @@ export default function AccessSocket({ children }) {
         return;
       }
 
+      // App-level heartbeat (see ws.js) -- just needs a reply so the server
+      // knows the connection is still alive; nothing else consumes this.
+      if (data.type === "ping") {
+        sendMessage({ type: "pong" });
+        return;
+      }
+
       if (data.type === "account-deleted") {
         logout();
         navigateRef.current("/login", { replace: true });
@@ -194,6 +202,11 @@ export default function AccessSocket({ children }) {
 
       if (data.type === "character-updated") {
         setCharacterUpdate({ userId: data.userId, character: data.character, at: Date.now() });
+        return;
+      }
+
+      if (data.type === "character-created") {
+        setCharacterCreated({ userId: data.userId, at: Date.now() });
         return;
       }
 
@@ -364,6 +377,7 @@ export default function AccessSocket({ children }) {
         onlineUserIds,
         slugterraRevealed,
         characterUpdate,
+        characterCreated,
         partyHealed,
         slugUpdate,
         blasterUpdate,

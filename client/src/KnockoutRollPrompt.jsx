@@ -7,11 +7,18 @@ import Die from "./Die.jsx";
 import "./Panel.css";
 import "./KnockoutRollPrompt.css";
 
-const REASON_TEXT = {
+const REASON_TEXT_SELF = {
   grit: "Your Grit just hit 0.",
   knockback: "You were slammed into a wall.",
   "mecha-ram": "You were thrown by a mecha ramming into you.",
   "mecha-destroyed": "The mecha you were riding was just wrecked.",
+};
+
+const REASON_TEXT_NPC = {
+  grit: "Grit just hit 0.",
+  knockback: "Slammed into a wall.",
+  "mecha-ram": "Thrown by a ramming mecha.",
+  "mecha-destroyed": "The mecha it was riding was just wrecked.",
 };
 
 function KnockoutCard({ offer, onDone }) {
@@ -20,6 +27,9 @@ function KnockoutCard({ offer, onDone }) {
   const [display, setDisplay] = useState(1);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+
+  const forNpc = Boolean(offer.forNpc);
+  const who = forNpc ? offer.name || "The NPC" : null;
 
   useEffect(() => {
     if (!rolling) return;
@@ -58,8 +68,14 @@ function KnockoutCard({ offer, onDone }) {
           <PulseIcon weight="duotone" />
         </span>
         <div>
-          <p className="knockout-prompt-kicker">{REASON_TEXT[offer.reason] || "You've taken a hit."}</p>
-          <h3 className="knockout-prompt-title">Knockout Roll -- DC {offer.dc}</h3>
+          <p className="knockout-prompt-kicker">
+            {forNpc
+              ? `${who} -- ${REASON_TEXT_NPC[offer.reason] || "took a hit."}`
+              : REASON_TEXT_SELF[offer.reason] || "You've taken a hit."}
+          </p>
+          <h3 className="knockout-prompt-title">
+            {forNpc ? `${who}: Knockout Roll` : "Knockout Roll"} -- DC {offer.dc}
+          </h3>
         </div>
       </div>
 
@@ -75,13 +91,19 @@ function KnockoutCard({ offer, onDone }) {
 
       {!result && !rolling && (
         <button type="button" className="panel-btn" onClick={handleRoll}>
-          Roll Constitution Save
+          {forNpc ? `Roll Constitution Save for ${who}` : "Roll Constitution Save"}
         </button>
       )}
 
       {result && (
         <p className={`knockout-prompt-result ${result.success ? "knockout-prompt-result--success" : "knockout-prompt-result--fail"}`}>
-          {result.success ? "You shake it off and stay in the fight!" : "You fall unconscious."}
+          {forNpc
+            ? result.success
+              ? `${who} shakes it off and stays in the fight!`
+              : `${who} falls unconscious.`
+            : result.success
+              ? "You shake it off and stay in the fight!"
+              : "You fall unconscious."}
         </p>
       )}
       {result && (
@@ -96,18 +118,23 @@ function KnockoutCard({ offer, onDone }) {
 
 export default function KnockoutRollPrompt() {
   const { knockoutRollOffered } = useLiveState();
-  const [offer, setOffer] = useState(null);
+  const [offers, setOffers] = useState([]);
 
+  // A DM fielding several NPCs (or an AOE dropping a whole group) can get
+  // multiple knockout rolls stacked up at once -- keep every distinct offer
+  // rather than only the latest, and clear each as it's answered.
   useEffect(() => {
     if (!knockoutRollOffered) return;
-    setOffer(knockoutRollOffered);
+    setOffers((prev) => (prev.some((o) => o.id === knockoutRollOffered.id) ? prev : [...prev, knockoutRollOffered]));
   }, [knockoutRollOffered]);
 
-  if (!offer) return null;
+  if (offers.length === 0) return null;
 
   return (
     <div className="knockout-prompt-stack">
-      <KnockoutCard offer={offer} onDone={() => setOffer(null)} />
+      {offers.map((offer) => (
+        <KnockoutCard key={offer.id} offer={offer} onDone={() => setOffers((prev) => prev.filter((o) => o.id !== offer.id))} />
+      ))}
     </div>
   );
 }

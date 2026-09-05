@@ -97,6 +97,11 @@ router.post("/", async (req, res) => {
       return res.status(409).json({ error: "Character already exists." });
     }
 
+    // Tell every open client a new character joined the table so their
+    // Roster re-syncs from the server -- the per-character "character-updated"
+    // signal only patches rows already in the list, it can't add a new one.
+    broadcastAll({ type: "character-created", userId: req.user.sub, at: Date.now() });
+
     res.status(201).json({ character: toClientCharacter(rows[0]) });
   } catch (err) {
     console.error(err);

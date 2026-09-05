@@ -63,7 +63,7 @@ app.get("/api/presence/online", requireAuth, (req, res) => {
 app.get("/api/me", requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT id, username, role, status, must_change_password, theme, sound_volume, voice_input_mode, voice_peer_volumes FROM users WHERE id = $1",
+      "SELECT id, username, role, status, must_change_password, theme, sound_volume, voice_input_mode, voice_peer_volumes, voice_cue_volume, master_volume, combat_sfx_volumes FROM users WHERE id = $1",
       [req.user.sub]
     );
     const row = rows[0];
@@ -81,6 +81,9 @@ app.get("/api/me", requireAuth, async (req, res) => {
         soundVolume: row.sound_volume,
         voiceInputMode: row.voice_input_mode,
         voicePeerVolumes: row.voice_peer_volumes,
+        voiceCueVolume: row.voice_cue_volume,
+        masterVolume: row.master_volume,
+        combatSfxVolumes: row.combat_sfx_volumes,
       },
     });
   } catch (err) {

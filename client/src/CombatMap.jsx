@@ -16,6 +16,36 @@ function playShotSound(sliderVolume) {
   audio.play().catch(() => {});
 }
 
+// The rest of the combat SFX, played on every client watching the battle and
+// all scaled by the same per-user "Combat shots" volume the launch sound
+// uses. Files live in client/public/ alongside slugterra-velocity.mp3.
+//   fail   -- the shot misfired; nothing ever left the barrel
+//   miss   -- the bolt landed wide of its target (plays with the burst)
+//   hit    -- the bolt landed on a combatant (plays with the burst)
+//   break  -- a wall (or wall segment) was broken, at the moment it breaks
+//   hazard -- a hazard area was created, at the moment it appears
+//   geyser -- a Pressure Tick steam pod fired
+//   zeus   -- a Zeus slug was shot; plays once the launch sound has finished
+// Filenames are capital-cased to match the actual files in client/public/ --
+// Vite's static serving is case-sensitive (a lowercase miss falls through to
+// the SPA's index.html, which then can't be decoded as audio).
+const COMBAT_SFX = {
+  fail: "/Fail.mp3",
+  miss: "/Miss.mp3",
+  hit: "/Hit.mp3",
+  break: "/Break.mp3",
+  hazard: "/Hazard.mp3",
+  geyser: "/Geyser.mp3",
+  zeus: "/Zeus.mp3",
+};
+function playCombatSfx(name, sliderVolume) {
+  const src = COMBAT_SFX[name];
+  if (!src) return;
+  const audio = new Audio(src);
+  audio.volume = volumeToGain(sliderVolume);
+  audio.play().catch(() => {});
+}
+
 // The DM's map image is stored at whatever resolution it was uploaded --
 // this caps it before it ever reaches the server, so a phone photo doesn't
 // balloon the encounters table (and every websocket broadcast of it).
@@ -568,6 +598,13 @@ export default function CombatMap({
 }) {
   const { user } = useAuth();
   const soundVolume = user?.soundVolume;
+  // Per-sound level for the non-launch combat SFX (fail/miss/hit/break/
+  // hazard). Sparse map -- a missing key falls back to 0.5, same default the
+  // server and Settings.jsx use. Kept in a ref so the wall/hazard effects
+  // don't need it in their dep arrays.
+  const combatSfxVolumesRef = useRef(user?.combatSfxVolumes || {});
+  combatSfxVolumesRef.current = user?.combatSfxVolumes || {};
+  const sfxVolume = (name) => combatSfxVolumesRef.current[name] ?? 0.5;
   const svgRef = useRef(null);
   const mapFileInputRef = useRef(null);
   const [drawing, setDrawing] = useState(null); // {x1,y1,x2,y2} while dragging a wall
@@ -597,6 +634,14 @@ export default function CombatMap({
   useEffect(() => {
     const currentIds = new Set(encounter.walls.map((w) => w.id));
     if (knownWallIds.current !== null) {
+      // A wall (or a segment of one -- a partial break drops the old id and
+      // adds up to two new pieces) that was here and now isn't just broke.
+      // The server holds this update back until the shot's burst would have
+      // played (scheduleAfterFlight), so "now" is the moment of the break.
+      // Skipped while the DM is drawing/erasing walls by hand.
+      const broke = [...knownWallIds.current].some((id) => !currentIds.has(id));
+      if (broke && !drawMode) playCombatSfx("break", sfxVolume("break"));
+
       const newSlugWallIds = encounter.walls
         .filter((w) => w.source === "slug" && !knownWallIds.current.has(w.id))
         .map((w) => w.id);
@@ -630,6 +675,9 @@ export default function CombatMap({
     if (knownHazardIds.current !== null) {
       const newIds = (encounter.hazards || []).filter((h) => !knownHazardIds.current.has(h.id)).map((h) => h.id);
       if (newIds.length > 0) {
+        // A hazard area was just made -- the server already delayed it to the
+        // moment its shot's burst plays, so this is that moment.
+        playCombatSfx("hazard", sfxVolume("hazard"));
         setGrowingHazardIds((prev) => new Set([...prev, ...newIds]));
         const timer = setTimeout(() => {
           setGrowingHazardIds((prev) => {
@@ -691,10 +739,22 @@ export default function CombatMap({
     if (shotFx.outcome === "jam") {
       setMisfireFlash(true);
       setTimeout(() => setMisfireFlash(false), 3000);
+      // The shot completely failed -- nothing left the barrel. No launch
+      // sound (nothing flew); the misfire gets its own sound instead.
+      playCombatSfx("fail", sfxVolume("fail"));
+    } else if (shotFx.pod) {
+      // A Pressure Tick steam pod going off -- its own sound, not a slug
+      // launch (nothing was fired from a blaster).
+      playCombatSfx("geyser", sfxVolume("geyser"));
     } else {
       // The slug actually left the blaster -- play the launch sound. Not on
       // a jam/misfire, since then it never went anywhere.
       playShotSound(soundVolume);
+      // Zeus flies as a blur -- its own thunderclap follows once the launch
+      // sound has run its course.
+      if (shotFx.slugName === "Zeus") {
+        setTimeout(() => playCombatSfx("zeus", sfxVolume("zeus")), SOUND_DURATION_MS);
+      }
     }
   }, [shotFx]);
 
@@ -704,23 +764,49 @@ export default function CombatMap({
   useEffect(() => {
     if (!shotResolved || shotResolved.id === lastResolvedId.current) return;
     lastResolvedId.current = shotResolved.id;
+
+    // The outcome reveal reaches us the instant it's decided -- for the
+    // common uncontested shot that's right at launch, a whole flight before
+    // the bolt lands. Everything that should land *with* the burst (the miss
+    // glow, and now the hit/miss sounds) is held back until then. `remaining`
+    // is how long until this shot's flight animation reaches its impact
+    // point; a countered shot resolves at the end of its window, so that's
+    // ~0, but its hit burst is a further half-flight out past the clash (see
+    // ShotEffect's clashAt + aftermathMs).
+    const meta = shotFlightMeta.current.get(shotResolved.id);
+    const remaining = meta ? Math.max(0, meta.totalMs - (performance.now() - meta.at)) : 0;
+    const atBurst = (fn, extraDelay = 0) => {
+      const delay = remaining + extraDelay;
+      if (delay <= 0) fn();
+      else setTimeout(fn, delay);
+    };
+    const clashAftermath = meta ? meta.totalMs / 2 : 0;
+
     if (shotResolved.outcome === "miss") {
-      // Hold the glow until the bolt would actually land -- for a shot that
-      // resolves at launch (the common case) that's the whole flight away;
-      // for one that resolves at the end of a counter window it's now.
-      const meta = shotFlightMeta.current.get(shotResolved.id);
-      const remaining = meta ? Math.max(0, meta.totalMs - (performance.now() - meta.at)) : 0;
-      const flash = () => {
+      atBurst(() => {
         setMissFlash(true);
         setTimeout(() => setMissFlash(false), 3000);
-      };
-      if (remaining <= 0) flash();
-      else setTimeout(flash, remaining);
+        playCombatSfx("miss", sfxVolume("miss"));
+      });
+    } else if (shotResolved.outcome === "out-of-range") {
+      // Went wide / fell short -- same "missed the target" sound, no glow
+      // (that's reserved for a true accuracy miss).
+      atBurst(() => playCombatSfx("miss", sfxVolume("miss")));
+    } else if (shotResolved.outcome === "hit") {
+      atBurst(() => playCombatSfx("hit", sfxVolume("hit")));
+    } else if (shotResolved.outcome === "attacker-wins" || shotResolved.outcome === "defender-wins") {
+      // A clash one side won -- the winning bolt carries on and lands a hit
+      // burst a half-flight after the clash itself.
+      atBurst(() => playCombatSfx("hit", sfxVolume("hit")), clashAftermath);
     }
+
     if (shotResolved.countered) {
       // The counter-slug fires too, right as it's chosen -- give it the same
-      // launch sound the original shot got.
+      // launch sound the original shot got, and Zeus's thunderclap after it.
       playShotSound(soundVolume);
+      if (shotResolved.counterSlugName === "Zeus") {
+        setTimeout(() => playCombatSfx("zeus", sfxVolume("zeus")), SOUND_DURATION_MS);
+      }
     }
     setActiveShots((prev) =>
       prev.map((s) =>
