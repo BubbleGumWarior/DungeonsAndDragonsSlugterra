@@ -811,18 +811,8 @@ export async function initSchema() {
   await pool.query(`ALTER TABLE mechas ADD COLUMN IF NOT EXISTS can_glide BOOLEAN NOT NULL DEFAULT false;`);
   await pool.query(`ALTER TABLE mechas ADD COLUMN IF NOT EXISTS can_aquatic BOOLEAN NOT NULL DEFAULT false;`);
   await pool.query(`ALTER TABLE mechas ADD COLUMN IF NOT EXISTS can_burrow BOOLEAN NOT NULL DEFAULT false;`);
-  // Self-heal / backfill: derive the flags from whatever is equipped right
-  // now, so an existing table (or one edited straight in SQL) lines up.
-  await pool.query(`
-    UPDATE mechas m SET
-      can_glide   = EXISTS (SELECT 1 FROM mecha_mods x WHERE x.equipped_mecha_id = m.id AND x.unlocks_mode = 'glider'),
-      can_aquatic = EXISTS (SELECT 1 FROM mecha_mods x WHERE x.equipped_mecha_id = m.id AND x.unlocks_mode = 'aquatic'),
-      can_burrow  = EXISTS (SELECT 1 FROM mecha_mods x WHERE x.equipped_mecha_id = m.id AND x.unlocks_mode = 'burrow')
-    WHERE
-      m.can_glide   IS DISTINCT FROM EXISTS (SELECT 1 FROM mecha_mods x WHERE x.equipped_mecha_id = m.id AND x.unlocks_mode = 'glider')
-      OR m.can_aquatic IS DISTINCT FROM EXISTS (SELECT 1 FROM mecha_mods x WHERE x.equipped_mecha_id = m.id AND x.unlocks_mode = 'aquatic')
-      OR m.can_burrow  IS DISTINCT FROM EXISTS (SELECT 1 FROM mecha_mods x WHERE x.equipped_mecha_id = m.id AND x.unlocks_mode = 'burrow');
-  `);
+  // (The self-heal backfill for these flags runs further down, once mecha_mods
+  // exists and the seeded mods have been (re)equipped -- see below.)
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS mecha_mod_templates (
@@ -864,6 +854,21 @@ export async function initSchema() {
   await seedDefaultMechaTemplates();
   await seedDefaultMechaModTemplates();
   await refreshSeededMechaMods();
+
+  // Self-heal / backfill: derive the terrain-mode flags on `mechas` from
+  // whatever mod is equipped right now. Runs here -- after `mecha_mods` exists
+  // and the seeded mods have been (re)equipped -- so it's safe on a brand-new
+  // database as well as one edited straight in SQL.
+  await pool.query(`
+    UPDATE mechas m SET
+      can_glide   = EXISTS (SELECT 1 FROM mecha_mods x WHERE x.equipped_mecha_id = m.id AND x.unlocks_mode = 'glider'),
+      can_aquatic = EXISTS (SELECT 1 FROM mecha_mods x WHERE x.equipped_mecha_id = m.id AND x.unlocks_mode = 'aquatic'),
+      can_burrow  = EXISTS (SELECT 1 FROM mecha_mods x WHERE x.equipped_mecha_id = m.id AND x.unlocks_mode = 'burrow')
+    WHERE
+      m.can_glide   IS DISTINCT FROM EXISTS (SELECT 1 FROM mecha_mods x WHERE x.equipped_mecha_id = m.id AND x.unlocks_mode = 'glider')
+      OR m.can_aquatic IS DISTINCT FROM EXISTS (SELECT 1 FROM mecha_mods x WHERE x.equipped_mecha_id = m.id AND x.unlocks_mode = 'aquatic')
+      OR m.can_burrow  IS DISTINCT FROM EXISTS (SELECT 1 FROM mecha_mods x WHERE x.equipped_mecha_id = m.id AND x.unlocks_mode = 'burrow');
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS messages (

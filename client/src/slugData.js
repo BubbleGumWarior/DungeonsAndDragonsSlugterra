@@ -100,7 +100,7 @@ export const TYPE_BALLISTICS = {
   Air: { range: 800, band: "Long", accuracyMod: 2, powerMod: 0, reaction: "Fast", hitEffect: "None -- pure range and accuracy" },
   Dark: { range: 500, band: "Medium", accuracyMod: -1, powerMod: 0, reaction: "Medium", hitEffect: "Phases through walls (ignores cover)" },
   Earth: { range: 400, band: "Short", accuracyMod: -2, powerMod: 1, reaction: "Slow", hitEffect: "Large knockback" },
-  Electricity: { range: 550, band: "Medium", accuracyMod: 1, powerMod: 0, reaction: "Fast", hitEffect: "Chains a half-power hit to a nearby enemy. Double damage to mechas (only the part that hits the mecha -- a mounted rider's own share isn't doubled)" },
+  Electricity: { range: 550, band: "Medium", accuracyMod: 1, powerMod: 0, reaction: "Fast", hitEffect: "Chains a half-power hit to a nearby enemy. Double damage to mechas." },
   Energy: { range: 500, band: "Medium", accuracyMod: 1, powerMod: 0, reaction: "Fast", hitEffect: "Refunds 1 energy pip on another loaded slug" },
   Fire: { range: 450, band: "Short", accuracyMod: 2, powerMod: 0, reaction: "Fast", hitEffect: "Burn -- damage each turn for 3 turns" },
   Healing: { range: 450, band: "Short", accuracyMod: 1, powerMod: 0, reaction: "Medium", hitEffect: "Heals the target instead of damaging" },
