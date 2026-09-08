@@ -20,7 +20,7 @@ import Inventory from "./Inventory.jsx";
 import Slugs from "./Slugs.jsx";
 import Mechas from "./Mechas.jsx";
 import CombatPage from "./CombatPage.jsx";
-import Npcs from "./Npcs.jsx";
+import Chronicle from "./Chronicle.jsx";
 import Settings from "./Settings.jsx";
 
 function PublicOnlyRoute({ children }) {
@@ -80,7 +80,8 @@ function App() {
             <Route path="/slugs" element={<Slugs />} />
             <Route path="/mechas" element={<Mechas />} />
             <Route path="/combat" element={<CombatPage />} />
-            <Route path="/npcs" element={<Npcs />} />
+            <Route path="/chronicle" element={<Chronicle />} />
+            <Route path="/npcs" element={<Navigate to="/chronicle" replace />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="/settings" element={<Settings />} />
           </Route>

@@ -30,6 +30,9 @@ export function toClientMecha(row) {
     passengerCapacity: row.passenger_capacity,
     modSlots: row.mod_slots,
     tier: row.tier,
+    canGlide: row.can_glide,
+    canAquatic: row.can_aquatic,
+    canBurrow: row.can_burrow,
     createdAt: row.created_at,
   };
 }

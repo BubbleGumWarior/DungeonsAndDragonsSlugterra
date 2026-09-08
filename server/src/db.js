@@ -23,82 +23,87 @@ const DEFAULT_MECHA_TEMPLATES = [
   {
     name: "LK-E",
     frameType: "Wolf",
-    image: "/mecha/lucky.png",
+    image: "/mecha/lk-e.jpg",
     speed: 4,
     handling: 4,
     armor: 1,
     rammingPower: 1,
     passengerCapacity: 1,
-    modSlots: 3,
-    tier: 4,
+    modSlots: 4,
+    tier: 0,
   },
   {
     name: "PNTH-3",
     frameType: "Panther",
-    image: "/mecha/pnth-3.png",
+    image: "/mecha/pnth-3.jpg",
     speed: 4,
     handling: 5,
     armor: 1,
     rammingPower: 2,
     passengerCapacity: 1,
-    modSlots: 2,
-    tier: 2,
+    modSlots: 4,
+    tier: 0,
   },
   {
     name: "TH1-DR",
     frameType: "Bull",
-    image: "/mecha/thundarr.png",
+    image: "/mecha/thundarr.jpg",
     speed: 1,
     handling: 1,
     armor: 4,
     rammingPower: 5,
     passengerCapacity: 1,
-    modSlots: 3,
-    tier: 4,
+    modSlots: 6,
+    tier: 0,
   },
   {
-    name: "Forge-Standard Horse",
+    name: "H0R-SE",
     frameType: "Horse",
-    image: "/mecha/forge-standard-horse.png",
+    image: "/mecha/h0r-se.jpg",
     speed: 3,
     handling: 3,
     armor: 2,
     rammingPower: 1,
     passengerCapacity: 2,
-    modSlots: 3,
-    tier: 1,
+    modSlots: 4,
+    tier: 0,
   },
   {
-    name: "Forge-Standard Mole",
+    name: "M-0",
     frameType: "Mole",
-    image: "/mecha/forge-standard-mole.png",
+    image: "/mecha/m-0.jpg",
     speed: 2,
     handling: 2,
     armor: 2,
     rammingPower: 1,
     passengerCapacity: 1,
-    modSlots: 2,
-    tier: 1,
+    modSlots: 3,
+    tier: 0,
   },
   {
-    name: "Roadworn Warthog",
+    name: "WR-TH0G",
     frameType: "Warthog",
-    image: "/mecha/roadworn-warthog.png",
+    image: "/mecha/wr-th0g.jpg",
     speed: 2,
     handling: 1,
     armor: 3,
     rammingPower: 4,
     passengerCapacity: 1,
-    modSlots: 3,
+    modSlots: 4,
     tier: 0,
   },
 ];
 
+// Mecha-Beast mod catalog. `speedMultiplier` is applied to the mecha's speed
+// *after* every flat bonus is summed (see effectiveStats in mechaData.js), so a
+// flat booster and a multiplier stack in that order rather than fighting.
 const DEFAULT_MECHA_MOD_TEMPLATES = [
   {
     name: "Turbo Injector",
-    effect: "A tuned turbine boost for bursts of speed.",
+    effect:
+      "A supplementary turbine spliced into the drive train that force-feeds compressed air to the engine on demand. It adds a flat block of raw speed to whatever the frame already puts out, at the cost of a thirstier fuel burn and a good deal more waste heat for the chassis to shed on a long run.",
     speedBonus: 2,
+    speedMultiplier: 1,
     handlingBonus: 0,
     armorBonus: 0,
     rammingBonus: 0,
@@ -106,8 +111,10 @@ const DEFAULT_MECHA_MOD_TEMPLATES = [
   },
   {
     name: "Reinforced Plating",
-    effect: "Layered plating that shrugs off hits.",
+    effect:
+      "Overlapping ablative plates bolted across the hull and the most exposed joints, each layer keyed to peel and spread the force of a hit rather than let it punch straight through. The added mass dulls the mecha's acceleration a touch, but it can wade through fire that would cripple a bare frame.",
     speedBonus: 0,
+    speedMultiplier: 1,
     handlingBonus: 0,
     armorBonus: 2,
     rammingBonus: 0,
@@ -115,8 +122,10 @@ const DEFAULT_MECHA_MOD_TEMPLATES = [
   },
   {
     name: "Ram Plow",
-    effect: "A reinforced prow for bull-rushing obstacles and blockades.",
+    effect:
+      "A hardened, angled prow welded across the front of the frame and braced back into the roll cage. It lets the mecha shoulder through barricades, rubble and light cover without shredding its own bodywork, and it drives the full weight of a charge into whatever it hits.",
     speedBonus: 0,
+    speedMultiplier: 1,
     handlingBonus: 0,
     armorBonus: 0,
     rammingBonus: 2,
@@ -124,8 +133,10 @@ const DEFAULT_MECHA_MOD_TEMPLATES = [
   },
   {
     name: "Hydraulic Suspension",
-    effect: "Precision hydraulics for sharp turns and rough terrain.",
+    effect:
+      "Active hydraulic struts on every leg or wheel that read the ground a fraction of a second ahead and adjust ride height and damping on the fly. Sharp turns, broken rock and steep grades stop bleeding off control, so the pilot can hold a hard line at speed instead of nursing the mecha through it.",
     speedBonus: 0,
+    speedMultiplier: 1,
     handlingBonus: 2,
     armorBonus: 0,
     rammingBonus: 0,
@@ -133,8 +144,10 @@ const DEFAULT_MECHA_MOD_TEMPLATES = [
   },
   {
     name: "Aquatic Converter",
-    effect: "Kord Zane's amphibious conversion kit; lets the mecha cross open water.",
+    effect:
+      "A sealed intake-and-impeller kit that closes off the engine bay and hands the drive over to water jets the moment the mecha is submerged. With it fitted the mecha can ford rivers, cross flooded caverns and run along the bed of open water instead of being turned back at the shoreline.",
     speedBonus: 0,
+    speedMultiplier: 1,
     handlingBonus: 0,
     armorBonus: 0,
     rammingBonus: 0,
@@ -142,8 +155,10 @@ const DEFAULT_MECHA_MOD_TEMPLATES = [
   },
   {
     name: "Glider Fins",
-    effect: "Retractable fins that slow a long drop into a glide.",
+    effect:
+      "Retractable membrane fins that deploy from the flanks and tail, paired with a stabiliser bar that snaps out above the cockpit. They cannot lift the mecha from a standstill, but off a ledge or a ramp they turn a killing fall into a long, controlled glide down to lower ground.",
     speedBonus: 0,
+    speedMultiplier: 1,
     handlingBonus: 0,
     armorBonus: 0,
     rammingBonus: 0,
@@ -151,12 +166,157 @@ const DEFAULT_MECHA_MOD_TEMPLATES = [
   },
   {
     name: "Bike Conversion Kit",
-    effect: "Folds the mecha down into a lean motorcycle form for tight tunnels.",
-    speedBonus: 1,
+    effect:
+      "A full transformation package: the limbs fold in, the frame collapses to a low two-wheeled profile and the pilot drops into a racing tuck. Frontal area and rolling resistance fall away and every bit of drive-train output goes straight into forward motion, doubling the mecha's effective speed once all other tuning has been added in.",
+    speedBonus: 0,
+    speedMultiplier: 2,
     handlingBonus: 0,
     armorBonus: 0,
     rammingBonus: 0,
     unlocksMode: "bike",
+  },
+  {
+    name: "Auger Drill",
+    effect:
+      "A heavy helical drill head on a telescoping arm, fed by a spoil auger that clears loosened rock and soil back behind the mecha as it advances. It bites through packed earth, clay and soft sedimentary stone, letting the mecha open its own tunnels or simply dig down and out of a fight.",
+    speedBonus: 0,
+    speedMultiplier: 1,
+    handlingBonus: 0,
+    armorBonus: 1,
+    rammingBonus: 0,
+    unlocksMode: "burrow",
+  },
+  {
+    name: "Nitro Cell",
+    effect:
+      "A single-charge canister of nitrous oxide plumbed straight into the intake and dumped in all at once for a violent shove of acceleration. It buys a large jump in top speed, but the sudden power spike leaves the steering vague and twitchy until the bottle is spent.",
+    speedBonus: 3,
+    speedMultiplier: 1,
+    handlingBonus: -1,
+    armorBonus: 0,
+    rammingBonus: 0,
+    unlocksMode: null,
+  },
+  {
+    name: "Gyro Stabiliser",
+    effect:
+      "A heavy flywheel spinning low in the frame that resists sudden changes in attitude, keeping the mecha planted through hard cornering and broken footing. The mass it adds down low is dead weight on a straight, shaving a little off outright speed in exchange for far steadier handling.",
+    speedBonus: -1,
+    speedMultiplier: 1,
+    handlingBonus: 3,
+    armorBonus: 0,
+    rammingBonus: 0,
+    unlocksMode: null,
+  },
+  {
+    name: "Blast Cage",
+    effect:
+      "An external cage of box-section bar wrapped around the cockpit and power core, built to hold its shape long after the outer panels are gone. It shrugs off impacts that would fold a lighter frame, at the price of bulk that blunts the mecha's agility.",
+    speedBonus: 0,
+    speedMultiplier: 1,
+    handlingBonus: -1,
+    armorBonus: 3,
+    rammingBonus: 0,
+    unlocksMode: null,
+  },
+  {
+    name: "Weighted Bull Bar",
+    effect:
+      "A ballasted ram bar loaded with dense metal billets, turning the whole nose of the mecha into a battering mass. Anything it charges is hit with real momentum behind it, though hauling that weight everywhere costs the mecha some of its pace.",
+    speedBonus: -1,
+    speedMultiplier: 1,
+    handlingBonus: 0,
+    armorBonus: 0,
+    rammingBonus: 3,
+    unlocksMode: null,
+  },
+  {
+    name: "Lightweight Chassis Kit",
+    effect:
+      "A rebuild around hollow-spar framing and composite panels that strips a large fraction of the mecha's mass. Everything it does becomes quicker and sharper, but the thinner structure gives ground the moment it takes a solid hit.",
+    speedBonus: 1,
+    speedMultiplier: 1,
+    handlingBonus: 1,
+    armorBonus: -1,
+    rammingBonus: 0,
+    unlocksMode: null,
+  },
+  {
+    name: "All-Terrain Treads",
+    effect:
+      "Deep-lugged tracks and clawed pads that bite into scree, mud and loose sand where a road tyre would only spin. They keep the mecha moving and under control well off the beaten path, and cost it nothing on the flat.",
+    speedBonus: 1,
+    speedMultiplier: 1,
+    handlingBonus: 2,
+    armorBonus: 0,
+    rammingBonus: 0,
+    unlocksMode: null,
+  },
+  {
+    name: "Impact Dampeners",
+    effect:
+      "Sacrificial crush cans and gas struts fitted behind every leading surface, soaking up the first jolt of a collision before it reaches the frame. They spare the mecha the worst of a crash and let it lean into a charge without punishing its own structure.",
+    speedBonus: 0,
+    speedMultiplier: 1,
+    handlingBonus: 0,
+    armorBonus: 2,
+    rammingBonus: 1,
+    unlocksMode: null,
+  },
+  {
+    name: "Governor Bypass",
+    effect:
+      "A workshop job that pulls the factory rev limiter and leans the fuel map for maximum output across the whole range. The drive train gives noticeably more of itself, but runs hot and hard enough that the mecha's own plating takes the strain.",
+    speedBonus: 0,
+    speedMultiplier: 1.5,
+    handlingBonus: 0,
+    armorBonus: -1,
+    rammingBonus: 0,
+    unlocksMode: null,
+  },
+  {
+    name: "Spring-Loaded Legs",
+    effect:
+      "Pre-tensioned leg actuators that store energy on the crouch and release it in one hard extension, launching the mecha into a pounce or a standing leap. The same coiled travel eats awkward landings and throws the mecha's weight forward on a charge.",
+    speedBonus: 0,
+    speedMultiplier: 1,
+    handlingBonus: 1,
+    armorBonus: 0,
+    rammingBonus: 2,
+    unlocksMode: null,
+  },
+  {
+    name: "Ablative Skirt",
+    effect:
+      "A hanging apron of shed-plate around the lower hull that catches shrapnel, kerb strikes and low fire before it reaches anything vital. It is light enough not to slow the mecha, and it keeps grit out of the joints so the mecha stays cleaner and more responsive on rough ground.",
+    speedBonus: 0,
+    speedMultiplier: 1,
+    handlingBonus: 1,
+    armorBonus: 1,
+    rammingBonus: 0,
+    unlocksMode: null,
+  },
+  {
+    name: "Ramjet Booster",
+    effect:
+      "A rear-mounted thrust duct that fires in short bursts, kicking the mecha forward independently of its wheels or legs. The shove adds to the mecha's speed on open ground and lands behind a charge, driving a ram home with extra force.",
+    speedBonus: 2,
+    speedMultiplier: 1,
+    handlingBonus: 0,
+    armorBonus: 0,
+    rammingBonus: 1,
+    unlocksMode: null,
+  },
+  {
+    name: "Balanced Tuning Package",
+    effect:
+      "A full workshop session with nothing flashy about it: fluids flushed, geometry set true, every actuator shimmed and every panel re-torqued to spec. The mecha comes out a step better at everything it already did.",
+    speedBonus: 1,
+    speedMultiplier: 1,
+    handlingBonus: 1,
+    armorBonus: 1,
+    rammingBonus: 1,
+    unlocksMode: null,
   },
 ];
 
@@ -173,16 +333,49 @@ async function seedDefaultMechaTemplates() {
   }
 }
 
+// Idempotent per name: seeds the full default mod catalog on a fresh install
+// and back-fills any entry a later release adds (the catalog grew from 8 to
+// 20). A name a DM has deleted comes back on the next boot -- these are the
+// house catalog, not curated content.
 async function seedDefaultMechaModTemplates() {
-  const { rows } = await pool.query("SELECT COUNT(*)::int AS count FROM mecha_mod_templates");
-  if (rows[0].count > 0) return;
   for (const m of DEFAULT_MECHA_MOD_TEMPLATES) {
     await pool.query(
       `INSERT INTO mecha_mod_templates
-        (name, effect, speed_bonus, handling_bonus, armor_bonus, ramming_bonus, unlocks_mode)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [m.name, m.effect, m.speedBonus, m.handlingBonus, m.armorBonus, m.rammingBonus, m.unlocksMode]
+        (name, effect, speed_bonus, speed_multiplier, handling_bonus, armor_bonus, ramming_bonus, unlocks_mode)
+       SELECT $1, $2, $3, $4, $5, $6, $7, $8
+       WHERE NOT EXISTS (SELECT 1 FROM mecha_mod_templates WHERE name = $1)`,
+      [m.name, m.effect, m.speedBonus, m.speedMultiplier ?? 1, m.handlingBonus, m.armorBonus, m.rammingBonus, m.unlocksMode]
     );
+  }
+}
+
+// One-time refresh of the seeded mod catalog: fleshed-out effect text (no
+// named characters) and the Bike Conversion Kit's new speed multiplier.
+// Guarded on the *old* seed values so it fires once and never touches a mod
+// a DM has since hand-edited. Applies to the catalog and to every player copy.
+const SEEDED_MOD_REWRITES = [
+  { name: "Turbo Injector", oldEffect: "A tuned turbine boost for bursts of speed." },
+  { name: "Reinforced Plating", oldEffect: "Layered plating that shrugs off hits." },
+  { name: "Ram Plow", oldEffect: "A reinforced prow for bull-rushing obstacles and blockades." },
+  { name: "Hydraulic Suspension", oldEffect: "Precision hydraulics for sharp turns and rough terrain." },
+  { name: "Aquatic Converter", oldEffect: "Kord Zane's amphibious conversion kit; lets the mecha cross open water." },
+  { name: "Glider Fins", oldEffect: "Retractable fins that slow a long drop into a glide." },
+  { name: "Bike Conversion Kit", oldEffect: "Folds the mecha down into a lean motorcycle form for tight tunnels." },
+  { name: "Auger Drill", oldEffect: "A retractable drilling rig; lets the mecha tunnel through soil and soft rock." },
+];
+
+async function refreshSeededMechaMods() {
+  for (const rw of SEEDED_MOD_REWRITES) {
+    const seed = DEFAULT_MECHA_MOD_TEMPLATES.find((m) => m.name === rw.name);
+    if (!seed) continue;
+    for (const table of ["mecha_mod_templates", "mecha_mods"]) {
+      await pool.query(
+        `UPDATE ${table}
+           SET effect = $1, speed_bonus = $2, speed_multiplier = $3
+         WHERE name = $4 AND effect = $5`,
+        [seed.effect, seed.speedBonus, seed.speedMultiplier ?? 1, rw.name, rw.oldEffect]
+      );
+    }
   }
 }
 
@@ -434,6 +627,17 @@ export async function initSchema() {
   await pool.query(`
     ALTER TABLE slugs ADD COLUMN IF NOT EXISTS causes_jam BOOLEAN NOT NULL DEFAULT false;
   `);
+  // Blocks the Shoot Slug action entirely (see /actions/shoot) for the
+  // target's next turn -- unlike causes_jam's single guaranteed misfire,
+  // this is a turn-counted status (DISARM_DURATION_TURNS) that can also be
+  // kept up indefinitely by Cynosure's disarm_zone field. Triggers on a
+  // landed hit or an ordinary miss, same rule as causes_jam.
+  await pool.query(`
+    ALTER TABLE slug_templates ADD COLUMN IF NOT EXISTS causes_disarm BOOLEAN NOT NULL DEFAULT false;
+  `);
+  await pool.query(`
+    ALTER TABLE slugs ADD COLUMN IF NOT EXISTS causes_disarm BOOLEAN NOT NULL DEFAULT false;
+  `);
 
   // Bespoke one-off Velocity Abilities -- one dedicated flag each, same
   // per-slug-metadata convention as every column above. See
@@ -454,6 +658,18 @@ export async function initSchema() {
     "mirage_decoy", // Mirage Coil -- self-targeted, spawns 2 decoys that mimic the owner until hit
     "star_wall", // Regulator -- forms a 5-point damaging wall burst on impact, then the segments persist as normal walls
     "anchor_zone", // Anchorage -- creates a zone that suppresses knockback and wall-breaking for anyone/anything inside it
+    "voids_fire_clash", // Caligo -- any clash against a Fire-type slug, either side, cancels instantly with no damage to either slug
+    "clears_fire_terrain", // Caligo -- on landing, snuffs out any Fire-origin wall/bridge/hazard within HAZARD_RADIUS; otherwise leaves its own steam hazard patch instead
+    "disarm_zone", // Cynosure -- on landing, leaves a lingering electromagnetic field that keeps anyone standing in it (and for a turn after they leave) disarmed
+    "mind_scramble", // Perplexus -- replaces Psychic's baseline stun with a chosen/rolled effect: 3 debuffs fired at someone else, 2 buffs fired at yourself
+    "swaps_position", // Tesser -- on a landed hit, the shooter and the target slinger instantly trade map positions
+    "friction_shift", // Psi -- on a landed hit, chosen/rolled between rooting the target in place (harsh friction) or a personal ice-slip risk on their next Moves (slippery)
+    "crosswind_zone", // Lentus -- on landing, leaves a lingering hazard that randomly bends the course of any shot (anyone's) passing through it
+    "skips_reload", // Lentus -- self-chambers immediately on returning from cooldown once its loyalty tier is Friendly or higher, no manual Reload needed
+    "emotion_surge", // Eunoa -- self-shot stacks keenVision + enhancedReaction, other-shot stacks confused + blinded
+    "uncounterable", // Meduslug -- never offers the target a counter at all, the shot always resolves as a plain accuracy roll
+    "damage_tripled", // Meduslug -- unconditional x3 damage (unlike Emberblade's clash-only clash_tripled)
+    "static_mark", // Arcling -- tags whoever it hits as `marked`, and splashes 25% of any hit this slug lands onto every other marked combatant, global
   ];
   for (const col of bespokeFlags) {
     await pool.query(`ALTER TABLE slug_templates ADD COLUMN IF NOT EXISTS ${col} BOOLEAN NOT NULL DEFAULT false;`);
@@ -513,6 +729,15 @@ export async function initSchema() {
   // its owner's own turns. See combatRules.js's SLUG_RETURN_TURNS.
   await pool.query(`
     ALTER TABLE slugs ADD COLUMN IF NOT EXISTS cooldown_turns_left INTEGER NOT NULL DEFAULT 0;
+  `);
+
+  // Once a fired slug's return-to-hand cooldown (above) counts all the way
+  // down it's back in the shooter's hand but NOT chambered -- it sits out of
+  // the weapon until the owner spends a Reload action (AP cost = the active
+  // blaster's reload_ap_cost) to load it back in. `loaded` false + cooldown 0
+  // is the "returned, not loaded" state the combat UI marks in vertigo.
+  await pool.query(`
+    ALTER TABLE slugs ADD COLUMN IF NOT EXISTS loaded BOOLEAN NOT NULL DEFAULT true;
   `);
 
   await pool.query(`
@@ -578,6 +803,27 @@ export async function initSchema() {
     );
   `);
 
+  // Terrain-traversal flags -- whether this mecha can currently glide, cross
+  // open water, or tunnel. No mecha can do any of these by default; a flag
+  // flips true while a mod granting that mode is equipped (kept in sync by
+  // routes/mechaMods.js's syncMechaModeFlags) and false again once it is
+  // removed. `bike` mode stays a badge-only affair with no persistent flag.
+  await pool.query(`ALTER TABLE mechas ADD COLUMN IF NOT EXISTS can_glide BOOLEAN NOT NULL DEFAULT false;`);
+  await pool.query(`ALTER TABLE mechas ADD COLUMN IF NOT EXISTS can_aquatic BOOLEAN NOT NULL DEFAULT false;`);
+  await pool.query(`ALTER TABLE mechas ADD COLUMN IF NOT EXISTS can_burrow BOOLEAN NOT NULL DEFAULT false;`);
+  // Self-heal / backfill: derive the flags from whatever is equipped right
+  // now, so an existing table (or one edited straight in SQL) lines up.
+  await pool.query(`
+    UPDATE mechas m SET
+      can_glide   = EXISTS (SELECT 1 FROM mecha_mods x WHERE x.equipped_mecha_id = m.id AND x.unlocks_mode = 'glider'),
+      can_aquatic = EXISTS (SELECT 1 FROM mecha_mods x WHERE x.equipped_mecha_id = m.id AND x.unlocks_mode = 'aquatic'),
+      can_burrow  = EXISTS (SELECT 1 FROM mecha_mods x WHERE x.equipped_mecha_id = m.id AND x.unlocks_mode = 'burrow')
+    WHERE
+      m.can_glide   IS DISTINCT FROM EXISTS (SELECT 1 FROM mecha_mods x WHERE x.equipped_mecha_id = m.id AND x.unlocks_mode = 'glider')
+      OR m.can_aquatic IS DISTINCT FROM EXISTS (SELECT 1 FROM mecha_mods x WHERE x.equipped_mecha_id = m.id AND x.unlocks_mode = 'aquatic')
+      OR m.can_burrow  IS DISTINCT FROM EXISTS (SELECT 1 FROM mecha_mods x WHERE x.equipped_mecha_id = m.id AND x.unlocks_mode = 'burrow');
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS mecha_mod_templates (
       id SERIAL PRIMARY KEY,
@@ -609,8 +855,15 @@ export async function initSchema() {
     );
   `);
 
+  // A speed multiplier applied to the mecha's speed after every flat bonus is
+  // summed (see effectiveStats in mechaData.js). Default 1 = no effect; the
+  // Bike Conversion Kit is the only seeded mod that sets it (to 2).
+  await pool.query(`ALTER TABLE mecha_mod_templates ADD COLUMN IF NOT EXISTS speed_multiplier REAL NOT NULL DEFAULT 1;`);
+  await pool.query(`ALTER TABLE mecha_mods ADD COLUMN IF NOT EXISTS speed_multiplier REAL NOT NULL DEFAULT 1;`);
+
   await seedDefaultMechaTemplates();
   await seedDefaultMechaModTemplates();
+  await refreshSeededMechaMods();
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS messages (
@@ -774,6 +1027,19 @@ export async function initSchema() {
       max_ap = GREATEST(8, 6 + 3 * dex_modifier),
       max_grit = GREATEST(1, 20 + con_modifier * 5 + dex_modifier);
   `);
+
+  // The NPCs tab is now "The Chronicle" -- a codex of everyone the party has
+  // met, not just a combat-prep list. `profile` holds the biographical lines
+  // (age, faction, relationship, status, bio paragraphs, connections), each
+  // with its own `shown` flag so the DM reveals a card one line at a time
+  // (see routes/npcTemplates.js's toPlayerTemplate). `dm_notes` is a private
+  // scratchpad that never reaches a player. `combat_ready` marks whether the
+  // stat block applies at all -- a shopkeeper card has it off and never shows
+  // up in Combat's NPC picker. Existing rows already carry stat blocks, so it
+  // defaults true.
+  await pool.query(`ALTER TABLE npc_templates ADD COLUMN IF NOT EXISTS profile JSONB NOT NULL DEFAULT '{}';`);
+  await pool.query(`ALTER TABLE npc_templates ADD COLUMN IF NOT EXISTS dm_notes TEXT;`);
+  await pool.query(`ALTER TABLE npc_templates ADD COLUMN IF NOT EXISTS combat_ready BOOLEAN NOT NULL DEFAULT true;`);
 
   await pool.query(`
     ALTER TABLE combatants ADD COLUMN IF NOT EXISTS ref_npc_template_id INTEGER REFERENCES npc_templates(id) ON DELETE SET NULL;

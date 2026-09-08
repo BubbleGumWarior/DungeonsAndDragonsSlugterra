@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { MinusIcon, PlusIcon, EngineIcon } from "@phosphor-icons/react";
-import { MOD_BONUS_MIN, MOD_BONUS_MAX, MODES, defaultMechaModFields } from "./mechaData.js";
+import { MOD_BONUS_MIN, MOD_BONUS_MAX, SPEED_MULT_MIN, SPEED_MULT_MAX, MODES, defaultMechaModFields } from "./mechaData.js";
 import "./SlugForm.css";
 
 function Stepper({ label, value, min, max, onChange }) {
@@ -72,6 +72,19 @@ export default function MechaModForm({ mode, initialValues, players, onSubmit, o
         <Stepper label="Handling Bonus" value={fields.handlingBonus} min={MOD_BONUS_MIN} max={MOD_BONUS_MAX} onChange={(v) => update("handlingBonus", v)} />
         <Stepper label="Armor Bonus" value={fields.armorBonus} min={MOD_BONUS_MIN} max={MOD_BONUS_MAX} onChange={(v) => update("armorBonus", v)} />
         <Stepper label="Ramming Bonus" value={fields.rammingBonus} min={MOD_BONUS_MIN} max={MOD_BONUS_MAX} onChange={(v) => update("rammingBonus", v)} />
+      </div>
+
+      <div className="slug-form-field">
+        <label htmlFor="mecha-mod-form-speed-mult">Speed Multiplier (applied after every flat bonus)</label>
+        <input
+          id="mecha-mod-form-speed-mult"
+          type="number"
+          step="0.25"
+          min={SPEED_MULT_MIN}
+          max={SPEED_MULT_MAX}
+          value={fields.speedMultiplier ?? 1}
+          onChange={(e) => update("speedMultiplier", Number(e.target.value) || 1)}
+        />
       </div>
 
       <div className="slug-form-field">

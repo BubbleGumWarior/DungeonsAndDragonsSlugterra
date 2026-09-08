@@ -502,14 +502,34 @@ function statusEffectBadges(statusEffects) {
     badges.push({ key: "poison", label: `Poisoned ×${statusEffects.poison.stacks}` });
   }
   if (statusEffects.snared) badges.push({ key: "snare", label: "Snared" });
+  if (statusEffects.slippery?.turnsLeft > 0) {
+    badges.push({ key: "slippery", label: "Slippery -- risks their turn ending on any Move" });
+  }
   if (statusEffects.stunned) badges.push({ key: "stun", label: "Stunned" });
   if (statusEffects.blinded) badges.push({ key: "blind", label: "Blinded" });
   if (statusEffects.confused) badges.push({ key: "confused", label: "Confused -- shots may fire wildly off target" });
+  if (statusEffects.disarmed?.turnsLeft > 0) badges.push({ key: "disarm", label: "Disarmed -- can't Shoot Slug" });
+  if (statusEffects.reversedDirection?.turnsLeft > 0) {
+    badges.push({ key: "reverse", label: "Reversed -- Move goes the exact opposite way" });
+  }
+  if (statusEffects.slowedReaction?.turnsLeft > 0) {
+    badges.push({ key: "slow-reaction", label: "Slowed reaction -- shorter counter window" });
+  }
+  if (statusEffects.enhancedReaction?.turnsLeft > 0) {
+    badges.push({ key: "enhanced-reaction", label: "Enhanced reaction -- longer counter window" });
+  }
+  if (statusEffects.keenVision) badges.push({ key: "keen-vision", label: "Keen vision -- next attack has advantage" });
   return badges;
 }
 
-function Token({ combatant, isActive, isSelected, isActing, draggable, pos, onMouseDown, dimmed }) {
-  const r = tokenRadius(combatant.kind);
+function Token({ combatant, isActive, isSelected, isActing, draggable, pos, onMouseDown, dimmed, mountTarget }) {
+  // A mounted rider rides small, tucked onto the upper-right of the mecha's
+  // token so the two read as one entity (the server keeps their positions in
+  // lockstep -- see /actions/move).
+  const mountedRider = combatant.kind === "character" && combatant.mountedOn != null;
+  const r = mountedRider ? 11 : tokenRadius(combatant.kind);
+  const offX = mountedRider ? 15 : 0;
+  const offY = mountedRider ? -15 : 0;
   const badges = statusEffectBadges(combatant.statusEffects);
   const fraction =
     combatant.kind === "mecha"
@@ -525,12 +545,13 @@ function Token({ combatant, isActive, isSelected, isActing, draggable, pos, onMo
   return (
     <g
       className={`combat-token combat-token--${combatant.kind} ${downed ? "combat-token--down" : ""} ${isActing ? "combat-token--acting" : ""} ${draggable ? "combat-token--draggable" : ""} ${dimmed ? "combat-token--invisible" : ""}`}
-      transform={`translate(${pos.x}, ${pos.y})`}
+      transform={`translate(${pos.x + offX}, ${pos.y + offY})`}
       onMouseDown={(e) => {
         e.stopPropagation();
         onMouseDown?.(combatant, e);
       }}
     >
+      {mountTarget && <circle className="combat-token-mount-target" r={r + 10} />}
       {isActive && <circle className="combat-token-active-ring" r={r + 7} />}
       {isSelected && <circle className="combat-token-selected-ring" r={r + 4} />}
       <circle className="combat-token-grit-ring" r={r + 3} style={{ stroke: gritColor(fraction) }} />
@@ -586,6 +607,7 @@ export default function CombatMap({
   activeCombatantId,
   actingCombatantId,
   rangeRing,
+  mountRing,
   isDraggable,
   showDragApCost = false,
   estimateApCost,
@@ -1070,6 +1092,10 @@ export default function CombatMap({
           <circle className="combat-map-range-ring" cx={rangeRing.x} cy={rangeRing.y} r={rangeRing.r} />
         )}
 
+        {mountRing && (
+          <circle className="combat-map-mount-ring" cx={mountRing.x} cy={mountRing.y} r={mountRing.r} />
+        )}
+
         {encounter.walls.map((w) => {
           const isSlugWall = w.source === "slug";
           const isGrowing = growingWallIds.has(w.id);
@@ -1115,18 +1141,34 @@ export default function CombatMap({
             if (!c.statusEffects?.invisible) return true;
             return isDM || (c.kind === "character" && c.refUserId === viewerUserId);
           })
-          .map((c) => (
-            <Token
-              key={c.id}
-              combatant={c}
-              pos={drag && drag.combatant.id === c.id ? { x: drag.x, y: drag.y } : { x: c.x, y: c.y }}
-              isActive={c.id === activeCombatantId}
-              isActing={c.id === actingCombatantId}
-              draggable={!dragLocked && Boolean(isDraggable?.(c))}
-              onMouseDown={handleTokenMouseDown}
-              dimmed={Boolean(c.statusEffects?.invisible)}
-            />
-          ))}
+          // Mounted riders paint last so they sit on top of their mecha.
+          .sort((a, b) => (a.mountedOn != null ? 1 : 0) - (b.mountedOn != null ? 1 : 0))
+          .map((c) => {
+            // Follow a drag: the dragged token itself, and -- when a mounted
+            // rider is being dragged -- the mecha they're riding, so the pair
+            // moves as one.
+            const followsDrag =
+              drag && (drag.combatant.id === c.id || (drag.combatant.mountedOn != null && drag.combatant.mountedOn === c.id));
+            const pos = followsDrag ? { x: drag.x, y: drag.y } : { x: c.x, y: c.y };
+            const inMountRange =
+              mountRing &&
+              c.kind === "mecha" &&
+              !c.disabled &&
+              Math.hypot(c.x - mountRing.x, c.y - mountRing.y) <= mountRing.r;
+            return (
+              <Token
+                key={c.id}
+                combatant={c}
+                pos={pos}
+                isActive={c.id === activeCombatantId}
+                isActing={c.id === actingCombatantId}
+                draggable={!dragLocked && Boolean(isDraggable?.(c))}
+                onMouseDown={handleTokenMouseDown}
+                dimmed={Boolean(c.statusEffects?.invisible)}
+                mountTarget={Boolean(inMountRange)}
+              />
+            );
+          })}
 
         {activeShots.map((fx) => (
           <ShotEffect key={fx.id} fx={fx} onDone={() => removeShot(fx.id)} />

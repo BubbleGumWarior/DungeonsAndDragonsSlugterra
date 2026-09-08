@@ -31,6 +31,16 @@ export default function MechaModCard({ mod, mechas = [], editable = false, dragg
           ? (e) => {
               e.dataTransfer.setData("text/plain", String(mod.id));
               e.dataTransfer.effectAllowed = "move";
+              // The mecha-beasts to drop onto sit above this list; a mod
+              // picked up near the bottom is a long drag back up, and the
+              // browser's own drag-to-edge auto-scroll is slow and easy to
+              // overshoot. Jump straight to the top so a mecha is already in
+              // view. Deferred a tick because scrolling synchronously inside
+              // dragstart yanks this element out from under the drag ghost
+              // mid-snapshot and aborts the drag (same fix as PlayerSlugs).
+              if (mechas.length > 0) {
+                setTimeout(() => window.scrollTo({ top: 0, behavior: "auto" }), 0);
+              }
             }
           : undefined
       }
@@ -44,6 +54,9 @@ export default function MechaModCard({ mod, mechas = [], editable = false, dragg
           <h3 className="mod-card-name">{mod.name}</h3>
           <div className="mod-card-bonuses">
             {mod.speedBonus !== 0 && <span className="mod-card-bonus">Speed {formatSigned(mod.speedBonus)}</span>}
+            {mod.speedMultiplier != null && mod.speedMultiplier !== 1 && (
+              <span className="mod-card-bonus">Speed &times;{mod.speedMultiplier}</span>
+            )}
             {mod.handlingBonus !== 0 && <span className="mod-card-bonus">Handling {formatSigned(mod.handlingBonus)}</span>}
             {mod.armorBonus !== 0 && <span className="mod-card-bonus">Armor {formatSigned(mod.armorBonus)}</span>}
             {mod.rammingBonus !== 0 && <span className="mod-card-bonus">Ramming {formatSigned(mod.rammingBonus)}</span>}

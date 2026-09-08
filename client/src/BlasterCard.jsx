@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { PlusIcon, TargetIcon, WrenchIcon } from "@phosphor-icons/react";
-import { effectiveAccuracy, effectiveReloadApCost, formatSigned, qualityInfo } from "./itemData.js";
+import { effectiveAccuracy, effectiveReloadApCost, formatSigned, qualityColor, qualityInfo } from "./itemData.js";
 import "./BlasterCard.css";
 
 const EQUIP_SLOT_LABELS = ["Primary", "Secondary"];
@@ -29,6 +29,7 @@ export default function BlasterCard({
   return (
     <div
       className={`blaster-card blaster-card--${size} ${onClick ? "blaster-card--clickable" : ""} ${draggableEquip ? "blaster-card--draggable" : ""}`}
+      style={{ "--quality-color": qualityColor(blaster.quality) }}
       onClick={onClick}
       draggable={draggableEquip}
       onDragStart={draggableEquip ? (e) => { e.dataTransfer.setData("text/plain", String(blaster.id)); e.dataTransfer.effectAllowed = "move"; onDragStart?.(blaster); } : undefined}

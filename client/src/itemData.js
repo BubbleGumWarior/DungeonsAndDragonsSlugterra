@@ -14,15 +14,19 @@ export const BASE_TYPES = {
 export const BASE_TYPE_KEYS = Object.keys(BASE_TYPES);
 
 export const QUALITY_TIERS = [
-  { tier: 0, label: "Crude", accuracyBonus: 0, failRate: 25 },
-  { tier: 1, label: "Standard", accuracyBonus: 1, failRate: 15 },
-  { tier: 2, label: "Fine", accuracyBonus: 2, failRate: 8 },
-  { tier: 3, label: "Masterwork", accuracyBonus: 3, failRate: 3 },
-  { tier: 4, label: "Legendary", accuracyBonus: 4, failRate: 0 },
+  { tier: 0, label: "Crude", accuracyBonus: 0, failRate: 25, color: "#dd7a4a" },
+  { tier: 1, label: "Standard", accuracyBonus: 1, failRate: 15, color: "#c9d1d9" },
+  { tier: 2, label: "Fine", accuracyBonus: 2, failRate: 8, color: "#7fd99a" },
+  { tier: 3, label: "Masterwork", accuracyBonus: 3, failRate: 3, color: "#8fb8f0" },
+  { tier: 4, label: "Legendary", accuracyBonus: 4, failRate: 0, color: "#e6cd93" },
 ];
 
 export const QUALITY_MIN = 0;
 export const QUALITY_MAX = QUALITY_TIERS.length - 1;
+
+export function qualityColor(tier) {
+  return (QUALITY_TIERS[tier] ?? QUALITY_TIERS[0]).color;
+}
 
 export const STAT_MIN = -10;
 export const STAT_MAX = 20;

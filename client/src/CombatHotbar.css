@@ -15,6 +15,17 @@
   gap: 10px;
 }
 
+.combat-hotbar-ap-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+}
+
+.combat-hotbar-ap-group .combat-hotbar-ap-label {
+  min-width: 62px;
+}
+
 .combat-hotbar-ap-label {
   font-family: var(--font-display);
   font-weight: 700;

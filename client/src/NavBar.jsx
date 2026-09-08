@@ -11,7 +11,7 @@ import {
   CircleDashedIcon,
   PawPrintIcon,
   SwordIcon,
-  MaskHappyIcon,
+  BookOpenTextIcon,
   GearSixIcon,
   ListIcon,
   XIcon,
@@ -156,9 +156,9 @@ export default function NavBar() {
                 <PawPrintIcon weight="bold" />
                 <span className="nav-label">Mecha-Beasts</span>
               </NavLink>
-              <NavLink className={linkClass} to="/npcs">
-                <MaskHappyIcon weight="bold" />
-                <span className="nav-label">NPCs</span>
+              <NavLink className={linkClass} to="/chronicle">
+                <BookOpenTextIcon weight="bold" />
+                <span className="nav-label">Chronicle</span>
               </NavLink>
               <NavLink className={linkClass} to="/combat">
                 <SwordIcon weight="bold" />

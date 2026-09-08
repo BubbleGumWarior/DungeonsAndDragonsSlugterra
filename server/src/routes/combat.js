@@ -11,12 +11,15 @@ import { toClientBlaster } from "./blasters.js";
 import { recordSlugpediaEntry } from "../slugpediaStore.js";
 import {
   MOVE_SPEED_PER_AP,
-  MECHA_SPEED_UNIT,
+  MECHA_SPEED_PER_AP,
   MOUNT_RANGE,
   MOVE_AP_COST,
-  HUNKER_AP_COST,
   MOUNT_AP_COST,
   RAM_AP_COST,
+  RAM_DAMAGE_MULTIPLIER,
+  RAM_CHARACTER_MAX_GRIT_FRACTION,
+  splitRiderDamage,
+  ELECTRIC_MECHA_DAMAGE_MULTIPLIER,
   SWITCH_WEAPON_AP_COST,
   PRIMARY_WEAPON_SLOT,
   SECONDARY_WEAPON_SLOT,
@@ -86,6 +89,24 @@ import {
   starSegments,
   ANCHOR_RADIUS,
   ANCHOR_DURATION_ROUNDS,
+  DISARM_ZONE_RADIUS,
+  DISARM_ZONE_DURATION_ROUNDS,
+  DISARM_DURATION_TURNS,
+  MIND_SCRAMBLE_ENEMY_EFFECTS,
+  MIND_SCRAMBLE_SELF_EFFECTS,
+  MIND_SCRAMBLE_EFFECT_LABELS,
+  MIND_SCRAMBLE_DURATION_TURNS,
+  FRICTION_EFFECTS,
+  FRICTION_EFFECT_LABELS,
+  SLIPPERY_DURATION_TURNS,
+  CROSSWIND_ZONE_RADIUS,
+  CROSSWIND_ZONE_DURATION_ROUNDS,
+  LOYALTY_FRIENDLY_TIER,
+  MARK_SPLASH_FRACTION,
+  rollCrosswindOffset,
+  rotateDeflection,
+  reactionWindowFactor,
+  reverseMoveDestination,
   isInsideAnyZone,
   DECOY_COUNT,
   randomDecoyOffset,
@@ -131,6 +152,7 @@ function toClientCombatant(row) {
     initiative: row.initiative,
     mountedOn: row.mounted_on,
     damagedThisTurn: row.damaged_this_turn,
+    rammedThisRound: row.rammed_this_round,
     statusEffects: row.status_effects,
     data: row.data,
   };
@@ -208,6 +230,14 @@ async function pushCombatLog(encounterId, text) {
 async function getCombatant(id) {
   const { rows } = await pool.query("SELECT * FROM combatants WHERE id = $1", [id]);
   return rows[0] || null;
+}
+
+// A mecha with someone riding it shares that rider's turn -- it never takes
+// its own (see advanceTurn's skip loop), and it also can't be moved
+// independently (see /actions/move).
+async function mechaRiders(mechaId) {
+  const { rows } = await pool.query("SELECT * FROM combatants WHERE mounted_on = $1", [mechaId]);
+  return rows;
 }
 
 async function updateCombatant(id, fields) {
@@ -312,11 +342,11 @@ router.post("/encounters/:id/end", requireDungeonMaster, async (req, res) => {
     // against, so every slug that belonged to a combatant here comes back
     // fresh for next time instead of carrying a stale cooldown into it.
     const { rows: clearedSlugs } = await pool.query(
-      `UPDATE slugs s SET cooldown_turns_left = 0
+      `UPDATE slugs s SET cooldown_turns_left = 0, loaded = true
        FROM combatants c
        WHERE c.encounter_id = $1
          AND (s.user_id = c.ref_user_id OR s.owner_combatant_id = c.id)
-         AND s.cooldown_turns_left > 0
+         AND (s.cooldown_turns_left > 0 OR s.loaded = false)
        RETURNING s.*`,
       [id]
     );
@@ -503,7 +533,10 @@ router.post("/encounters/:id/combatants", requireDungeonMaster, async (req, res)
       fields.max_ap = 2;
       fields.max_structure = maxStructure;
       fields.current_structure = maxStructure;
-      fields.data = { dexMod: 0, speed: mecha.speed, handling: mecha.handling, armor: mecha.armor, rammingPower: mecha.ramming_power, tier: mecha.tier };
+      // ownerUserId: the player who owns this mecha on the Mechas page. They
+      // (and only they, besides the DM) may move it on its own turn while
+      // it's unmounted -- see /actions/move and isActingCombatantAuthorized.
+      fields.data = { dexMod: 0, speed: mecha.speed, handling: mecha.handling, armor: mecha.armor, rammingPower: mecha.ramming_power, tier: mecha.tier, ownerUserId: mecha.user_id ?? null };
     } else {
       // npc: DM supplies a lightweight ad-hoc stat block. AP and Grit are
       // derived from the DEX/CON modifiers on the same curves players use --
@@ -699,8 +732,11 @@ router.post("/encounters/:id/npc-combatants", requireDungeonMaster, async (req, 
            causes_blind, causes_snare, causes_shock, causes_jam,
            pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion,
            trail_wall, clash_tripled, cone_blast, spawns_pods, mirage_decoy, star_wall, anchor_zone,
+           voids_fire_clash, clears_fire_terrain, causes_disarm, disarm_zone, mind_scramble, swaps_position,
+           friction_shift, crosswind_zone, skips_reload,
+           emotion_surge, uncounterable, damage_tripled, static_mark,
            equipped_blaster_id, magazine_slot)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53)
          RETURNING *`,
         [
           st.id,
@@ -741,6 +777,19 @@ router.post("/encounters/:id/npc-combatants", requireDungeonMaster, async (req, 
           st.mirage_decoy,
           st.star_wall,
           st.anchor_zone,
+          st.voids_fire_clash,
+          st.clears_fire_terrain,
+          st.causes_disarm,
+          st.disarm_zone,
+          st.mind_scramble,
+          st.swaps_position,
+          st.friction_shift,
+          st.crosswind_zone,
+          st.skips_reload,
+          st.emotion_surge,
+          st.uncounterable,
+          st.damage_tripled,
+          st.static_mark,
           equippedBlasterId,
           magazineSlot,
         ]
@@ -769,7 +818,7 @@ router.post("/encounters/:id/npc-combatants", requireDungeonMaster, async (req, 
             combatant.x,
             combatant.y,
             maxStructure,
-            JSON.stringify({ dexMod: 0, speed: mt.speed, handling: mt.handling, armor: mt.armor, rammingPower: mt.ramming_power, tier: mt.tier }),
+            JSON.stringify({ dexMod: 0, speed: mt.speed, handling: mt.handling, armor: mt.armor, rammingPower: mt.ramming_power, tier: mt.tier, ownerUserId: null }),
           ]
         );
         await pool.query("UPDATE combatants SET mounted_on = $1 WHERE id = $2", [mechaResult.rows[0].id, combatant.id]);
@@ -843,7 +892,11 @@ async function advanceTurn(encounterId) {
     nextIndex = (nextIndex + 1) % turnOrder.length;
     if (nextIndex === 0) wrapped = true;
     const combatant = await getCombatant(turnOrder[nextIndex]);
-    if (combatant && !combatant.unconscious && !combatant.disabled) break;
+    if (!combatant || combatant.unconscious || combatant.disabled) continue;
+    // A ridden mecha never takes its own turn -- it acts on its rider's turn,
+    // sharing that one slot (see /actions/move and /actions/ram).
+    if (combatant.kind === "mecha" && (await mechaRiders(combatant.id)).length > 0) continue;
+    break;
   }
   if (wrapped) round += 1;
 
@@ -877,7 +930,11 @@ async function advanceTurn(encounterId) {
     // burn/poison also deal their damage here, before this turn's AP is even
     // usable. A shocked or feared combatant still takes their DoT/cooldown
     // tick -- neither skips anything except their own actions.
-    const { damage: dotDamage, statusEffects: nextStatus, notes: dotNotes } = tickStatusEffects(statusAfterStun);
+    // Cynosure's disarm field is checked here too, against wherever this
+    // combatant is actually standing right now -- see insideDisarmZone's
+    // doc on tickStatusEffects.
+    const insideDisarmZone = isInsideAnyZone(encounter.zones, { x: nextCombatant.x, y: nextCombatant.y }, "disarm");
+    const { damage: dotDamage, statusEffects: nextStatus, notes: dotNotes } = tickStatusEffects(statusAfterStun, insideDisarmZone);
 
     await tickSlugCooldowns(nextCombatant);
 
@@ -904,6 +961,16 @@ async function advanceTurn(encounterId) {
 
     const updatedCombatant = await updateCombatant(nextCombatant.id, fields);
 
+    // A ridden mecha is skipped in the turn loop above, so its AP would never
+    // refill on its own. Top it up here, on its rider's turn -- the two share
+    // this one slot, and the mecha's pool is what Move/Ram spend while mounted.
+    if (nextCombatant.mounted_on != null) {
+      const riddenMecha = await getCombatant(nextCombatant.mounted_on);
+      if (riddenMecha && !riddenMecha.disabled) {
+        await updateCombatant(riddenMecha.id, { current_ap: riddenMecha.max_ap });
+      }
+    }
+
     if (dotDamage > 0 && hasGrit) {
       await syncCharacterFromCombatant(updatedCombatant);
       await pushCombatLog(encounterId, `${nextCombatant.name} takes ${dotDamage} damage from ${dotNotes.join(" + ")}.`);
@@ -914,9 +981,10 @@ async function advanceTurn(encounterId) {
   }
   if (wrapped) {
     await pool.query("UPDATE combatants SET rammed_this_round = false WHERE encounter_id = $1", [encounterId]);
-    // Anchorage's zones are a battlefield fixture, not a status on a
-    // person -- they tick down once per full round, not per combatant turn.
-    await tickAnchorZones(encounterId);
+    // Zones (Anchorage's, Cynosure's) are battlefield fixtures, not a status
+    // on a person -- they tick down once per full round, not per combatant
+    // turn.
+    await tickZones(encounterId);
   }
 
   await pool.query("UPDATE encounters SET active_turn_index = $1, round = $2 WHERE id = $3", [nextIndex, round, encounterId]);
@@ -944,7 +1012,10 @@ router.post("/actions/end-turn", async (req, res) => {
   try {
     const combatant = await getCombatant(combatantId);
     if (!combatant) return res.status(404).json({ error: "Combatant not found." });
-    if (req.user.role !== "Dungeon Master" && combatant.ref_user_id !== req.user.sub) {
+    const ownsCombatant =
+      combatant.ref_user_id === req.user.sub ||
+      (combatant.kind === "mecha" && combatant.data?.ownerUserId === req.user.sub);
+    if (req.user.role !== "Dungeon Master" && !ownsCombatant) {
       return res.status(403).json({ error: "That isn't your combatant." });
     }
     // A player may only end their own combatant's turn, and only while it's
@@ -968,6 +1039,9 @@ router.post("/actions/end-turn", async (req, res) => {
 function isActingCombatantAuthorized(req, combatant, encounter) {
   if (req.user.role === "Dungeon Master") return true;
   if (combatant.kind === "character" && combatant.ref_user_id === req.user.sub) return true;
+  // A player may drive their own mecha (moving it on its turn, or riding it).
+  // Non-movement actions still reject mechas on their own `kind` checks.
+  if (combatant.kind === "mecha" && combatant.data?.ownerUserId === req.user.sub) return true;
   return false;
 }
 
@@ -980,7 +1054,7 @@ function requireOwnTurn(encounter, combatant) {
 // ---------------------------------------------------------------------------
 
 router.post("/actions/move", async (req, res) => {
-  const { combatantId, x, y } = req.body || {};
+  let { combatantId, x, y } = req.body || {};
   if (!Number.isFinite(x) || !Number.isFinite(y)) {
     return res.status(400).json({ error: "A destination is required." });
   }
@@ -999,12 +1073,63 @@ router.post("/actions/move", async (req, res) => {
     if (combatant.unconscious || combatant.disabled) {
       return res.status(400).json({ error: "This combatant can't move." });
     }
+
+    // --- Mecha movement (a lone mecha on its own turn, or a mounted rider
+    // driving the mecha they're on) -------------------------------------------
+    // The mecha is the thing that actually moves: it covers a character's
+    // walking distance times its own `speed`, spends the mecha's AP, and drags
+    // every rider along to the same spot. A mounted rider's foot speed and
+    // personal status effects (snare, reversed, ice) don't apply -- they're
+    // along for the ride.
+    const vehicle =
+      combatant.kind === "mecha"
+        ? combatant
+        : combatant.mounted_on != null
+          ? await getCombatant(combatant.mounted_on)
+          : null;
+    if (vehicle) {
+      if (vehicle.disabled) return res.status(400).json({ error: "That mecha is disabled." });
+      const speedPerAp = MECHA_SPEED_PER_AP(vehicle.data?.speed);
+      const dist = distance({ x: vehicle.x, y: vehicle.y }, { x, y });
+      const apNeeded = Math.max(1, Math.ceil(dist / speedPerAp));
+      if ((vehicle.current_ap ?? 0) < apNeeded) {
+        return res.status(400).json({ error: "Not enough mecha AP to move that far." });
+      }
+      if (firstWallHit({ x: vehicle.x, y: vehicle.y }, { x, y }, encounter.walls)) {
+        return res.status(400).json({ error: "A wall blocks that path." });
+      }
+      await updateCombatant(vehicle.id, { x, y, current_ap: vehicle.current_ap - apNeeded });
+      for (const rider of await mechaRiders(vehicle.id)) {
+        await updateCombatant(rider.id, { x, y });
+      }
+      const encounterOut = await broadcastEncounter(combatant.encounter_id);
+      await pushCombatLog(combatant.encounter_id, `${vehicle.name} repositions.`);
+      return res.json({ encounter: encounterOut });
+    }
+
     const statusEffects = combatant.status_effects || {};
     if (statusEffects.snared?.turnsLeft > 0) {
       return res.status(400).json({ error: "This combatant is snared and can't move." });
     }
+    // Perplexus's reversedDirection: whatever destination was actually
+    // requested gets mirrored through the combatant's current position --
+    // same distance, exact opposite direction -- before anything else about
+    // this Move (AP cost, wall-blocking, hazards) is worked out. Applies to
+    // every Move for as long as the status is up, not just a one-shot
+    // consumption (same as snared blocking every Move above, not just one).
+    if (statusEffects.reversedDirection?.turnsLeft > 0) {
+      const reversed = clampToMapBounds(
+        reverseMoveDestination({ x: combatant.x, y: combatant.y }, { x, y }),
+        encounter.map_width,
+        encounter.map_height
+      );
+      x = reversed.x;
+      y = reversed.y;
+    }
 
-    const speedPerAp = combatant.kind === "mecha" ? (combatant.data?.speed || 1) * MECHA_SPEED_UNIT : MOVE_SPEED_PER_AP;
+    // Only characters/NPCs on foot reach here -- a mecha or a mounted rider
+    // returned from the vehicle branch above.
+    const speedPerAp = MOVE_SPEED_PER_AP;
     const dist = distance({ x: combatant.x, y: combatant.y }, { x, y });
     const apNeeded = Math.max(1, Math.ceil(dist / speedPerAp));
 
@@ -1027,6 +1152,11 @@ router.post("/actions/move", async (req, res) => {
     if (combatant.kind !== "mecha") {
       const iceHazard = findHazardAt({ x, y }, encounter.hazards, "ice");
       if (iceHazard && Math.random() < ICE_SLIP_CHANCE) slipped = true;
+
+      // Psi's slippery status: same ICE_SLIP_CHANCE roll as an ice patch,
+      // just carried on the combatant themselves instead of requiring them
+      // to be standing on a specific tile.
+      if (statusEffects.slippery?.turnsLeft > 0 && Math.random() < ICE_SLIP_CHANCE) slipped = true;
 
       const dmgHazard = findHazardAt({ x, y }, encounter.hazards, "damage");
       if (dmgHazard) {
@@ -1147,25 +1277,112 @@ router.post("/actions/hunker-down", async (req, res) => {
     if (combatant.damaged_this_turn) {
       return res.status(400).json({ error: "Can't hunker down the same round you were hit." });
     }
-    if (combatant.current_ap < HUNKER_AP_COST) {
-      return res.status(400).json({ error: "Not enough AP." });
+    if (combatant.current_ap < 1) {
+      return res.status(400).json({ error: "No AP left to hunker down." });
     }
 
+    // Sinks every remaining AP into the heal -- one 1d4 + CON roll per AP.
+    const apSpent = combatant.current_ap;
     const conMod = combatant.data?.conMod ?? 0;
-    const heal = hunkerHeal(conMod);
+    const heal = hunkerHeal(conMod, apSpent);
     const newGrit = Math.min(combatant.max_grit, combatant.current_grit + heal);
 
     const updated = await updateCombatant(combatant.id, {
       current_grit: newGrit,
-      current_ap: combatant.current_ap - HUNKER_AP_COST,
+      current_ap: 0,
     });
     await syncCharacterFromCombatant(updated);
     const encounterOut = await broadcastEncounter(combatant.encounter_id);
-    await pushCombatLog(combatant.encounter_id, `${combatant.name} hunkers down and recovers ${heal} Grit.`);
+    await pushCombatLog(
+      combatant.encounter_id,
+      `${combatant.name} hunkers down, spending ${apSpent} AP to recover ${heal} Grit.`
+    );
     res.json({ encounter: encounterOut, healed: heal });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not hunker down." });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Reload
+// ---------------------------------------------------------------------------
+
+// A slug that's finished its return-to-hand cooldown (see SLUG_RETURN_TURNS)
+// is back with its owner but sitting out of the weapon -- `loaded` false.
+// Reload chambers every such slug in the currently active weapon at once,
+// for a flat AP cost equal to that blaster's own reload_ap_cost.
+router.post("/actions/reload", async (req, res) => {
+  const { combatantId } = req.body || {};
+  try {
+    const combatant = await getCombatant(combatantId);
+    if (!combatant) return res.status(404).json({ error: "Combatant not found." });
+    const encounterRow = await pool.query("SELECT * FROM encounters WHERE id = $1", [combatant.encounter_id]);
+    const encounter = encounterRow.rows[0];
+    if (!isActingCombatantAuthorized(req, combatant, encounter)) {
+      return res.status(403).json({ error: "That isn't your combatant." });
+    }
+    if (req.user.role !== "Dungeon Master" && !requireOwnTurn(encounter, combatant)) {
+      return res.status(400).json({ error: "It isn't your turn." });
+    }
+    if (combatant.unconscious || combatant.disabled) {
+      return res.status(400).json({ error: "This combatant can't act." });
+    }
+    if (combatant.kind !== "character" && combatant.kind !== "npc") {
+      return res.status(400).json({ error: "This combatant doesn't carry slugs." });
+    }
+
+    // The blaster in hand right now: a character's active slot, an NPC's
+    // single loadout.
+    let blaster;
+    if (combatant.kind === "character") {
+      const activeSlot = combatant.data?.activeWeaponSlot ?? PRIMARY_WEAPON_SLOT;
+      ({ rows: [blaster] } = await pool.query(
+        "SELECT * FROM blasters WHERE user_id = $1 AND equip_slot = $2",
+        [combatant.ref_user_id, activeSlot]
+      ));
+    } else {
+      ({ rows: [blaster] } = await pool.query(
+        "SELECT * FROM blasters WHERE owner_combatant_id = $1 AND equip_slot IS NOT NULL ORDER BY equip_slot ASC LIMIT 1",
+        [combatant.id]
+      ));
+    }
+    if (!blaster) return res.status(400).json({ error: "No weapon equipped to reload." });
+
+    const { rows: toReload } = await pool.query(
+      `SELECT * FROM slugs
+       WHERE equipped_blaster_id = $1 AND loaded = false AND cooldown_turns_left = 0`,
+      [blaster.id]
+    );
+    if (toReload.length === 0) {
+      return res.status(400).json({ error: "No returned slugs waiting to be reloaded." });
+    }
+
+    const apCost = Math.max(1, blaster.reload_ap_cost || 1);
+    if (combatant.current_ap < apCost) {
+      return res.status(400).json({ error: "Not enough AP to reload." });
+    }
+
+    await updateCombatant(combatant.id, { current_ap: combatant.current_ap - apCost });
+    const { rows: reloaded } = await pool.query(
+      `UPDATE slugs SET loaded = true
+       WHERE equipped_blaster_id = $1 AND loaded = false AND cooldown_turns_left = 0
+       RETURNING *`,
+      [blaster.id]
+    );
+    for (const slugRow of reloaded) {
+      broadcastAll({ type: "slug-updated", userId: slugRow.user_id, slug: toClientSlug(slugRow) });
+    }
+
+    const encounterOut = await broadcastEncounter(combatant.encounter_id);
+    await pushCombatLog(
+      combatant.encounter_id,
+      `${combatant.name} reloads ${reloaded.length} slug${reloaded.length === 1 ? "" : "s"} into ${blaster.name}.`
+    );
+    res.json({ encounter: encounterOut, reloaded: reloaded.length });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not reload." });
   }
 });
 
@@ -1195,7 +1412,9 @@ async function ejectSlug(slugId) {
 
 // Called exactly when a slug actually flies -- the shooter's own shot, or a
 // defender's chosen counter -- so this is also the one place that starts its
-// return-to-hand cooldown (see SLUG_RETURN_TURNS).
+// return-to-hand cooldown (see SLUG_RETURN_TURNS) and knocks it out of the
+// weapon: once the cooldown expires the slug is back in hand but `loaded`
+// false, needing a Reload action to chamber it again (see /actions/reload).
 async function spendEnergyPip(slugId) {
   if (!slugId) return;
   const { rows } = await pool.query("SELECT * FROM slugs WHERE id = $1", [slugId]);
@@ -1205,7 +1424,17 @@ async function spendEnergyPip(slugId) {
   const idx = pips.findIndex((p) => p);
   if (idx === -1) return;
   const next = pips.map((p, i) => (i === idx ? false : p));
-  await pool.query("UPDATE slugs SET cooldown_turns_left = $1 WHERE id = $2", [SLUG_RETURN_TURNS, slugId]);
+  // Lentus: self-chambers the instant it's back in hand -- never actually
+  // goes to `loaded: false` in the first place once its loyalty tier is
+  // Friendly or higher, so there's nothing to Reload and no "needs reload"
+  // UI state to show either. Cooldown itself (SLUG_RETURN_TURNS) is
+  // unaffected -- only the separate reload step is skipped.
+  const selfLoads = Boolean(slug.skips_reload) && (slug.loyalty_tier || 0) >= LOYALTY_FRIENDLY_TIER;
+  await pool.query("UPDATE slugs SET cooldown_turns_left = $1, loaded = $2 WHERE id = $3", [
+    SLUG_RETURN_TURNS,
+    !selfLoads,
+    slugId,
+  ]);
   const { rows: updated } = await pool.query("UPDATE slugs SET energy_pips = $1 WHERE id = $2 RETURNING *", [
     JSON.stringify(next),
     slugId,
@@ -1293,6 +1522,7 @@ async function findEligibleCounterSlugs(target) {
         Array.isArray(s.energy_pips) &&
         s.energy_pips.some(Boolean) &&
         (s.cooldown_turns_left || 0) === 0 &&
+        s.loaded !== false &&
         (s.ap_cost || 0) <= availableAp
     )
     .map(applyLoyaltyToSlug);
@@ -1351,6 +1581,33 @@ async function disableMecha(mechaCombatantId) {
     await updateCombatant(rider.id, { mounted_on: null });
     await triggerKnockoutRoll(rider.id, "mecha-destroyed");
   }
+}
+
+// Any Grit hit that would land on a mounted rider is split with their mecha:
+// the mecha soaks RIDER_DAMAGE_MECHA_FRACTION (75%, rounded up) as Structure,
+// the rider takes the rest (see splitRiderDamage's rounding note). Applies the
+// mecha's share to Structure here (disabling it at 0, which also dismounts the
+// rider) and returns { riderDamage, note } for the caller to fold into its
+// own Grit write and log line. A no-op -- returns the amount untouched -- when
+// the target isn't riding a live mecha.
+async function absorbRiderDamage(target, amount, { electric = false } = {}) {
+  if (!(amount > 0) || target.mounted_on == null) return { riderDamage: amount, note: "" };
+  const mecha = await getCombatant(target.mounted_on);
+  if (!mecha || mecha.kind !== "mecha" || mecha.disabled) return { riderDamage: amount, note: "" };
+  const split = splitRiderDamage(amount);
+  const riderDamage = split.rider;
+  // Only the mecha's share is doubled by Electricity -- the rider's portion is
+  // untouched (power 10 -> split 8/2 -> mecha 16, rider 2).
+  const mechaShare = electric ? split.mecha * ELECTRIC_MECHA_DAMAGE_MULTIPLIER : split.mecha;
+  const newStructure = Math.max(0, (mecha.current_structure ?? 0) - mechaShare);
+  await updateCombatant(mecha.id, { current_structure: newStructure });
+  let note = ` ${mecha.name} soaks ${mechaShare} Structure`;
+  if (newStructure === 0 && !mecha.disabled) {
+    await disableMecha(mecha.id);
+    note += " and is wrecked";
+  }
+  note += ".";
+  return { riderDamage, mechaShare, note };
 }
 
 async function triggerKnockoutRoll(combatantId, reason) {
@@ -1496,7 +1753,7 @@ async function addTrailWall(encounterId, fromPos, toPos, slugType) {
 // already-computed impact point), tagged with the leaving slug's own type
 // and clashPower so applyHazardEffect below knows what to do when someone
 // walks into it later.
-async function addDamageHazard(encounterId, point, slug) {
+async function addDamageHazard(encounterId, point, slug, logText) {
   try {
     const { rows } = await pool.query("SELECT hazards, next_hazard_id FROM encounters WHERE id = $1", [encounterId]);
     if (!rows[0]) return;
@@ -1510,10 +1767,57 @@ async function addDamageHazard(encounterId, point, slug) {
       hazardId + 1,
       encounterId,
     ]);
-    await pushCombatLog(encounterId, `${slug.name} leaves a hazardous patch of terrain behind.`);
+    await pushCombatLog(encounterId, logText || `${slug.name} leaves a hazardous patch of terrain behind.`);
     await broadcastEncounter(encounterId);
   } catch (err) {
     console.error("Could not add damage hazard:", err);
+  }
+}
+
+// Caligo's clears_fire_terrain flag: wherever its shot actually comes to
+// rest, snuff out any Fire-origin wall, bridge, or damage hazard within
+// HAZARD_RADIUS of that point -- a lingering fire trail hisses out, a
+// blazing bridge collapses into ash, a burning patch goes cold. If nothing
+// Fire-tagged was in range, it leaves its own steam patch instead, reusing
+// addDamageHazard exactly like an ordinary Hazard Maker would (Water has no
+// burn/poison DoT, so this is flat scalding damage only). Every wall,
+// bridge, and hazard already carries the slugType that made it (see
+// addTrailWall/formStarWall/addDamageHazard and the build-wall/build-bridge
+// actions below), so this is a plain radius filter, not new terrain
+// bookkeeping. Walls are line segments (distanceToSegment); bridges and
+// hazards are single points (their own x/y).
+async function clearOrCreateSteamTerrain(encounterId, point, slug) {
+  try {
+    const { rows } = await pool.query("SELECT walls, bridges, hazards FROM encounters WHERE id = $1", [encounterId]);
+    if (!rows[0]) return;
+    const walls = rows[0].walls || [];
+    const bridges = rows[0].bridges || [];
+    const hazards = rows[0].hazards || [];
+
+    const fireWalls = walls.filter(
+      (w) => w.slugType === "Fire" && distanceToSegment(point, { x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 }) <= HAZARD_RADIUS
+    );
+    const fireBridges = bridges.filter((b) => b.slugType === "Fire" && Math.hypot(b.x - point.x, b.y - point.y) <= HAZARD_RADIUS);
+    const fireHazards = hazards.filter((h) => h.slugType === "Fire" && Math.hypot(h.x - point.x, h.y - point.y) <= HAZARD_RADIUS);
+
+    if (fireWalls.length === 0 && fireBridges.length === 0 && fireHazards.length === 0) {
+      await addDamageHazard(encounterId, point, slug, `${slug.name}'s mist condenses into a scalding cloud of steam.`);
+      return;
+    }
+
+    const remainingWalls = fireWalls.length ? walls.filter((w) => !fireWalls.includes(w)) : walls;
+    const remainingBridges = fireBridges.length ? bridges.filter((b) => !fireBridges.includes(b)) : bridges;
+    const remainingHazards = fireHazards.length ? hazards.filter((h) => !fireHazards.includes(h)) : hazards;
+    await pool.query("UPDATE encounters SET walls = $1, bridges = $2, hazards = $3 WHERE id = $4", [
+      JSON.stringify(remainingWalls),
+      JSON.stringify(remainingBridges),
+      JSON.stringify(remainingHazards),
+      encounterId,
+    ]);
+    await pushCombatLog(encounterId, `${slug.name}'s steam smothers the flames nearby -- the fire hisses out.`);
+    await broadcastEncounter(encounterId);
+  } catch (err) {
+    console.error("Could not clear/create fire terrain:", err);
   }
 }
 
@@ -1536,14 +1840,19 @@ async function applyEnvironmentalDamage(combatant, amount, slugType) {
     nextStatus.poison = { stacks, turnsLeft: POISON_DURATION_TURNS };
     note = " and is poisoned";
   }
-  const newGrit = Math.max(0, (combatant.current_grit ?? 0) - amount);
+  // A mounted rider's mecha soaks most of the hit (Structure); the DoT status
+  // above still lands on the rider themselves.
+  const { riderDamage, note: absorbNote } = await absorbRiderDamage(combatant, amount, {
+    electric: slugType === "Electricity",
+  });
+  const newGrit = Math.max(0, (combatant.current_grit ?? 0) - riderDamage);
   const updated = await updateCombatant(combatant.id, {
     current_grit: newGrit,
     damaged_this_turn: true,
     status_effects: JSON.stringify(nextStatus),
   });
   await syncCharacterFromCombatant(updated);
-  return { amount, newGrit, note };
+  return { amount: riderDamage, newGrit, note: note + absorbNote };
 }
 
 // Called from /actions/move when a non-mecha combatant's destination lands
@@ -1700,7 +2009,10 @@ async function formStarWall(encounterId, point, slug) {
 
 // Anchorage: a zone that suppresses knockback and wall-breaking for anyone
 // inside it, for ANCHOR_DURATION_ROUNDS rounds. Unconditional on hit/miss,
-// same trigger rule as Ice's patch.
+// same trigger rule as Ice's patch. Tagged kind: "anchor" so isInsideAnyZone
+// checks elsewhere (knockback, wall-breaking) don't also trip on a
+// differently-kinded zone sharing the same `zones` array/lifecycle, e.g.
+// Cynosure's disarm field below.
 async function addAnchorZone(encounterId, point) {
   try {
     const { rows } = await pool.query("SELECT zones, next_zone_id FROM encounters WHERE id = $1", [encounterId]);
@@ -1708,7 +2020,7 @@ async function addAnchorZone(encounterId, point) {
     const zoneId = rows[0].next_zone_id;
     const zones = [
       ...(rows[0].zones || []),
-      { id: zoneId, x: point.x, y: point.y, radius: ANCHOR_RADIUS, turnsLeft: ANCHOR_DURATION_ROUNDS },
+      { id: zoneId, kind: "anchor", x: point.x, y: point.y, radius: ANCHOR_RADIUS, turnsLeft: ANCHOR_DURATION_ROUNDS },
     ];
     await pool.query("UPDATE encounters SET zones = $1, next_zone_id = $2 WHERE id = $3", [
       JSON.stringify(zones),
@@ -1722,9 +2034,62 @@ async function addAnchorZone(encounterId, point) {
   }
 }
 
+// Cynosure: a lingering electromagnetic field, same shape/lifecycle as
+// Anchorage's zone (radius/duration, ticked down by the same tickZones
+// below) but tagged kind: "disarm" -- checked every affected combatant's
+// own turn in advanceTurn (see tickStatusEffects' insideDisarmZone param),
+// not against a one-off action like knockback/wall-break.
+async function addDisarmZone(encounterId, point) {
+  try {
+    const { rows } = await pool.query("SELECT zones, next_zone_id FROM encounters WHERE id = $1", [encounterId]);
+    if (!rows[0]) return;
+    const zoneId = rows[0].next_zone_id;
+    const zones = [
+      ...(rows[0].zones || []),
+      { id: zoneId, kind: "disarm", x: point.x, y: point.y, radius: DISARM_ZONE_RADIUS, turnsLeft: DISARM_ZONE_DURATION_ROUNDS },
+    ];
+    await pool.query("UPDATE encounters SET zones = $1, next_zone_id = $2 WHERE id = $3", [
+      JSON.stringify(zones),
+      zoneId + 1,
+      encounterId,
+    ]);
+    await pushCombatLog(encounterId, "The air crackles -- a standing electromagnetic field settles over the ground, frying any blaster inside it.");
+    await broadcastEncounter(encounterId);
+  } catch (err) {
+    console.error("Could not add disarm zone:", err);
+  }
+}
+
+// Lentus: a lingering crosswind hazard, same shape/lifecycle as Anchorage's/
+// Cynosure's zones but tagged kind: "crosswind" -- bends the course of ANY
+// shot (anyone's, not just Lentus's own) whose path passes through it, see
+// the crosswind check in the shoot route below.
+async function addCrosswindZone(encounterId, point) {
+  try {
+    const { rows } = await pool.query("SELECT zones, next_zone_id FROM encounters WHERE id = $1", [encounterId]);
+    if (!rows[0]) return;
+    const zoneId = rows[0].next_zone_id;
+    const zones = [
+      ...(rows[0].zones || []),
+      { id: zoneId, kind: "crosswind", x: point.x, y: point.y, radius: CROSSWIND_ZONE_RADIUS, turnsLeft: CROSSWIND_ZONE_DURATION_ROUNDS },
+    ];
+    await pool.query("UPDATE encounters SET zones = $1, next_zone_id = $2 WHERE id = $3", [
+      JSON.stringify(zones),
+      zoneId + 1,
+      encounterId,
+    ]);
+    await pushCombatLog(encounterId, "A swirling crosswind kicks up over the ground -- any shot flying through it risks veering wildly off course.");
+    await broadcastEncounter(encounterId);
+  } catch (err) {
+    console.error("Could not add crosswind zone:", err);
+  }
+}
+
 // Ticks every zone's duration down by 1 (once per full round -- see
-// advanceTurn's `wrapped` branch), dropping any that expire.
-async function tickAnchorZones(encounterId) {
+// advanceTurn's `wrapped` branch), dropping any that expire. Kind-agnostic
+// -- Anchorage's and Cynosure's zones share this same lifecycle, they just
+// mean different things while they're up (see their own `kind` tag).
+async function tickZones(encounterId) {
   try {
     const { rows } = await pool.query("SELECT zones FROM encounters WHERE id = $1", [encounterId]);
     const zones = rows[0]?.zones || [];
@@ -1732,7 +2097,7 @@ async function tickAnchorZones(encounterId) {
     const next = zones.map((z) => ({ ...z, turnsLeft: z.turnsLeft - 1 })).filter((z) => z.turnsLeft > 0);
     await pool.query("UPDATE encounters SET zones = $1 WHERE id = $2", [JSON.stringify(next), encounterId]);
   } catch (err) {
-    console.error("Could not tick anchor zones:", err);
+    console.error("Could not tick zones:", err);
   }
 }
 
@@ -1780,6 +2145,39 @@ async function removeDecoys(encounterId, decoyIds) {
   await pool.query("DELETE FROM combatants WHERE id = ANY($1::int[])", [decoyIds]);
 }
 
+// Arcling's static_mark, second half: whenever this slug deals damage to
+// anyone, MARK_SPLASH_FRACTION of that same hit's Grit damage also lands on
+// every OTHER `marked` combatant in the encounter (global -- no radius, no
+// proximity check, matching the source text exactly), excluding the
+// combatant that was just hit directly (they already took their own full
+// hit) and the shooter themselves. Mecha/decoys are skipped -- marking is a
+// Grit-only status, same as every other status effect here. Returns the
+// per-target log fragments for the caller to fold into its own single
+// combined log line, rather than pushing its own combat-log entries (which
+// would land out of order relative to the primary hit's own line).
+async function applyMarkedSplash(encounterId, shooterId, primaryTargetId, amount, electric = false) {
+  const splashAmount = Math.floor(amount * MARK_SPLASH_FRACTION);
+  if (splashAmount <= 0) return [];
+  const { rows } = await pool.query(
+    "SELECT * FROM combatants WHERE encounter_id = $1 AND unconscious = false AND disabled = false",
+    [encounterId]
+  );
+  const notes = [];
+  for (const c of rows) {
+    if (c.id === primaryTargetId || c.id === shooterId) continue;
+    if (c.kind === "mecha" || c.kind === "decoy") continue;
+    if (!c.status_effects?.marked) continue;
+    if (c.current_grit === null) continue;
+    const { riderDamage, note: absorbNote } = await absorbRiderDamage(c, splashAmount, { electric });
+    const newGrit = Math.max(0, c.current_grit - riderDamage);
+    const updated = await updateCombatant(c.id, { current_grit: newGrit });
+    await syncCharacterFromCombatant(updated);
+    notes.push(`${c.name} takes ${riderDamage} from the static arc${newGrit === 0 ? " and is at 0 Grit!" : ""}${absorbNote}`);
+    if (newGrit === 0 && !c.unconscious) await triggerKnockoutRoll(c.id, "grit");
+  }
+  return notes;
+}
+
 // The core damage/heal/trait/wall-break/knockback resolver, shared by normal
 // hits, clash outcomes, chained hits, and ram. Re-fetches fresh rows so it's
 // safe to call after an arbitrary delay (a counter window can take seconds).
@@ -1788,7 +2186,16 @@ async function dealHit(
   shooterCombatantId,
   targetCombatantId,
   slug,
-  { half = false, windowMs = 0, firedAt, isSplash = false, originPos = null, isRicochetLeg = false } = {}
+  {
+    half = false,
+    windowMs = 0,
+    firedAt,
+    isSplash = false,
+    originPos = null,
+    isRicochetLeg = false,
+    mindScrambleEffect = null,
+    frictionEffect = null,
+  } = {}
 ) {
   const shooter = await getCombatant(shooterCombatantId);
   const target = await getCombatant(targetCombatantId);
@@ -1850,16 +2257,23 @@ async function dealHit(
   // slug.clash_power all get the effective number for free, with no extra
   // loyalty lookup needed at each of those sites.
   let amount = Math.max(0, slug.clash_power + tb.powerMod);
+  // Meduslug: damage_tripled is unconditional (any hit, not just while
+  // clashing like Emberblade's clash_tripled) -- reuses the same multiplier
+  // constant since it's the same "x3" the design already established.
+  if (slug.damage_tripled) amount *= CLASH_TRIPLE_MULTIPLIER;
   if (half) amount = Math.floor(amount / 2);
 
   if (skipDamageResolution) {
     // fall through to the aoe_blast block below
   } else if (target.kind === "mecha") {
     const armor = target.data?.armor ?? 0;
-    const dmg = Math.max(0, amount - armor);
+    // Electricity fries circuitry -- double whatever damage actually reaches
+    // Structure (applied after armor, so armor still does its job first).
+    const electricMult = slug.type === "Electricity" ? ELECTRIC_MECHA_DAMAGE_MULTIPLIER : 1;
+    const dmg = Math.max(0, amount - armor) * electricMult;
     const newStructure = Math.max(0, (target.current_structure ?? 0) - dmg);
     await updateCombatant(target.id, { current_structure: newStructure });
-    log = `${target.name} takes ${dmg} Structure damage.`;
+    log = `${target.name} takes ${dmg} Structure damage${electricMult > 1 ? " (Electricity -- doubled)" : ""}.`;
     if (newStructure === 0) {
       await disableMecha(target.id);
       log += ` ${target.name} is disabled!`;
@@ -1875,7 +2289,14 @@ async function dealHit(
     // Computed up front, before any of those checks, so every one of them
     // can gate on it -- same rule causes_jam already followed further down.
     const isSelfTarget = shooter.id === target.id;
-    const gritDamage = isSelfTarget ? 0 : amount;
+    let gritDamage = isSelfTarget ? 0 : amount;
+    // A mounted rider's mecha soaks 75% of the hit as Structure.
+    let riderAbsorbNote = "";
+    if (!isSelfTarget) {
+      const split = await absorbRiderDamage(target, gritDamage, { electric: slug.type === "Electricity" });
+      gritDamage = split.riderDamage;
+      riderAbsorbNote = split.note;
+    }
     const newGrit = Math.max(0, (target.current_grit ?? 0) - gritDamage);
     const nextStatus = { ...(target.status_effects || {}) };
     // Burn/poison don't hit right now -- they land at the start of the
@@ -1899,9 +2320,79 @@ async function dealHit(
       nextStatus.poison = { stacks: poisonStacks, turnsLeft: POISON_DURATION_TURNS };
     }
     if (tb.trait === "snare" && !isSelfTarget) nextStatus.snared = { turnsLeft: SNARE_DURATION_TURNS };
-    if (tb.trait === "stun" && !isSelfTarget) nextStatus.stunned = true;
+    // Perplexus's mind_scramble replaces Psychic's own baseline stun
+    // entirely (see the block below) -- without this gate it'd just be a
+    // strictly-better Psychic slug, stun plus a bonus effect.
+    if (tb.trait === "stun" && !isSelfTarget && !slug.mind_scramble && !slug.emotion_surge) nextStatus.stunned = true;
     if (tb.trait === "blind" && !isSelfTarget) nextStatus.blinded = true;
     if (tb.trait === "douse") delete nextStatus.burning;
+    // Perplexus -- 3 debuffs fired at someone else, 2 buffs fired at
+    // yourself (isSelfTarget picks the pool, not a !isSelfTarget gate like
+    // every flag below). mindScrambleEffect (the shoot route's own
+    // offer.effectChoice, threaded in as this option) is only trusted if
+    // it's actually legal for whichever pool applies here -- an NPC fired
+    // without the client's picker, or a mismatched/missing choice, falls
+    // back to a random pick from that same pool instead.
+    let mindScrambleResult = "";
+    if (slug.mind_scramble) {
+      const pool = isSelfTarget ? MIND_SCRAMBLE_SELF_EFFECTS : MIND_SCRAMBLE_ENEMY_EFFECTS;
+      mindScrambleResult = pool.includes(mindScrambleEffect) ? mindScrambleEffect : pool[Math.floor(Math.random() * pool.length)];
+      if (mindScrambleResult === "reverse") nextStatus.reversedDirection = { turnsLeft: MIND_SCRAMBLE_DURATION_TURNS };
+      if (mindScrambleResult === "darkness") nextStatus.blinded = true;
+      if (mindScrambleResult === "slow") nextStatus.slowedReaction = { turnsLeft: MIND_SCRAMBLE_DURATION_TURNS };
+      if (mindScrambleResult === "enhance") nextStatus.enhancedReaction = { turnsLeft: MIND_SCRAMBLE_DURATION_TURNS };
+      if (mindScrambleResult === "vision") nextStatus.keenVision = true;
+    }
+    // Tesser: on a landed hit, the shooter and the target slinger instantly
+    // trade map positions -- captured before either write lands (shooter's
+    // own updateCombatant call right here, target's folded into the big
+    // status_effects write below) so the two don't race each other or read
+    // back an already-moved position.
+    const swapsPosition = Boolean(slug.swaps_position && !isSelfTarget);
+    const shooterOldPos = { x: shooter.x, y: shooter.y };
+    const targetOldPos = { x: target.x, y: target.y };
+    if (swapsPosition) {
+      await updateCombatant(shooter.id, { x: targetOldPos.x, y: targetOldPos.y });
+    }
+    // Psi: friction_shift, always a debuff (no self-target branch, unlike
+    // Perplexus's split pools) -- picks between rooting the target in place
+    // (reuses `snared` outright) or making them personally slippery for a
+    // few of their own Moves (see the ICE_SLIP_CHANCE check in
+    // /actions/move). Same offer.effectChoice/random-fallback convention as
+    // Perplexus's mind_scramble.
+    let frictionResult = "";
+    if (slug.friction_shift && !isSelfTarget) {
+      frictionResult = FRICTION_EFFECTS.includes(frictionEffect)
+        ? frictionEffect
+        : FRICTION_EFFECTS[Math.floor(Math.random() * FRICTION_EFFECTS.length)];
+      if (frictionResult === "harsh") nextStatus.snared = { turnsLeft: SNARE_DURATION_TURNS };
+      if (frictionResult === "slippery") nextStatus.slippery = { turnsLeft: SLIPPERY_DURATION_TURNS };
+    }
+    // Eunoa: emotion_surge, no choice/randomness involved, just isSelfTarget
+    // deciding which pair of effects lands -- fired at yourself stacks BOTH
+    // of Perplexus's buffs at once (keenVision's advantage+range-waiver and
+    // enhancedReaction's longer counter window), which is already stronger
+    // than Perplexus's pick-one-buff version without needing new, larger
+    // constants of its own. Fired at someone else stacks BOTH of
+    // Perplexus's "someone else" debuffs that don't step on trait defaults
+    // here (darkness/blind and reversed reasoning of confusion), reusing
+    // `confused` and `blinded` exactly as they already exist.
+    if (slug.emotion_surge) {
+      if (isSelfTarget) {
+        nextStatus.keenVision = true;
+        nextStatus.enhancedReaction = { turnsLeft: MIND_SCRAMBLE_DURATION_TURNS };
+      } else {
+        nextStatus.confused = { turnsLeft: CONFUSION_DURATION_TURNS };
+        nextStatus.blinded = true;
+      }
+    }
+    // Arcling: static_mark tags whoever it hits with a persistent `marked`
+    // status (no duration -- the source text never mentions it wearing
+    // off, so it just lasts the rest of the encounter). The other half of
+    // the ability -- 25% of *any* damage this same slug deals splashing to
+    // every other marked combatant -- runs after the main hit lands below,
+    // once gritDamage/newGrit are known (see applyMarkedSplash).
+    if (slug.static_mark && !isSelfTarget) nextStatus.marked = true;
     // Mirage Coil -- the real owner (never a decoy; those are intercepted
     // above before reaching here) taking any hit collapses the whole
     // illusion at once, unlike a decoy being hit (which only pops that one
@@ -1925,6 +2416,10 @@ async function dealHit(
     // for the miss case) -- consumed the next time they attempt to fire, see
     // /actions/shoot.
     if (slug.causes_jam && !isSelfTarget) nextStatus.jammed = true;
+    // Cynosure -- fries the target's blaster for their next turn (a
+    // turn-counted lockout, not causes_jam's single guaranteed misfire); see
+    // DISARM_DURATION_TURNS and the disarmed check in /actions/shoot.
+    if (slug.causes_disarm && !isSelfTarget) nextStatus.disarmed = { turnsLeft: DISARM_DURATION_TURNS };
     // Frightgeist -- records *where the shot came from*, not just that fear
     // landed, so advanceTurn knows which direction to run the target away
     // from when their turn comes up (see FEAR_FLEE_AP_EQUIVALENT there).
@@ -1956,11 +2451,19 @@ async function dealHit(
       // keys off having been hit this turn (hunker eligibility, etc.).
       damaged_this_turn: isSelfTarget ? target.damaged_this_turn : true,
       status_effects: JSON.stringify(nextStatus),
+      ...(swapsPosition ? { x: shooterOldPos.x, y: shooterOldPos.y } : {}),
     });
     await syncCharacterFromCombatant(updated);
     log = isSelfTarget
       ? `${shooter.name} braces behind ${slug.name}.${mirageLog}`
-      : `${target.name} takes ${gritDamage} Grit damage${newGrit === 0 ? " and is at 0 Grit!" : ""}.${mirageLog}`;
+      : `${target.name} takes ${gritDamage} Grit damage${newGrit === 0 ? " and is at 0 Grit!" : ""}.${riderAbsorbNote}${mirageLog}`;
+
+    // Arcling: 25% of this same hit's damage also splashes onto every other
+    // marked combatant, global, no radius -- see applyMarkedSplash.
+    if (slug.static_mark) {
+      const markNotes = await applyMarkedSplash(encounterId, shooter.id, target.id, gritDamage, slug.type === "Electricity");
+      if (markNotes.length > 0) log += ` Static arcs to the marked: ${markNotes.join(", ")}.`;
+    }
 
     // Mirage Coil, self-targeted -- spawn the decoys now that `updated`
     // (this combatant's just-written status_effects) is on hand, then layer
@@ -1992,6 +2495,15 @@ async function dealHit(
     if (tb.trait === "blind" && !isSelfTarget) {
       log += ` ${target.name} is blinded -- their next attack roll has disadvantage.`;
     }
+    if (mindScrambleResult) {
+      log += ` ${target.name}'s mind scrambles -- ${MIND_SCRAMBLE_EFFECT_LABELS[mindScrambleResult]}.`;
+    }
+    if (swapsPosition) {
+      log += ` ${shooter.name} and ${target.name} swap places in a flicker of light!`;
+    }
+    if (frictionResult) {
+      log += ` ${target.name}'s friction shifts -- ${FRICTION_EFFECT_LABELS[frictionResult]}.`;
+    }
     if (wasDoused) {
       log += ` The water douses ${target.name}'s flames.`;
     }
@@ -2006,6 +2518,9 @@ async function dealHit(
     }
     if (slug.causes_jam && !isSelfTarget) {
       log += ` ${target.name}'s blaster is fried -- their next shot misfires.`;
+    }
+    if (slug.causes_disarm && !isSelfTarget) {
+      log += ` ${target.name}'s blaster is disabled -- they can't Shoot Slug on their next turn.`;
     }
     if (slug.causes_fear && !isSelfTarget) {
       log += ` ${target.name} is terrified -- their entire next turn is spent fleeing.`;
@@ -2047,7 +2562,7 @@ async function dealHit(
     if (kbDistance > 0) {
       const encRow = (await pool.query("SELECT walls, zones FROM encounters WHERE id = $1", [encounterId])).rows[0];
       // Anchorage's zone suppresses knockback entirely for anyone inside it.
-      if (isInsideAnyZone(encRow?.zones, { x: target.x, y: target.y })) {
+      if (isInsideAnyZone(encRow?.zones, { x: target.x, y: target.y }, "anchor")) {
         log += ` ${target.name} doesn't budge -- something is anchoring them in place!`;
       } else {
         const kb = knockbackTarget(knockbackOrigin, { x: target.x, y: target.y }, encRow?.walls || [], kbDistance);
@@ -2207,6 +2722,31 @@ function broadcastPodFx({ fromPos, toPos }) {
   });
 }
 
+// A failed ram (missed the target, or the mecha stalled out) -- reuses the
+// slug-shot misfire treatment on the client: the "jam" outcome plays Fail.mp3
+// and fires the red-border shake on the map (see CombatMap.jsx's shotFx
+// effect). Self-contained, like the chain/pod broadcasts.
+function broadcastRamFailFx({ fromPos, toPos }) {
+  broadcastAll({
+    type: "combat-shot-fx",
+    fx: {
+      id: `ram-fail-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      attackerId: null,
+      targetId: null,
+      attackerPos: fromPos,
+      targetPos: toPos,
+      impactPoint: toPos,
+      slugType: null,
+      slugName: null,
+      windowMs: 450,
+      countered: false,
+      counterSlugType: null,
+      outcome: "jam",
+      aoe: false,
+    },
+  });
+}
+
 // The follow-up to a LAUNCH broadcast: arrives whenever the shot actually
 // finishes resolving (immediately for an out-of-range/uncontested shot, or
 // up to windowMs later for a shot that offered a counter) and tells the
@@ -2248,7 +2788,8 @@ function scheduleAfterFlight(firedAt, windowMs, fn) {
 
 // Every terrain mark a shot leaves at -- or, for a fire trail, along the way
 // to -- wherever it actually ends up: ice/damage patches, Regulator's star
-// of fire walls, Anchorage's zone, a fire trail, Pressure Tick's steam pods.
+// of fire walls, Anchorage's zone, a fire trail, Pressure Tick's steam pods,
+// Caligo's fire-terrain clear/steam patch, Cynosure's disarm field.
 // `endPoint` is where the shot really stopped, which is the whole point of
 // routing these through here rather than scheduling them at fire time: the
 // target for an uncontested shot (or one that smashed through a counter),
@@ -2266,6 +2807,9 @@ async function applyShotTerrain(offer, endPoint) {
   if (slug.star_wall) await formStarWall(eid, endPoint, slug);
   if (slug.anchor_zone) await addAnchorZone(eid, endPoint);
   if (slug.spawns_pods) await spawnPods(eid, endPoint, slug);
+  if (slug.clears_fire_terrain) await clearOrCreateSteamTerrain(eid, endPoint, slug);
+  if (slug.disarm_zone) await addDisarmZone(eid, endPoint);
+  if (slug.crosswind_zone) await addCrosswindZone(eid, endPoint);
 }
 
 // Same, deferred to land with the shot's own flight/burst rather than the
@@ -2297,9 +2841,15 @@ async function launchAndOfferCounter(offer) {
   // there's nothing to clash with, so it never offers the target a counter,
   // whoever it was aimed at. A self-targeted shot (a self-buff) is the same:
   // you don't clash with your own slug. Both go straight to resolution.
+  // Meduslug's uncounterable is the same "never offers a counter" outcome
+  // for a different reason -- its gaze locks the target in place before
+  // they can even react, so the shot always resolves as a plain accuracy
+  // roll (resolveNormalHit), never a clash.
   const isSelfShot = offer.attackerCombatantId === offer.targetCombatantId;
   const eligible =
-    target && !isSupportiveSlug(offer.slug) && !isSelfShot ? await findEligibleCounterSlugs(target) : [];
+    target && !isSupportiveSlug(offer.slug) && !isSelfShot && !offer.slug.uncounterable
+      ? await findEligibleCounterSlugs(target)
+      : [];
   if (target && eligible.length > 0) {
     // A player-controlled target answers their own counter; an NPC's (no
     // ref_user_id) is handed to the DM to answer on its behalf.
@@ -2372,7 +2922,12 @@ async function fireSecondaryShot({ encounterId, attackerId, attackerName, origin
   const reaches = dist <= stopDist;
   const impactPoint = reaches ? targetPos : pointAtDistance(originPos, targetPos, stopDist);
   const rawWindowMs = shotFlightMs(dist, blaster.range);
-  const windowMs = slug.ultra_fast ? Math.round(rawWindowMs * ULTRA_FAST_WINDOW_FACTOR) : rawWindowMs;
+  // Perplexus's slowedReaction/enhancedReaction modify the *target's* own
+  // window regardless of the shooter's own ultra_fast -- see
+  // reactionWindowFactor.
+  const windowMs = Math.round(
+    (slug.ultra_fast ? rawWindowMs * ULTRA_FAST_WINDOW_FACTOR : rawWindowMs) * reactionWindowFactor(target.status_effects)
+  );
   const fxId = `ricochet-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const firedAt = Date.now();
 
@@ -2475,7 +3030,12 @@ async function resolveNormalHit(offer) {
   // Pivot the accuracy penalty on the shot's actual effective range (blaster
   // vs. slug type, whichever reaches further), not the blaster's range
   // alone -- so it scales correctly whichever one is doing the reaching.
-  const penalty = rangePenalty(dist, Math.max(offer.blaster.range, tb.range));
+  // Perplexus's keenVision waives the range falloff entirely for this shot
+  // (the "further-seeing" half of the effect) -- mutually exclusive with
+  // blinded below (whichever one applies, not both) since a combatant
+  // realistically can't be both blinded and keen-sighted at once.
+  const hasKeenVision = Boolean(attacker.status_effects?.keenVision);
+  const penalty = hasKeenVision ? 0 : rangePenalty(dist, Math.max(offer.blaster.range, tb.range));
   const targetDexMod = target.data?.dexMod ?? 0;
 
   let roll = rollD20();
@@ -2483,6 +3043,13 @@ async function resolveNormalHit(offer) {
     roll = Math.min(roll, rollD20());
     await updateCombatant(attacker.id, {
       status_effects: JSON.stringify({ ...attacker.status_effects, blinded: false }),
+    });
+  } else if (hasKeenVision) {
+    // Advantage -- the exact mirror of blinded's disadvantage above -- plus
+    // the range-falloff waiver already applied to `penalty`.
+    roll = Math.max(roll, rollD20());
+    await updateCombatant(attacker.id, {
+      status_effects: JSON.stringify({ ...attacker.status_effects, keenVision: false }),
     });
   }
   const attackTotal =
@@ -2516,6 +3083,8 @@ async function resolveNormalHit(offer) {
         // entirely.
         originPos: offer.attackerPos,
         isRicochetLeg: offer.isRicochetLeg,
+        mindScrambleEffect: offer.effectChoice,
+        frictionEffect: offer.effectChoice,
       });
       log = isSelfShot
         ? `${attacker.name} fires ${offer.slug.name} at themselves. ${hitLog}`
@@ -2534,6 +3103,14 @@ async function resolveNormalHit(offer) {
           status_effects: JSON.stringify({ ...(target.status_effects || {}), jammed: true }),
         });
         log += ` ${target.name}'s blaster is fried -- their next shot misfires.`;
+      }
+      // Cynosure's disarm follows the exact same "still fries on a miss"
+      // rule as causes_jam above.
+      if (offer.slug.causes_disarm && target.kind !== "mecha" && target.id !== attacker.id) {
+        await updateCombatant(target.id, {
+          status_effects: JSON.stringify({ ...(target.status_effects || {}), disarmed: { turnsLeft: DISARM_DURATION_TURNS } }),
+        });
+        log += ` ${target.name}'s blaster is disabled -- they can't Shoot Slug on their next turn.`;
       }
       // An AOE slug still detonates on a miss -- it just goes off wherever
       // the deflected shot actually landed instead of on the target.
@@ -2600,12 +3177,21 @@ async function resolveCounterOffer(id, chosenSlugId) {
   // tripling below multiplies the already-effective numbers.
   const attackerClashMultiplier = offer.slug.clash_tripled ? CLASH_TRIPLE_MULTIPLIER : 1;
   const defenderClashMultiplier = counterSlugRow.clash_tripled ? CLASH_TRIPLE_MULTIPLIER : 1;
-  const outcome = resolveClash({
-    attackerPower: offer.slug.clash_power * attackerClashMultiplier,
-    attackerDefense: offer.slug.clash_defense * attackerClashMultiplier,
-    defenderPower: counterSlugRow.clash_power * defenderClashMultiplier,
-    defenderDefense: counterSlugRow.clash_defense * defenderClashMultiplier,
-  });
+  // Caligo: a clash against a Fire-type slug never resolves on power/defense
+  // at all -- whichever side has voids_fire_clash smothers it in steam
+  // before it ever lands, same end state as an ordinary "bounce" (no damage,
+  // no ejects), just guaranteed instead of a resolveClash roll of the dice.
+  const firesVoided =
+    (offer.slug.voids_fire_clash && counterSlugRow.type === "Fire") ||
+    (counterSlugRow.voids_fire_clash && offer.slug.type === "Fire");
+  const outcome = firesVoided
+    ? "bounce"
+    : resolveClash({
+        attackerPower: offer.slug.clash_power * attackerClashMultiplier,
+        attackerDefense: offer.slug.clash_defense * attackerClashMultiplier,
+        defenderPower: counterSlugRow.clash_power * defenderClashMultiplier,
+        defenderDefense: counterSlugRow.clash_defense * defenderClashMultiplier,
+      });
 
   // Where the two bolts actually meet. The incoming shot has been in the
   // air for counterAtMs by the time the counter launches (clamped to the
@@ -2638,7 +3224,9 @@ async function resolveCounterOffer(id, chosenSlugId) {
       await ejectSlug(counterSlugRow.id);
       log = `${offer.attackerName}'s ${offer.slug.name} and ${offer.targetName}'s ${counterSlugRow.name} clash head-on and both go flying -- no damage.`;
     } else if (outcome === "bounce") {
-      log = `${offer.attackerName}'s ${offer.slug.name} and ${offer.targetName}'s ${counterSlugRow.name} clash and deflect harmlessly.`;
+      log = firesVoided
+        ? `${offer.attackerName}'s ${offer.slug.name} and ${offer.targetName}'s ${counterSlugRow.name} clash in a billow of steam -- the flames are smothered instantly, no damage.`
+        : `${offer.attackerName}'s ${offer.slug.name} and ${offer.targetName}'s ${counterSlugRow.name} clash and deflect harmlessly.`;
     } else if (outcome === "attacker-wins") {
       await ejectSlug(counterSlugRow.id);
       // Tripled power carries through to the actual damage too, not just the
@@ -2651,6 +3239,8 @@ async function resolveCounterOffer(id, chosenSlugId) {
         firedAt: offer.firedAt,
         originPos: offer.attackerPos, // see the matching comment in resolveNormalHit
         isRicochetLeg: offer.isRicochetLeg,
+        mindScrambleEffect: offer.effectChoice,
+        frictionEffect: offer.effectChoice,
       });
       log = `${offer.attackerName}'s ${offer.slug.name} smashes through ${offer.targetName}'s counter! ${hitLog}`;
       // B's counter didn't actually stop the shot (it still connected) --
@@ -2745,6 +3335,9 @@ async function resolveShooterSlugAndBlaster(attacker, req, { slugId, npcSlug, np
     if ((slug.cooldown_turns_left || 0) > 0) {
       return { error: "That slug hasn't returned to hand yet." };
     }
+    if (slug.loaded === false) {
+      return { error: "That slug is back in hand but not loaded -- Reload it into your weapon first." };
+    }
     if (!Array.isArray(slug.energy_pips) || !slug.energy_pips.some(Boolean)) {
       return { error: "That slug is out of energy -- it needs to recharge." };
     }
@@ -2779,6 +3372,19 @@ async function resolveShooterSlugAndBlaster(attacker, req, { slugId, npcSlug, np
       mirage_decoy: Boolean(npcSlug?.mirageDecoy),
       star_wall: Boolean(npcSlug?.starWall),
       anchor_zone: Boolean(npcSlug?.anchorZone),
+      voids_fire_clash: Boolean(npcSlug?.voidsFireClash),
+      clears_fire_terrain: Boolean(npcSlug?.clearsFireTerrain),
+      causes_disarm: Boolean(npcSlug?.causesDisarm),
+      disarm_zone: Boolean(npcSlug?.disarmZone),
+      mind_scramble: Boolean(npcSlug?.mindScramble),
+      swaps_position: Boolean(npcSlug?.swapsPosition),
+      friction_shift: Boolean(npcSlug?.frictionShift),
+      crosswind_zone: Boolean(npcSlug?.crosswindZone),
+      skips_reload: Boolean(npcSlug?.skipsReload),
+      emotion_surge: Boolean(npcSlug?.emotionSurge),
+      uncounterable: Boolean(npcSlug?.uncounterable),
+      damage_tripled: Boolean(npcSlug?.damageTripled),
+      static_mark: Boolean(npcSlug?.staticMark),
       energy_pips: [true],
       user_id: null,
     };
@@ -2816,7 +3422,7 @@ async function applyEnvironmentEffect({ actionType, attacker, slug, tb, attacker
       const walls = row?.walls || [];
       const bridges = row?.bridges || [];
       const wallHit = firstWallHit(attackerPos, finalPoint, walls);
-      if (wallHit && isInsideAnyZone(row?.zones, wallHit.hit)) {
+      if (wallHit && isInsideAnyZone(row?.zones, wallHit.hit, "anchor")) {
         // Anchorage's zone -- nothing here can be broken while it's up.
         impactPoint = wallHit.hit;
         log = `${attacker.name}'s ${slug.name} slams into the wall, but some anchoring force keeps it standing!`;
@@ -2936,7 +3542,7 @@ async function resolveEnvironmentShot({ actionType, attacker, slug, blaster, tb,
 }
 
 router.post("/actions/shoot", async (req, res) => {
-  const { attackerId, targetId, targetPoint, slugId, npcSlug, npcBlaster, actionType: rawActionType } = req.body || {};
+  const { attackerId, targetId, targetPoint, slugId, npcSlug, npcBlaster, actionType: rawActionType, effectChoice } = req.body || {};
   const actionType = ["break-wall", "make-wall", "build-bridge"].includes(rawActionType) ? rawActionType : "attack";
   try {
     const attacker = await getCombatant(attackerId);
@@ -2950,6 +3556,12 @@ router.post("/actions/shoot", async (req, res) => {
       return res.status(400).json({ error: "It isn't your turn." });
     }
     if (attacker.unconscious || attacker.disabled) return res.status(400).json({ error: "This combatant can't act." });
+    // Cynosure: a disarmed combatant can't Shoot Slug at all this turn --
+    // no Attack, no Break/Make Wall, no Build Bridge, same blanket lockout
+    // shape as the snared-can't-Move check in /actions/move.
+    if (attacker.status_effects?.disarmed?.turnsLeft > 0) {
+      return res.status(400).json({ error: "This combatant's blaster is disabled and can't be fired." });
+    }
 
     let target = null;
     if (actionType === "attack") {
@@ -3066,7 +3678,12 @@ router.post("/actions/shoot", async (req, res) => {
     // counter" -- which for free also speeds up the client's own bolt
     // animation, since that's driven directly off this same number.
     const rawWindowMs = shotFlightMs(dist, blaster.range);
-    const windowMs = slug.ultra_fast ? Math.round(rawWindowMs * ULTRA_FAST_WINDOW_FACTOR) : rawWindowMs;
+    // Perplexus's slowedReaction/enhancedReaction modify the *target's* own
+    // window regardless of the shooter's own ultra_fast -- see
+    // reactionWindowFactor.
+    const windowMs = Math.round(
+      (slug.ultra_fast ? rawWindowMs * ULTRA_FAST_WINDOW_FACTOR : rawWindowMs) * reactionWindowFactor(target.status_effects)
+    );
 
     const offer = {
       fxId,
@@ -3082,6 +3699,12 @@ router.post("/actions/shoot", async (req, res) => {
       targetPos,
       impactPoint,
       windowMs,
+      // Perplexus/Psi: the client's pre-fire effect picker, already narrowed
+      // to whichever pool this shot's targeting actually allows -- see
+      // dealHit's mind_scramble/friction_shift blocks, which each
+      // re-validate against their own pool and fall back to a random pick
+      // if this is missing/invalid (an NPC fired without the picker, e.g.).
+      effectChoice: slug.mind_scramble || slug.friction_shift ? effectChoice : null,
     };
 
     // Fandango's confusion: a *complete* 180-degree misfire chance on the
@@ -3114,6 +3737,47 @@ router.post("/actions/shoot", async (req, res) => {
       return res.json({ pending: false, encounter });
     }
 
+    // Lentus: crosswinds bend the course of ANY shot (not gated on the
+    // shooter's own slug -- this is a purely environmental hazard) whose
+    // straight-line path from attacker to its already-determined impact
+    // point passes within a live crosswind zone. Rolls 0-180 recentered on
+    // 90 as "no change" -- on anything else, the shot veers off by that
+    // many degrees and the whole thing resolves as a miss at the new point,
+    // same short-circuit shape as Fandango's confusion just above (which
+    // this can't stack with -- confusion already returned before this ever
+    // runs). Checked once per shot; multiple overlapping crosswind zones
+    // still only get the one roll.
+    const crosswindZone = (encounterRow.zones || []).find(
+      (z) => z.kind === "crosswind" && distanceToSegment({ x: z.x, y: z.y }, attackerPos, impactPoint) <= z.radius
+    );
+    if (crosswindZone) {
+      const offsetDeg = rollCrosswindOffset();
+      if (offsetDeg !== 0) {
+        const windPoint = rotateDeflection(attackerPos, impactPoint, offsetDeg, encounterRow.walls);
+        broadcastShotFx({ ...offer, outcome: null });
+        broadcastShotResolved(offer, { outcome: "miss", impactPoint: windPoint });
+        scheduleAfterFlight(firedAt, windowMs, async () => {
+          let log = `${attacker.name}'s ${slug.name} gets caught in a crosswind and veers ${Math.abs(offsetDeg)} degrees off course!`;
+          if (slug.aoe_blast) {
+            const caught = await findAoeTargets(attacker.encounter_id, windPoint, [attacker.id]);
+            if (caught.length > 0) {
+              log += " It still detonates!";
+              for (const other of caught) {
+                const splashLog = await dealHit(attacker.encounter_id, attacker.id, other.id, slug, { isSplash: true });
+                log += ` The blast catches ${other.name}: ${splashLog}`;
+              }
+            }
+          }
+          await pushCombatLog(attacker.encounter_id, log);
+          await broadcastEncounter(attacker.encounter_id);
+        });
+        const encounter = await broadcastEncounter(attacker.encounter_id);
+        return res.json({ pending: false, encounter });
+      }
+      // offsetDeg === 0 -- "stays its course": fall through to normal
+      // resolution exactly as if the zone weren't there.
+    }
+
     // Everything else actually launches: the bolt starts flying and the
     // launch sound plays immediately, right now, the instant the AP is
     // spent -- not delayed until the shot finishes resolving. Whatever
@@ -3125,7 +3789,8 @@ router.post("/actions/shoot", async (req, res) => {
     // which launches the exact same way but isn't a real HTTP request.)
 
     // Any terrain the slug leaves -- ice/damage patch, Regulator's star
-    // wall, Anchorage's zone, a fire trail, Pressure Tick's steam pods -- is
+    // wall, Anchorage's zone, a fire trail, Pressure Tick's steam pods,
+    // Caligo's fire-terrain clear/steam patch, Cynosure's disarm field -- is
     // a *result* of the shot landing, so it's delayed to the end of the
     // flight (and grown in client-side, see the encounter diffs in
     // CombatMap.jsx) rather than popping up mid-flight. Where it lands
@@ -3144,7 +3809,7 @@ router.post("/actions/shoot", async (req, res) => {
         const walls = row?.walls || [];
         const stillThere = walls.find((w) => w.id === wallHit.wall.id);
         if (!stillThere) return; // already gone by the time the bolt got there
-        if (isInsideAnyZone(row?.zones, wallHit.hit)) {
+        if (isInsideAnyZone(row?.zones, wallHit.hit, "anchor")) {
           // Anchorage's zone -- the dagger still hits the target (the shot
           // already resolved as a normal hit above), the wall just holds.
           await pushCombatLog(attacker.encounter_id, `${attacker.name}'s ${slug.name} punches the wall, but some anchoring force keeps it standing!`);
@@ -3301,10 +3966,12 @@ router.post("/actions/mount", async (req, res) => {
     if (req.user.role !== "Dungeon Master" && !requireOwnTurn(encounterRow, rider)) {
       return res.status(400).json({ error: "It isn't your turn." });
     }
+    if (rider.kind === "mecha") return res.status(400).json({ error: "A mecha can't ride another mecha." });
+    if (rider.mounted_on != null) return res.status(400).json({ error: "Already mounted." });
     if (mecha.disabled) return res.status(400).json({ error: "That mecha is disabled." });
     if (rider.current_ap < MOUNT_AP_COST) return res.status(400).json({ error: "Not enough AP." });
     if (distance({ x: rider.x, y: rider.y }, { x: mecha.x, y: mecha.y }) > MOUNT_RANGE) {
-      return res.status(400).json({ error: "Too far away to mount." });
+      return res.status(400).json({ error: "Too far away to mount -- get within about one move." });
     }
     await updateCombatant(rider.id, {
       mounted_on: mecha.id,
@@ -3350,23 +4017,33 @@ router.post("/actions/ram", async (req, res) => {
     const target = await getCombatant(targetCombatantId);
     if (!mecha || mecha.kind !== "mecha" || !target) return res.status(404).json({ error: "Combatant not found." });
     const encounterRow = (await pool.query("SELECT * FROM encounters WHERE id = $1", [mecha.encounter_id])).rows[0];
-    const { rows: riders } = await pool.query("SELECT * FROM combatants WHERE mounted_on = $1", [mecha.id]);
-    const driverAuthorized = req.user.role === "Dungeon Master" || riders.some((r) => r.ref_user_id === req.user.sub);
-    if (!driverAuthorized) return res.status(403).json({ error: "You aren't riding that mecha." });
-    if (req.user.role !== "Dungeon Master" && !requireOwnTurn(encounterRow, mecha)) {
-      return res.status(400).json({ error: "It isn't this mecha's turn." });
+
+    // Ram happens on the *rider's* turn now, not the mecha's -- an unmounted
+    // mecha can never ram.
+    const riders = await mechaRiders(mecha.id);
+    if (riders.length === 0) return res.status(400).json({ error: "Only a mounted mecha can ram." });
+    const isDM = req.user.role === "Dungeon Master";
+    const myRider = riders.find((r) => r.ref_user_id === req.user.sub);
+    if (!isDM && !myRider) return res.status(403).json({ error: "You aren't riding that mecha." });
+    const turnRider = myRider || riders[0];
+    if (!isDM && !requireOwnTurn(encounterRow, turnRider)) {
+      return res.status(400).json({ error: "It isn't your turn." });
     }
     if (mecha.disabled) return res.status(400).json({ error: "This mecha is disabled." });
     if (mecha.rammed_this_round) return res.status(400).json({ error: "This mecha already rammed this round." });
-    if (mecha.current_ap < RAM_AP_COST) return res.status(400).json({ error: "Not enough AP." });
+    if ((mecha.current_ap ?? 0) < RAM_AP_COST) return res.status(400).json({ error: "Not enough mecha AP to ram." });
     if (distance({ x: mecha.x, y: mecha.y }, { x: target.x, y: target.y }) > MOUNT_RANGE) {
-      return res.status(400).json({ error: "Target isn't adjacent." });
+      return res.status(400).json({ error: "Target isn't in ramming range." });
     }
 
     await updateCombatant(mecha.id, { current_ap: mecha.current_ap - RAM_AP_COST, rammed_this_round: true });
 
+    const fromPos = { x: mecha.x, y: mecha.y };
+    const toPos = { x: target.x, y: target.y };
+
     const tierInfo = MECHA_TIER_LABELS[mecha.data?.tier ?? 0] || MECHA_TIER_LABELS[0];
     if (Math.random() * 100 < (tierInfo.breakdownChance ?? 0)) {
+      broadcastRamFailFx({ fromPos, toPos });
       await pushCombatLog(mecha.encounter_id, `${mecha.name} lurches forward but stalls out -- mechanical failure!`);
       const encounter = await broadcastEncounter(mecha.encounter_id);
       return res.json({ encounter, log: "Mechanical failure." });
@@ -3380,10 +4057,11 @@ router.post("/actions/ram", async (req, res) => {
 
     let log;
     if (attackTotal < dc) {
+      broadcastRamFailFx({ fromPos, toPos });
       log = `${mecha.name} rams at ${target.name} and misses (${attackTotal} vs DC ${dc}).`;
     } else {
       const rammingPower = mecha.data?.rammingPower ?? 1;
-      const dmg = rammingPower * 2;
+      const dmg = rammingPower * RAM_DAMAGE_MULTIPLIER;
       if (target.kind === "mecha") {
         const reduced = Math.max(0, dmg - (target.data?.armor ?? 0));
         const newStructure = Math.max(0, (target.current_structure ?? 0) - reduced);
@@ -3393,7 +4071,7 @@ router.post("/actions/ram", async (req, res) => {
           await disableMecha(target.id);
           log += ` ${target.name} is disabled!`;
         }
-        const backDmg = Math.max(0, (target.data?.rammingPower ?? 0) * 2 - (mecha.data?.armor ?? 0));
+        const backDmg = Math.max(0, (target.data?.rammingPower ?? 0) * RAM_DAMAGE_MULTIPLIER - (mecha.data?.armor ?? 0));
         const mechaNewStructure = Math.max(0, (mecha.current_structure ?? 0) - backDmg);
         await updateCombatant(mecha.id, { current_structure: mechaNewStructure });
         log += ` ${mecha.name} takes ${backDmg} Structure damage from the collision.`;
@@ -3402,11 +4080,15 @@ router.post("/actions/ram", async (req, res) => {
           log += ` ${mecha.name} is disabled!`;
         }
       } else {
-        const gritDmg = Math.floor(dmg / 2);
-        const newGrit = Math.max(0, (target.current_grit ?? 0) - gritDmg);
+        // A mecha slamming a person: a flat half of their max Grit, whatever
+        // the mecha's ramming power (see RAM_CHARACTER_MAX_GRIT_FRACTION).
+        const gritDmg = Math.max(1, Math.floor((target.max_grit ?? 0) * RAM_CHARACTER_MAX_GRIT_FRACTION));
+        // If the rammed character is themselves mounted, their mecha soaks 75%.
+        const { riderDamage, note: absorbNote } = await absorbRiderDamage(target, gritDmg);
+        const newGrit = Math.max(0, (target.current_grit ?? 0) - riderDamage);
         const updatedTarget = await updateCombatant(target.id, { current_grit: newGrit, damaged_this_turn: true });
         await syncCharacterFromCombatant(updatedTarget);
-        log = `${mecha.name} rams ${target.name} for ${gritDmg} Grit damage.`;
+        log = `${mecha.name} rams ${target.name} for ${riderDamage} Grit damage.${absorbNote}`;
 
         const kb = knockbackTarget({ x: mecha.x, y: mecha.y }, { x: target.x, y: target.y }, encounterRow.walls, KNOCKBACK_DISTANCE);
         await updateCombatant(target.id, { x: kb.point.x, y: kb.point.y });

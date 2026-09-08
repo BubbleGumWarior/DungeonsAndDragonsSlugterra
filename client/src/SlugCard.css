@@ -1,25 +1,64 @@
 .slug-card {
+  --type-color: var(--gold);
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 75%);
+  /* base panel plus an element-coloured hue bleeding in from the top and
+     bottom edges -- the same "what element is this" read the Chronicle cards
+     give for relationship. */
+  background:
+    radial-gradient(120% 55% at 50% 0%, color-mix(in srgb, var(--type-color) 15%, transparent), transparent 70%),
+    radial-gradient(120% 55% at 50% 100%, color-mix(in srgb, var(--type-color) 13%, transparent), transparent 70%),
+    linear-gradient(168deg, #212327, #0f1012 82%);
   border: 1px solid var(--charcoal-600);
   border-top-color: var(--charcoal-700);
   border-radius: 14px;
   padding: 16px;
   box-shadow:
-    0 12px 30px rgba(0, 0, 0, 0.5),
+    0 16px 36px rgba(0, 0, 0, 0.55),
     0 2px 0 rgba(255, 255, 255, 0.03) inset,
     0 -1px 0 rgba(0, 0, 0, 0.6) inset;
+  transition: border-color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
+}
+
+/* Element accent bars across the top and bottom, plus a faint element-tinted
+   inner frame -- the same highlight the Chronicle cards use for relationship.
+   Inset from the corners so the card needs no overflow:hidden (its hover
+   panels escape its bounds). */
+.slug-card::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 0;
+  bottom: 0;
+  border-top: 2px solid var(--type-color);
+  border-bottom: 2px solid var(--type-color);
+  border-radius: 1px;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent);
+  pointer-events: none;
+}
+
+.slug-card::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border: 1px solid color-mix(in srgb, var(--type-color) 13%, transparent);
+  border-radius: 9px;
+  pointer-events: none;
+}
+
+.slug-card:hover {
+  border-color: color-mix(in srgb, var(--type-color) 50%, var(--charcoal-600));
 }
 
 .slug-card--clickable {
   cursor: pointer;
-  transition: border-color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
 }
 
 .slug-card--clickable:hover {
-  border-color: var(--gold-dim);
   transform: translateY(-2px);
 }
 
@@ -57,9 +96,27 @@
   white-space: normal;
 }
 
+/* Wraps the element chip so the on-hover element panel can anchor to it.
+   This is the only hover target for the panel -- not the whole card. */
+.slug-card-type-wrap {
+  position: relative;
+  align-self: flex-start;
+  display: inline-flex;
+  border-radius: 999px;
+  cursor: help;
+}
+
+.slug-card--lg .slug-card-type-wrap {
+  align-self: center;
+}
+
+.slug-card-type-wrap:focus-visible {
+  outline: 2px solid var(--gold-dim);
+  outline-offset: 2px;
+}
+
 .slug-card-type {
   display: inline-flex;
-  align-self: flex-start;
   padding: 2px 10px;
   border-radius: 999px;
   font-size: 11px;
@@ -69,10 +126,12 @@
   color: var(--type-color);
   border: 1px solid var(--type-color);
   background: color-mix(in srgb, var(--type-color) 14%, transparent);
+  transition: box-shadow 0.15s var(--ease-out);
 }
 
-.slug-card--lg .slug-card-type {
-  align-self: center;
+.slug-card-type-wrap:hover .slug-card-type,
+.slug-card-type-wrap:focus-within .slug-card-type {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--type-color) 35%, transparent);
 }
 
 .slug-card-stats {
@@ -210,6 +269,138 @@
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+/* Element hover panel -- how this slug's type bends a shot: its range and
+   accuracy modifiers plus the guaranteed on-hit effect. Only shows while the
+   element chip is hovered/focused. The whole card is lifted in the stacking
+   order for that window so the panel clears its neighbours instead of being
+   painted over by them. */
+.slug-card:has(.slug-card-type-wrap:hover),
+.slug-card:has(.slug-card-type-wrap:focus-within) {
+  z-index: 50;
+}
+
+.slug-card-benefit {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 12px);
+  width: 240px;
+  max-width: 240px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--charcoal-800);
+  border: 1px solid var(--charcoal-600);
+  box-shadow: 0 10px 22px -8px rgba(0, 0, 0, 0.8);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 10;
+  transform: translateX(-6px);
+  transition: opacity 0.15s var(--ease-out), transform 0.15s var(--ease-out), visibility 0.15s;
+  text-align: left;
+}
+
+/* Cards near the right edge of the viewport would push the panel off-screen
+   -- SlugCard measures on hover and adds this to flip it to the left side. */
+.slug-card-benefit--left {
+  left: auto;
+  right: calc(100% + 12px);
+  transform: translateX(6px);
+}
+
+.slug-card-type-wrap:hover .slug-card-benefit,
+.slug-card-type-wrap:focus-within .slug-card-benefit {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+}
+
+.slug-card-benefit-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--ink-dim);
+}
+
+.slug-card-benefit-type {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--type-color);
+  border: 1px solid var(--type-color);
+  background: color-mix(in srgb, var(--type-color) 14%, transparent);
+}
+
+.slug-card-benefit-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.slug-card-benefit-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-700);
+}
+
+.slug-card-benefit-stat-value {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--gold-soft);
+}
+
+.slug-card-benefit-stat-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--ink-dim);
+}
+
+.slug-card-benefit-stat-sub {
+  font-size: 10px;
+  color: var(--ink-dim);
+  opacity: 0.8;
+}
+
+.slug-card-benefit-effect-label {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--ink-dim);
+  margin-bottom: 3px;
+}
+
+.slug-card-benefit-effect p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--gold-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slug-card-benefit,
+  .slug-card-benefit--left,
+  .slug-card-type-wrap:hover .slug-card-benefit,
+  .slug-card-type-wrap:focus-within .slug-card-benefit {
+    transition: opacity 0.15s var(--ease-out), visibility 0.15s;
+    transform: none;
+  }
 }
 
 .slug-card-energy {

@@ -364,6 +364,110 @@ export default function SlugForm({ mode, initialValues, players, slugId, onSubmi
           />
           Anchor zone (creates a zone that suppresses knockback and wall-breaking inside it)
         </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.voidsFireClash)}
+            onChange={(e) => update("voidsFireClash", e.target.checked)}
+          />
+          Voids fire clash (any clash against a Fire-type slug, either side, cancels instantly with no damage -- Caligo)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.clearsFireTerrain)}
+            onChange={(e) => update("clearsFireTerrain", e.target.checked)}
+          />
+          Clears fire terrain (snuffs out a nearby Fire wall/bridge/hazard on landing, or leaves a steam patch instead -- Caligo)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.causesDisarm)}
+            onChange={(e) => update("causesDisarm", e.target.checked)}
+          />
+          Causes disarm (blocks the target's Shoot Slug action entirely for their next turn -- Cynosure)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.disarmZone)}
+            onChange={(e) => update("disarmZone", e.target.checked)}
+          />
+          Disarm zone (leaves an electromagnetic field that keeps anyone inside it disarmed, plus 1 turn after leaving -- Cynosure)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.mindScramble)}
+            onChange={(e) => update("mindScramble", e.target.checked)}
+          />
+          Mind scramble (replaces Psychic's stun with a chosen effect -- 3 debuffs on an enemy, 2 buffs on yourself -- Perplexus)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.swapsPosition)}
+            onChange={(e) => update("swapsPosition", e.target.checked)}
+          />
+          Swaps position (on a hit, the shooter and target instantly trade map positions -- Tesser)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.frictionShift)}
+            onChange={(e) => update("frictionShift", e.target.checked)}
+          />
+          Friction shift (chosen effect: root the target in place, or risk their turn ending on their next Moves -- Psi)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.crosswindZone)}
+            onChange={(e) => update("crosswindZone", e.target.checked)}
+          />
+          Crosswind zone (leaves a hazard that randomly bends the course of any shot passing through it -- Lentus)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.skipsReload)}
+            onChange={(e) => update("skipsReload", e.target.checked)}
+          />
+          Skips reload (self-chambers on return from cooldown once loyalty is Friendly or higher -- Lentus)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.emotionSurge)}
+            onChange={(e) => update("emotionSurge", e.target.checked)}
+          />
+          Emotion surge (self: advantage + range waiver + longer counter window. Other: confused + blinded -- Eunoa)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.uncounterable)}
+            onChange={(e) => update("uncounterable", e.target.checked)}
+          />
+          Uncounterable (never offers the target a counter -- always a plain accuracy roll -- Meduslug)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.damageTripled)}
+            onChange={(e) => update("damageTripled", e.target.checked)}
+          />
+          Damage tripled (unconditional x3 damage on every hit, not just while clashing -- Meduslug)
+        </label>
+        <label className="slug-form-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(fields.staticMark)}
+            onChange={(e) => update("staticMark", e.target.checked)}
+          />
+          Static mark (tags whoever it hits; 25% of any hit this slug lands also splashes every other marked target -- Arcling)
+        </label>
       </div>
 
       <div className="slug-form-field">

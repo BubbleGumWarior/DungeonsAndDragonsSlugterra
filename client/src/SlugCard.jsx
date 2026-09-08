@@ -1,5 +1,13 @@
-import { useState } from "react";
-import { LOYALTY_TIER_LABELS, LOYALTY_TIERS, typeColor, loyaltyClashModifier, loyaltyAccuracyModifier, loyaltyTierColor } from "./slugData.js";
+import { useRef, useState } from "react";
+import {
+  LOYALTY_TIER_LABELS,
+  LOYALTY_TIERS,
+  typeColor,
+  typeBallistics,
+  loyaltyClashModifier,
+  loyaltyAccuracyModifier,
+  loyaltyTierColor,
+} from "./slugData.js";
 import { useTypewriter } from "./useTypewriter.js";
 import SlugImage from "./SlugImage.jsx";
 import EnergyPips from "./EnergyPips.jsx";
@@ -23,8 +31,34 @@ export default function SlugCard({ slug, size = "sm", editable = false, onToggle
   const accuracyModClass = `slug-card-loyalty-mod slug-card-loyalty-mod--${accuracyMod > 0 ? "positive" : "negative"}`;
   const loyaltyColor = loyaltyTierColor(slug.loyaltyTier);
 
+  // Combat profile shown on hover: what this slug's *element* does to a shot.
+  // Range/accuracy are the type's modifiers (mirrors TYPE_BALLISTICS in
+  // server/src/combatRules.js); loyalty tier nudges accuracy further. This is
+  // purely the type contribution -- per-slug ability flags aren't listed here.
+  const ballistics = typeBallistics(slug.type);
+  const fmtMod = (n) => (n > 0 ? `+${n}` : `${n}`);
+  const totalAccuracy = ballistics.accuracyMod + accuracyMod;
+
+  // The element panel opens to the type chip's right by default; if that would
+  // run it off the right edge of the viewport, flip it to the left instead.
+  // Measured on hover/focus rather than guessed from grid position, since the
+  // grid reflows to any number of columns.
+  const typeRef = useRef(null);
+  const [benefitLeft, setBenefitLeft] = useState(false);
+  function placeBenefit() {
+    const el = typeRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const PANEL_SPACE = 240 + 12 + 8; // panel width + gap + margin
+    setBenefitLeft(rect.right + PANEL_SPACE > window.innerWidth);
+  }
+
   return (
-    <div className={`slug-card slug-card--${size} ${onClick ? "slug-card--clickable" : ""}`} onClick={onClick}>
+    <div
+      className={`slug-card slug-card--${size} ${onClick ? "slug-card--clickable" : ""}`}
+      style={{ "--type-color": typeColor(slug.type) }}
+      onClick={onClick}
+    >
       <div className="slug-card-top">
         <SlugImage
           protoformImage={slug.protoformImage}
@@ -34,9 +68,48 @@ export default function SlugCard({ slug, size = "sm", editable = false, onToggle
         />
         <div className="slug-card-identity">
           <h3 className="slug-card-name">{slug.name}</h3>
-          <span className="slug-card-type" style={{ "--type-color": typeColor(slug.type) }}>
-            {slug.type}
-          </span>
+          {/* Hovering (or focusing) the element chip reveals what that type
+              does to a shot: its range/accuracy modifiers and on-hit effect. */}
+          <div
+            className="slug-card-type-wrap"
+            ref={typeRef}
+            tabIndex={0}
+            onMouseEnter={placeBenefit}
+            onFocus={placeBenefit}
+          >
+            <span className="slug-card-type" style={{ "--type-color": typeColor(slug.type) }}>
+              {slug.type}
+            </span>
+
+            <div className={`slug-card-benefit ${benefitLeft ? "slug-card-benefit--left" : ""}`} role="tooltip">
+              <p className="slug-card-benefit-title">
+                <span className="slug-card-benefit-type" style={{ "--type-color": typeColor(slug.type) }}>
+                  {slug.type}
+                </span>
+                element
+              </p>
+              <div className="slug-card-benefit-stats">
+                <div className="slug-card-benefit-stat">
+                  <span className="slug-card-benefit-stat-value">{ballistics.band}</span>
+                  <span className="slug-card-benefit-stat-label">Range</span>
+                  <span className="slug-card-benefit-stat-sub">~{ballistics.range}u</span>
+                </div>
+                <div className="slug-card-benefit-stat">
+                  <span className="slug-card-benefit-stat-value">{fmtMod(totalAccuracy)}</span>
+                  <span className="slug-card-benefit-stat-label">Accuracy</span>
+                  <span className="slug-card-benefit-stat-sub">
+                    type {fmtMod(ballistics.accuracyMod)}
+                    {accuracyMod !== 0 && ` · loyalty ${fmtMod(accuracyMod)}`}
+                  </span>
+                </div>
+              </div>
+
+              <div className="slug-card-benefit-effect">
+                <span className="slug-card-benefit-effect-label">Hit effect</span>
+                <p>{ballistics.hitEffect}</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

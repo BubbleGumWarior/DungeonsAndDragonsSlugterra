@@ -57,6 +57,9 @@ function Row({ combatant, isActive, isActing, isDM, onSelect, onRevive, onRemove
             {combatant.statusEffects.snared && (
               <span className="combat-roster-effect combat-roster-effect--snare">Snared</span>
             )}
+            {combatant.statusEffects.slippery?.turnsLeft > 0 && (
+              <span className="combat-roster-effect combat-roster-effect--snare">Slippery</span>
+            )}
             {combatant.statusEffects.stunned && (
               <span className="combat-roster-effect combat-roster-effect--stun">Stunned</span>
             )}
@@ -71,6 +74,21 @@ function Row({ combatant, isActive, isActing, isDM, onSelect, onRevive, onRemove
             )}
             {combatant.statusEffects.jammed && (
               <span className="combat-roster-effect combat-roster-effect--jam">Jammed</span>
+            )}
+            {combatant.statusEffects.disarmed?.turnsLeft > 0 && (
+              <span className="combat-roster-effect combat-roster-effect--jam">Disarmed</span>
+            )}
+            {combatant.statusEffects.reversedDirection?.turnsLeft > 0 && (
+              <span className="combat-roster-effect combat-roster-effect--confused">Reversed</span>
+            )}
+            {combatant.statusEffects.slowedReaction?.turnsLeft > 0 && (
+              <span className="combat-roster-effect combat-roster-effect--confused">Slowed Reaction</span>
+            )}
+            {combatant.statusEffects.enhancedReaction?.turnsLeft > 0 && (
+              <span className="combat-roster-effect combat-roster-effect--stun">Enhanced Reaction</span>
+            )}
+            {combatant.statusEffects.keenVision && (
+              <span className="combat-roster-effect combat-roster-effect--stun">Keen Vision</span>
             )}
           </div>
         )}

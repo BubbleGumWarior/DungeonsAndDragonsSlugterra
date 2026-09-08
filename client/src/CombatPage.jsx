@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PlusIcon, SwordIcon, XIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
@@ -9,6 +9,9 @@ import CombatSlugPanel from "./CombatSlugPanel.jsx";
 import CombatRoster from "./CombatRoster.jsx";
 import CombatLog from "./CombatLog.jsx";
 import SlugActionModal from "./SlugActionModal.jsx";
+import MindScrambleModal from "./MindScrambleModal.jsx";
+import FrictionModal from "./FrictionModal.jsx";
+import HunkerConfirmModal from "./HunkerConfirmModal.jsx";
 import { typeRange } from "./slugData.js";
 import "./Panel.css";
 import "./CombatPage.css";
@@ -50,12 +53,7 @@ async function del(token, url) {
 // live preview while dragging. The server is always the authority on the
 // real AP cost when the move is actually submitted.
 const MOVE_SPEED_PER_AP = 80; // mirrors server combatRules.js -- walking distance only; a given walk costs 2.5x the AP vs. the old 200
-const MECHA_SPEED_UNIT = 12;
-
-function estimateApCost(combatant, dist) {
-  const speedPerAp = combatant.kind === "mecha" ? (combatant.data?.speed || 1) * MECHA_SPEED_UNIT : MOVE_SPEED_PER_AP;
-  return Math.max(1, Math.ceil(dist / speedPerAp));
-}
+const MOUNT_RANGE = MOVE_SPEED_PER_AP; // mirrors server -- 1 AP of walking, to mount / dismount / ram
 
 function TopBar({ title, subtitle, children }) {
   return (
@@ -258,7 +256,7 @@ function PullNpcForm({ npcTemplates, onPull }) {
   }
 
   if (npcTemplates.length === 0) {
-    return <p className="combat-map-drag-hint">No NPCs yet -- create some on the NPCs page first.</p>;
+    return <p className="combat-map-drag-hint">No combat-ready NPCs yet -- create some on the Chronicle page first.</p>;
   }
 
   return (
@@ -297,6 +295,9 @@ export default function CombatPage() {
   const [allSlugs, setAllSlugs] = useState([]);
   const [allBlasters, setAllBlasters] = useState([]);
   const [actionPicker, setActionPicker] = useState(null); // slug awaiting an Attack/Break Wall/Make Wall/Build Bridge choice
+  const [mindScramblePicker, setMindScramblePicker] = useState(null); // Perplexus awaiting an effect choice
+  const [frictionPicker, setFrictionPicker] = useState(null); // Psi awaiting a friction choice
+  const [hunkerConfirm, setHunkerConfirm] = useState(null); // { ap, conMod } while awaiting "spend all AP?" confirmation
 
   const isDM = user?.role === "Dungeon Master";
 
@@ -334,7 +335,7 @@ export default function CombatPage() {
       .catch(() => {});
     fetch("/api/npc-templates", { headers: authHeaders(token) })
       .then((res) => res.json())
-      .then((data) => setNpcTemplates(data.templates || []))
+      .then((data) => setNpcTemplates((data.templates || []).filter((t) => t.combatReady !== false)))
       .catch(() => {});
   }, [isDM, token]);
 
@@ -379,13 +380,21 @@ export default function CombatPage() {
   useEffect(() => {
     if (!encounter) return;
     if (!isDM) {
-      setActingId(myCombatant?.id ?? null);
+      // When it's this player's own unmounted mecha's turn, hand them the
+      // mecha's controls (move + End Turn); otherwise they drive their
+      // character. A ridden mecha never gets its own turn (server skips it).
+      const active = encounter.combatants.find((c) => c.id === encounter.activeCombatantId);
+      const ownsActiveMecha =
+        active?.kind === "mecha" &&
+        active.data?.ownerUserId === user?.id &&
+        !encounter.combatants.some((c) => c.mountedOn === active.id);
+      setActingId(ownsActiveMecha ? active.id : myCombatant?.id ?? null);
       return;
     }
     if (actingId && encounter.combatants.some((c) => c.id === actingId)) return;
     setActingId(encounter.activeCombatantId ?? encounter.combatants[0]?.id ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [encounter, isDM, myCombatant]);
+  }, [encounter, isDM, myCombatant, user]);
 
   const actingCombatant = encounter?.combatants.find((c) => c.id === actingId) || null;
 
@@ -427,6 +436,28 @@ export default function CombatPage() {
     return { activeSlot, otherSlot, hasOther };
   }, [actingCombatant, allBlasters]);
 
+  // Drives the hotbar's Reload button: the active weapon's reload AP cost and
+  // how many of this combatant's slugs have returned to hand but aren't
+  // chambered (loaded === false, cooldown done). Mirrors the server's
+  // /actions/reload targeting.
+  const reloadInfo = useMemo(() => {
+    if (!actingCombatant || (actingCombatant.kind !== "character" && actingCombatant.kind !== "npc")) return null;
+    const activeSlot = actingCombatant.data?.activeWeaponSlot ?? 0;
+    const activeBlaster = allBlasters.find((b) => {
+      const owned =
+        actingCombatant.kind === "character"
+          ? b.userId === actingCombatant.refUserId
+          : b.ownerCombatantId === actingCombatant.id;
+      if (!owned || b.equipSlot == null) return false;
+      return actingCombatant.kind === "character" ? b.equipSlot === activeSlot : true;
+    });
+    if (!activeBlaster) return null;
+    const pending = allSlugs.filter(
+      (s) => s.equippedBlasterId === activeBlaster.id && s.loaded === false && (s.cooldownTurnsLeft || 0) === 0
+    ).length;
+    return { apCost: Math.max(1, activeBlaster.reloadApCost ?? 1), pending };
+  }, [actingCombatant, allBlasters, allSlugs]);
+
   const rangeRing = useMemo(() => {
     if (!actingCombatant || mode?.type !== "shoot") return null;
     const slug = allSlugs.find((s) => s.id === mode.slugId);
@@ -435,6 +466,37 @@ export default function CombatPage() {
     // Mirrors the server's combinedRange = max(blaster.range, type's range).
     return { x: actingCombatant.x, y: actingCombatant.y, r: Math.max(blaster?.range || 0, typeRange(slug.type)) };
   }, [actingCombatant, mode, allSlugs, allBlasters]);
+
+  // While "Mount" is armed, show how close you have to be -- a ring at
+  // MOUNT_RANGE around the character, with every in-range mecha highlighted
+  // (CombatMap does the per-token highlight from this).
+  const mountRing = useMemo(() => {
+    if (!actingCombatant || mode?.type !== "mount") return null;
+    return { x: actingCombatant.x, y: actingCombatant.y, r: MOUNT_RANGE };
+  }, [actingCombatant, mode]);
+
+  // The mecha the acting character is riding, if any -- drives the hotbar's
+  // dual AP display and the Ram button's enable state.
+  const mountedMecha = useMemo(() => {
+    if (!encounter || actingCombatant?.mountedOn == null) return null;
+    return encounter.combatants.find((c) => c.id === actingCombatant.mountedOn) || null;
+  }, [encounter, actingCombatant]);
+
+  // A mounted rider moves at their mecha's speed and spends the mecha's AP; a
+  // lone mecha covers a character's walk times its own speed. Mirrors the
+  // server's /actions/move math -- preview only.
+  const estimateApCost = useCallback(
+    (combatant, dist) => {
+      let speed = null;
+      if (combatant.kind === "mecha") speed = combatant.data?.speed || 1;
+      else if (combatant.mountedOn != null) {
+        speed = encounter?.combatants.find((c) => c.id === combatant.mountedOn)?.data?.speed || 1;
+      }
+      const speedPerAp = speed != null ? MOVE_SPEED_PER_AP * Math.max(1, speed) : MOVE_SPEED_PER_AP;
+      return Math.max(1, Math.ceil(dist / speedPerAp));
+    },
+    [encounter]
+  );
 
   // Every mutating call below applies its own response's `encounter` to
   // local state directly, rather than waiting on the websocket echo to come
@@ -553,6 +615,12 @@ export default function CombatPage() {
     setError(null);
     try {
       if (name === "hunker-down") {
+        // Hunker Down burns *all* remaining AP -- confirm first if there's more
+        // than one to lose, so a stray click doesn't end the turn.
+        if ((actingCombatant.currentAp ?? 0) > 1) {
+          setHunkerConfirm({ ap: actingCombatant.currentAp, conMod: actingCombatant.data?.conMod ?? 0 });
+          return;
+        }
         applyEncounter(await postJson(token, "/api/combat/actions/hunker-down", { combatantId: actingCombatant.id }));
       } else if (name === "end-turn") {
         applyEncounter(await postJson(token, "/api/combat/actions/end-turn", { combatantId: actingCombatant.id }));
@@ -560,7 +628,20 @@ export default function CombatPage() {
         applyEncounter(await postJson(token, "/api/combat/actions/dismount", { combatantId: actingCombatant.id }));
       } else if (name === "switch-weapon") {
         applyEncounter(await postJson(token, "/api/combat/actions/switch-weapon", { combatantId: actingCombatant.id }));
+      } else if (name === "reload") {
+        applyEncounter(await postJson(token, "/api/combat/actions/reload", { combatantId: actingCombatant.id }));
       }
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function confirmHunker() {
+    setHunkerConfirm(null);
+    if (!actingCombatant) return;
+    setError(null);
+    try {
+      applyEncounter(await postJson(token, "/api/combat/actions/hunker-down", { combatantId: actingCombatant.id }));
     } catch (err) {
       setError(err.message);
     }
@@ -594,7 +675,17 @@ export default function CombatPage() {
     if (!encounter) return false;
     if (isDM) return true;
     if (encounter.status !== "active") return false;
-    return combatant.id === actingCombatant?.id && combatant.kind === "character" && combatant.refUserId === user?.id;
+    if (combatant.id !== actingCombatant?.id) return false;
+    if (combatant.kind === "character" && combatant.refUserId === user?.id) return true;
+    // Your own mecha, on its own turn, only while nobody's riding it.
+    if (
+      combatant.kind === "mecha" &&
+      combatant.data?.ownerUserId === user?.id &&
+      !encounter.combatants.some((c) => c.mountedOn === combatant.id)
+    ) {
+      return true;
+    }
+    return false;
   }
 
   async function handleTokenDragEnd(combatant, point) {
@@ -626,6 +717,7 @@ export default function CombatPage() {
             slugId: mode.slugId,
             actionType: mode.actionType || "attack",
             ...(isEnvAction ? { targetPoint: { x: target.x, y: target.y } } : { targetId: target.id }),
+            ...(mode.effectChoice ? { effectChoice: mode.effectChoice } : {}),
           })
         );
       } catch (err) {
@@ -674,12 +766,37 @@ export default function CombatPage() {
       setActionPicker(slug);
       return;
     }
+    // Perplexus: state your intended effect before you know the target --
+    // the server re-validates against whichever pool (enemy debuffs vs self
+    // buffs) the eventual target actually calls for, see
+    // MindScrambleModal's own comment.
+    if (slug.mindScramble) {
+      setMindScramblePicker(slug);
+      return;
+    }
+    // Psi: same "state your intent before you know the target" pattern as
+    // Perplexus, just a single un-grouped pool (friction_shift is always a
+    // debuff, no self-target buff reading).
+    if (slug.frictionShift) {
+      setFrictionPicker(slug);
+      return;
+    }
     setMode({ type: "shoot", slugId: slug.id, slugName: slug.name, actionType: "attack" });
   }
 
   function handlePickSlugAction(slug, actionType) {
     setActionPicker(null);
     setMode({ type: "shoot", slugId: slug.id, slugName: slug.name, actionType });
+  }
+
+  function handlePickMindScrambleEffect(slug, effectChoice) {
+    setMindScramblePicker(null);
+    setMode({ type: "shoot", slugId: slug.id, slugName: slug.name, actionType: "attack", effectChoice });
+  }
+
+  function handlePickFrictionEffect(slug, effectChoice) {
+    setFrictionPicker(null);
+    setMode({ type: "shoot", slugId: slug.id, slugName: slug.name, actionType: "attack", effectChoice });
   }
 
   if (encounter === undefined) return null;
@@ -820,6 +937,7 @@ export default function CombatPage() {
             activeCombatantId={encounter.activeCombatantId}
             actingCombatantId={actingCombatant?.id}
             rangeRing={rangeRing}
+            mountRing={mountRing}
             isDraggable={isDraggable}
             showDragApCost
             estimateApCost={estimateApCost}
@@ -834,6 +952,8 @@ export default function CombatPage() {
             isDM={isDM}
             mode={mode}
             weaponSwitch={weaponSwitch}
+            reloadInfo={reloadInfo}
+            mountedMecha={mountedMecha}
             onArmMode={setMode}
             onCancelMode={cancelMode}
             onAction={runAction}
@@ -857,6 +977,24 @@ export default function CombatPage() {
 
       {actionPicker && (
         <SlugActionModal slug={actionPicker} onPick={handlePickSlugAction} onClose={() => setActionPicker(null)} />
+      )}
+      {mindScramblePicker && (
+        <MindScrambleModal
+          slug={mindScramblePicker}
+          onPick={handlePickMindScrambleEffect}
+          onClose={() => setMindScramblePicker(null)}
+        />
+      )}
+      {frictionPicker && (
+        <FrictionModal slug={frictionPicker} onPick={handlePickFrictionEffect} onClose={() => setFrictionPicker(null)} />
+      )}
+      {hunkerConfirm && (
+        <HunkerConfirmModal
+          ap={hunkerConfirm.ap}
+          conMod={hunkerConfirm.conMod}
+          onConfirm={confirmHunker}
+          onClose={() => setHunkerConfirm(null)}
+        />
       )}
       </div>
     </>

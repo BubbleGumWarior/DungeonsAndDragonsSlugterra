@@ -57,10 +57,24 @@ export function toClientSlug(row) {
     mirageDecoy: row.mirage_decoy,
     starWall: row.star_wall,
     anchorZone: row.anchor_zone,
+    voidsFireClash: row.voids_fire_clash,
+    clearsFireTerrain: row.clears_fire_terrain,
+    causesDisarm: row.causes_disarm,
+    disarmZone: row.disarm_zone,
+    mindScramble: row.mind_scramble,
+    swapsPosition: row.swaps_position,
+    frictionShift: row.friction_shift,
+    crosswindZone: row.crosswind_zone,
+    skipsReload: row.skips_reload,
+    emotionSurge: row.emotion_surge,
+    uncounterable: row.uncounterable,
+    damageTripled: row.damage_tripled,
+    staticMark: row.static_mark,
     ownerCombatantId: row.owner_combatant_id,
     equippedBlasterId: row.equipped_blaster_id,
     magazineSlot: row.magazine_slot,
     cooldownTurnsLeft: row.cooldown_turns_left,
+    loaded: row.loaded,
     createdAt: row.created_at,
   };
 }
@@ -127,6 +141,19 @@ router.post("/", requireDungeonMaster, async (req, res) => {
     mirageDecoy,
     starWall,
     anchorZone,
+    voidsFireClash,
+    clearsFireTerrain,
+    causesDisarm,
+    disarmZone,
+    mindScramble,
+    swapsPosition,
+    frictionShift,
+    crosswindZone,
+    skipsReload,
+    emotionSurge,
+    uncounterable,
+    damageTripled,
+    staticMark,
   } = req.body || {};
 
   const validation = validateSlugFields({
@@ -177,8 +204,10 @@ router.post("/", requireDungeonMaster, async (req, res) => {
         (template_id, user_id, name, type, protoform_image, velocity_image, clash_power, clash_defense, ap_cost, max_energy_pips, energy_pips, loyalty_tier, velocity_ability, protoform_utility, breaks_walls, causes_knockback, wall_maker, bridge_maker, aoe_blast, hazard_maker,
          causes_blind, causes_snare, causes_shock, causes_jam,
          pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion, trail_wall, clash_tripled,
-         cone_blast, spawns_pods, mirage_decoy, star_wall, anchor_zone)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38)
+         cone_blast, spawns_pods, mirage_decoy, star_wall, anchor_zone,
+         voids_fire_clash, clears_fire_terrain, causes_disarm, disarm_zone, mind_scramble, swaps_position,
+         friction_shift, crosswind_zone, skips_reload, emotion_surge, uncounterable, damage_tripled, static_mark)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51)
        RETURNING *`,
       [
         Number.isInteger(templateId) ? templateId : null,
@@ -219,6 +248,19 @@ router.post("/", requireDungeonMaster, async (req, res) => {
         Boolean(mirageDecoy),
         Boolean(starWall),
         Boolean(anchorZone),
+        Boolean(voidsFireClash),
+        Boolean(clearsFireTerrain),
+        Boolean(causesDisarm),
+        Boolean(disarmZone),
+        Boolean(mindScramble),
+        Boolean(swapsPosition),
+        Boolean(frictionShift),
+        Boolean(crosswindZone),
+        Boolean(skipsReload),
+        Boolean(emotionSurge),
+        Boolean(uncounterable),
+        Boolean(damageTripled),
+        Boolean(staticMark),
       ]
     );
 
@@ -270,6 +312,19 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
     mirageDecoy,
     starWall,
     anchorZone,
+    voidsFireClash,
+    clearsFireTerrain,
+    causesDisarm,
+    disarmZone,
+    mindScramble,
+    swapsPosition,
+    frictionShift,
+    crosswindZone,
+    skipsReload,
+    emotionSurge,
+    uncounterable,
+    damageTripled,
+    staticMark,
   } = req.body || {};
 
   const validation = validateSlugFields({
@@ -328,8 +383,11 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
         causes_blind = $19, causes_snare = $20, causes_shock = $21, causes_jam = $22,
         pierces_walls = $23, causes_chain = $24, ricochets = $25, ultra_fast = $26,
         causes_invisible = $27, causes_fear = $28, causes_confusion = $29, trail_wall = $30, clash_tripled = $31,
-        cone_blast = $32, spawns_pods = $33, mirage_decoy = $34, star_wall = $35, anchor_zone = $36
-       WHERE id = $37
+        cone_blast = $32, spawns_pods = $33, mirage_decoy = $34, star_wall = $35, anchor_zone = $36,
+        voids_fire_clash = $37, clears_fire_terrain = $38, causes_disarm = $39, disarm_zone = $40,
+        mind_scramble = $41, swaps_position = $42, friction_shift = $43, crosswind_zone = $44, skips_reload = $45,
+        emotion_surge = $46, uncounterable = $47, damage_tripled = $48, static_mark = $49
+       WHERE id = $50
        RETURNING *`,
       [
         name.trim(),
@@ -368,6 +426,19 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
         Boolean(mirageDecoy),
         Boolean(starWall),
         Boolean(anchorZone),
+        Boolean(voidsFireClash),
+        Boolean(clearsFireTerrain),
+        Boolean(causesDisarm),
+        Boolean(disarmZone),
+        Boolean(mindScramble),
+        Boolean(swapsPosition),
+        Boolean(frictionShift),
+        Boolean(crosswindZone),
+        Boolean(skipsReload),
+        Boolean(emotionSurge),
+        Boolean(uncounterable),
+        Boolean(damageTripled),
+        Boolean(staticMark),
         id,
       ]
     );

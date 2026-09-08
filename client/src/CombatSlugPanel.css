@@ -118,6 +118,32 @@
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
 
+/* Same frosted pane as the exhausted state, tinted toward a woozy vertigo
+   violet -- the slug has returned to hand but isn't chambered, and needs a
+   Reload action (see CombatHotbar) before it can fire again. */
+.combat-slug-cooldown-glass--not-loaded {
+  flex-direction: column;
+  gap: 4px;
+  background: linear-gradient(160deg, rgba(176, 111, 216, 0.2), rgba(255, 255, 255, 0.03) 60%);
+  border-color: rgba(176, 111, 216, 0.4);
+}
+
+.combat-slug-not-loaded-icon {
+  width: 26px;
+  height: 26px;
+  color: #c98fe6;
+  filter: drop-shadow(0 0 5px rgba(176, 111, 216, 0.65));
+}
+
+.combat-slug-not-loaded-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #c98fe6;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
 @keyframes combat-slug-cooldown-pulse {
   0%,
   100% {

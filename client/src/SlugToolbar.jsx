@@ -25,6 +25,19 @@ import {
   CopyIcon,
   StarIcon,
   ShieldIcon,
+  FireExtinguisherIcon,
+  CloudIcon,
+  ProhibitIcon,
+  MagnetIcon,
+  BrainIcon,
+  SwapIcon,
+  FootprintsIcon,
+  TornadoIcon,
+  FastForwardIcon,
+  HeartbeatIcon,
+  ShieldSlashIcon,
+  AsteriskIcon,
+  BroadcastIcon,
 } from "@phosphor-icons/react";
 import { SLUG_TYPES } from "./slugData.js";
 import "./SlugToolbar.css";
@@ -64,6 +77,19 @@ const FLAGS = [
   { key: "mirageDecoy", label: "Mirage Decoy", icon: CopyIcon },
   { key: "starWall", label: "Star Wall", icon: StarIcon },
   { key: "anchorZone", label: "Anchor Zone", icon: ShieldIcon },
+  { key: "voidsFireClash", label: "Voids Fire Clash", icon: FireExtinguisherIcon },
+  { key: "clearsFireTerrain", label: "Clears Fire Terrain", icon: CloudIcon },
+  { key: "causesDisarm", label: "Causes Disarm", icon: ProhibitIcon },
+  { key: "disarmZone", label: "Disarm Zone", icon: MagnetIcon },
+  { key: "mindScramble", label: "Mind Scramble", icon: BrainIcon },
+  { key: "swapsPosition", label: "Swaps Position", icon: SwapIcon },
+  { key: "frictionShift", label: "Friction Shift", icon: FootprintsIcon },
+  { key: "crosswindZone", label: "Crosswind Zone", icon: TornadoIcon },
+  { key: "skipsReload", label: "Skips Reload", icon: FastForwardIcon },
+  { key: "emotionSurge", label: "Emotion Surge", icon: HeartbeatIcon },
+  { key: "uncounterable", label: "Uncounterable", icon: ShieldSlashIcon },
+  { key: "damageTripled", label: "Damage Tripled", icon: AsteriskIcon },
+  { key: "staticMark", label: "Static Mark", icon: BroadcastIcon },
 ];
 
 export function sortTemplates(list, sortKey) {

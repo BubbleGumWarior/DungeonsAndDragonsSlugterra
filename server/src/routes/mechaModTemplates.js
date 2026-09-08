@@ -20,6 +20,7 @@ function toClientTemplate(row) {
     name: row.name,
     effect: row.effect,
     speedBonus: row.speed_bonus,
+    speedMultiplier: row.speed_multiplier,
     handlingBonus: row.handling_bonus,
     armorBonus: row.armor_bonus,
     rammingBonus: row.ramming_bonus,
@@ -39,9 +40,9 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const { name, effect, speedBonus, handlingBonus, armorBonus, rammingBonus, unlocksMode } = req.body || {};
+  const { name, effect, speedBonus, speedMultiplier, handlingBonus, armorBonus, rammingBonus, unlocksMode } = req.body || {};
 
-  const validation = validateMechaModFields({ name, effect, speedBonus, handlingBonus, armorBonus, rammingBonus, unlocksMode });
+  const validation = validateMechaModFields({ name, effect, speedBonus, speedMultiplier, handlingBonus, armorBonus, rammingBonus, unlocksMode });
   if (!validation.valid) {
     return res.status(400).json({ error: validation.error });
   }
@@ -49,10 +50,10 @@ router.post("/", async (req, res) => {
   try {
     const { rows } = await pool.query(
       `INSERT INTO mecha_mod_templates
-        (name, effect, speed_bonus, handling_bonus, armor_bonus, ramming_bonus, unlocks_mode)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+        (name, effect, speed_bonus, speed_multiplier, handling_bonus, armor_bonus, ramming_bonus, unlocks_mode)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [name.trim(), effect ?? null, speedBonus, handlingBonus, armorBonus, rammingBonus, unlocksMode ?? null]
+      [name.trim(), effect ?? null, speedBonus, speedMultiplier ?? 1, handlingBonus, armorBonus, rammingBonus, unlocksMode ?? null]
     );
     res.status(201).json({ template: toClientTemplate(rows[0]) });
   } catch (err) {
@@ -63,9 +64,9 @@ router.post("/", async (req, res) => {
 
 router.patch("/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const { name, effect, speedBonus, handlingBonus, armorBonus, rammingBonus, unlocksMode } = req.body || {};
+  const { name, effect, speedBonus, speedMultiplier, handlingBonus, armorBonus, rammingBonus, unlocksMode } = req.body || {};
 
-  const validation = validateMechaModFields({ name, effect, speedBonus, handlingBonus, armorBonus, rammingBonus, unlocksMode });
+  const validation = validateMechaModFields({ name, effect, speedBonus, speedMultiplier, handlingBonus, armorBonus, rammingBonus, unlocksMode });
   if (!validation.valid) {
     return res.status(400).json({ error: validation.error });
   }
@@ -73,10 +74,10 @@ router.patch("/:id", async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE mecha_mod_templates SET
-        name = $1, effect = $2, speed_bonus = $3, handling_bonus = $4, armor_bonus = $5, ramming_bonus = $6, unlocks_mode = $7
-       WHERE id = $8
+        name = $1, effect = $2, speed_bonus = $3, speed_multiplier = $4, handling_bonus = $5, armor_bonus = $6, ramming_bonus = $7, unlocks_mode = $8
+       WHERE id = $9
        RETURNING *`,
-      [name.trim(), effect ?? null, speedBonus, handlingBonus, armorBonus, rammingBonus, unlocksMode ?? null, id]
+      [name.trim(), effect ?? null, speedBonus, speedMultiplier ?? 1, handlingBonus, armorBonus, rammingBonus, unlocksMode ?? null, id]
     );
     if (!rows[0]) {
       return res.status(404).json({ error: "Template not found." });

@@ -16,9 +16,13 @@ export const FRAME_TYPES = {
 
 export const FRAME_TYPE_KEYS = Object.keys(FRAME_TYPES);
 
-// Frames that innately grant a terrain mode with no mod required.
-export const FRAME_INNATE_MODES = {
-  Mole: "burrow",
+// No frame grants a terrain mode innately -- glide / aquatic / burrow are all
+// mod-only. `bike` is the odd one out: still a mod-granted mode, but it shows
+// as a badge only and has no persistent flag on the mecha row.
+export const MODE_FLAG_COLUMNS = {
+  glider: "can_glide",
+  aquatic: "can_aquatic",
+  burrow: "can_burrow",
 };
 
 export const TIER_LABELS = [
@@ -39,9 +43,11 @@ export const STAT_MAX = 10;
 export const PASSENGER_MIN = 1;
 export const PASSENGER_MAX = 6;
 export const MOD_SLOTS_MIN = 0;
-export const MOD_SLOTS_MAX = 6;
+export const MOD_SLOTS_MAX = 8;
 export const MOD_BONUS_MIN = -5;
 export const MOD_BONUS_MAX = 5;
+export const SPEED_MULT_MIN = 0.25;
+export const SPEED_MULT_MAX = 5;
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_TEXT_LENGTH = 500;
@@ -122,13 +128,19 @@ export function validateMechaFields({
   return { valid: true };
 }
 
-export function validateMechaModFields({ name, effect, speedBonus, handlingBonus, armorBonus, rammingBonus, unlocksMode }) {
+export function validateMechaModFields({ name, effect, speedBonus, speedMultiplier, handlingBonus, armorBonus, rammingBonus, unlocksMode }) {
   if (typeof name !== "string" || !name.trim() || name.trim().length > 40) {
     return { valid: false, error: "Name must be a non-empty string of 40 characters or fewer." };
   }
 
   const effectError = validateText(effect, "Effect");
   if (effectError) return { valid: false, error: effectError };
+
+  if (speedMultiplier !== undefined && speedMultiplier !== null) {
+    if (typeof speedMultiplier !== "number" || !Number.isFinite(speedMultiplier) || speedMultiplier < SPEED_MULT_MIN || speedMultiplier > SPEED_MULT_MAX) {
+      return { valid: false, error: `Speed Multiplier must be a number between ${SPEED_MULT_MIN} and ${SPEED_MULT_MAX}.` };
+    }
+  }
 
   for (const [value, label] of [
     [speedBonus, "Speed Bonus"],

@@ -54,11 +54,11 @@ for the whole encounter.
 |---|---|---|
 | Move | 1 per use | Move up to `MOVE_SPEED_PER_AP` (**80** map units) in any direction/path, blocked by walls. Multiple Move actions in a turn chain together. Intentionally independent of `RANGE_SCALE` (shooting range/speed), so retuning one never silently changes the other. |
 | Shoot Slug | `slug.apCost` (1–3, already on the slug) | Fire the slug currently chambered in the active weapon's selected magazine slot at a target in range + line of sight. Triggers the counter-clash window (§6) if the target has a loaded slug they can both react with *and* afford (its `apCost` ≤ their leftover AP). |
-| Reload | `blaster.reloadApCost` | Chamber a fresh slug into the blaster (swap the active magazine slot's slug), or clear a "jammed" (failed-quality) shot. |
+| Reload | `blaster.reloadApCost` (flat, one action) | Re-chamber **every** slug in the active weapon that has returned to hand but is sitting unloaded (`loaded = false`, cooldown done — see §4's return-to-hand cooldown), and clear any "jammed" (failed-quality) shot. |
 | Swap Active Weapon | 0 (free, once per turn) | Switch which equipped blaster (Primary/Secondary) is active, matching the existing weapon-cycling UI. |
-| Hunker Down | 2 | No movement/attack this turn; heal Grit equal to `HUNKER_HEAL` (default **1d4 + CON modifier**, min 1). Cannot be done the same turn you were hit. |
-| Mount / Dismount Mecha | 1 | Board or leave a mecha token you're adjacent to (within `MOUNT_RANGE`, default 5 units). |
-| Ram (mecha) | 2 | Drive a mecha into an adjacent target; see §8. |
+| Hunker Down | **all remaining AP** | Sinks every remaining AP into a heal — one **1d4 + CON modifier** roll per AP spent, summed (min 1 overall). Ends the turn. Cannot be done the same turn you were hit. The client asks for confirmation first whenever more than 1 AP would be spent. |
+| Mount / Dismount Mecha | 1 | Board or leave a mecha token within `MOUNT_RANGE` (**one Move's worth of walking**, `MOVE_SPEED_PER_AP` units). While armed, the map shows the range ring and highlights every in-range mecha. |
+| Ram (mecha) | 2, **from the mecha's AP** | Drive a mounted mecha into a target in `MOUNT_RANGE`; happens on the *rider's* turn. An unmounted mecha cannot ram. See §8. |
 | Free custom action (DM only) | DM sets cost | Escape hatch for narrative actions the system doesn't model. |
 
 The **knockout roll** reaction doesn't consume AP. A **counter-clash** does: firing
@@ -85,7 +85,7 @@ spread between types (Air long, Rock/Earth short, etc.) is unchanged by that sca
 | Air | Long (32) | +2 | +0 | Fast | — (flies true, long-ranged, accurate) |
 | Dark | Medium (20) | −1 | +0 | Medium | Phases through walls: ignores line-of-sight blocking (a ghost-shot), doesn't damage the wall |
 | Earth | Short (16) | −2 | +1 | Slow | Large knockback, always (doubled if the slug's `causesKnockback` is also set) — see §5 |
-| Electricity | Medium (22) | +1 | +0 | Fast | Chains: 50% power hit to one enemy within 8 units of target |
+| Electricity | Medium (22) | +1 | +0 | Fast | Chains: 50% power hit to one enemy within 8 units of target. **Also fries mechas** — every point of damage that lands on a mecha's Structure (a direct hit, or the 75% a mounted rider's mecha soaks) is doubled (`ELECTRIC_MECHA_DAMAGE_MULTIPLIER`); the rider's own share of a split hit is *not* doubled |
 | Energy | Medium (20) | +1 | +0 | Fast | Recharge: on a hit, regain 1 spent energy pip on another of your loaded slugs |
 | Fire | Short (18) | +2 | +0 | Fast | Burns: 50% of the slug's own clashPower (min 1) grit dmg/turn, for 3 turns (DoT; doesn't stack — a fresh hit refreshes duration + damage) |
 | Healing* | Short (18) | +1 | n/a | Medium | Heals instead of harms |
@@ -286,6 +286,15 @@ called from `advanceTurn`), and blocks both firing it again and offering it as a
 counter-clash option while it's still counting down. Ending the encounter clears
 every combatant's outstanding cooldowns, so nobody carries a stale one into the
 next fight.
+
+Once the cooldown reaches 0 the slug is back in hand but **not chambered** —
+`spendEnergyPip()` also set `slug.loaded = false`, and it stays that way (blocking
+firing and countering, marked in the combat UI with a vertigo "Not Loaded" overlay
+on the slug card, the loaded-state twin of the "Exhausted" overlay) until the owner
+spends a **Reload** action. Reload (`POST /actions/reload`, `tickSlugCooldowns`'s
+counterpart) chambers *every* returned-but-unloaded slug in the currently active
+weapon at once for a flat AP cost of that blaster's own `reload_ap_cost`. Ending
+the encounter re-loads everything along with clearing cooldowns.
 
 ## 5. Shooting resolution
 
@@ -528,26 +537,39 @@ every tier without a second stat to invent):
 maxStructure = 20 + armor * 4 + tier * 5
 ```
 
-- A mecha token moves at `speed * MECHA_SPEED_UNIT` (default 12) map units per Move
-  action AP spent — faster than characters, matching the fiction.
-- **Ram** action (2 AP): drive into an adjacent enemy (character or mecha). Attack
-  roll `d20 + handling` vs `10 + target evasion` (target DEX mod, or target mecha's
-  handling if it's a mecha). On hit: damage = `rammingPower * 2`, reduced by the
-  target's armor if it's a mecha, applied to Structure (mecha target) or Grit
-  (character target, halved and always triggers a knockback-into-wall check —
-  getting rammed by a mecha throws you). The ramming mecha takes `targetRammingPower`
-  (or half, for a character target) back as its own Structure damage — a head-on
-  hit costs both sides.
-- Riding as a passenger doesn't grant extra AP; a passenger can still Shoot Slug from
-  a mount as long as the mecha didn't also Ram that turn (one "big" action per mecha
-  per turn: either it rams, or its passengers act individually — keeps a mecha from
-  being strictly better than dismounting).
+- A mecha token moves a character's normal walking distance (`MOVE_SPEED_PER_AP`)
+  times its own `speed` per Move-action AP — speed 1 walks like a person, speed 3
+  covers three times the ground.
+- **Unmounted mecha**: only its owning player (or the DM) can move it, and only on
+  its own initiative turn. It can take no other action — no ram, no shooting.
+- **Mounting** ties the rider and mecha into one entity: they share the *rider's*
+  turn (the mecha is skipped in initiative), move together at the mecha's speed
+  spending the mecha's AP, and the rider's token rides small on the mecha's. The
+  mecha's AP refills at the start of the rider's turn.
+- **Ram** action (2 AP, spent from the mecha's pool, taken on the rider's turn):
+  drive into a target within `MOUNT_RANGE`. Attack roll `d20 + handling` vs
+  `10 + target evasion` (target DEX mod, or target mecha's handling). On hit:
+  damage = `rammingPower * RAM_DAMAGE_MULTIPLIER` (**×5**), reduced by the target's
+  armor if it's a mecha and applied to Structure; against a **character** the raw
+  figure is ignored — they take a flat `RAM_CHARACTER_MAX_GRIT_FRACTION` (**50%**)
+  of their max Grit, always with a knockback-into-wall check. The ramming mecha
+  takes `targetRammingPower * 5 - armor` (mecha target) or `rammingPower / 2`
+  (character target) back as Structure damage.
+- A **failed** ram — missed attack roll, or a `tier` breakdown mechanical failure —
+  plays the same misfire feedback as a jammed slug shot (Fail.mp3 + the red-border
+  map shake).
+- A passenger can still Shoot Slug from a mount.
+- **Damage soak**: any Grit hit that would land on a mounted rider is split with
+  the mecha — the mecha takes `RIDER_DAMAGE_MECHA_FRACTION` (**75%**, rounded up)
+  as Structure, the rider takes the rest. A hit too small to quarter lands
+  entirely on the mecha (2–3 damage → all to the mecha; 5 → 4 mecha / 1 rider).
+  Covers direct hits, clash outcomes, chain/AOE/cone splash, static-mark arcs,
+  and being rammed. Burn/poison DoTs still tick on the rider. If the soak drops
+  the mecha to 0 Structure it's wrecked (and throws its riders). An **Electricity**
+  slug doubles the mecha's soaked share (not the rider's) — see §4.
 - Structure at 0 → mecha is disabled (can't move/ram this encounter); passengers are
   dismounted in place and each immediately makes a knockback-style knockout roll
   check (a wrecked mecha throws its riders).
-- Mecha `tier` breakdown chance (already defined in `mechaRules.js`) is rolled once
-  per Ram action as a mechanical-failure check on top of the attack roll — high-tier
-  mechas rarely misfire.
 
 ## 9. Data model additions
 

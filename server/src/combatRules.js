@@ -11,15 +11,23 @@ export { statModifier };
 // ---- Movement -------------------------------------------------------------
 
 export const MOVE_SPEED_PER_AP = 80; // map units moved per Move action -- walking distance only, shooting range/speed untouched (was 200; cut to 80 so a given walk costs 2.5x the AP)
-export const MECHA_SPEED_UNIT = 12; // map units per point of `speed`, per Move action
-export const MOUNT_RANGE = 5; // max distance to mount/dismount a mecha
+// A mecha covers a character's normal walking distance times its own `speed`
+// stat per Move-action AP -- speed 1 walks like a person, speed 3 covers three
+// times the ground. A mounted rider moves at their mecha's rate, spending the
+// mecha's AP (see /actions/move). Was a flat 12 units/speed-point, wholly
+// disconnected from the walking scale.
+export const MECHA_SPEED_PER_AP = (speed) => MOVE_SPEED_PER_AP * Math.max(1, speed || 1);
+export const MOUNT_RANGE = MOVE_SPEED_PER_AP; // 1 AP of walking -- how close you must be to mount/dismount, and how close a mecha must be to ram
 
 // ---- Action costs -----------------------------------------------------
 
 export const MOVE_AP_COST = 1;
-export const HUNKER_AP_COST = 2;
+// Hunker Down no longer has a fixed cost -- it sinks *all* remaining AP into
+// the heal (see hunkerHeal / routes/combat.js). Kept only as the threshold
+// above which the client asks for confirmation first.
+export const HUNKER_MIN_AP = 1;
 export const MOUNT_AP_COST = 1;
-export const RAM_AP_COST = 2;
+export const RAM_AP_COST = 2; // spent from the mecha's AP pool, on the rider's turn
 export const SWITCH_WEAPON_AP_COST = 1;
 
 // ---- Weapons ------------------------------------------------------------
@@ -81,9 +89,15 @@ export const SLUG_RETURN_TURNS = 3;
 
 // ---- Hunker Down ------------------------------------------------------
 
-export function hunkerHeal(conModifier) {
-  const roll = 1 + Math.floor(Math.random() * 4); // 1d4
-  return Math.max(1, roll + conModifier);
+// Hunker Down spends every remaining AP on patching yourself up: one
+// 1d4 + CON-modifier roll per AP consumed, all summed. Min 1 overall so a
+// deeply negative CON can never turn it into a wasted turn.
+export function hunkerHeal(conModifier, apSpent = 1) {
+  let total = 0;
+  for (let i = 0; i < Math.max(1, apSpent); i++) {
+    total += 1 + Math.floor(Math.random() * 4) + conModifier; // 1d4 + CON
+  }
+  return Math.max(1, total);
 }
 
 // ---- Shooting -----------------------------------------------------------
@@ -137,17 +151,113 @@ export const POISON_DAMAGE_PER_STACK = 1;
 export const POISON_DURATION_TURNS = 3;
 export const SNARE_DURATION_TURNS = 2;
 
+// -- Cynosure: causes_disarm fries the target's blaster on hit or miss
+// alike (same "regardless of hit/miss" rule as causes_jam), blocking the
+// Shoot Slug action entirely (see /actions/shoot) for their next
+// DISARM_DURATION_TURNS - 1 turns -- same "duration constant is one more
+// than the turns it actually blocks" convention as SNARE_DURATION_TURNS.
+// Its disarm_zone flag leaves a lingering electromagnetic field that pins
+// anyone standing in it to fully disarmed every one of their turns (never
+// decaying while they stay put), then lets it decay normally -- exactly
+// DISARM_DURATION_TURNS - 1 more turns of grace -- once they actually step
+// out. See tickStatusEffects' `insideDisarmZone` param below and
+// addDisarmZone/DISARM_ZONE_RADIUS/DISARM_ZONE_DURATION_ROUNDS in
+// routes/combat.js.
+export const DISARM_DURATION_TURNS = 2;
+
+// -- Perplexus: mind_scramble replaces Psychic's own baseline "stunned" trait
+// entirely (see the tb.trait === "stun" gate in dealHit) with a chosen
+// effect instead of a roll -- 3 debuffs when fired at someone else, 2 buffs
+// when fired at yourself. The shoot route narrows an incoming effectChoice
+// to whichever pool actually applies to this shot's targeting and falls
+// back to a random pick from that same pool if none was given (an NPC fired
+// without the client's picker, or an invalid/mismatched choice) -- see
+// dealHit's own mind_scramble block, which does this same narrowing again
+// as its actual source of truth (the route's own check is just an early,
+// friendlier rejection).
+export const MIND_SCRAMBLE_ENEMY_EFFECTS = ["reverse", "darkness", "slow"];
+export const MIND_SCRAMBLE_SELF_EFFECTS = ["enhance", "vision"];
+export const MIND_SCRAMBLE_EFFECT_LABELS = {
+  reverse: "their sense of direction flips -- their next Move goes the exact opposite way",
+  darkness: "darkness falls over them -- their next attack roll has disadvantage",
+  slow: "their reaction time slows -- less time to react to incoming shots",
+  enhance: "their reaction time sharpens -- more time to react to incoming shots",
+  vision: "their vision sharpens -- their next attack roll has advantage and ignores range falloff",
+};
+// reverse/slow/enhance are turn-counted (tickStatusEffects, same "duration
+// constant is one more than the turns it actually blocks" convention as
+// SNARE_DURATION_TURNS); darkness reuses the existing one-shot `blinded`
+// status as-is, and vision is its own one-shot `keenVision` status, both
+// consumed the instant the affected combatant's next attack roll happens
+// (see the blinded/keenVision checks in resolveNormalHit/resolveCounterOffer).
+export const MIND_SCRAMBLE_DURATION_TURNS = 2;
+// Slower reaction shrinks the counter-clash window on the *next* incoming
+// shot(s) aimed at the target -- same shrink Zeus's ultra_fast already
+// applies to whoever Zeus itself shoots, just target-driven instead of
+// shooter-driven. Enhanced reaction is the mirror buff.
+export const REACTION_SLOW_FACTOR = 0.5;
+export const REACTION_ENHANCE_FACTOR = 1.5;
+
+// Multiplies a shot's windowMs based on the *target's* own reaction status
+// (independent of whatever the shooter's own slug does, e.g. ultra_fast) --
+// see the two call sites in routes/combat.js that compute windowMs for a
+// shot aimed at a real combatant.
+export function reactionWindowFactor(statusEffects) {
+  if (statusEffects?.slowedReaction?.turnsLeft > 0) return REACTION_SLOW_FACTOR;
+  if (statusEffects?.enhancedReaction?.turnsLeft > 0) return REACTION_ENHANCE_FACTOR;
+  return 1;
+}
+
+// Mirrors `to` through `from` -- same distance, exactly opposite direction.
+// Used for Perplexus's reversed-direction effect on a Move action (see
+// /actions/move): the destination the combatant actually asked for gets
+// flipped to its exact opposite before the wall-check/AP-cost math runs.
+export function reverseMoveDestination(from, to) {
+  return { x: from.x * 2 - to.x, y: from.y * 2 - to.y };
+}
+
+// -- Tesser: swaps_position, on a landed hit (never a self-shot, and mecha
+// never reach this branch of dealHit to begin with), instantly trades the
+// shooter's and target's map positions. No numbers to tune here -- it's a
+// straight swap of two already-legal positions, so there's nothing to wall-
+// check or clamp to map bounds either. See the swapsPosition block in
+// routes/combat.js's dealHit.
+
+// -- Psi: friction_shift picks (via the same offer.effectChoice the shoot
+// route already threads through for Perplexus) between two frictions,
+// always a debuff (no self-target branch, unlike Perplexus's split pools --
+// there's no "buff yourself with friction" reading of the source text):
+// "harsh" cranks it up, rooting the target in place -- reuses the ordinary
+// `snared` status outright, no separate mechanic needed. "slippery" drops
+// it to nothing, giving the target ICE_SLIP_CHANCE odds of their turn
+// ending abruptly on *any* Move attempt for the duration -- the exact same
+// roll Ice's own hazard patch already uses (see ICE_SLIP_CHANCE), just
+// carried on the combatant as a personal `slippery` status instead of
+// requiring them to stand in a patch of terrain. Falls back to a random
+// pick between the two if no valid choice came through (an NPC fired
+// without the client's picker, e.g.) -- see dealHit's friction_shift block.
+export const FRICTION_EFFECTS = ["harsh", "slippery"];
+export const FRICTION_EFFECT_LABELS = {
+  harsh: "their friction cranks up -- rooted in place, they can't Move for a turn",
+  slippery: "their friction drops to nothing -- any Move risks their turn ending abruptly",
+};
+export const SLIPPERY_DURATION_TURNS = 2;
+
 export function computeBurnDamage(clashPower) {
   return Math.max(1, Math.round(clashPower * BURN_DAMAGE_FRACTION));
 }
 
 // Called once, right as a combatant's own turn starts (see advanceTurn) --
-// applies any pending burn/poison damage and counts snare/poison/burn down,
-// all in one pass. Pure function: takes the combatant's current
-// status_effects (with `stunned` already stripped by the caller, since that
-// one only affects AP refill, not damage) and returns the damage to apply
-// plus the status_effects to write back.
-export function tickStatusEffects(statusEffects) {
+// applies any pending burn/poison damage and counts snare/poison/burn/
+// confusion/invisibility/disarm down, all in one pass. Pure function: takes
+// the combatant's current status_effects (with `stunned` already stripped by
+// the caller, since that one only affects AP refill, not damage) and returns
+// the damage to apply plus the status_effects to write back. `insideDisarmZone`
+// -- whether this combatant is currently standing inside a live Cynosure
+// field -- is the one exception to "pure duration countdown": while true, it
+// re-pins `disarmed` to the full duration every call instead of decrementing
+// it, so the effect never lapses while they're still in the field.
+export function tickStatusEffects(statusEffects, insideDisarmZone = false) {
   const next = { ...(statusEffects || {}) };
   let damage = 0;
   const notes = [];
@@ -188,6 +298,44 @@ export function tickStatusEffects(statusEffects) {
     const turnsLeft = (next.invisible.turnsLeft ?? 1) - 1;
     if (turnsLeft > 0) next.invisible = { turnsLeft };
     else delete next.invisible;
+  }
+
+  // Perplexus's reversedDirection/slowedReaction/enhancedReaction all tick
+  // down the same pure-duration-countdown way -- see MIND_SCRAMBLE_DURATION_TURNS.
+  if (next.reversedDirection) {
+    const turnsLeft = next.reversedDirection.turnsLeft - 1;
+    if (turnsLeft > 0) next.reversedDirection = { turnsLeft };
+    else delete next.reversedDirection;
+  }
+  if (next.slowedReaction) {
+    const turnsLeft = next.slowedReaction.turnsLeft - 1;
+    if (turnsLeft > 0) next.slowedReaction = { turnsLeft };
+    else delete next.slowedReaction;
+  }
+  if (next.enhancedReaction) {
+    const turnsLeft = next.enhancedReaction.turnsLeft - 1;
+    if (turnsLeft > 0) next.enhancedReaction = { turnsLeft };
+    else delete next.enhancedReaction;
+  }
+
+  // Psi's slippery -- same pure duration countdown, checked against
+  // ICE_SLIP_CHANCE on each Move attempt in /actions/move rather than here.
+  if (next.slippery) {
+    const turnsLeft = next.slippery.turnsLeft - 1;
+    if (turnsLeft > 0) next.slippery = { turnsLeft };
+    else delete next.slippery;
+  }
+
+  // Cynosure's disarm: standing inside the field re-pins to the full
+  // duration every turn (so it can never lapse while you're still in it);
+  // outside it, an existing disarm just counts down like every other status
+  // above.
+  if (insideDisarmZone) {
+    next.disarmed = { turnsLeft: DISARM_DURATION_TURNS };
+  } else if (next.disarmed) {
+    const turnsLeft = next.disarmed.turnsLeft - 1;
+    if (turnsLeft > 0) next.disarmed = { turnsLeft };
+    else delete next.disarmed;
   }
 
   return { damage, statusEffects: next, notes };
@@ -449,6 +597,31 @@ export function countKnockoutPipsUsed(pips) {
 
 // ---- Mecha --------------------------------------------------------------
 
+// A ram hit lands rammingPower * this against a mecha target (then cut by the
+// target's armor, applied to Structure). Against a *character* the figure is
+// ignored entirely -- a mecha slamming a person always deals
+// RAM_CHARACTER_MAX_GRIT_FRACTION of that character's max Grit, regardless of
+// how the mecha is built.
+export const RAM_DAMAGE_MULTIPLIER = 5;
+export const RAM_CHARACTER_MAX_GRIT_FRACTION = 0.5;
+
+// Electricity slugs fry circuitry -- every point of damage that actually lands
+// on a mecha's Structure (a direct hit, or the share a mounted rider's mecha
+// soaks for them) is multiplied by this. The rider's own portion of a split
+// hit is NOT multiplied -- only what the mecha eats.
+export const ELECTRIC_MECHA_DAMAGE_MULTIPLIER = 2;
+
+// When a mounted rider takes damage, their mecha soaks up this fraction of it
+// (as Structure), rounded UP -- so a small hit that can't be cleanly quartered
+// lands entirely on the mecha (2 or 3 damage -> all to the mecha; 5 -> 4 to
+// the mecha, 1 to the rider). The rider takes whatever is left.
+export const RIDER_DAMAGE_MECHA_FRACTION = 0.75;
+
+export function splitRiderDamage(amount) {
+  const mecha = Math.ceil(amount * RIDER_DAMAGE_MECHA_FRACTION);
+  return { mecha, rider: Math.max(0, amount - mecha) };
+}
+
 export function computeMaxStructure({ armor, tier }) {
   return 20 + armor * 4 + tier * 5;
 }
@@ -653,6 +826,78 @@ export function confusedDeflection(attackerPos, trueImpactPoint, walls = []) {
   return { x: wallHit.hit.x, y: wallHit.hit.y };
 }
 
+// -- Lentus: crosswind_zone, a lingering hazard (same battlefield-fixture
+// lifecycle as Anchorage's/Cynosure's zones, tagged kind: "crosswind",
+// ticked down by the same tickZones) that bends the course of ANY shot
+// whose straight-line path passes within it -- not gated on the shooter's
+// own slug at all, since this is a purely environmental hazard anyone's
+// bolt can fly through. See the crosswind check in routes/combat.js's
+// shoot route (right after Fandango's confusion check, which it can't fire
+// alongside -- confusion already short-circuits the shot before this ever
+// runs).
+export const CROSSWIND_ZONE_RADIUS = 140; // map units, same as Anchorage's/Cynosure's
+export const CROSSWIND_ZONE_DURATION_ROUNDS = 3;
+
+// Rolls 0-180 inclusive, recentered on 90 as "no change" -- so the shot
+// keeps flying wherever it was already headed (a roughly 1-in-181 chance)
+// on exactly 90, and anything else is how many degrees off course it gets
+// bent, -90..+90.
+export function rollCrosswindOffset() {
+  return Math.floor(Math.random() * 181) - 90;
+}
+
+// Rotates `trueImpactPoint` by `angleDeg` around `attackerPos` -- same
+// distance, a different direction -- with the same wall-clamp fallback as
+// confusedDeflection just above (which is this same operation at a fixed
+// 180 degrees; kept as its own function rather than refactored out from
+// under Fandango's already-tested path).
+export function rotateDeflection(attackerPos, trueImpactPoint, angleDeg, walls = []) {
+  const dx = trueImpactPoint.x - attackerPos.x;
+  const dy = trueImpactPoint.y - attackerPos.y;
+  const rad = (angleDeg * Math.PI) / 180;
+  const rotated = {
+    x: attackerPos.x + dx * Math.cos(rad) - dy * Math.sin(rad),
+    y: attackerPos.y + dx * Math.sin(rad) + dy * Math.cos(rad),
+  };
+  const wallHit = firstWallHit(attackerPos, rotated, walls);
+  if (!wallHit) return rotated;
+  return { x: wallHit.hit.x, y: wallHit.hit.y };
+}
+
+// -- Lentus: skips_reload, straight out of its own protoform lore ("can be
+// trained to enter blasters all by themselves") -- once its loyalty tier
+// reaches LOYALTY_FRIENDLY_TIER or higher, it self-chambers the instant it
+// returns from its ordinary cooldown instead of coming back `loaded: false`
+// and waiting on a manual Reload -- see the selfLoads check in
+// spendEnergyPip, routes/combat.js. Cooldown itself is untouched; only the
+// separate reload step is skipped.
+export const LOYALTY_FRIENDLY_TIER = 2; // see LOYALTY_TIER_LABELS in client/src/slugData.js
+
+// -- Arcling: static_mark tags whoever it hits with a persistent `marked`
+// status (no duration -- the source text never says it wears off) that
+// makes them a lightning rod for every *other* hit this same slug lands:
+// MARK_SPLASH_FRACTION of that other hit's own damage also lands on them,
+// global -- no radius, no chain-style single bounce -- see
+// applyMarkedSplash in routes/combat.js.
+export const MARK_SPLASH_FRACTION = 0.25;
+
+// -- Meduslug: uncounterable (its gaze locks the target in place before
+// they can even react, so it never offers a counter -- see
+// launchAndOfferCounter) and damage_tripled (unconditional x3, unlike
+// Emberblade's clash-only clash_tripled -- reuses CLASH_TRIPLE_MULTIPLIER
+// since it's the same factor) combine with the plain existing causes_shock
+// flag to give the full "damage triples, target is fully shocked, and
+// there's no clashing your way out of it" ability -- no bespoke status of
+// its own needed beyond those three flags.
+
+// -- Zephur: clash_tripled, Emberblade's own existing flag, reused outright
+// -- no new mechanic, just a second slug built around the same "weak
+// baseline, triples specifically while clashing" identity.
+
+// -- Eunoa: emotion_surge, see its own block in dealHit (routes/combat.js)
+// -- stacks two of Perplexus's existing buffs together on a self-shot, or
+// two of its existing debuffs together on anyone else, no new statuses.
+
 // -- Emberblade / Flaringo: both leave a wall of fire along the exact line
 // the shot traveled (attacker's position -> impact point), not the
 // perpendicular "shield" a Wall Maker slug raises. Unconditional on any
@@ -706,6 +951,17 @@ export const POD_MIN_TIMER = 3;
 export const POD_MAX_TIMER = 10;
 export const POD_LINE_LENGTH = 200; // map units the steam line reaches
 export const POD_LINE_HIT_TOLERANCE = 24; // how close a combatant must be to the line to be caught in it
+
+// -- Caligo: two flags, both Water-flavored counters to Fire. voidsFireClash
+// forces any clash it's part of against a Fire-type slug straight to the
+// "bounce" outcome (no damage, no ejects, no resolveClash roll at all) --
+// see resolveCounterOffer in routes/combat.js. clearsFireTerrain fires on
+// every Attack, same unconditional hit/miss/out-of-range trigger as every
+// other terrain flag: within HAZARD_RADIUS of wherever the shot actually
+// stopped, it snuffs out any Fire-tagged wall/bridge/hazard it finds, or
+// leaves its own steam damage patch (an ordinary Hazard Maker-style patch,
+// reusing addDamageHazard) if there was nothing to put out -- see
+// clearOrCreateSteamTerrain in routes/combat.js.
 
 export function rollPodTimer() {
   return POD_MIN_TIMER + Math.floor(Math.random() * (POD_MAX_TIMER - POD_MIN_TIMER + 1));
@@ -771,9 +1027,23 @@ export function starSegments(center, length = STAR_SEGMENT_LENGTH, points = STAR
 export const ANCHOR_RADIUS = 140; // map units
 export const ANCHOR_DURATION_ROUNDS = 3;
 
+// -- Cynosure: a persistent electromagnetic field, same battlefield-fixture
+// lifecycle as Anchorage's zone (see addDisarmZone/tickZones in
+// routes/combat.js), just tagged its own `kind` so the two don't cross-wire
+// -- Anchorage's suppresses knockback/wall-breaking, Cynosure's disarms
+// blasters (see DISARM_DURATION_TURNS below). Radius/duration match
+// Anchorage's own for now; tune independently if the field should feel
+// bigger/longer-lived.
+export const DISARM_ZONE_RADIUS = 140; // map units
+export const DISARM_ZONE_DURATION_ROUNDS = 3;
+
 // True if `point` falls inside any active zone (each {x, y, radius}).
-export function isInsideAnyZone(zones, point) {
-  return (zones || []).some((z) => distance(point, z) <= z.radius);
+// `kind`, if given, restricts the check to zones of that kind (e.g.
+// "anchor", "disarm") -- zones of other kinds sharing the same `zones`
+// array/lifecycle are otherwise invisible to this check. Omit it only for a
+// generic "is anything at all here" query.
+export function isInsideAnyZone(zones, point, kind) {
+  return (zones || []).some((z) => (!kind || z.kind === kind) && distance(point, z) <= z.radius);
 }
 
 // -- Mirage Coil: self-targeted, spawns DECOY_COUNT decoys that mimic the

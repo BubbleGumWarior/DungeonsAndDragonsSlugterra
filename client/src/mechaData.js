@@ -16,21 +16,29 @@ export const FRAME_TYPES = {
 
 export const FRAME_TYPE_KEYS = Object.keys(FRAME_TYPES);
 
-// Frames that innately grant a terrain mode with no mod required.
-export const FRAME_INNATE_MODES = {
-  Mole: "burrow",
-};
+// The three terrain abilities tracked as persistent flags on a mecha
+// (server columns can_glide / can_aquatic / can_burrow). None is granted by
+// default -- each turns on only while a mod that unlocks it is equipped.
+export const TERRAIN_MODES = [
+  { key: "glide", label: "Glide", flag: "canGlide", modeKey: "glider" },
+  { key: "aquatic", label: "Aquatic", flag: "canAquatic", modeKey: "aquatic" },
+  { key: "burrow", label: "Burrow", flag: "canBurrow", modeKey: "burrow" },
+];
 
 export const TIER_LABELS = [
-  { tier: 0, label: "Roadworn", statBonus: 0, breakdownChance: 25 },
-  { tier: 1, label: "Forge-Standard", statBonus: 1, breakdownChance: 15 },
-  { tier: 2, label: "Forge-Tuned", statBonus: 2, breakdownChance: 8 },
-  { tier: 3, label: "Blakk Custom", statBonus: 3, breakdownChance: 3 },
-  { tier: 4, label: "Legendary", statBonus: 4, breakdownChance: 0 },
+  { tier: 0, label: "Roadworn", statBonus: 0, breakdownChance: 25, color: "#dd7a4a" },
+  { tier: 1, label: "Forge-Standard", statBonus: 1, breakdownChance: 15, color: "#c9d1d9" },
+  { tier: 2, label: "Forge-Tuned", statBonus: 2, breakdownChance: 8, color: "#7fd99a" },
+  { tier: 3, label: "Blakk Custom", statBonus: 3, breakdownChance: 3, color: "#8fb8f0" },
+  { tier: 4, label: "Legendary", statBonus: 4, breakdownChance: 0, color: "#e6cd93" },
 ];
 
 export const TIER_MIN = 0;
 export const TIER_MAX = TIER_LABELS.length - 1;
+
+export function tierColor(tier) {
+  return (TIER_LABELS[tier] ?? TIER_LABELS[0]).color;
+}
 
 export const MODES = [
   { key: "aquatic", label: "Aquatic" },
@@ -46,9 +54,11 @@ export const STAT_MAX = 10;
 export const PASSENGER_MIN = 1;
 export const PASSENGER_MAX = 6;
 export const MOD_SLOTS_MIN = 0;
-export const MOD_SLOTS_MAX = 6;
+export const MOD_SLOTS_MAX = 8;
 export const MOD_BONUS_MIN = -5;
 export const MOD_BONUS_MAX = 5;
+export const SPEED_MULT_MIN = 0.25;
+export const SPEED_MULT_MAX = 5;
 
 export function tierInfo(tier) {
   return TIER_LABELS[tier] ?? TIER_LABELS[0];
@@ -60,18 +70,25 @@ export function formatSigned(value) {
 
 export function effectiveStats(mecha, equippedMods = []) {
   const tier = tierInfo(mecha.tier);
+  // Speed resolves in two stages: every flat bonus (frame + tier + each mod's
+  // speedBonus) is summed first, then the running product of every mod's
+  // speedMultiplier is applied to that total. So a flat booster and the Bike
+  // Conversion Kit's x2 stack -- boost, then double -- rather than one washing
+  // out the other.
+  const flatSpeed = mecha.speed + tier.statBonus + equippedMods.reduce((sum, m) => sum + m.speedBonus, 0);
+  const speedMult = equippedMods.reduce((product, m) => product * (m.speedMultiplier ?? 1), 1);
   return {
-    speed: mecha.speed + tier.statBonus + equippedMods.reduce((sum, m) => sum + m.speedBonus, 0),
+    speed: Math.round(flatSpeed * speedMult),
     handling: mecha.handling + tier.statBonus + equippedMods.reduce((sum, m) => sum + m.handlingBonus, 0),
     armor: mecha.armor + tier.statBonus + equippedMods.reduce((sum, m) => sum + m.armorBonus, 0),
     rammingPower: mecha.rammingPower + tier.statBonus + equippedMods.reduce((sum, m) => sum + m.rammingBonus, 0),
   };
 }
 
-export function unlockedModes(mecha, equippedMods = []) {
+// Modes granted purely by the currently-equipped mods. Used for the "bike"
+// badge; glide / aquatic / burrow are read from the mecha's own flags instead.
+export function unlockedModes(equippedMods = []) {
   const modes = new Set();
-  const innate = FRAME_INNATE_MODES[mecha.frameType];
-  if (innate) modes.add(innate);
   for (const mod of equippedMods) {
     if (mod.unlocksMode) modes.add(mod.unlocksMode);
   }
@@ -99,6 +116,7 @@ export function defaultMechaModFields() {
     name: "",
     effect: "",
     speedBonus: 0,
+    speedMultiplier: 1,
     handlingBonus: 0,
     armorBonus: 0,
     rammingBonus: 0,

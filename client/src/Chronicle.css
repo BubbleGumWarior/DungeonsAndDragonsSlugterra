@@ -1,0 +1,193 @@
+/* The Chronicle gallery: Party / Met segments, a relationship filter, and a
+   uniform grid of hero cards (see ChronicleCard.css). */
+.chronicle-subtitle {
+  margin: -6px 0 22px;
+  color: var(--ink-dim);
+  font-size: 14px;
+}
+
+.chronicle {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
+  max-width: 1040px;
+}
+
+.chronicle-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 18px;
+}
+
+.chronicle-segment {
+  display: inline-flex;
+  padding: 3px;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-600);
+  border-radius: 999px;
+}
+.chronicle-segment button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-dim);
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 12.5px;
+  letter-spacing: 0.03em;
+  padding: 8px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.16s var(--ease-out), background 0.16s var(--ease-out);
+}
+.chronicle-segment button[aria-selected="true"] {
+  background: linear-gradient(180deg, var(--gold), var(--gold-dim));
+  color: #1a1206;
+}
+.chronicle-segment button:focus-visible {
+  outline: 2px solid var(--gold-soft);
+  outline-offset: 2px;
+}
+
+.chronicle-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chronicle-chip {
+  appearance: none;
+  border: 1px solid var(--charcoal-600);
+  background: var(--charcoal-900);
+  color: var(--ink-dim);
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), color 0.15s var(--ease-out), background 0.15s var(--ease-out);
+}
+.chronicle-chip[aria-pressed="true"] {
+  border-color: var(--gold-dim);
+  color: var(--gold-soft);
+  background: rgba(201, 162, 75, 0.09);
+}
+.chronicle-chip:focus-visible {
+  outline: 2px solid var(--gold-soft);
+  outline-offset: 2px;
+}
+.chronicle-chip-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 7px;
+  vertical-align: 1px;
+  background: var(--dot, var(--ink-dim));
+}
+
+.chronicle-new {
+  margin-left: auto;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 15px;
+  border-radius: 999px;
+  border: 1px solid var(--gold-dim);
+  background: linear-gradient(180deg, var(--gold), var(--gold-dim));
+  color: #1a1206;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.chronicle-new svg {
+  width: 14px;
+  height: 14px;
+}
+
+.chronicle-empty {
+  color: var(--ink-dim);
+  font-size: 13.5px;
+  padding: 8px 0;
+}
+
+.chronicle-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chronicle-cell--hidden .chronicle-card {
+  opacity: 0.55;
+}
+
+.chronicle-cell-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.chronicle-cell-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--charcoal-600);
+  background: var(--charcoal-900);
+  color: var(--ink-dim);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+.chronicle-cell-btn svg {
+  width: 13px;
+  height: 13px;
+}
+.chronicle-cell-btn:hover {
+  border-color: var(--gold-dim);
+  color: var(--gold-soft);
+}
+.chronicle-cell-btn--danger:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.chronicle-cell-btn--reveal-on {
+  color: var(--success);
+  border-color: var(--success);
+}
+.chronicle-cell-btn--guess {
+  width: 100%;
+  justify-content: center;
+  padding: 7px 9px;
+  font-size: 11.5px;
+}
+
+.chronicle-guessed {
+  padding-top: 6px;
+}
+
+.chronicle-modal-guesses {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--charcoal-700);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chronicle-modal-guesses > label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-dim);
+}
+.chronicle-modal-guess-hint {
+  font-size: 12px;
+  color: var(--ink-dim);
+  line-height: 1.5;
+  margin: 0 0 4px;
+}

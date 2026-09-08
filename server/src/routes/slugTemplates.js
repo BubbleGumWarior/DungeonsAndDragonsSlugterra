@@ -66,6 +66,19 @@ export function toClientTemplate(row) {
     mirageDecoy: row.mirage_decoy,
     starWall: row.star_wall,
     anchorZone: row.anchor_zone,
+    voidsFireClash: row.voids_fire_clash,
+    clearsFireTerrain: row.clears_fire_terrain,
+    causesDisarm: row.causes_disarm,
+    disarmZone: row.disarm_zone,
+    mindScramble: row.mind_scramble,
+    swapsPosition: row.swaps_position,
+    frictionShift: row.friction_shift,
+    crosswindZone: row.crosswind_zone,
+    skipsReload: row.skips_reload,
+    emotionSurge: row.emotion_surge,
+    uncounterable: row.uncounterable,
+    damageTripled: row.damage_tripled,
+    staticMark: row.static_mark,
     createdAt: row.created_at,
   };
 }
@@ -162,6 +175,19 @@ router.post("/", async (req, res) => {
     mirageDecoy,
     starWall,
     anchorZone,
+    voidsFireClash,
+    clearsFireTerrain,
+    causesDisarm,
+    disarmZone,
+    mindScramble,
+    swapsPosition,
+    frictionShift,
+    crosswindZone,
+    skipsReload,
+    emotionSurge,
+    uncounterable,
+    damageTripled,
+    staticMark,
   } = req.body || {};
 
   const validation = validateSlugFields({
@@ -206,8 +232,10 @@ router.post("/", async (req, res) => {
         (name, type, protoform_image, velocity_image, clash_power, clash_defense, ap_cost, max_energy_pips, loyalty_tier, velocity_ability, protoform_utility, breaks_walls, causes_knockback, wall_maker, bridge_maker, aoe_blast, hazard_maker,
          causes_blind, causes_snare, causes_shock, causes_jam,
          pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion, trail_wall, clash_tripled,
-         cone_blast, spawns_pods, mirage_decoy, star_wall, anchor_zone)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
+         cone_blast, spawns_pods, mirage_decoy, star_wall, anchor_zone, voids_fire_clash, clears_fire_terrain,
+         causes_disarm, disarm_zone, mind_scramble, swaps_position, friction_shift, crosswind_zone, skips_reload,
+         emotion_surge, uncounterable, damage_tripled, static_mark)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48)
        RETURNING *`,
       [
         name.trim(),
@@ -245,6 +273,19 @@ router.post("/", async (req, res) => {
         Boolean(mirageDecoy),
         Boolean(starWall),
         Boolean(anchorZone),
+        Boolean(voidsFireClash),
+        Boolean(clearsFireTerrain),
+        Boolean(causesDisarm),
+        Boolean(disarmZone),
+        Boolean(mindScramble),
+        Boolean(swapsPosition),
+        Boolean(frictionShift),
+        Boolean(crosswindZone),
+        Boolean(skipsReload),
+        Boolean(emotionSurge),
+        Boolean(uncounterable),
+        Boolean(damageTripled),
+        Boolean(staticMark),
       ]
     );
     res.status(201).json({ template: toClientTemplate(rows[0]) });
@@ -292,6 +333,19 @@ router.patch("/:id", async (req, res) => {
     mirageDecoy,
     starWall,
     anchorZone,
+    voidsFireClash,
+    clearsFireTerrain,
+    causesDisarm,
+    disarmZone,
+    mindScramble,
+    swapsPosition,
+    frictionShift,
+    crosswindZone,
+    skipsReload,
+    emotionSurge,
+    uncounterable,
+    damageTripled,
+    staticMark,
   } = req.body || {};
 
   const validation = validateSlugFields({
@@ -340,8 +394,11 @@ router.patch("/:id", async (req, res) => {
         causes_blind = $18, causes_snare = $19, causes_shock = $20, causes_jam = $21,
         pierces_walls = $22, causes_chain = $23, ricochets = $24, ultra_fast = $25,
         causes_invisible = $26, causes_fear = $27, causes_confusion = $28, trail_wall = $29, clash_tripled = $30,
-        cone_blast = $31, spawns_pods = $32, mirage_decoy = $33, star_wall = $34, anchor_zone = $35
-       WHERE id = $36
+        cone_blast = $31, spawns_pods = $32, mirage_decoy = $33, star_wall = $34, anchor_zone = $35,
+        voids_fire_clash = $36, clears_fire_terrain = $37, causes_disarm = $38, disarm_zone = $39,
+        mind_scramble = $40, swaps_position = $41, friction_shift = $42, crosswind_zone = $43, skips_reload = $44,
+        emotion_surge = $45, uncounterable = $46, damage_tripled = $47, static_mark = $48
+       WHERE id = $49
        RETURNING *`,
       [
         name.trim(),
@@ -379,6 +436,19 @@ router.patch("/:id", async (req, res) => {
         Boolean(mirageDecoy),
         Boolean(starWall),
         Boolean(anchorZone),
+        Boolean(voidsFireClash),
+        Boolean(clearsFireTerrain),
+        Boolean(causesDisarm),
+        Boolean(disarmZone),
+        Boolean(mindScramble),
+        Boolean(swapsPosition),
+        Boolean(frictionShift),
+        Boolean(crosswindZone),
+        Boolean(skipsReload),
+        Boolean(emotionSurge),
+        Boolean(uncounterable),
+        Boolean(damageTripled),
+        Boolean(staticMark),
         id,
       ]
     );

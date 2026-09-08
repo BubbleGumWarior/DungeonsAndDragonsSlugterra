@@ -366,6 +366,33 @@
   pointer-events: none;
 }
 
+/* "Mount" is armed -- how close you must be to board a mecha. */
+.combat-map-mount-ring {
+  fill: rgba(74, 165, 110, 0.06);
+  stroke: var(--success);
+  stroke-width: 2;
+  stroke-dasharray: 7 6;
+  pointer-events: none;
+}
+
+/* A mecha inside the mount ring, ready to board. */
+.combat-token-mount-target {
+  fill: none;
+  stroke: var(--success);
+  stroke-width: 2.5;
+  animation: combat-mount-pulse 1.15s ease-in-out infinite;
+}
+
+@keyframes combat-mount-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 .combat-token {
   cursor: pointer;
 }
@@ -502,6 +529,30 @@
 
 .combat-token-effect-dot--blind {
   fill: #d9d9d9;
+}
+
+.combat-token-effect-dot--disarm {
+  fill: #9aa5ad;
+}
+
+.combat-token-effect-dot--reverse {
+  fill: #b06fd8;
+}
+
+.combat-token-effect-dot--slow-reaction {
+  fill: #7a5a99;
+}
+
+.combat-token-effect-dot--enhanced-reaction {
+  fill: #d8a24a;
+}
+
+.combat-token-effect-dot--keen-vision {
+  fill: #f0e6a0;
+}
+
+.combat-token-effect-dot--slippery {
+  fill: #8fd0e0;
 }
 
 .combat-token-label {
