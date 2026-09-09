@@ -80,6 +80,8 @@ export const ENERGY_PIPS_MIN = 1;
 export const ENERGY_PIPS_MAX = 16;
 export const LOYALTY_TIER_MIN = 0;
 export const LOYALTY_TIER_MAX = 4;
+export const RARITY_MIN = 1;
+export const RARITY_MAX = 10;
 
 export function typeColor(type) {
   return SLUG_TYPES.find((t) => t.key === type)?.color ?? "#c9a24b";
@@ -178,6 +180,7 @@ export function defaultSlugFields() {
     apCost: 1,
     maxEnergyPips: 3,
     loyaltyTier: 0,
+    rarity: 5,
     velocityAbility: "",
     protoformUtility: "",
     breaksWalls: false,

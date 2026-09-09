@@ -5,8 +5,10 @@
 // See docs/combat-system-design.md for the full spec these implement.
 
 import { statModifier } from "./characterRules.js";
+import { GATLING_AP_DISCOUNT, CANNON_CLASH_BONUS } from "./itemRules.js";
 
 export { statModifier };
+export { GATLING_AP_DISCOUNT, CANNON_CLASH_BONUS };
 
 // ---- Movement -------------------------------------------------------------
 
@@ -38,6 +40,37 @@ export const SWITCH_WEAPON_AP_COST = 1;
 // the *currently active* slot's blaster can be fired.
 export const PRIMARY_WEAPON_SLOT = 0;
 export const SECONDARY_WEAPON_SLOT = 1;
+
+// ---- Base-type combat effects ----------------------------------------
+// A handful of blaster base types (see BASE_TYPES in itemRules.js) do
+// something in combat beyond their raw accuracy/range/mag stat line. Each
+// helper is keyed on the fired blaster's `base_type` and no-ops for every
+// other type, so the Shoot Slug flow can call them unconditionally.
+
+// Bow: the one base type whose attack roll also folds in the shooter's own
+// DEX modifier, on top of the usual blaster/quality/type/loyalty accuracy
+// terms. `shooter` is the acting combatant row (dexMod lives on its data
+// blob, defaulting to 0 for NPCs that never had one).
+export function blasterTypeAccuracyBonus(blaster, shooter) {
+  if (blaster?.base_type !== "Bow") return 0;
+  return shooter?.data?.dexMod ?? 0;
+}
+
+// Gatling: every slug it fires costs GATLING_AP_DISCOUNT less AP to shoot,
+// never dropping below 1.
+export function gatlingShotApCost(blaster, baseApCost) {
+  if (blaster?.base_type !== "Gatling") return baseApCost;
+  return Math.max(1, baseApCost - GATLING_AP_DISCOUNT);
+}
+
+// Cannon: the slug it fires gets +CANNON_CLASH_BONUS clash power. Returns a
+// cloned slug (never mutates the caller's row) so the boost can flow through
+// both resolveClash and the eventual dealHit damage; a "None"-type dud stays
+// a dud. Any other base type returns the slug untouched.
+export function applyBlasterTypeToSlug(blaster, slug) {
+  if (!slug || blaster?.base_type !== "Cannon" || slug.type === "None") return slug;
+  return { ...slug, clash_power: slug.clash_power + CANNON_CLASH_BONUS };
+}
 
 // ---- Loyalty tier modifiers -------------------------------------------
 

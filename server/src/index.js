@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import "dotenv/config";
 import { initSchema, pool } from "./db.js";
-import { seedDefaultSlugTemplates } from "./seedDefaultSlugs.js";
+import { seedDefaultSlugTemplates, backfillSlugTemplateRarity } from "./seedDefaultSlugs.js";
 import authRouter from "./routes/auth.js";
 import adminRouter from "./routes/admin.js";
 import charactersRouter from "./routes/characters.js";
@@ -23,9 +23,11 @@ import challengeRouter from "./routes/challenge.js";
 import diceRollRouter from "./routes/diceRoll.js";
 import combatRouter from "./routes/combat.js";
 import npcTemplatesRouter from "./routes/npcTemplates.js";
+import gruntTemplatesRouter from "./routes/gruntTemplates.js";
 import chronicleRouter from "./routes/chronicle.js";
 import slugpediaRouter from "./routes/slugpedia.js";
 import slugHuntRouter from "./routes/slugHunt.js";
+import shipsRouter from "./routes/ships.js";
 import voiceRouter from "./routes/voice.js";
 import { requireAuth } from "./middleware/auth.js";
 import { setupWebSocket, getOnlineUserIds } from "./ws.js";
@@ -53,9 +55,11 @@ app.use("/api/challenge", challengeRouter);
 app.use("/api/dice-roll", diceRollRouter);
 app.use("/api/combat", combatRouter);
 app.use("/api/npc-templates", npcTemplatesRouter);
+app.use("/api/grunt-templates", gruntTemplatesRouter);
 app.use("/api/chronicle", chronicleRouter);
 app.use("/api/slugpedia", slugpediaRouter);
 app.use("/api/slug-hunt", slugHuntRouter);
+app.use("/api/ships", shipsRouter);
 app.use("/api/voice", voiceRouter);
 
 app.get("/api/presence/online", requireAuth, (req, res) => {
@@ -100,6 +104,7 @@ setupWebSocket(server);
 
 initSchema()
   .then(() => seedDefaultSlugTemplates())
+  .then(() => backfillSlugTemplateRarity())
   .then(() => {
     server.listen(port, () => console.log(`Server listening on port ${port}`));
   })

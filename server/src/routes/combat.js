@@ -3,9 +3,9 @@ import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { broadcastAll, notifyUser } from "../ws.js";
 import { statModifier, computeMaxGrit, actionPoints, initiativeBonus, npcActionPoints, npcMaxGrit } from "../characterRules.js";
-import { QUALITY_TIERS, BASE_TYPES } from "../itemRules.js";
+import { QUALITY_TIERS, BASE_TYPES, BASE_TYPE_KEYS } from "../itemRules.js";
 import { TIER_LABELS as MECHA_TIER_LABELS } from "../mechaRules.js";
-import { LOYALTY_TIER_MAX } from "../slugRules.js";
+import { LOYALTY_TIER_MIN, LOYALTY_TIER_MAX, RARITY_MAX } from "../slugRules.js";
 import { toClientSlug } from "./slugs.js";
 import { toClientBlaster } from "./blasters.js";
 import { recordSlugpediaEntry } from "../slugpediaStore.js";
@@ -112,6 +112,9 @@ import {
   randomDecoyOffset,
   loyaltyAccuracyModifier,
   applyLoyaltyToSlug,
+  blasterTypeAccuracyBonus,
+  gatlingShotApCost,
+  applyBlasterTypeToSlug,
 } from "../combatRules.js";
 
 const router = Router();
@@ -136,6 +139,13 @@ function toClientCombatant(row) {
     refUserId: row.ref_user_id,
     refMechaId: row.ref_mecha_id,
     refNpcTemplateId: row.ref_npc_template_id,
+    refGruntTemplateId: row.ref_grunt_template_id,
+    // Ally / Friend / Neutral / Rival / Enemy / Unknown -- from loadFullEncounter's
+    // join (which reflects later template edits), falling back to the copy
+    // stamped into `data` when the combatant was spawned. Null for
+    // characters/mecha. Combat shows everyone fully, so this is never gated on
+    // the NPC card's per-line "shown" flag.
+    relationship: row.relationship ?? row.data?.relationship ?? null,
     name: row.name,
     portrait: row.portrait,
     x: row.x,
@@ -187,7 +197,13 @@ async function loadFullEncounter(id) {
   const encounter = encResult.rows[0];
   if (!encounter) return null;
   const combatantsResult = await pool.query(
-    `SELECT c.* FROM combatants c WHERE c.encounter_id = $1 ORDER BY c.id ASC`,
+    `SELECT c.*,
+       COALESCE(gt.relationship, nt.profile->'fields'->'relationship'->>'value') AS relationship
+     FROM combatants c
+     LEFT JOIN grunt_templates gt ON gt.id = c.ref_grunt_template_id
+     LEFT JOIN npc_templates nt ON nt.id = c.ref_npc_template_id
+     WHERE c.encounter_id = $1
+     ORDER BY c.id ASC`,
     [id]
   );
   return toClientEncounter(encounter, combatantsResult.rows);
@@ -573,6 +589,19 @@ router.patch("/encounters/:id/combatants/:cid/position", requireDungeonMaster, a
   }
   try {
     await updateCombatant(cid, { x, y });
+    // Keep a mounted pair together: dragging the rider drags the mecha (and
+    // any other riders), dragging the mecha drags its riders.
+    const moved = await getCombatant(cid);
+    if (moved?.mounted_on != null) {
+      await updateCombatant(moved.mounted_on, { x, y });
+      for (const r of await mechaRiders(moved.mounted_on)) {
+        if (r.id !== cid) await updateCombatant(r.id, { x, y });
+      }
+    } else if (moved?.kind === "mecha") {
+      for (const r of await mechaRiders(cid)) {
+        await updateCombatant(r.id, { x, y });
+      }
+    }
     const encounter = await broadcastEncounter(Number(req.params.id));
     res.json({ encounter });
   } catch (err) {
@@ -604,9 +633,224 @@ router.delete("/encounters/:id/combatants/:cid", requireDungeonMaster, async (re
   }
 });
 
-// Pulls an NPC template into the encounter as a fresh, independently-geared
-// instance. Repeated pulls of the same template auto-number: "Bandit 1",
-// "Bandit 2", etc.
+// Kits out an already-inserted NPC/grunt combatant row: spawns independent
+// blaster copies (first two equipped), then independent slug copies loaded
+// into whatever magazine slot is free, then an optional auto-mounted mecha.
+// Shared by the important-character pull (/npc-combatants) and the grunt pull
+// (/grunt-combatants) -- the differences are which id arrays get passed in and
+// `slugLoyaltyTier`: an important character shows up with slugs they've already
+// bonded with (Loyal), a grunt with barely-tamed ones (Wild).
+// `slugTemplateIds` may contain repeats (a grunt rolling the same slug twice).
+async function equipNpcCombatant(
+  combatant,
+  encounterId,
+  { slugTemplateIds, blasterTemplateIds, mechaTemplateId, slugLoyaltyTier = LOYALTY_TIER_MAX - 1 }
+) {
+  // Spawn independent blaster copies for this instance, equipped in order
+  // (only the first two get a slot -- same Primary/Secondary limit players have).
+  const spawnedBlasters = [];
+  for (let i = 0; i < blasterTemplateIds.length; i++) {
+    const btResult = await pool.query("SELECT * FROM blaster_templates WHERE id = $1", [blasterTemplateIds[i]]);
+    const bt = btResult.rows[0];
+    if (!bt) continue;
+    const equipSlot = i < 2 ? i : null;
+    const { rows } = await pool.query(
+      `INSERT INTO blasters
+        (template_id, owner_combatant_id, name, base_type, image, accuracy, reload_ap_cost, range, mod_slots, magazine_size, quality, equip_slot)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       RETURNING *`,
+      [bt.id, combatant.id, bt.name, bt.base_type, bt.image, bt.accuracy, bt.reload_ap_cost, bt.range, bt.mod_slots, bt.magazine_size, bt.quality, equipSlot]
+    );
+    spawnedBlasters.push(rows[0]);
+    // The DM's already-fetched slug/blaster lists have no way to learn
+    // about gear that gets created after that fetch -- without this, a
+    // pulled NPC's weapons exist in the DB but never show up in the
+    // DM's slug panel to actually fire.
+    broadcastAll({ type: "blaster-updated", userId: null, blaster: toClientBlaster(rows[0]) });
+  }
+
+  // Spawn independent slug copies, auto-loaded into whichever spawned
+  // blaster still has a free magazine slot -- an NPC joins the fight with
+  // its slugs already loaded, exactly like a player joins on a ready
+  // primary weapon.
+  const slotCursor = spawnedBlasters.map(() => 0);
+
+  // Next free (equipped-blaster, magazine-slot) pair, or null if every
+  // equipped weapon is full.
+  function nextFreeMagazineSlot() {
+    for (let i = 0; i < spawnedBlasters.length; i++) {
+      if (spawnedBlasters[i].equip_slot === null) continue;
+      if (slotCursor[i] < spawnedBlasters[i].magazine_size) {
+        const slot = { equippedBlasterId: spawnedBlasters[i].id, magazineSlot: slotCursor[i] };
+        slotCursor[i] += 1;
+        return slot;
+      }
+    }
+    return null;
+  }
+
+  // The DM gave this NPC slugs but not enough weapon to hold them (no
+  // blaster at all, or one whose magazine is already full). Give it a
+  // plain Standard Blaster in the next open equip slot so nothing joins
+  // combat stranded and unfirable. Returns false once both slots are used.
+  async function spawnFallbackBlaster() {
+    const equippedCount = spawnedBlasters.filter((b) => b.equip_slot !== null).length;
+    if (equippedCount >= 2) return false;
+    const base = BASE_TYPES.Pistol;
+    const { rows } = await pool.query(
+      `INSERT INTO blasters
+        (template_id, owner_combatant_id, name, base_type, image, accuracy, reload_ap_cost, range, mod_slots, magazine_size, quality, equip_slot)
+       VALUES (NULL,$1,$2,$3,NULL,$4,$5,$6,$7,$8,$9,$10)
+       RETURNING *`,
+      [combatant.id, "Standard Blaster", "Pistol", base.accuracy, base.reloadApCost, base.range, base.modSlots, base.magazineSize, 1, equippedCount]
+    );
+    spawnedBlasters.push(rows[0]);
+    slotCursor.push(0);
+    broadcastAll({ type: "blaster-updated", userId: null, blaster: toClientBlaster(rows[0]) });
+    return true;
+  }
+
+  // The caller decides the tier (see the doc comment) rather than trusting
+  // whatever the template happens to store: an important character's slugs
+  // spawn Loyal, a grunt's spawn Wild.
+  const NPC_SLUG_LOYALTY_TIER = Math.max(LOYALTY_TIER_MIN, Math.min(LOYALTY_TIER_MAX, slugLoyaltyTier));
+
+  for (const slugTemplateId of slugTemplateIds) {
+    const stResult = await pool.query("SELECT * FROM slug_templates WHERE id = $1", [slugTemplateId]);
+    const st = stResult.rows[0];
+    if (!st) continue;
+    let slot = nextFreeMagazineSlot();
+    if (!slot && (await spawnFallbackBlaster())) slot = nextFreeMagazineSlot();
+    const equippedBlasterId = slot ? slot.equippedBlasterId : null;
+    const magazineSlot = slot ? slot.magazineSlot : null;
+    const { rows: slugRows } = await pool.query(
+      `INSERT INTO slugs
+        (template_id, owner_combatant_id, name, type, protoform_image, velocity_image, clash_power, clash_defense,
+         ap_cost, max_energy_pips, energy_pips, loyalty_tier, velocity_ability, protoform_utility,
+         breaks_walls, causes_knockback, wall_maker, bridge_maker, aoe_blast, hazard_maker,
+         causes_blind, causes_snare, causes_shock, causes_jam,
+         pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion,
+         trail_wall, clash_tripled, cone_blast, spawns_pods, mirage_decoy, star_wall, anchor_zone,
+         voids_fire_clash, clears_fire_terrain, causes_disarm, disarm_zone, mind_scramble, swaps_position,
+         friction_shift, crosswind_zone, skips_reload,
+         emotion_surge, uncounterable, damage_tripled, static_mark,
+         equipped_blaster_id, magazine_slot)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53)
+       RETURNING *`,
+      [
+        st.id,
+        combatant.id,
+        st.name,
+        st.type,
+        st.protoform_image,
+        st.velocity_image,
+        st.clash_power,
+        st.clash_defense,
+        st.ap_cost,
+        st.max_energy_pips,
+        JSON.stringify(Array(st.max_energy_pips).fill(true)),
+        NPC_SLUG_LOYALTY_TIER,
+        st.velocity_ability,
+        st.protoform_utility,
+        st.breaks_walls,
+        st.causes_knockback,
+        st.wall_maker,
+        st.bridge_maker,
+        st.aoe_blast,
+        st.hazard_maker,
+        st.causes_blind,
+        st.causes_snare,
+        st.causes_shock,
+        st.causes_jam,
+        st.pierces_walls,
+        st.causes_chain,
+        st.ricochets,
+        st.ultra_fast,
+        st.causes_invisible,
+        st.causes_fear,
+        st.causes_confusion,
+        st.trail_wall,
+        st.clash_tripled,
+        st.cone_blast,
+        st.spawns_pods,
+        st.mirage_decoy,
+        st.star_wall,
+        st.anchor_zone,
+        st.voids_fire_clash,
+        st.clears_fire_terrain,
+        st.causes_disarm,
+        st.disarm_zone,
+        st.mind_scramble,
+        st.swaps_position,
+        st.friction_shift,
+        st.crosswind_zone,
+        st.skips_reload,
+        st.emotion_surge,
+        st.uncounterable,
+        st.damage_tripled,
+        st.static_mark,
+        equippedBlasterId,
+        magazineSlot,
+      ]
+    );
+    broadcastAll({ type: "slug-updated", userId: null, slug: toClientSlug(slugRows[0]) });
+    // This NPC/grunt joined the fight carrying it -- the party now knows the
+    // slug exists and what it looks like, but not its stats or abilities. Those
+    // stay redacted in the slugpedia until a player catches one themselves
+    // (see slugpediaStore.js).
+    recordSlugpediaEntry(slugRows[0], { discovered: false });
+  }
+
+  // Optionally spawn a mecha companion, auto-mounted by this NPC.
+  if (mechaTemplateId) {
+    const mtResult = await pool.query("SELECT * FROM mecha_templates WHERE id = $1", [mechaTemplateId]);
+    const mt = mtResult.rows[0];
+    if (mt) {
+      const maxStructure = computeMaxStructure({ armor: mt.armor, tier: mt.tier });
+      const mechaResult = await pool.query(
+        `INSERT INTO combatants
+          (encounter_id, kind, name, portrait, x, y, max_ap, current_ap, max_structure, current_structure, data)
+         VALUES ($1, 'mecha', $2, $3, $4, $5, 2, 0, $6, $6, $7)
+         RETURNING *`,
+        [
+          encounterId,
+          `${combatant.name}'s ${mt.name}`,
+          mt.image,
+          combatant.x,
+          combatant.y,
+          maxStructure,
+          JSON.stringify({ dexMod: 0, speed: mt.speed, handling: mt.handling, armor: mt.armor, rammingPower: mt.ramming_power, tier: mt.tier, ownerUserId: null }),
+        ]
+      );
+      await pool.query("UPDATE combatants SET mounted_on = $1 WHERE id = $2", [mechaResult.rows[0].id, combatant.id]);
+    }
+  }
+}
+
+// Weighted random pick of one item; `weightFn` returns a non-negative number.
+function weightedPick(items, weightFn) {
+  const weights = items.map((it) => Math.max(0, weightFn(it)));
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (total <= 0) return items[Math.floor(Math.random() * items.length)];
+  let roll = Math.random() * total;
+  for (let i = 0; i < items.length; i++) {
+    roll -= weights[i];
+    if (roll < 0) return items[i];
+  }
+  return items[items.length - 1];
+}
+
+// `n` weighted picks with replacement.
+function weightedSample(items, n, weightFn) {
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(weightedPick(items, weightFn));
+  return out;
+}
+
+// Pulls an important-character Chronicle card into the encounter as a fresh,
+// independently-geared instance. One copy only -- the card names a single
+// named character, so a second pull is rejected and the name carries no
+// number. (Disposable minions that DO stack live at /grunt-combatants.)
 router.post("/encounters/:id/npc-combatants", requireDungeonMaster, async (req, res) => {
   const encounterId = Number(req.params.id);
   const { npcTemplateId, x, y } = req.body || {};
@@ -619,11 +863,15 @@ router.post("/encounters/:id/npc-combatants", requireDungeonMaster, async (req, 
     const template = templateResult.rows[0];
     if (!template) return res.status(404).json({ error: "NPC not found." });
 
-    const countResult = await pool.query(
-      "SELECT COUNT(*)::int AS count FROM combatants WHERE encounter_id = $1 AND ref_npc_template_id = $2",
+    const dupe = await pool.query(
+      "SELECT 1 FROM combatants WHERE encounter_id = $1 AND ref_npc_template_id = $2 LIMIT 1",
       [encounterId, npcTemplateId]
     );
-    const name = `${template.name} ${countResult.rows[0].count + 1}`;
+    if (dupe.rows[0]) {
+      return res.status(409).json({ error: `${template.name} is already in this encounter.` });
+    }
+    const name = template.name;
+    const relationship = template.profile?.fields?.relationship?.value || null;
 
     const combatantResult = await pool.query(
       `INSERT INTO combatants
@@ -640,196 +888,116 @@ router.post("/encounters/:id/npc-combatants", requireDungeonMaster, async (req, 
         npcActionPoints(template.dex_modifier),
         npcMaxGrit(template.con_modifier, template.dex_modifier),
         JSON.stringify([false, false, false]),
-        JSON.stringify({ dexMod: template.dex_modifier, conMod: template.con_modifier }),
+        JSON.stringify({ dexMod: template.dex_modifier, conMod: template.con_modifier, relationship }),
       ]
     );
     const combatant = combatantResult.rows[0];
 
-    // Spawn independent blaster copies for this instance, equipped in order
-    // (only the first two get a slot -- same Primary/Secondary limit players have).
-    const spawnedBlasters = [];
-    for (let i = 0; i < template.blaster_template_ids.length; i++) {
-      const btResult = await pool.query("SELECT * FROM blaster_templates WHERE id = $1", [template.blaster_template_ids[i]]);
-      const bt = btResult.rows[0];
-      if (!bt) continue;
-      const equipSlot = i < 2 ? i : null;
-      const { rows } = await pool.query(
-        `INSERT INTO blasters
-          (template_id, owner_combatant_id, name, base_type, image, accuracy, reload_ap_cost, range, mod_slots, magazine_size, quality, equip_slot)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-         RETURNING *`,
-        [bt.id, combatant.id, bt.name, bt.base_type, bt.image, bt.accuracy, bt.reload_ap_cost, bt.range, bt.mod_slots, bt.magazine_size, bt.quality, equipSlot]
-      );
-      spawnedBlasters.push(rows[0]);
-      // The DM's already-fetched slug/blaster lists have no way to learn
-      // about gear that gets created after that fetch -- without this, a
-      // pulled NPC's weapons exist in the DB but never show up in the
-      // DM's slug panel to actually fire.
-      broadcastAll({ type: "blaster-updated", userId: null, blaster: toClientBlaster(rows[0]) });
-    }
-
-    // Spawn independent slug copies, auto-loaded into whichever spawned
-    // blaster still has a free magazine slot -- an NPC joins the fight with
-    // its slugs already loaded, exactly like a player joins on a ready
-    // primary weapon.
-    const slotCursor = spawnedBlasters.map(() => 0);
-
-    // Next free (equipped-blaster, magazine-slot) pair, or null if every
-    // equipped weapon is full.
-    function nextFreeMagazineSlot() {
-      for (let i = 0; i < spawnedBlasters.length; i++) {
-        if (spawnedBlasters[i].equip_slot === null) continue;
-        if (slotCursor[i] < spawnedBlasters[i].magazine_size) {
-          const slot = { equippedBlasterId: spawnedBlasters[i].id, magazineSlot: slotCursor[i] };
-          slotCursor[i] += 1;
-          return slot;
-        }
-      }
-      return null;
-    }
-
-    // The DM gave this NPC slugs but not enough weapon to hold them (no
-    // blaster at all, or one whose magazine is already full). Give it a
-    // plain Standard Blaster in the next open equip slot so nothing joins
-    // combat stranded and unfirable. Returns false once both slots are used.
-    async function spawnFallbackBlaster() {
-      const equippedCount = spawnedBlasters.filter((b) => b.equip_slot !== null).length;
-      if (equippedCount >= 2) return false;
-      const base = BASE_TYPES.Pistol;
-      const { rows } = await pool.query(
-        `INSERT INTO blasters
-          (template_id, owner_combatant_id, name, base_type, image, accuracy, reload_ap_cost, range, mod_slots, magazine_size, quality, equip_slot)
-         VALUES (NULL,$1,$2,$3,NULL,$4,$5,$6,$7,$8,$9,$10)
-         RETURNING *`,
-        [combatant.id, "Standard Blaster", "Pistol", base.accuracy, base.reloadApCost, base.range, base.modSlots, base.magazineSize, 1, equippedCount]
-      );
-      spawnedBlasters.push(rows[0]);
-      slotCursor.push(0);
-      broadcastAll({ type: "blaster-updated", userId: null, blaster: toClientBlaster(rows[0]) });
-      return true;
-    }
-
-    // An NPC's slugs spawn already at the second-highest loyalty tier
-    // (Loyal, one below max Bonded) instead of whatever tier the template
-    // itself happens to store -- these are the DM's own creatures showing
-    // up with a slug they've already bonded with, not a wild-caught one at
-    // the template's default tier.
-    const NPC_SLUG_LOYALTY_TIER = LOYALTY_TIER_MAX - 1;
-
-    for (const slugTemplateId of template.slug_template_ids) {
-      const stResult = await pool.query("SELECT * FROM slug_templates WHERE id = $1", [slugTemplateId]);
-      const st = stResult.rows[0];
-      if (!st) continue;
-      let slot = nextFreeMagazineSlot();
-      if (!slot && (await spawnFallbackBlaster())) slot = nextFreeMagazineSlot();
-      const equippedBlasterId = slot ? slot.equippedBlasterId : null;
-      const magazineSlot = slot ? slot.magazineSlot : null;
-      const { rows: slugRows } = await pool.query(
-        `INSERT INTO slugs
-          (template_id, owner_combatant_id, name, type, protoform_image, velocity_image, clash_power, clash_defense,
-           ap_cost, max_energy_pips, energy_pips, loyalty_tier, velocity_ability, protoform_utility,
-           breaks_walls, causes_knockback, wall_maker, bridge_maker, aoe_blast, hazard_maker,
-           causes_blind, causes_snare, causes_shock, causes_jam,
-           pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion,
-           trail_wall, clash_tripled, cone_blast, spawns_pods, mirage_decoy, star_wall, anchor_zone,
-           voids_fire_clash, clears_fire_terrain, causes_disarm, disarm_zone, mind_scramble, swaps_position,
-           friction_shift, crosswind_zone, skips_reload,
-           emotion_surge, uncounterable, damage_tripled, static_mark,
-           equipped_blaster_id, magazine_slot)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53)
-         RETURNING *`,
-        [
-          st.id,
-          combatant.id,
-          st.name,
-          st.type,
-          st.protoform_image,
-          st.velocity_image,
-          st.clash_power,
-          st.clash_defense,
-          st.ap_cost,
-          st.max_energy_pips,
-          JSON.stringify(Array(st.max_energy_pips).fill(true)),
-          NPC_SLUG_LOYALTY_TIER,
-          st.velocity_ability,
-          st.protoform_utility,
-          st.breaks_walls,
-          st.causes_knockback,
-          st.wall_maker,
-          st.bridge_maker,
-          st.aoe_blast,
-          st.hazard_maker,
-          st.causes_blind,
-          st.causes_snare,
-          st.causes_shock,
-          st.causes_jam,
-          st.pierces_walls,
-          st.causes_chain,
-          st.ricochets,
-          st.ultra_fast,
-          st.causes_invisible,
-          st.causes_fear,
-          st.causes_confusion,
-          st.trail_wall,
-          st.clash_tripled,
-          st.cone_blast,
-          st.spawns_pods,
-          st.mirage_decoy,
-          st.star_wall,
-          st.anchor_zone,
-          st.voids_fire_clash,
-          st.clears_fire_terrain,
-          st.causes_disarm,
-          st.disarm_zone,
-          st.mind_scramble,
-          st.swaps_position,
-          st.friction_shift,
-          st.crosswind_zone,
-          st.skips_reload,
-          st.emotion_surge,
-          st.uncounterable,
-          st.damage_tripled,
-          st.static_mark,
-          equippedBlasterId,
-          magazineSlot,
-        ]
-      );
-      broadcastAll({ type: "slug-updated", userId: null, slug: toClientSlug(slugRows[0]) });
-      // This NPC just joined the fight carrying it -- reveal the variant to
-      // the whole party's slugpedia, same as if a player had been assigned it.
-      recordSlugpediaEntry(slugRows[0]);
-    }
-
-    // Optionally spawn a mecha companion, auto-mounted by this NPC.
-    if (template.mecha_template_id) {
-      const mtResult = await pool.query("SELECT * FROM mecha_templates WHERE id = $1", [template.mecha_template_id]);
-      const mt = mtResult.rows[0];
-      if (mt) {
-        const maxStructure = computeMaxStructure({ armor: mt.armor, tier: mt.tier });
-        const mechaResult = await pool.query(
-          `INSERT INTO combatants
-            (encounter_id, kind, name, portrait, x, y, max_ap, current_ap, max_structure, current_structure, data)
-           VALUES ($1, 'mecha', $2, $3, $4, $5, 2, 0, $6, $6, $7)
-           RETURNING *`,
-          [
-            encounterId,
-            `${name}'s ${mt.name}`,
-            mt.image,
-            combatant.x,
-            combatant.y,
-            maxStructure,
-            JSON.stringify({ dexMod: 0, speed: mt.speed, handling: mt.handling, armor: mt.armor, rammingPower: mt.ramming_power, tier: mt.tier, ownerUserId: null }),
-          ]
-        );
-        await pool.query("UPDATE combatants SET mounted_on = $1 WHERE id = $2", [mechaResult.rows[0].id, combatant.id]);
-      }
-    }
+    await equipNpcCombatant(combatant, encounterId, {
+      slugTemplateIds: template.slug_template_ids,
+      blasterTemplateIds: template.blaster_template_ids,
+      mechaTemplateId: template.mecha_template_id,
+    });
 
     const encounter = await broadcastEncounter(encounterId);
     res.status(201).json({ encounter });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not pull NPC into the encounter." });
+  }
+});
+
+// Pulls a grunt/minion into the encounter. Unlike an important character, a
+// grunt stacks (auto-numbered "Blakk Goon 1", "2", ...) and rolls its own
+// loadout from the template's pools: one blaster, biased toward the
+// lower-quality options, then a magazine's worth of slugs, biased toward the
+// lower-rarity options. Every grunt of the same type comes out a little
+// different and a little weaker than a hand-built NPC.
+router.post("/encounters/:id/grunt-combatants", requireDungeonMaster, async (req, res) => {
+  const encounterId = Number(req.params.id);
+  const { gruntTemplateId, x, y } = req.body || {};
+  if (!Number.isInteger(gruntTemplateId)) {
+    return res.status(400).json({ error: "A grunt is required." });
+  }
+
+  try {
+    const templateResult = await pool.query("SELECT * FROM grunt_templates WHERE id = $1", [gruntTemplateId]);
+    const template = templateResult.rows[0];
+    if (!template) return res.status(404).json({ error: "Grunt not found." });
+
+    const countResult = await pool.query(
+      "SELECT COUNT(*)::int AS count FROM combatants WHERE encounter_id = $1 AND ref_grunt_template_id = $2",
+      [encounterId, gruntTemplateId]
+    );
+    const name = `${template.name} ${countResult.rows[0].count + 1}`;
+
+    const combatantResult = await pool.query(
+      `INSERT INTO combatants
+        (encounter_id, kind, ref_grunt_template_id, name, portrait, x, y, max_ap, current_ap, max_grit, current_grit, knockout_pips, data)
+       VALUES ($1, 'npc', $2, $3, $4, $5, $6, $7, 0, $8, $8, $9, $10)
+       RETURNING *`,
+      [
+        encounterId,
+        gruntTemplateId,
+        name,
+        template.image,
+        Number.isFinite(x) ? x : 100,
+        Number.isFinite(y) ? y : 100,
+        npcActionPoints(template.dex_modifier),
+        npcMaxGrit(template.con_modifier, template.dex_modifier),
+        JSON.stringify([false, false, false]),
+        JSON.stringify({
+          dexMod: template.dex_modifier,
+          conMod: template.con_modifier,
+          relationship: template.relationship || "Enemy",
+        }),
+      ]
+    );
+    const combatant = combatantResult.rows[0];
+
+    // Roll one blaster from the pool, leaning toward lower quality.
+    let chosenBlasterIds = [];
+    let magSize = BASE_TYPES.Pistol.magazineSize;
+    if (Array.isArray(template.blaster_template_ids) && template.blaster_template_ids.length) {
+      const { rows: pool_ } = await pool.query(
+        "SELECT * FROM blaster_templates WHERE id = ANY($1::int[])",
+        [template.blaster_template_ids]
+      );
+      if (pool_.length) {
+        const maxQ = Math.max(...pool_.map((b) => b.quality));
+        const chosen = weightedPick(pool_, (b) => (maxQ - b.quality + 1) ** 2);
+        chosenBlasterIds = [chosen.id];
+        magSize = chosen.magazine_size;
+      }
+    }
+
+    // Roll a magazine's worth of slugs from the pool, leaning toward lower
+    // rarity (a NULL rarity counts as mid). Picks are with replacement -- a
+    // grunt can turn up carrying two of the same common slug.
+    let chosenSlugIds = [];
+    if (Array.isArray(template.slug_template_ids) && template.slug_template_ids.length && magSize > 0) {
+      const { rows: pool_ } = await pool.query(
+        "SELECT id, rarity FROM slug_templates WHERE id = ANY($1::int[])",
+        [template.slug_template_ids]
+      );
+      if (pool_.length) {
+        chosenSlugIds = weightedSample(pool_, magSize, (s) => (RARITY_MAX - (s.rarity ?? 5) + 1) ** 2).map((s) => s.id);
+      }
+    }
+
+    await equipNpcCombatant(combatant, encounterId, {
+      slugTemplateIds: chosenSlugIds,
+      blasterTemplateIds: chosenBlasterIds,
+      mechaTemplateId: null,
+      // A goon's slugs are barely tamed -- lowest loyalty tier possible.
+      slugLoyaltyTier: LOYALTY_TIER_MIN,
+    });
+
+    const encounter = await broadcastEncounter(encounterId);
+    res.status(201).json({ encounter });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not pull the grunt into the encounter." });
   }
 });
 
@@ -1430,9 +1598,11 @@ async function spendEnergyPip(slugId) {
   // UI state to show either. Cooldown itself (SLUG_RETURN_TURNS) is
   // unaffected -- only the separate reload step is skipped.
   const selfLoads = Boolean(slug.skips_reload) && (slug.loyalty_tier || 0) >= LOYALTY_FRIENDLY_TIER;
+  // A normal slug comes back from cooldown un-chambered (`loaded` false) and
+  // waits on a Reload action; only a self-loading slug (Lentus) stays loaded.
   await pool.query("UPDATE slugs SET cooldown_turns_left = $1, loaded = $2 WHERE id = $3", [
     SLUG_RETURN_TURNS,
-    !selfLoads,
+    selfLoads,
     slugId,
   ]);
   const { rows: updated } = await pool.query("UPDATE slugs SET energy_pips = $1 WHERE id = $2 RETURNING *", [
@@ -1614,6 +1784,19 @@ async function triggerKnockoutRoll(combatantId, reason) {
   const combatant = await getCombatant(combatantId);
   if (!combatant || combatant.unconscious) return;
 
+  // One 0-Grit beat can land more than once on the same combatant -- an AOE
+  // blast that also splashes the primary target's neighbours, a chain or
+  // ricochet leg that circles back, a counter-clash the shot still wins on top
+  // of the plain hit, a burn/poison tick arriving while the prompt is still
+  // open. Only the first gets a roll: a second prompt here would stack a
+  // duplicate popup and burn a second knockout pip for what is really a single
+  // "did they stay up?" question. Cleared the instant the pending roll is
+  // answered (or after its TTL), so a genuinely separate later hit still rolls.
+  cleanupExpiredKnockouts();
+  for (const pending of pendingKnockouts.values()) {
+    if (pending.combatantId === combatantId) return;
+  }
+
   // Both player characters and NPCs make a Constitution save to stay
   // conscious -- an NPC's is answered by the DM (see dmControlled below),
   // same convention as a counter-clash. Anything without a knockout-pip
@@ -1638,7 +1821,6 @@ async function triggerKnockoutRoll(combatantId, reason) {
     return;
   }
 
-  cleanupExpiredKnockouts();
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const dc = knockoutDC(pipsUsed);
   const conMod = combatant.data?.conMod ?? 0;
@@ -3058,7 +3240,9 @@ async function resolveNormalHit(offer) {
     quality.accuracyBonus +
     tb.accuracyMod +
     penalty +
-    loyaltyAccuracyModifier(offer.slug.loyalty_tier);
+    loyaltyAccuracyModifier(offer.slug.loyalty_tier) +
+    // Bow folds in the shooter's own DEX modifier; every other base type adds 0.
+    blasterTypeAccuracyBonus(offer.blaster, attacker);
   const dc = 10 + targetDexMod;
   // You never fumble a slug fired at yourself -- a self-buff always lands.
   const isSelfShot = attacker.id === target.id;
@@ -3389,6 +3573,9 @@ async function resolveShooterSlugAndBlaster(attacker, req, { slugId, npcSlug, np
       user_id: null,
     };
     const blaster = {
+      // Lets a DM-puppeted NPC opt into a base type's combat effect (Bow's
+      // DEX roll, Gatling's AP discount, Cannon's clash bonus); null = none.
+      base_type: BASE_TYPE_KEYS.includes(npcBlaster?.baseType) ? npcBlaster.baseType : null,
       accuracy: Number.isInteger(npcBlaster?.accuracy) ? npcBlaster.accuracy : 0,
       range: Number.isInteger(npcBlaster?.range) ? npcBlaster.range : 20,
       quality: Number.isInteger(npcBlaster?.quality) ? npcBlaster.quality : 0,
@@ -3507,7 +3694,13 @@ async function resolveEnvironmentShot({ actionType, attacker, slug, blaster, tb,
   const quality = QUALITY_TIERS[blaster.quality] || QUALITY_TIERS[0];
   const penalty = rangePenalty(dist, Math.max(blaster.range, tb.range));
   const attackTotal =
-    rollD20() + blaster.accuracy + quality.accuracyBonus + tb.accuracyMod + penalty + loyaltyAccuracyModifier(slug.loyalty_tier);
+    rollD20() +
+    blaster.accuracy +
+    quality.accuracyBonus +
+    tb.accuracyMod +
+    penalty +
+    loyaltyAccuracyModifier(slug.loyalty_tier) +
+    blasterTypeAccuracyBonus(blaster, attacker); // Bow adds the shooter's DEX modifier
   const hit = attackTotal >= ENV_ACTION_DC;
   // A miss runs the exact same effect logic, just a few degrees off target
   // -- a wall might land somewhere else, a different wall gets broken, or
@@ -3573,7 +3766,14 @@ router.post("/actions/shoot", async (req, res) => {
 
     const resolved = await resolveShooterSlugAndBlaster(attacker, req, { slugId, npcSlug, npcBlaster });
     if (resolved.error) return res.status(400).json({ error: resolved.error });
-    const { slug, blaster } = resolved;
+    const { blaster } = resolved;
+    // Cannon lends +3 clash power to whatever it fires (see
+    // applyBlasterTypeToSlug) -- a cloned slug, so the DB row is untouched and
+    // the boost rides through both the clash comparison and the hit's damage.
+    const slug = applyBlasterTypeToSlug(blaster, resolved.slug);
+    // Gatling fires everything for 2 less AP (floored at 1). Every AP check
+    // and spend below this point uses shotApCost, not the slug's raw ap_cost.
+    const shotApCost = gatlingShotApCost(blaster, slug.ap_cost);
 
     if (actionType === "break-wall" && !slug.breaks_walls) {
       return res.status(400).json({ error: "That slug can't break walls." });
@@ -3585,12 +3785,12 @@ router.post("/actions/shoot", async (req, res) => {
       return res.status(400).json({ error: "That slug can't build bridges." });
     }
 
-    if (attacker.current_ap < slug.ap_cost) return res.status(400).json({ error: "Not enough AP." });
+    if (attacker.current_ap < shotApCost) return res.status(400).json({ error: "Not enough AP." });
 
     const attackerPos = { x: attacker.x, y: attacker.y };
     const tb = typeBallistics(slug.type);
 
-    await updateCombatant(attacker.id, { current_ap: attacker.current_ap - slug.ap_cost });
+    await updateCombatant(attacker.id, { current_ap: attacker.current_ap - shotApCost });
     if (slug.id != null) await spendEnergyPip(slug.id);
 
     // Ties together this shot's launch broadcast, its later resolve

@@ -4,17 +4,29 @@
 // type ranges, which is what actually decides a shot's effective reach in
 // combat (combinedRange = max(blaster.range, slug type's range)).
 export const BASE_TYPES = {
-  Pistol: { accuracy: 3, reloadApCost: 1, range: 4 * 25, modSlots: 2, magazineSize: 6 },
-  Revolver: { accuracy: 2, reloadApCost: 1, range: 5 * 25, modSlots: 2, magazineSize: 6 },
-  Repeater: { accuracy: 1, reloadApCost: 2, range: 5 * 25, modSlots: 3, magazineSize: 10 },
-  Bow: { accuracy: 2, reloadApCost: 1, range: 6 * 25, modSlots: 2, magazineSize: 1 },
-  Gatling: { accuracy: -1, reloadApCost: 3, range: 4 * 25, modSlots: 4, magazineSize: 20 },
+  Pistol: { accuracy: 1, reloadApCost: 1, range: 4 * 25, modSlots: 2, magazineSize: 6 },
+  Revolver: { accuracy: 3, reloadApCost: 2, range: 5 * 25, modSlots: 2, magazineSize: 6 },
+  Repeater: { accuracy: 1, reloadApCost: 3, range: 6 * 25, modSlots: 3, magazineSize: 10 },
+  Bow: { accuracy: 2, reloadApCost: 1, range: 7 * 25, modSlots: 4, magazineSize: 1 },
+  Gatling: { accuracy: -2, reloadApCost: 5, range: 4 * 25, modSlots: 4, magazineSize: 20 },
   Cannon: { accuracy: -2, reloadApCost: 3, range: 3 * 25, modSlots: 3, magazineSize: 1 },
-  "Twin Slinger": { accuracy: 1, reloadApCost: 2, range: 4 * 25, modSlots: 3, magazineSize: 12 },
-  "Sniper Rig": { accuracy: 4, reloadApCost: 2, range: 9 * 25, modSlots: 2, magazineSize: 3 },
+  "Twin Slinger": { accuracy: 0, reloadApCost: 2, range: 3 * 25, modSlots: 4, magazineSize: 12 },
+  "Sniper Rig": { accuracy: 4, reloadApCost: 2, range: 10 * 25, modSlots: 4, magazineSize: 4 },
 };
 
 export const BASE_TYPE_KEYS = Object.keys(BASE_TYPES);
+
+// Combat effects some base types carry beyond their raw stat line. All three
+// are resolved in routes/combat.js's Shoot Slug flow -- keyed on the fired
+// blaster's base_type:
+//   Bow     -- adds the shooter's own DEX modifier to the attack roll
+//              (blasterTypeAccuracyBonus in combatRules.js).
+//   Gatling -- every slug it fires costs GATLING_AP_DISCOUNT less AP to shoot,
+//              floored at 1 (gatlingShotApCost in combatRules.js).
+//   Cannon  -- the fired slug gets +CANNON_CLASH_BONUS clash power, which
+//              flows through both the clash comparison and the hit's damage.
+export const GATLING_AP_DISCOUNT = 2;
+export const CANNON_CLASH_BONUS = 3;
 
 export const QUALITY_TIERS = [
   { tier: 0, label: "Crude", accuracyBonus: 0, failRate: 25 },

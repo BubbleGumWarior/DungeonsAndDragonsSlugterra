@@ -153,10 +153,13 @@ router.post("/voice-peer-volume", async (req, res) => {
 
 router.get("/", async (req, res) => {
   try {
-    const { rows } = await pool.query("SELECT slugterra_revealed, slug_hunt_area FROM campaign_settings WHERE id = 1");
+    const { rows } = await pool.query(
+      "SELECT slugterra_revealed, slug_hunt_area, active_ship_id FROM campaign_settings WHERE id = 1"
+    );
     res.json({
       slugterraRevealed: rows[0]?.slugterra_revealed ?? false,
       slugHuntArea: rows[0]?.slug_hunt_area ?? 0,
+      activeShipId: rows[0]?.active_ship_id ?? null,
     });
   } catch (err) {
     console.error(err);

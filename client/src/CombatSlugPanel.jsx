@@ -9,6 +9,14 @@ import "./CombatSlugPanel.css";
 // owner's own turns a fired slug spends away before it's back in hand.
 const SLUG_RETURN_TURNS = 3;
 
+// Mirrors server/src/itemRules.js's GATLING_AP_DISCOUNT -- a Gatling fires
+// every slug for this much less AP, floored at 1.
+const GATLING_AP_DISCOUNT = 2;
+function shotApCost(baseApCost, blasterBaseType) {
+  if (blasterBaseType !== "Gatling") return baseApCost;
+  return Math.max(1, baseApCost - GATLING_AP_DISCOUNT);
+}
+
 const COOLDOWN_RING_RADIUS = 27;
 const COOLDOWN_RING_CIRCUMFERENCE = 2 * Math.PI * COOLDOWN_RING_RADIUS;
 
@@ -19,7 +27,14 @@ function slugHotkey(slug) {
   return Number.isInteger(slug.magazineSlot) ? slug.magazineSlot + 1 : null;
 }
 
-export default function CombatSlugPanel({ actingCombatant, slugs, armedSlugId, onPickSlug, hotkeysActive = false }) {
+export default function CombatSlugPanel({
+  actingCombatant,
+  slugs,
+  activeBlasterBaseType = null,
+  armedSlugId,
+  onPickSlug,
+  hotkeysActive = false,
+}) {
   // 1-9 arms the slug in that magazine slot, but only on your own turn (a
   // counter-clash on someone else's turn has its own prompt + handler) and
   // never while typing into a field.
@@ -89,6 +104,7 @@ export default function CombatSlugPanel({ actingCombatant, slugs, armedSlugId, o
             // combat (see loyaltyClashModifier in server/src/combatRules.js)
             // -- shown as a small +/- tag next to the base stat so the
             // number a hit actually deals doesn't look unexplained.
+            const discountedAp = shotApCost(s.apCost, activeBlasterBaseType);
             const loyaltyMod = loyaltyClashModifier(s.loyaltyTier);
             const loyaltyModLabel = loyaltyMod > 0 ? `+${loyaltyMod}` : `${loyaltyMod}`;
             const loyaltyModClass = `combat-slug-panel-card-loyalty-mod combat-slug-panel-card-loyalty-mod--${loyaltyMod > 0 ? "positive" : "negative"}`;
@@ -115,9 +131,16 @@ export default function CombatSlugPanel({ actingCombatant, slugs, armedSlugId, o
                     <span className="combat-slug-panel-card-key">{slugHotkey(s)}</span>
                   )}
                   <span className="combat-slug-panel-card-name">{s.name}</span>
-                  <span className="combat-slug-panel-card-ap">
+                  <span
+                    className="combat-slug-panel-card-ap"
+                    title={
+                      discountedAp !== s.apCost
+                        ? `${activeBlasterBaseType} fires this for ${discountedAp} AP (normally ${s.apCost})`
+                        : undefined
+                    }
+                  >
                     <LightningIcon weight="fill" />
-                    {s.apCost}
+                    {discountedAp}
                   </span>
                 </div>
                 <span className="combat-slug-panel-card-type">{s.type}</span>

@@ -4,6 +4,7 @@ import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import ChronicleCard from "./ChronicleCard.jsx";
 import ChronicleForm from "./ChronicleForm.jsx";
+import GruntForm from "./GruntForm.jsx";
 import NpcSlugGuesses from "./NpcSlugGuesses.jsx";
 import NpcGuessedChips from "./NpcGuessedChips.jsx";
 import "./SlugManagement.css";
@@ -25,6 +26,16 @@ const FILTERS = [
   { key: "enemy", label: "Enemies", rels: ["Enemy"], dot: "var(--rel-enemy)" },
   { key: "gone", label: "Deceased & missing", statuses: ["Deceased", "Missing"], dot: "var(--rel-neutral)" },
 ];
+
+const REL_DOT = {
+  Ally: "var(--rel-ally)",
+  Friend: "var(--rel-friend)",
+  Neutral: "var(--rel-neutral)",
+  Rival: "var(--rel-rival)",
+  Enemy: "var(--rel-enemy)",
+  Unknown: "var(--rel-unknown)",
+};
+const relDot = (rel) => REL_DOT[rel] || REL_DOT.Enemy;
 
 function normNpcDm(t) {
   const pf = t.profile?.fields || {};
@@ -108,9 +119,10 @@ function normPc(c) {
 export default function ChronicleGallery() {
   const { token, user } = useAuth();
   const isDungeonMaster = user?.role === "Dungeon Master";
-  const { npcTemplatesUpdate, characterUpdate, characterCreated, slugUpdate, partyHealed, slugpediaUpdate } = useLiveState();
+  const { npcTemplatesUpdate, gruntTemplatesUpdate, characterUpdate, characterCreated, slugUpdate, partyHealed, slugpediaUpdate } = useLiveState();
 
   const [npcs, setNpcs] = useState([]);
+  const [grunts, setGrunts] = useState([]);
   const [party, setParty] = useState([]);
   const [gallery, setGallery] = useState([]);
   const [knownTemplateIds, setKnownTemplateIds] = useState(() => new Set());
@@ -131,6 +143,14 @@ export default function ChronicleGallery() {
       .catch(() => {});
   }, [authHeaders]);
 
+  const loadGrunts = useCallback(() => {
+    if (!isDungeonMaster) return;
+    fetch("/api/grunt-templates", { headers: authHeaders() })
+      .then((res) => res.json())
+      .then((data) => setGrunts(data.templates || []))
+      .catch(() => {});
+  }, [authHeaders, isDungeonMaster]);
+
   const loadParty = useCallback(() => {
     fetch("/api/chronicle/party", { headers: authHeaders() })
       .then((res) => res.json())
@@ -147,6 +167,7 @@ export default function ChronicleGallery() {
 
   useEffect(() => {
     loadNpcs();
+    loadGrunts();
     loadParty();
     loadKnown();
     fetch("/api/slug-templates/gallery", { headers: authHeaders() })
@@ -167,11 +188,14 @@ export default function ChronicleGallery() {
         .then((data) => setMechaTemplates(data.templates || []))
         .catch(() => {});
     }
-  }, [authHeaders, isDungeonMaster, loadNpcs, loadParty, loadKnown]);
+  }, [authHeaders, isDungeonMaster, loadNpcs, loadGrunts, loadParty, loadKnown]);
 
   useEffect(() => {
     if (npcTemplatesUpdate) loadNpcs();
   }, [npcTemplatesUpdate, loadNpcs]);
+  useEffect(() => {
+    if (gruntTemplatesUpdate) loadGrunts();
+  }, [gruntTemplatesUpdate, loadGrunts]);
   useEffect(() => {
     if (characterUpdate || characterCreated || slugUpdate || partyHealed) loadParty();
   }, [characterUpdate, characterCreated, slugUpdate, partyHealed, loadParty]);
@@ -194,6 +218,12 @@ export default function ChronicleGallery() {
       return true;
     });
   }, [entries, filter]);
+
+  const filteredGrunts = useMemo(() => {
+    const def = FILTERS.find((f) => f.key === filter);
+    if (!def || !def.rels) return grunts; // "all" and status-only filters don't narrow grunts
+    return grunts.filter((g) => def.rels.includes(g.relationship || "Enemy"));
+  }, [grunts, filter]);
 
   // --- DM actions -----------------------------------------------------------
   async function createNpc(payload) {
@@ -225,6 +255,36 @@ export default function ChronicleGallery() {
     setModal(null);
     loadNpcs();
   }
+  async function createGrunt(payload) {
+    const res = await fetch("/api/grunt-templates", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Could not create the grunt.");
+    setModal(null);
+    loadGrunts();
+  }
+  async function updateGrunt(id, payload) {
+    const res = await fetch(`/api/grunt-templates/${id}`, {
+      method: "PATCH",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Could not update the grunt.");
+    setModal(null);
+    loadGrunts();
+  }
+  async function deleteGrunt(id) {
+    const entry = grunts.find((g) => g.id === id);
+    if (!window.confirm(`Delete ${entry?.name || "this grunt"}? This can't be undone.`)) return;
+    await fetch(`/api/grunt-templates/${id}`, { method: "DELETE", headers: authHeaders() });
+    setModal(null);
+    loadGrunts();
+  }
+
   async function toggleReveal(entry) {
     const nextRevealed = !entry.revealed;
     setNpcs((prev) => prev.map((n) => (n.id === entry.id ? { ...n, revealed: nextRevealed } : n)));
@@ -285,6 +345,7 @@ export default function ChronicleGallery() {
 
   const guessableGallery = gallery.filter((t) => knownTemplateIds.has(t.id));
   const editingRaw = modal?.type === "edit" ? npcs.find((n) => n.id === modal.id) : null;
+  const editingGrunt = modal?.type === "grunt" && modal.id != null ? grunts.find((g) => g.id === modal.id) : null;
   const guessingNpc =
     modal?.type === "guess"
       ? (isDungeonMaster ? npcs.map(normNpcDm) : npcs.map(normNpcPlayer)).find((n) => n.id === modal.id)
@@ -300,21 +361,30 @@ export default function ChronicleGallery() {
           <button role="tab" aria-selected={segment === "party"} onClick={() => setSegment("party")}>
             Party
           </button>
+          {isDungeonMaster && (
+            <button role="tab" aria-selected={segment === "grunts"} onClick={() => setSegment("grunts")}>
+              Grunts
+            </button>
+          )}
         </div>
 
         <div className="chronicle-chips" aria-label="Filter">
-          {FILTERS.map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              className="chronicle-chip"
-              aria-pressed={filter === f.key}
-              onClick={() => setFilter(f.key)}
-            >
-              {f.dot && <span className="chronicle-chip-dot" style={{ "--dot": f.dot }} />}
-              {f.label}
-            </button>
-          ))}
+          {FILTERS
+            // Grunts carry a relationship but no life status, so drop the
+            // status-only filter from their chip row.
+            .filter((f) => segment !== "grunts" || f.key === "all" || f.rels)
+            .map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                className="chronicle-chip"
+                aria-pressed={filter === f.key}
+                onClick={() => setFilter(f.key)}
+              >
+                {f.dot && <span className="chronicle-chip-dot" style={{ "--dot": f.dot }} />}
+                {f.label}
+              </button>
+            ))}
         </div>
 
         {isDungeonMaster && segment === "met" && (
@@ -322,9 +392,55 @@ export default function ChronicleGallery() {
             <PlusIcon weight="bold" /> New character
           </button>
         )}
+        {isDungeonMaster && segment === "grunts" && (
+          <button type="button" className="chronicle-new" onClick={() => setModal({ type: "grunt" })}>
+            <PlusIcon weight="bold" /> New grunt
+          </button>
+        )}
       </div>
 
-      {filtered.length === 0 ? (
+      {segment === "grunts" ? (
+        grunts.length === 0 ? (
+          <p className="chronicle-empty">No grunts yet. Add a minion type the party keeps running into.</p>
+        ) : filteredGrunts.length === 0 ? (
+          <p className="chronicle-empty">No grunts match this filter.</p>
+        ) : (
+          <div className="chronicle-grid">
+            {filteredGrunts.map((g) => (
+              <div key={g.id} className="chronicle-cell">
+                <div className="chronicle-grunt-card" style={{ "--rel": relDot(g.relationship) }}>
+                  {g.image ? (
+                    <img className="chronicle-grunt-img" src={g.image} alt="" />
+                  ) : (
+                    <div className="chronicle-grunt-img chronicle-grunt-img--blank" />
+                  )}
+                  <div className="chronicle-grunt-name">{g.name}</div>
+                  <div className="chronicle-grunt-rel">
+                    <span className="chronicle-grunt-rel-dot" />
+                    {g.relationship || "Enemy"}
+                  </div>
+                  <div className="chronicle-grunt-meta">
+                    {g.slugTemplateIds.length} slug{g.slugTemplateIds.length === 1 ? "" : "s"} ·{" "}
+                    {g.blasterTemplateIds.length} blaster{g.blasterTemplateIds.length === 1 ? "" : "s"} in pool
+                  </div>
+                </div>
+                <div className="chronicle-cell-actions">
+                  <button type="button" className="chronicle-cell-btn" onClick={() => setModal({ type: "grunt", id: g.id })}>
+                    <PencilSimpleIcon weight="bold" /> Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="chronicle-cell-btn chronicle-cell-btn--danger"
+                    onClick={() => deleteGrunt(g.id)}
+                  >
+                    <TrashIcon weight="bold" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      ) : filtered.length === 0 ? (
         <p className="chronicle-empty">
           {segment === "party"
             ? "No player characters yet."
@@ -398,7 +514,7 @@ export default function ChronicleGallery() {
         </div>
       )}
 
-      {modal?.type && modal.type !== "guess" && (
+      {modal?.type && modal.type !== "guess" && modal.type !== "grunt" && (
         <div className="slug-modal-backdrop" onClick={() => setModal(null)}>
           <div className="slug-modal" onClick={(e) => e.stopPropagation()}>
             <h2>{modal.type === "new" ? "New character" : `Edit ${editingRaw?.name || ""}`}</h2>
@@ -414,6 +530,23 @@ export default function ChronicleGallery() {
                 submitLabel={modal.type === "new" ? "Create card" : "Save card"}
               />
             )}
+          </div>
+        </div>
+      )}
+
+      {modal?.type === "grunt" && (modal.id == null || editingGrunt) && (
+        <div className="slug-modal-backdrop" onClick={() => setModal(null)}>
+          <div className="slug-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>{modal.id == null ? "New grunt" : `Edit ${editingGrunt?.name || ""}`}</h2>
+            <GruntForm
+              key={modal.id ?? "new"}
+              initialValues={editingGrunt || undefined}
+              slugTemplates={slugTemplates}
+              blasterTemplates={blasterTemplates}
+              onSubmit={modal.id == null ? createGrunt : (payload) => updateGrunt(editingGrunt.id, payload)}
+              onCancel={() => setModal(null)}
+              submitLabel={modal.id == null ? "Create grunt" : "Save grunt"}
+            />
           </div>
         </div>
       )}

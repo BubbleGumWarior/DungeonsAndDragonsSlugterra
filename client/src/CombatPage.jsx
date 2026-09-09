@@ -13,6 +13,7 @@ import MindScrambleModal from "./MindScrambleModal.jsx";
 import FrictionModal from "./FrictionModal.jsx";
 import HunkerConfirmModal from "./HunkerConfirmModal.jsx";
 import { typeRange } from "./slugData.js";
+import { combatantNameColor } from "./combatDisplay.js";
 import "./Panel.css";
 import "./CombatPage.css";
 
@@ -280,14 +281,58 @@ function PullNpcForm({ npcTemplates, onPull }) {
   );
 }
 
+function PullGruntForm({ gruntTemplates, onPull }) {
+  const [gruntTemplateId, setGruntTemplateId] = useState(gruntTemplates[0]?.id ?? "");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function handlePull() {
+    if (!gruntTemplateId) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await onPull(Number(gruntTemplateId));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (gruntTemplates.length === 0) {
+    return <p className="combat-map-drag-hint">No grunts yet -- create some on the Chronicle page first.</p>;
+  }
+
+  return (
+    <div className="combat-add-form combat-pull-npc-form">
+      <div className="panel-field">
+        <label>Send in a grunt (rolls its own loadout)</label>
+        <select value={gruntTemplateId} onChange={(e) => setGruntTemplateId(e.target.value)}>
+          {gruntTemplates.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      {error && <p className="panel-error">{error}</p>}
+      <button type="button" className="panel-btn panel-btn--ghost" disabled={submitting} onClick={handlePull}>
+        <PlusIcon weight="bold" />
+        Send Grunt Into Combat
+      </button>
+    </div>
+  );
+}
+
 export default function CombatPage() {
   const { token, user } = useAuth();
-  const { encounter: liveEncounter, slugUpdate, blasterUpdate, shotFx, shotResolved, damageFlash } = useLiveState();
+  const { encounter: liveEncounter, slugUpdate, blasterUpdate, shotFx, shotResolved, damageFlash, gruntTemplatesUpdate } = useLiveState();
   const [flashActive, setFlashActive] = useState(false);
   const [encounter, setEncounter] = useState(undefined);
   const [players, setPlayers] = useState([]);
   const [mechas, setMechas] = useState([]);
   const [npcTemplates, setNpcTemplates] = useState([]);
+  const [gruntTemplates, setGruntTemplates] = useState([]);
   const [mode, setMode] = useState(null);
   const [actingId, setActingId] = useState(null);
   const [drawMode, setDrawMode] = useState(false);
@@ -338,6 +383,14 @@ export default function CombatPage() {
       .then((data) => setNpcTemplates((data.templates || []).filter((t) => t.combatReady !== false)))
       .catch(() => {});
   }, [isDM, token]);
+
+  useEffect(() => {
+    if (!isDM) return;
+    fetch("/api/grunt-templates", { headers: authHeaders(token) })
+      .then((res) => res.json())
+      .then((data) => setGruntTemplates(data.templates || []))
+      .catch(() => {});
+  }, [isDM, token, gruntTemplatesUpdate]);
 
   useEffect(() => {
     const slugUrl = isDM ? "/api/slugs" : "/api/slugs/me";
@@ -424,6 +477,22 @@ export default function CombatPage() {
       // loadout screen and the counter-clash prompt.
       .sort((a, b) => (a.magazineSlot ?? 99) - (b.magazineSlot ?? 99) || a.id - b.id);
   }, [actingCombatant, allSlugs, allBlasters]);
+
+  // The active weapon's base type -- lets the slug panel show a Gatling's
+  // reduced shot AP cost (see BASE_TYPE_EFFECT_NOTES / server itemRules.js).
+  const activeBlasterBaseType = useMemo(() => {
+    if (!actingCombatant || (actingCombatant.kind !== "character" && actingCombatant.kind !== "npc")) return null;
+    const activeSlot = actingCombatant.data?.activeWeaponSlot ?? 0;
+    const blaster = allBlasters.find((b) => {
+      const owned =
+        actingCombatant.kind === "character"
+          ? b.userId === actingCombatant.refUserId
+          : b.ownerCombatantId === actingCombatant.id;
+      if (!owned || b.equipSlot == null) return false;
+      return actingCombatant.kind === "character" ? b.equipSlot === activeSlot : true;
+    });
+    return blaster?.baseType ?? null;
+  }, [actingCombatant, allBlasters]);
 
   // Drives the hotbar's Switch Weapon button: which slot is active now, and
   // whether the character actually has a blaster equipped in the *other*
@@ -584,6 +653,20 @@ export default function CombatPage() {
       const py = 150 + Math.random() * 200;
       applyEncounter(
         await postJson(token, `/api/combat/encounters/${encounter.id}/npc-combatants`, { npcTemplateId, x: px, y: py })
+      );
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  }
+
+  async function handlePullGrunt(gruntTemplateId) {
+    setError(null);
+    try {
+      const px = 150 + Math.random() * 300;
+      const py = 150 + Math.random() * 200;
+      applyEncounter(
+        await postJson(token, `/api/combat/encounters/${encounter.id}/grunt-combatants`, { gruntTemplateId, x: px, y: py })
       );
     } catch (err) {
       setError(err.message);
@@ -844,10 +927,11 @@ export default function CombatPage() {
           <div className="panel-body">
             {isDM && <AddCombatantForm players={players} mechas={mechas} onAdd={handleAddCombatant} />}
             {isDM && <PullNpcForm npcTemplates={npcTemplates} onPull={handlePullNpc} />}
+            {isDM && <PullGruntForm gruntTemplates={gruntTemplates} onPull={handlePullGrunt} />}
             <div className="combat-setup-list">
               {encounter.combatants.map((c) => (
                 <div key={c.id} className="combat-setup-item">
-                  <span>{c.name}</span>
+                  <span style={{ color: combatantNameColor(c) || undefined }}>{c.name}</span>
                   <span className="combat-setup-item-kind">{c.kind}</span>
                   {isDM && (
                     <button type="button" className="panel-btn panel-btn--icon panel-btn--ghost" onClick={() => handleRemoveCombatant(c.id)}>
@@ -919,6 +1003,7 @@ export default function CombatPage() {
         <CombatSlugPanel
           actingCombatant={actingCombatant}
           slugs={eligibleSlugs}
+          activeBlasterBaseType={activeBlasterBaseType}
           armedSlugId={mode?.type === "shoot" ? mode.slugId : null}
           onPickSlug={handlePickSlug}
           hotkeysActive={actingCombatant?.id === encounter.activeCombatantId}

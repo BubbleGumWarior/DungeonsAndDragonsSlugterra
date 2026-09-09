@@ -475,3 +475,25 @@
   gap: 8px;
   justify-content: flex-end;
 }
+
+/* Slugpedia: a slug only ever seen on an NPC -- name + art visible, stats and
+   ability descriptions sealed until a player catches one. */
+.slug-card--redacted {
+  border-style: dashed;
+}
+.slug-card--redacted .slug-image {
+  filter: grayscale(0.5) contrast(0.95);
+  opacity: 0.9;
+}
+.slug-card-stats--redacted .slug-card-stat-value {
+  color: var(--ink-dim);
+  letter-spacing: 0.1em;
+}
+.slug-card-redacted-note {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+  font-style: italic;
+  text-align: center;
+}

@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { UploadSimpleIcon, ArrowsOutCardinalIcon, XIcon } from "@phosphor-icons/react";
 import { typeColor } from "./slugData.js";
+import { combatantNameColor } from "./combatDisplay.js";
 import { useAuth } from "./AuthContext.jsx";
 import { volumeToGain } from "./soundVolume.js";
+import { downscaleImageFile } from "./imageDownscale.js";
 import "./CombatMap.css";
 
 // Launch sound for a fired slug -- shared by the fresh-shot and counter-shot
@@ -46,34 +48,8 @@ function playCombatSfx(name, sliderVolume) {
   audio.play().catch(() => {});
 }
 
-// The DM's map image is stored at whatever resolution it was uploaded --
-// this caps it before it ever reaches the server, so a phone photo doesn't
-// balloon the encounters table (and every websocket broadcast of it).
-const MAP_IMAGE_MAX_DIMENSION = 2200;
-const MAP_IMAGE_QUALITY = 0.85;
-
-function downscaleImageFile(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(reader.error);
-    reader.onload = () => {
-      const img = new window.Image();
-      img.onerror = () => reject(new Error("Could not read that image."));
-      img.onload = () => {
-        const scale = Math.min(1, MAP_IMAGE_MAX_DIMENSION / Math.max(img.width, img.height));
-        const w = Math.max(1, Math.round(img.width * scale));
-        const h = Math.max(1, Math.round(img.height * scale));
-        const canvas = document.createElement("canvas");
-        canvas.width = w;
-        canvas.height = h;
-        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/jpeg", MAP_IMAGE_QUALITY));
-      };
-      img.src = reader.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
+// The DM's battle-map image is downscaled before upload -- see
+// imageDownscale.js (shared with the ship deck-plan upload).
 
 const DRAG_THRESHOLD = 4; // px of screen movement before a mousedown counts as a drag, not a click
 const BURST_LINGER_MS = 400;
@@ -519,6 +495,7 @@ function statusEffectBadges(statusEffects) {
     badges.push({ key: "enhanced-reaction", label: "Enhanced reaction -- longer counter window" });
   }
   if (statusEffects.keenVision) badges.push({ key: "keen-vision", label: "Keen vision -- next attack has advantage" });
+  if (statusEffects.marked) badges.push({ key: "marked", label: "Marked -- takes splash damage from Arcling's static arcs" });
   return badges;
 }
 
@@ -585,7 +562,7 @@ function Token({ combatant, isActive, isSelected, isActing, draggable, pos, onMo
           ))}
         </g>
       )}
-      <text className="combat-token-label" y={r + 16}>
+      <text className="combat-token-label" y={r + 16} style={{ fill: combatantNameColor(combatant) || undefined }}>
         {combatant.name}
       </text>
       {downed && (

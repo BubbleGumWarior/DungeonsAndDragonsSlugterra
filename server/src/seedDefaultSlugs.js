@@ -49,8 +49,8 @@ export async function seedDefaultSlugTemplates() {
            pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion, trail_wall, clash_tripled,
            cone_blast, spawns_pods, mirage_decoy, star_wall, anchor_zone, voids_fire_clash, clears_fire_terrain,
            causes_disarm, disarm_zone, mind_scramble, swaps_position, friction_shift, crosswind_zone, skips_reload,
-           emotion_surge, uncounterable, damage_tripled, static_mark)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48)`,
+           emotion_surge, uncounterable, damage_tripled, static_mark, rarity)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49)`,
         [
           t.name,
           t.type,
@@ -100,6 +100,7 @@ export async function seedDefaultSlugTemplates() {
           Boolean(t.uncounterable),
           Boolean(t.damageTripled),
           Boolean(t.staticMark),
+          t.rarity ?? null,
         ]
       );
       seeded++;
@@ -109,4 +110,32 @@ export async function seedDefaultSlugTemplates() {
   }
   if (seeded > 0) console.log(`Seeded ${seeded} default slug template(s).`);
   return { available: true, seeded, total: defaults.length };
+}
+
+// `rarity` was added to slug_templates after the OG roster was already seeded
+// on most databases, so those rows have a NULL rarity. Fill them in from the
+// default JSON, matched by name -- but only where it's still NULL, so a rarity
+// the DM has since set by hand is never clobbered. Runs once per startup after
+// seedDefaultSlugTemplates(); a no-op once every default row has a value.
+export async function backfillSlugTemplateRarity() {
+  if (!existsSync(DATA_PATH)) return { updated: 0 };
+  let defaults;
+  try {
+    defaults = JSON.parse(readFileSync(DATA_PATH, "utf8"));
+  } catch {
+    return { updated: 0 };
+  }
+  if (!Array.isArray(defaults)) return { updated: 0 };
+
+  let updated = 0;
+  for (const t of defaults) {
+    if (t.rarity === undefined || t.rarity === null) continue;
+    const { rowCount } = await pool.query(
+      "UPDATE slug_templates SET rarity = $1 WHERE name = $2 AND rarity IS NULL",
+      [t.rarity, t.name]
+    );
+    updated += rowCount;
+  }
+  if (updated > 0) console.log(`Backfilled rarity on ${updated} slug template(s).`);
+  return { updated };
 }

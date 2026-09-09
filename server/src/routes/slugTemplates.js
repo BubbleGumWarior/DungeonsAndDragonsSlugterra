@@ -40,6 +40,7 @@ export function toClientTemplate(row) {
     apCost: row.ap_cost,
     maxEnergyPips: row.max_energy_pips,
     loyaltyTier: row.loyalty_tier,
+    rarity: row.rarity,
     velocityAbility: row.velocity_ability,
     protoformUtility: row.protoform_utility,
     breaksWalls: row.breaks_walls,
@@ -149,6 +150,7 @@ router.post("/", async (req, res) => {
     apCost,
     maxEnergyPips,
     loyaltyTier,
+    rarity,
     velocityAbility,
     protoformUtility,
     breaksWalls,
@@ -200,6 +202,7 @@ router.post("/", async (req, res) => {
     apCost,
     maxEnergyPips,
     loyaltyTier,
+    rarity,
     velocityAbility,
     protoformUtility,
     breaksWalls,
@@ -234,8 +237,8 @@ router.post("/", async (req, res) => {
          pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion, trail_wall, clash_tripled,
          cone_blast, spawns_pods, mirage_decoy, star_wall, anchor_zone, voids_fire_clash, clears_fire_terrain,
          causes_disarm, disarm_zone, mind_scramble, swaps_position, friction_shift, crosswind_zone, skips_reload,
-         emotion_surge, uncounterable, damage_tripled, static_mark)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48)
+         emotion_surge, uncounterable, damage_tripled, static_mark, rarity)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49)
        RETURNING *`,
       [
         name.trim(),
@@ -286,6 +289,7 @@ router.post("/", async (req, res) => {
         Boolean(uncounterable),
         Boolean(damageTripled),
         Boolean(staticMark),
+        rarity ?? null,
       ]
     );
     res.status(201).json({ template: toClientTemplate(rows[0]) });
@@ -307,6 +311,7 @@ router.patch("/:id", async (req, res) => {
     apCost,
     maxEnergyPips,
     loyaltyTier,
+    rarity,
     velocityAbility,
     protoformUtility,
     breaksWalls,
@@ -358,6 +363,7 @@ router.patch("/:id", async (req, res) => {
     apCost,
     maxEnergyPips,
     loyaltyTier,
+    rarity,
     velocityAbility,
     protoformUtility,
     breaksWalls,
@@ -397,8 +403,8 @@ router.patch("/:id", async (req, res) => {
         cone_blast = $31, spawns_pods = $32, mirage_decoy = $33, star_wall = $34, anchor_zone = $35,
         voids_fire_clash = $36, clears_fire_terrain = $37, causes_disarm = $38, disarm_zone = $39,
         mind_scramble = $40, swaps_position = $41, friction_shift = $42, crosswind_zone = $43, skips_reload = $44,
-        emotion_surge = $45, uncounterable = $46, damage_tripled = $47, static_mark = $48
-       WHERE id = $49
+        emotion_surge = $45, uncounterable = $46, damage_tripled = $47, static_mark = $48, rarity = $49
+       WHERE id = $50
        RETURNING *`,
       [
         name.trim(),
@@ -449,6 +455,7 @@ router.patch("/:id", async (req, res) => {
         Boolean(uncounterable),
         Boolean(damageTripled),
         Boolean(staticMark),
+        rarity ?? null,
         id,
       ]
     );

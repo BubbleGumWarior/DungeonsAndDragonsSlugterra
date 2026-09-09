@@ -191,3 +191,51 @@
   line-height: 1.5;
   margin: 0 0 4px;
 }
+
+/* Grunts segment -- lightweight cards for a DM-only minion roster. */
+.chronicle-grunt-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--charcoal-600);
+  border-top: 2px solid var(--rel, var(--charcoal-600));
+  border-radius: 12px;
+  background: var(--charcoal-950);
+  text-align: center;
+}
+.chronicle-grunt-img {
+  width: 84px;
+  height: 84px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 1px solid var(--charcoal-600);
+}
+.chronicle-grunt-img--blank {
+  background: var(--charcoal-900);
+}
+.chronicle-grunt-name {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ink);
+}
+.chronicle-grunt-rel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--rel, var(--rel-neutral));
+}
+.chronicle-grunt-rel-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--rel, var(--rel-neutral));
+}
+.chronicle-grunt-meta {
+  font-size: 11.5px;
+  color: var(--ink-dim);
+}

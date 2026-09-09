@@ -4,52 +4,14 @@ import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import { formatModifier } from "./characterData.js";
 import { oddsByArea } from "./slugHuntOdds.json";
+import { PLANETS } from "./planetData.js";
 import "./Panel.css";
 import "./SlugHuntPanel.css";
 
-// The eight layers of the Deep, top to bottom.
-const AREAS = [
-  {
-    name: "The Overcrust",
-    description:
-      "Grassland under a sky that isn't sky. Far overhead, light filters down through countless hairline cracks in stone, diffused into something dimmer and bluer than sunlight, so the whole layer sits in a permanent, gentle late-afternoon haze. Roots hang from the ceiling in places thick enough to mistake for trees, and where they've broken through, thin trickles of groundwater feed shallow puddles that never quite dry. The grass itself grows pale gold rather than green, starved of true sun, and hushes underfoot instead of rustling. Streams braid across the open ground toward low points, gathering into a scatter of ponds and one long, still lake. It's quiet in the way abandoned places are quiet — not empty, just holding its breath.",
-  },
-  {
-    name: "The Throat",
-    description:
-      "No biome, just the way down — a vertical labyrinth of shafts, chimneys, and collapsed-in sinkholes connecting the Overcrust to the sea below. Walls here are raw and unweathered, water-slicked in places, bone-dry and crumbling in others. Sound behaves strangely: a dropped stone can echo for longer than it should, or vanish entirely into some larger cavity nobody can see. Faint light from above thins out fast, replaced by nothing at all within the first hundred feet of descent, and then, gradually, by something else — a cold, blue-green glow bleeding up from far below that has nothing to do with the sun.",
-  },
-  {
-    name: "The Hollow Sea",
-    description:
-      "An ocean with no horizon, its ceiling the pale underside of the Overcrust's water table, glimpsed only when the surface calms enough to reflect it. The water itself is startlingly clear near the surface and impenetrably dark within a few dozen feet of depth, lit only by drifting clouds of bioluminescent plankton and the slow, cold pulses of things moving beneath. Rock spires break the surface at odd intervals, worn smooth, some large enough to stand on. The air smells of salt and stone. Waves here are slower and heavier than surface waves, as if the water itself is thicker, older, in less of a hurry.",
-  },
-  {
-    name: "The Underroot",
-    description:
-      "Warmth, humidity, and a canopy made of roots rather than branches — the Overcrust's own root systems, grown vast and tangled, forming a living ceiling threaded with hanging vines and moss. Warm ponds steam gently in clearings, ringed by broad-leafed plants that seem to lean toward any moving heat source. Light is scarce and green-gold, filtered through root-gaps rather than open sky, giving the whole layer a permanent dappled dimness. Sound carries strangely well here — a call from one side of a clearing reaches the other with unnerving clarity — and something is always rustling just out of sight, close enough to notice, never close enough to see.",
-  },
-  {
-    name: "The Rift Peaks",
-    description:
-      "The ground tilts upward into genuine mountains, jagged and grey, riddled with fissures that breathe faint heat into the air. This is the first layer where warmth stops being pleasant and starts being present — hot springs pool in the folds between ridges, steam curling off their surfaces even in the colder passes above them. Wind moves through the peaks in low, constant moans, funneled by the rock into something almost like a voice. Visibility is good but the terrain is brutal: narrow ledges, loose scree, sudden drops. At night — if there is a night here — the springs glow faintly from mineral deposits, the only warm light in an otherwise cold, hard landscape.",
-  },
-  {
-    name: "The Steam Barrens",
-    description:
-      "A flat, cracked expanse where the ground itself seems to be under pressure — geysers erupt without warning, sheets of scalding vapor roll low across the terrain, and the air is thick enough to fog goggles and swallow sound. Visibility rarely extends more than a few dozen feet. The rock underfoot is stained white and orange with mineral crust, brittle in places, treacherously hollow in others. Everything here is loud, wet-hot, and disorienting — the Barrens don't attack so much as they simply make it very hard to know where you're standing until the ground reminds you.",
-  },
-  {
-    name: "The Emberdeep",
-    description:
-      "The last livable layer, and it looks it. The ceiling glows faint orange from heat bleeding through from below, and rivers of slow-moving lava carve the landscape into black, glassy ridges and stark red seams. Ash drifts in the air like snow that never lands. The heat here isn't a spike, it's a constant, oppressive weight, thick enough to taste. Structures — natural or otherwise — cast long, wavering shadows in the heat-shimmer, and everything solid seems to creak faintly, as if the rock itself is being slowly cooked. It's beautiful in the way a wound can be beautiful: vivid, raw, and clearly not meant to be lingered in.",
-  },
-  {
-    name: "The Core",
-    description:
-      "Below the lava, silence — not the tense quiet of the Overcrust, but something older and stranger. The heat drops here, inexplicably, replaced by a cool, mineral stillness. The cavern opens into a space too vast for any light source to fully reveal, its true ceiling and walls lost in darkness beyond the reach of torchlight. Faint bioluminescent veins run through the stone like exposed nerves, pulsing slowly, unhurried, on a rhythm that doesn't match anything human. The air itself feels attended to — not empty, not hostile, just deeply, patiently aware. Nothing here needs to move quickly, because nothing here has anywhere else to be.",
-  },
-];
+// The party hunts on one of the system's eight charted worlds -- shared with
+// the Galaxy Map (see planetData.js). The index is campaign_settings
+// .slug_hunt_area, kept in sync with slugHuntOdds.json's `areas`.
+const AREAS = PLANETS;
 
 export default function SlugHuntPanel({ isDungeonMaster = false }) {
   const { token, user } = useAuth();
@@ -175,14 +137,14 @@ export default function SlugHuntPanel({ isDungeonMaster = false }) {
         </span>
         <div className="panel-header-text">
           <h2>Slug Hunt</h2>
-          <p>Odds of finding slugs at the party's location</p>
+          <p>Odds of finding slugs on the party's current planet</p>
         </div>
       </div>
 
       <div className="panel-body">
         {isDungeonMaster ? (
           <div className="panel-field">
-            <label>Party Location</label>
+            <label>Party Planet</label>
             <div className="slughunt-area-picker">
               <select
                 value={areaIndex}
@@ -207,7 +169,7 @@ export default function SlugHuntPanel({ isDungeonMaster = false }) {
           </div>
         ) : (
           <div className="slughunt-location">
-            <span>Current Location</span>
+            <span>Current Planet</span>
             <span className="slughunt-location-name">
               <strong>{area.name}</strong>
               <button
@@ -228,7 +190,7 @@ export default function SlugHuntPanel({ isDungeonMaster = false }) {
         ) : odds.length === 0 ? (
           <p className="panel-empty">
             {isDungeonMaster
-              ? "No slugs are listed for this area."
+              ? "No slugs are listed for this planet."
               : "None of the slugs in your Slugpedia turn up here — discover more to see their odds."}
           </p>
         ) : (
@@ -320,7 +282,7 @@ export default function SlugHuntPanel({ isDungeonMaster = false }) {
               <XIcon weight="bold" />
             </button>
             <h2>{`${areaIndex + 1} — ${area.name}`}</h2>
-            <p className="slughunt-area-modal-body">{area.description}</p>
+            <p className="slughunt-area-modal-body">{area.blurb}</p>
           </div>
         </div>
       )}

@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "client/src/NavBar.css"
+        ],
+        "createdAt": "2026-09-09T09:32:27.809Z",
+        "reason": "pre-existing .navbar-indicator slide (author-designed, documented at NavBar.css:200-205): absolutely-positioned 2px bar eased between two visible positions, not a size reveal. Predates this change; line number only shifted from adding nav-group styles above."
+      }
+    ]
+  }
+}

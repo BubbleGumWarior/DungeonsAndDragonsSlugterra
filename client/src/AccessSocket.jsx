@@ -15,6 +15,10 @@ export default function AccessSocket({ children }) {
   const navigate = useNavigate();
   const [onlineUserIds, setOnlineUserIds] = useState(() => new Set());
   const [slugterraRevealed, setSlugterraRevealed] = useState(false);
+  // Whether the initial /api/settings fetch has resolved. Route guards need
+  // this so they don't bounce a player off a legitimately-revealed page
+  // during the brief window before the real value arrives.
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [characterUpdate, setCharacterUpdate] = useState(null);
   const [characterCreated, setCharacterCreated] = useState(null);
   const [partyHealed, setPartyHealed] = useState(null);
@@ -36,7 +40,9 @@ export default function AccessSocket({ children }) {
   const [shotResolved, setShotResolved] = useState(null);
   const [combatLogEntry, setCombatLogEntry] = useState(null);
   const [npcTemplatesUpdate, setNpcTemplatesUpdate] = useState(null);
+  const [gruntTemplatesUpdate, setGruntTemplatesUpdate] = useState(null);
   const [slugpediaUpdate, setSlugpediaUpdate] = useState(null);
+  const [shipUpdate, setShipUpdate] = useState(null);
   const [slugHuntArea, setSlugHuntArea] = useState(0);
   const [slugHuntOffered, setSlugHuntOffered] = useState(null);
   const [slugHuntUpdated, setSlugHuntUpdated] = useState(null);
@@ -99,7 +105,8 @@ export default function AccessSocket({ children }) {
         setSlugterraRevealed(Boolean(data.slugterraRevealed));
         if (Number.isInteger(data.slugHuntArea)) setSlugHuntArea(data.slugHuntArea);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setSettingsLoaded(true));
 
     fetch("/api/presence/online", { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => res.json())
@@ -305,8 +312,18 @@ export default function AccessSocket({ children }) {
         return;
       }
 
+      if (data.type === "grunt-templates-updated") {
+        setGruntTemplatesUpdate(Date.now());
+        return;
+      }
+
       if (data.type === "slugpedia-updated") {
         setSlugpediaUpdate(Date.now());
+        return;
+      }
+
+      if (data.type === "ship-updated") {
+        setShipUpdate(Date.now());
         return;
       }
 
@@ -376,6 +393,7 @@ export default function AccessSocket({ children }) {
       value={{
         onlineUserIds,
         slugterraRevealed,
+        settingsLoaded,
         characterUpdate,
         characterCreated,
         partyHealed,
@@ -397,7 +415,9 @@ export default function AccessSocket({ children }) {
         shotResolved,
         combatLogEntry,
         npcTemplatesUpdate,
+        gruntTemplatesUpdate,
         slugpediaUpdate,
+        shipUpdate,
         slugHuntArea,
         slugHuntOffered,
         slugHuntUpdated,

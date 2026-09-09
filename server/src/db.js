@@ -379,6 +379,169 @@ async function refreshSeededMechaMods() {
   }
 }
 
+// Blaster mod catalog -- the twin of DEFAULT_MECHA_MOD_TEMPLATES for the
+// Inventory page. `accuracyBonus` folds straight into the attack roll (see
+// effectiveAccuracy in itemData.js); `reloadApBonus` shifts the weapon's
+// Reload cost (negative = cheaper, floored at 1 AP by effectiveReloadApCost).
+// A DM equips these onto a player's blaster in its mod slots. House catalog,
+// not curated content -- kept in sync by name on every boot.
+const DEFAULT_BLASTER_MOD_TEMPLATES = [
+  {
+    name: "Precision Sight",
+    effect:
+      "A finely machined adjustable aperture sight that locks solid once it is zeroed and holds that zero through recoil, knocks and rough handling. The shooter's eye falls onto the same sight picture every time they bring the weapon up, tightening every group without changing how the blaster loads or cycles.",
+    accuracyBonus: 2,
+    reloadApBonus: 0,
+  },
+  {
+    name: "Extended Barrel",
+    effect:
+      "A longer bored barrel that keeps the slug spinning and building speed for longer before it leaves the muzzle, flattening its arc and shrinking the group at distance. The extra length and forward weight make the weapon slower to bring back down and back on line for a fresh load.",
+    accuracyBonus: 2,
+    reloadApBonus: 1,
+  },
+  {
+    name: "Speed-Loader Clip",
+    effect:
+      "A pre-indexed feed clip that presents a full row of slugs already lined up with their chambers, so a reload is one firm push instead of seating each slug by hand. It does nothing for the shot itself, but it buys back a chunk of the time a reload normally costs.",
+    accuracyBonus: 0,
+    reloadApBonus: -1,
+  },
+  {
+    name: "Autoloader Assembly",
+    effect:
+      "A spring-fed autoloader that walks the next slugs into place the instant the breech clears, cutting the reload down to little more than releasing the catch. The mechanism is bulky and adds nothing to accuracy, but it turns the slowest weapons into something that can be topped up in the middle of a fight.",
+    accuracyBonus: 0,
+    reloadApBonus: -2,
+  },
+  {
+    name: "Recoil Compensator",
+    effect:
+      "A ported muzzle brake that vents propellant gas up and to the sides, pushing back against the barrel's climb so the weapon stays flatter through the shot and settles faster afterward. Loading and cycling are untouched.",
+    accuracyBonus: 1,
+    reloadApBonus: 0,
+  },
+  {
+    name: "Match-Grade Rifling",
+    effect:
+      "A hand-cut rifling job held to tolerances no factory line bothers with, every groove uniform and mirror-smooth. A slug leaves this barrel with almost no yaw, flying true to the sights out to the edge of its range. Painstaking work, but it costs the weapon nothing in weight or handling.",
+    accuracyBonus: 3,
+    reloadApBonus: 0,
+  },
+  {
+    name: "Reflex Optic",
+    effect:
+      "A collimated dot floated on a small canopy above the breech, always parallel to the bore no matter where the eye sits behind it. The shooter simply puts the dot on the target and fires -- fast to pick up and forgiving of a poor cheek weld, with no effect on how the weapon reloads.",
+    accuracyBonus: 2,
+    reloadApBonus: 0,
+  },
+  {
+    name: "Weighted Target Stock",
+    effect:
+      "A dense, deeply contoured stock that soaks up tremor and plants the weapon hard against the shoulder for a still, deliberate shot. The mass that makes it so steady also makes it slower to shift when swapping a spent magazine for a fresh one.",
+    accuracyBonus: 2,
+    reloadApBonus: 1,
+  },
+  {
+    name: "Vented Handguard",
+    effect:
+      "A skeletonised guard that sheds heat and grams in equal measure, keeping the fore-end cool to grip and light to control. The lighter nose comes back on target quicker after a shot and is quicker to bring around for a reload.",
+    accuracyBonus: 1,
+    reloadApBonus: -1,
+  },
+  {
+    name: "Gyro Wrist Mount",
+    effect:
+      "A small powered gimbal set between the grip and the frame that reads out fine tremor in the wrist and cancels it before it reaches the barrel. The sight sits noticeably steadier on a moving or winded shooter. It draws its own power and adds no bulk to the loading path.",
+    accuracyBonus: 2,
+    reloadApBonus: 0,
+  },
+  {
+    name: "Flared Magazine Well",
+    effect:
+      "A bevelled, oversized well that funnels a fresh magazine straight home even with cold hands or in the dark, taking the fumbling out of a reload. It changes nothing about the shot, only how quickly the weapon is fed.",
+    accuracyBonus: 0,
+    reloadApBonus: -1,
+  },
+  {
+    name: "Featherweight Housing",
+    effect:
+      "A moulded polymer receiver shell that strips a real fraction of the weapon's mass without weakening the action. Everything the shooter does with it -- holding aim, recovering from recoil, bringing it around to reload -- becomes a touch quicker and easier to hold together.",
+    accuracyBonus: 1,
+    reloadApBonus: -1,
+  },
+  {
+    name: "Twin Feed Ramp",
+    effect:
+      "A split loading ramp that chambers slugs from both sides of the magazine at once, halving the strokes a full reload takes. The gain is purely in speed of feeding; the ramp sits behind the chamber and does nothing for the slug once it is flying.",
+    accuracyBonus: 0,
+    reloadApBonus: -2,
+  },
+  {
+    name: "Fluted Heavy Barrel",
+    effect:
+      "A thick barrel with lengthwise flutes cut to keep it stiff and cool without the full dead weight of a bull profile. It holds the sights rock-steady through a string of shots, but it is still a heavy thing to lever back down and reload under pressure.",
+    accuracyBonus: 3,
+    reloadApBonus: 1,
+  },
+  {
+    name: "Adjustable Cheek Riser",
+    effect:
+      "A simple riser that raises the comb so the shooter's eye lands on the sight line naturally, the same way every time, instead of hunting for it. Small, light, and entirely separate from the loading mechanism.",
+    accuracyBonus: 1,
+    reloadApBonus: 0,
+  },
+  {
+    name: "Fibre-Optic Front Post",
+    effect:
+      "A front post threaded with a bright collector rod that gathers ambient light into a vivid aiming point, snapping the eye onto the sights in gloom or clutter where a plain blade would vanish. No effect on reload.",
+    accuracyBonus: 1,
+    reloadApBonus: 0,
+  },
+  {
+    name: "Slick Breech Coating",
+    effect:
+      "A dry-film coating bonded to every bearing surface of the action, so spent casings fall clear and fresh slugs slide into the chamber without drag or grit. It shaves time off each reload and nothing else.",
+    accuracyBonus: 0,
+    reloadApBonus: -1,
+  },
+  {
+    name: "Counterbalanced Bolt Carrier",
+    effect:
+      "A mass-tuned bolt carrier that runs flat and true instead of hammering the frame at each end of its travel. The sight settles faster after a shot, and the action returns to battery already lined up for the next slug to be loaded.",
+    accuracyBonus: 1,
+    reloadApBonus: -1,
+  },
+  {
+    name: "Snub Handling Package",
+    effect:
+      "A short heavy barrel and a cut-down grip built purely for speed of handling in a close scrum -- fast to swing onto a target and fast to feed. Past a few paces, though, the stubby bore throws slugs wide and the sight radius is too short to correct it.",
+    accuracyBonus: -1,
+    reloadApBonus: -2,
+  },
+  {
+    name: "Folding Bipod",
+    effect:
+      "Sprung legs under the fore-end that snap down to carry the weapon's weight off the arms, giving a braced, motionless platform for a careful shot. Stowing them again and clearing them for a reload costs a moment each time.",
+    accuracyBonus: 2,
+    reloadApBonus: 1,
+  },
+];
+
+// Idempotent per name -- seeds the full blaster mod catalog on a fresh
+// install and back-fills any entry a later release adds. A name a DM has
+// deleted comes back on the next boot. Mirrors seedDefaultMechaModTemplates.
+async function seedDefaultBlasterModTemplates() {
+  for (const m of DEFAULT_BLASTER_MOD_TEMPLATES) {
+    await pool.query(
+      `INSERT INTO mod_templates (name, effect, accuracy_bonus, reload_ap_bonus)
+       SELECT $1, $2, $3, $4
+       WHERE NOT EXISTS (SELECT 1 FROM mod_templates WHERE name = $1)`,
+      [m.name, m.effect, m.accuracyBonus, m.reloadApBonus]
+    );
+  }
+}
+
 export async function initSchema() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -466,11 +629,29 @@ export async function initSchema() {
     INSERT INTO campaign_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
   `);
 
-  // The party's current location for the dashboard Slug Hunt panel -- an
-  // index (0-7) into the eight layers of the Deep (see slugHuntOdds.json).
-  // The DM sets it from the panel's dropdown; players see it and hunt in it.
+  // The party's current planet for the dashboard Slug Hunt panel -- an
+  // index (0-7) into the eight charted worlds (see slugHuntOdds.json).
+  // The DM sets it from the panel's dropdown; players see it and hunt on it.
   await pool.query(`
     ALTER TABLE campaign_settings ADD COLUMN IF NOT EXISTS slug_hunt_area INTEGER NOT NULL DEFAULT 0;
+  `);
+
+  // The party's ship(s). One row per vessel the party has flown -- the DM
+  // swaps/upgrades ships over the campaign and the old ones stay listed.
+  // `image` is a downscaled data URL (same treatment as encounters.map_image);
+  // `compartments` is [{id, label, description, status, xPct, yPct}] -- the
+  // clickable nodes the DM drops on the deck-plan image. See routes/ships.js.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ships (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL DEFAULT 'The Ship',
+      image TEXT,
+      compartments JSONB NOT NULL DEFAULT '[]',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`
+    ALTER TABLE campaign_settings ADD COLUMN IF NOT EXISTS active_ship_id INTEGER REFERENCES ships(id) ON DELETE SET NULL;
   `);
 
   // One "Try Hunt" attempt per player per rest -- a row here means that user
@@ -520,6 +701,13 @@ export async function initSchema() {
   `);
   await pool.query(`
     ALTER TABLE slug_templates ADD COLUMN IF NOT EXISTS clash_defense INTEGER NOT NULL DEFAULT 5;
+  `);
+  // 1 (commonest) .. 10 (rarest), from docs/Slugs - OG Slugs.csv's "Rarity"
+  // column. Nullable: NULL means "unset" and the grunt-loadout roll
+  // (routes/combat.js) treats it as mid-rarity. Backfilled for the OG roster
+  // by backfillSlugTemplateRarity() in seedDefaultSlugs.js.
+  await pool.query(`
+    ALTER TABLE slug_templates ADD COLUMN IF NOT EXISTS rarity INTEGER;
   `);
 
   await pool.query(`
@@ -854,6 +1042,7 @@ export async function initSchema() {
   await seedDefaultMechaTemplates();
   await seedDefaultMechaModTemplates();
   await refreshSeededMechaMods();
+  await seedDefaultBlasterModTemplates();
 
   // Self-heal / backfill: derive the terrain-mode flags on `mechas` from
   // whatever mod is equipped right now. Runs here -- after `mecha_mods` exists
@@ -1049,6 +1238,34 @@ export async function initSchema() {
   await pool.query(`
     ALTER TABLE combatants ADD COLUMN IF NOT EXISTS ref_npc_template_id INTEGER REFERENCES npc_templates(id) ON DELETE SET NULL;
   `);
+
+  // Grunts / minions -- DM-only, never shown to players anywhere. Unlike an
+  // npc_templates card (one named, important character with a fixed loadout),
+  // a grunt template carries *pools* of slug/blaster templates; each grunt
+  // pulled into a fight rolls its own loadout from those pools, biased toward
+  // commoner slugs / lower-quality blasters (see routes/combat.js's
+  // /grunt-combatants). Repeated pulls auto-number ("Blakk Goon 1", "2", ...).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS grunt_templates (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      image TEXT,
+      dex_modifier INTEGER NOT NULL DEFAULT 0,
+      con_modifier INTEGER NOT NULL DEFAULT 0,
+      slug_template_ids JSONB NOT NULL DEFAULT '[]',
+      blaster_template_ids JSONB NOT NULL DEFAULT '[]',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  // Same Ally/Friend/Neutral/Rival/Enemy/Unknown set an npc_templates card
+  // carries -- grunts default to Enemy since that's what a minion pack usually
+  // is, but a squad of friendly guards is just as valid.
+  await pool.query(`
+    ALTER TABLE grunt_templates ADD COLUMN IF NOT EXISTS relationship TEXT NOT NULL DEFAULT 'Enemy';
+  `);
+  await pool.query(`
+    ALTER TABLE combatants ADD COLUMN IF NOT EXISTS ref_grunt_template_id INTEGER REFERENCES grunt_templates(id) ON DELETE SET NULL;
+  `);
   // An earlier design redacted an NPC combatant's stats in combat until
   // revealed; that's gone (combat always shows everyone fully) so this
   // per-combatant flag is unused.
@@ -1134,5 +1351,15 @@ export async function initSchema() {
       clash_tripled BOOLEAN NOT NULL DEFAULT false,
       first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+  `);
+
+  // `discovered` = a player has actually owned this slug (assigned to them, or
+  // tracked down on a hunt). false means it's only ever been *seen* -- carried
+  // by an NPC/grunt that joined a fight -- so the slugpedia shows its name and
+  // art but redacts the stat block and both form descriptions until a player
+  // catches one (see slugpediaStore.js). Existing rows predate the distinction
+  // and were all fully shown, so they default to discovered.
+  await pool.query(`
+    ALTER TABLE slugpedia_entries ADD COLUMN IF NOT EXISTS discovered BOOLEAN NOT NULL DEFAULT true;
   `);
 }

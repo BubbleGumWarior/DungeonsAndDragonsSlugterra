@@ -303,11 +303,12 @@ the encounter re-loads everything along with clearing cooldowns.
    launches the slug) and not blocked by a wall the slug can't break or phase
    through (Dark).
 2. Attack roll: `d20 + blaster.accuracy + quality.accuracyBonus + type.accuracyMod +
-   loyaltyAccuracyModifier(slug.loyaltyTier)` vs a target DC of `10 + target DEX
-   modifier + range penalty` (range penalty: −1 per `RANGE_PENALTY_STEP`, default 8
-   units, past half the weapon's range). See "Loyalty tier modifiers" below for the
-   last term. Roll the quality tier's `failRate` first (jam chance) — a jam wastes
-   the shot and the AP but the magazine slot needs a Reload to clear.
+   loyaltyAccuracyModifier(slug.loyaltyTier) + blasterTypeAccuracyBonus(blaster, shooter)`
+   vs a target DC of `10 + target DEX modifier + range penalty` (range penalty: −1 per
+   `RANGE_PENALTY_STEP`, default 8 units, past half the weapon's range). See "Loyalty
+   tier modifiers" below for the loyalty term, and "Base-type combat effects" below
+   for the last term. Roll the quality tier's `failRate` first (jam chance) — a jam
+   wastes the shot and the AP but the magazine slot needs a Reload to clear.
 3. If the target has an available (energy-charged) loaded slug and hasn't already
    used their counter this round, open the counter-clash window (§6) **before**
    rolling the attack — a successful counter can win outright regardless of the
@@ -405,6 +406,22 @@ pod damage, the clash power/defense comparison in §6, the counter-offer prompt'
 own PWR/DEF display) just reads `clash_power`/`clash_defense` normally and gets the
 effective number for free, including through Emberblade's clash-tripling, which
 multiplies whatever it's handed.
+
+### Base-type combat effects
+
+Three blaster base types (`BASE_TYPES` in `itemRules.js`) carry a combat effect
+beyond their raw accuracy/range/magazine/reload stat line. All three are resolved
+in the Shoot Slug flow (`routes/combat.js`), keyed on the fired blaster's
+`base_type`, and no-op for every other type:
+
+| Base type | Effect | Where |
+|---|---|---|
+| **Bow** | Attack roll also adds the **shooter's own DEX modifier** (on top of the usual accuracy terms). | `blasterTypeAccuracyBonus` — folded into the attack roll in `resolveNormalHit` / `resolveEnvironmentShot` |
+| **Gatling** | Every slug it fires costs **`GATLING_AP_DISCOUNT` (2) less AP** to shoot, floored at 1. Applies to Attack and to Break/Make Wall & Build Bridge alike. | `gatlingShotApCost` — `shotApCost` replaces `slug.ap_cost` for the whole shoot route's AP check + spend |
+| **Cannon** | The fired slug gets **`+CANNON_CLASH_BONUS` (+3) clash power**, which rides through both the §6 clash comparison and the eventual hit damage (`clash_power` drives both). A `None`-type dud stays a dud. | `applyBlasterTypeToSlug` — clones the slug at fire time, stored on the pending offer |
+
+A DM-puppeted NPC opts into one of these by setting `npcBlaster.baseType` to the
+matching type; leaving it unset (the default) means no base-type effect.
 
 ## 6. Counter-clash
 

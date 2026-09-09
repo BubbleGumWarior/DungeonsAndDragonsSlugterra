@@ -14,6 +14,13 @@ echo One-time setup required before this works -- see
 echo CLOUDFLARE_TUNNEL_SETUP.md if you haven't done it yet.
 
 start "Dungeon Lair - Server" cmd /k "cd /d %~dp0server && npm start"
+
+echo.
+echo Waiting 5 seconds for the server to initialize the database and bind
+echo port 4000 before starting the client -- otherwise Vite's /ws proxy
+echo logs a burst of harmless ECONNREFUSED errors on first load.
+timeout /t 5 /nobreak >nul
+
 start "Dungeon Lair - Client" cmd /k "cd /d %~dp0client && npm run dev"
 start "Dungeon Lair - Tunnel" cmd /k "cloudflared tunnel run dungeonlair"
 

@@ -13,7 +13,15 @@ import SlugImage from "./SlugImage.jsx";
 import EnergyPips from "./EnergyPips.jsx";
 import "./SlugCard.css";
 
-export default function SlugCard({ slug, size = "sm", editable = false, onToggleEnergyPip, onClick, actions }) {
+export default function SlugCard({
+  slug,
+  size = "sm",
+  editable = false,
+  onToggleEnergyPip,
+  onClick,
+  actions,
+  redacted = false,
+}) {
   const [face, setFace] = useState("protoform");
   const abilityText = (face === "velocity" ? slug.velocityAbility : slug.protoformUtility) || "";
   const abilityLabel = face === "velocity" ? "Velocity Ability" : "Protoform Utility";
@@ -55,7 +63,9 @@ export default function SlugCard({ slug, size = "sm", editable = false, onToggle
 
   return (
     <div
-      className={`slug-card slug-card--${size} ${onClick ? "slug-card--clickable" : ""}`}
+      className={`slug-card slug-card--${size} ${onClick ? "slug-card--clickable" : ""} ${
+        redacted ? "slug-card--redacted" : ""
+      }`}
       style={{ "--type-color": typeColor(slug.type) }}
       onClick={onClick}
     >
@@ -73,7 +83,7 @@ export default function SlugCard({ slug, size = "sm", editable = false, onToggle
           <div
             className="slug-card-type-wrap"
             ref={typeRef}
-            tabIndex={0}
+            tabIndex={redacted ? -1 : 0}
             onMouseEnter={placeBenefit}
             onFocus={placeBenefit}
           >
@@ -81,6 +91,7 @@ export default function SlugCard({ slug, size = "sm", editable = false, onToggle
               {slug.type}
             </span>
 
+            {!redacted && (
             <div className={`slug-card-benefit ${benefitLeft ? "slug-card-benefit--left" : ""}`} role="tooltip">
               <p className="slug-card-benefit-title">
                 <span className="slug-card-benefit-type" style={{ "--type-color": typeColor(slug.type) }}>
@@ -109,49 +120,65 @@ export default function SlugCard({ slug, size = "sm", editable = false, onToggle
                 <p>{ballistics.hitEffect}</p>
               </div>
             </div>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="slug-card-stats">
-        <div className="slug-card-stat">
-          <span className="slug-card-stat-value">
-            {slug.clashPower}
-            {clashMod !== 0 && <span className={clashModClass}>{clashModLabel}</span>}
-          </span>
-          <span className="slug-card-stat-label">Clash Power</span>
+      {redacted ? (
+        <div className="slug-card-stats slug-card-stats--redacted">
+          {["Clash Power", "Clash Defense", "AP Cost", "Loyalty"].map((label) => (
+            <div className="slug-card-stat" key={label}>
+              <span className="slug-card-stat-value">?</span>
+              <span className="slug-card-stat-label">{label}</span>
+            </div>
+          ))}
         </div>
-        <div className="slug-card-stat">
-          <span className="slug-card-stat-value">
-            {slug.clashDefense}
-            {clashMod !== 0 && <span className={clashModClass}>{clashModLabel}</span>}
-          </span>
-          <span className="slug-card-stat-label">Clash Defense</span>
-        </div>
-        <div className="slug-card-stat">
-          <span className="slug-card-stat-value">{slug.apCost}</span>
-          <span className="slug-card-stat-label">AP Cost</span>
-        </div>
-        <div className="slug-card-stat slug-card-stat--loyalty" tabIndex={0}>
-          <span className="slug-card-stat-value" style={{ color: loyaltyColor }}>
-            {LOYALTY_TIER_LABELS[slug.loyaltyTier]}
-            {accuracyMod !== 0 && <span className={accuracyModClass}>{accuracyModLabel} ACC</span>}
-          </span>
-          <span className="slug-card-stat-label">Loyalty</span>
+      ) : (
+        <div className="slug-card-stats">
+          <div className="slug-card-stat">
+            <span className="slug-card-stat-value">
+              {slug.clashPower}
+              {clashMod !== 0 && <span className={clashModClass}>{clashModLabel}</span>}
+            </span>
+            <span className="slug-card-stat-label">Clash Power</span>
+          </div>
+          <div className="slug-card-stat">
+            <span className="slug-card-stat-value">
+              {slug.clashDefense}
+              {clashMod !== 0 && <span className={clashModClass}>{clashModLabel}</span>}
+            </span>
+            <span className="slug-card-stat-label">Clash Defense</span>
+          </div>
+          <div className="slug-card-stat">
+            <span className="slug-card-stat-value">{slug.apCost}</span>
+            <span className="slug-card-stat-label">AP Cost</span>
+          </div>
+          <div className="slug-card-stat slug-card-stat--loyalty" tabIndex={0}>
+            <span className="slug-card-stat-value" style={{ color: loyaltyColor }}>
+              {LOYALTY_TIER_LABELS[slug.loyaltyTier]}
+              {accuracyMod !== 0 && <span className={accuracyModClass}>{accuracyModLabel} ACC</span>}
+            </span>
+            <span className="slug-card-stat-label">Loyalty</span>
 
-          <div className="slug-card-loyalty-legend" role="tooltip">
-            <p className="slug-card-loyalty-legend-title">Loyalty Tiers</p>
-            {LOYALTY_TIERS.map((tier) => (
-              <div key={tier.value} className="slug-card-loyalty-legend-row">
-                <span className="slug-card-loyalty-legend-swatch" style={{ background: tier.color, color: tier.color }} />
-                <span className="slug-card-loyalty-legend-name" style={{ color: tier.color }}>
-                  {tier.label}
-                </span>
-              </div>
-            ))}
+            <div className="slug-card-loyalty-legend" role="tooltip">
+              <p className="slug-card-loyalty-legend-title">Loyalty Tiers</p>
+              {LOYALTY_TIERS.map((tier) => (
+                <div key={tier.value} className="slug-card-loyalty-legend-row">
+                  <span className="slug-card-loyalty-legend-swatch" style={{ background: tier.color, color: tier.color }} />
+                  <span className="slug-card-loyalty-legend-name" style={{ color: tier.color }}>
+                    {tier.label}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {redacted && (
+        <p className="slug-card-redacted-note">Seen in the wild — a player must catch one to log its stats and abilities.</p>
+      )}
 
       {Array.isArray(slug.energyPips) && (
         <div className="slug-card-energy">

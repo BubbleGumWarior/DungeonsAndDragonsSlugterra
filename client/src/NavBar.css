@@ -121,6 +121,82 @@
   color: var(--ink-dim);
 }
 
+/* --- Dropdown groups ------------------------------------------------------ */
+/* On desktop .navbar-actions-inner is `display: contents`, so .navbar-group
+   is a direct flex child of .navbar-actions and the absolute menu anchors to
+   it. On mobile the group goes `display: contents` too (below), collapsing
+   into the hamburger's vertical list. */
+.navbar-group {
+  position: relative;
+  display: flex;
+}
+
+.navbar-group-caret {
+  width: 12px;
+  height: 12px;
+  opacity: 0.55;
+  transition: transform 0.15s var(--ease-out);
+}
+
+.navbar-group-trigger[aria-expanded="true"] .navbar-group-caret {
+  transform: rotate(180deg);
+}
+
+.navbar-group-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 210px;
+  padding: 6px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-600);
+  border-radius: 10px;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.55);
+}
+
+.navbar-group-menu--open {
+  display: flex;
+}
+
+.navbar-group-label {
+  display: none;
+}
+
+.navbar-sublink {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--gold-soft);
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+}
+
+.navbar-sublink svg {
+  width: 15px;
+  height: 15px;
+}
+
+.navbar-sublink:hover {
+  background: var(--charcoal-700);
+  border-color: var(--gold);
+  color: var(--ink);
+}
+
+.navbar-sublink--active {
+  background: rgba(201, 162, 75, 0.16);
+  border-color: var(--gold);
+}
+
 /* The active-tab bar. Absolutely positioned against .navbar-actions (the
    real flex row on desktop -- .navbar-actions-inner is `display: contents`
    there) so it can glide independently of the links' own layout. left/
@@ -221,6 +297,43 @@
   .navbar-logout {
     width: 100%;
     padding: 12px 14px;
+  }
+
+  /* Groups collapse into the vertical list: drop the trigger, show the menu
+     inline as an always-open labelled subsection. */
+  .navbar-group {
+    display: contents;
+  }
+
+  .navbar-group-trigger {
+    display: none;
+  }
+
+  .navbar-group-menu {
+    position: static;
+    display: flex;
+    min-width: 0;
+    padding: 0;
+    background: none;
+    border: none;
+    box-shadow: none;
+    gap: 6px;
+  }
+
+  .navbar-group-label {
+    display: block;
+    margin: 10px 4px 0;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+  }
+
+  .navbar-sublink {
+    width: 100%;
+    padding: 12px 14px;
+    border-color: var(--charcoal-600);
   }
 
   .navbar-indicator {

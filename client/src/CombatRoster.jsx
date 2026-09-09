@@ -1,5 +1,6 @@
 import { ArrowClockwiseIcon, SkullIcon, TrashIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import KnockoutPips from "./KnockoutPips.jsx";
+import { combatantNameColor } from "./combatDisplay.js";
 import "./Panel.css";
 import "./CombatRoster.css";
 
@@ -29,7 +30,9 @@ function Row({ combatant, isActive, isActing, isDM, onSelect, onRevive, onRemove
 
       <div className="combat-roster-info">
         <div className="combat-roster-name-row">
-          <span className="combat-roster-name">{combatant.name}</span>
+          <span className="combat-roster-name" style={{ color: combatantNameColor(combatant) || undefined }}>
+            {combatant.name}
+          </span>
           <span className="combat-roster-kind">{combatant.kind}</span>
         </div>
         <div className={`combat-roster-bar-track ${combatant.kind === "mecha" ? "combat-roster-bar-track--structure" : ""}`}>
@@ -89,6 +92,9 @@ function Row({ combatant, isActive, isActing, isDM, onSelect, onRevive, onRemove
             )}
             {combatant.statusEffects.keenVision && (
               <span className="combat-roster-effect combat-roster-effect--stun">Keen Vision</span>
+            )}
+            {combatant.statusEffects.marked && (
+              <span className="combat-roster-effect combat-roster-effect--shock">Marked</span>
             )}
           </div>
         )}

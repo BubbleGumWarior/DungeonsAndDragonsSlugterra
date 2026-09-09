@@ -27,6 +27,8 @@ export const ENERGY_PIPS_MIN = 1;
 export const ENERGY_PIPS_MAX = 16;
 export const LOYALTY_TIER_MIN = 0;
 export const LOYALTY_TIER_MAX = 4;
+export const RARITY_MIN = 1;
+export const RARITY_MAX = 10;
 
 const MAX_TEXT_LENGTH = 500;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -60,6 +62,7 @@ export function validateSlugFields({
   apCost,
   maxEnergyPips,
   loyaltyTier,
+  rarity,
   velocityAbility,
   protoformUtility,
   breaksWalls,
@@ -114,6 +117,12 @@ export function validateSlugFields({
 
   if (!Number.isInteger(loyaltyTier) || loyaltyTier < LOYALTY_TIER_MIN || loyaltyTier > LOYALTY_TIER_MAX) {
     return { valid: false, error: `Loyalty Tier must be an integer between ${LOYALTY_TIER_MIN} and ${LOYALTY_TIER_MAX}.` };
+  }
+
+  if (rarity !== undefined && rarity !== null) {
+    if (!Number.isInteger(rarity) || rarity < RARITY_MIN || rarity > RARITY_MAX) {
+      return { valid: false, error: `Rarity must be an integer between ${RARITY_MIN} and ${RARITY_MAX}.` };
+    }
   }
 
   const velocityAbilityError = validateText(velocityAbility, "Velocity Ability");

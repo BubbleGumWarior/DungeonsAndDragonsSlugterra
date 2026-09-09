@@ -1,14 +1,25 @@
 // Range values are on the same 25x scale as TYPE_BALLISTICS in
 // server/src/combatRules.js -- see RANGE_SCALE there.
 export const BASE_TYPES = {
-  Pistol: { accuracy: 3, reloadApCost: 1, range: 4 * 25, modSlots: 2, magazineSize: 6 },
-  Revolver: { accuracy: 2, reloadApCost: 1, range: 5 * 25, modSlots: 2, magazineSize: 6 },
-  Repeater: { accuracy: 1, reloadApCost: 2, range: 5 * 25, modSlots: 3, magazineSize: 10 },
-  Bow: { accuracy: 2, reloadApCost: 1, range: 6 * 25, modSlots: 2, magazineSize: 1 },
-  Gatling: { accuracy: -1, reloadApCost: 3, range: 4 * 25, modSlots: 4, magazineSize: 20 },
+  Pistol: { accuracy: 1, reloadApCost: 1, range: 4 * 25, modSlots: 2, magazineSize: 6 },
+  Revolver: { accuracy: 3, reloadApCost: 2, range: 5 * 25, modSlots: 2, magazineSize: 6 },
+  Repeater: { accuracy: 1, reloadApCost: 3, range: 6 * 25, modSlots: 3, magazineSize: 10 },
+  Bow: { accuracy: 2, reloadApCost: 1, range: 7 * 25, modSlots: 4, magazineSize: 1 },
+  Gatling: { accuracy: -2, reloadApCost: 5, range: 4 * 25, modSlots: 4, magazineSize: 20 },
   Cannon: { accuracy: -2, reloadApCost: 3, range: 3 * 25, modSlots: 3, magazineSize: 1 },
-  "Twin Slinger": { accuracy: 1, reloadApCost: 2, range: 4 * 25, modSlots: 3, magazineSize: 12 },
-  "Sniper Rig": { accuracy: 4, reloadApCost: 2, range: 9 * 25, modSlots: 2, magazineSize: 3 },
+  "Twin Slinger": { accuracy: 0, reloadApCost: 2, range: 3 * 25, modSlots: 4, magazineSize: 12 },
+  "Sniper Rig": { accuracy: 4, reloadApCost: 2, range: 10 * 25, modSlots: 4, magazineSize: 4 },
+};
+
+// A few base types carry a combat effect beyond their raw stats (resolved
+// server-side in routes/combat.js -- see BASE_TYPE_EFFECTS in itemRules.js):
+//   Bow     -- the attack roll also gets the shooter's own DEX modifier.
+//   Gatling -- every slug it fires costs 2 less AP to shoot (never below 1).
+//   Cannon  -- the slug it fires gets +3 clash power.
+export const BASE_TYPE_EFFECT_NOTES = {
+  Bow: "Attack roll adds the shooter's DEX modifier.",
+  Gatling: "Slug AP cost to shoot is reduced by 2 (minimum 1).",
+  Cannon: "The fired slug gets +3 clash power.",
 };
 
 export const BASE_TYPE_KEYS = Object.keys(BASE_TYPES);

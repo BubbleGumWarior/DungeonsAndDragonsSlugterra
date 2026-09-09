@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { PlusIcon, TargetIcon, WrenchIcon } from "@phosphor-icons/react";
-import { effectiveAccuracy, effectiveReloadApCost, formatSigned, qualityColor, qualityInfo } from "./itemData.js";
+import {
+  BASE_TYPE_EFFECT_NOTES,
+  effectiveAccuracy,
+  effectiveReloadApCost,
+  formatSigned,
+  qualityColor,
+  qualityInfo,
+} from "./itemData.js";
 import "./BlasterCard.css";
 
 const EQUIP_SLOT_LABELS = ["Primary", "Secondary"];
@@ -25,6 +32,7 @@ export default function BlasterCard({
   const openSlots = Math.max(0, blaster.modSlots - equippedMods.length);
   const equipSlotLabel = blaster.equipSlot != null ? EQUIP_SLOT_LABELS[blaster.equipSlot] : null;
   const acceptsModDrop = editableSlots && Boolean(onDropMod) && openSlots > 0;
+  const effectNote = BASE_TYPE_EFFECT_NOTES[blaster.baseType];
 
   return (
     <div
@@ -75,6 +83,13 @@ export default function BlasterCard({
       <div className="blaster-card-fail-rate">
         Fail Rate <strong>{quality.failRate}%</strong>
       </div>
+
+      {effectNote && (
+        <div className="blaster-card-effect">
+          <span className="blaster-card-effect-label">{blaster.baseType} effect</span>
+          <span className="blaster-card-effect-text">{effectNote}</span>
+        </div>
+      )}
 
       <div className="blaster-card-slots">
         <span className="blaster-card-slots-label">

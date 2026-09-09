@@ -75,7 +75,7 @@ async function incrementMissStreak(userId) {
 }
 
 function areaName(areaIndex) {
-  return ODDS.areas[areaIndex] ?? `Area ${areaIndex + 1}`;
+  return ODDS.areas[areaIndex] ?? `Planet ${areaIndex + 1}`;
 }
 
 // Weighted random slug for an area, restricted to names the DM actually has a
@@ -205,7 +205,7 @@ router.post("/attempt", async (req, res) => {
       await incrementMissStreak(req.user.sub);
       await postChatMessage(
         "Player",
-        `${character.name} tried a slug hunt in ${areaName(area)} but found nothing.`
+        `${character.name} tried a slug hunt on ${areaName(area)} but found nothing.`
       );
       return res.json({ success: false, roll, modifier, total, area, areaName: areaName(area) });
     }
@@ -299,7 +299,7 @@ router.post("/:id/approve", requireDungeonMaster, async (req, res) => {
 
     await postChatMessage(
       "Dungeon Master",
-      `${hunt.initiatingName} tracked down a wild ${template.name} -- a ${template.type}-type slug -- in ${areaName(hunt.area)}.`
+      `${hunt.initiatingName} tracked down a wild ${template.name} -- a ${template.type}-type slug -- on ${areaName(hunt.area)}.`
     );
 
     await notifyDungeonMasters({ type: "slug-hunt-resolved", id: hunt.id });
@@ -329,7 +329,7 @@ router.post("/:id/dismiss", requireDungeonMaster, async (req, res) => {
     // the table as the hunt simply turning up nothing.
     await postChatMessage(
       "Player",
-      `${hunt.initiatingName} tried a slug hunt in ${areaName(hunt.area)} but found nothing.`
+      `${hunt.initiatingName} tried a slug hunt on ${areaName(hunt.area)} but found nothing.`
     );
     await notifyDungeonMasters({ type: "slug-hunt-resolved", id: hunt.id });
     notifyUser(hunt.initiatingUserId, { type: "slug-hunt-resolved", id: hunt.id, outcome: "dismissed" });

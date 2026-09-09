@@ -4,6 +4,7 @@ import ImageCropper from "./ImageCropper.jsx";
 import {
   BASE_TYPES,
   BASE_TYPE_KEYS,
+  BASE_TYPE_EFFECT_NOTES,
   QUALITY_TIERS,
   STAT_MIN,
   STAT_MAX,
@@ -96,6 +97,9 @@ export default function BlasterForm({ mode, initialValues, players, onSubmit, on
             </option>
           ))}
         </select>
+        {BASE_TYPE_EFFECT_NOTES[fields.baseType] && (
+          <p className="slug-form-hint">Combat effect: {BASE_TYPE_EFFECT_NOTES[fields.baseType]}</p>
+        )}
       </div>
 
       <div className="slug-form-field">

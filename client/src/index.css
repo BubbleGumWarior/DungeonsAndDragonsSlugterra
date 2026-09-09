@@ -81,6 +81,16 @@
   --danger: #ff7a6b;
   --success: #7fd99a;
 
+  /* Relationship hues -- shared by the Chronicle cards and the combat
+     roster/map, where an NPC or grunt's name is tinted so friend and foe
+     read apart at a glance. */
+  --rel-ally: var(--success);
+  --rel-friend: #8fd6b0;
+  --rel-neutral: #93a7bd;
+  --rel-rival: #e0a13c;
+  --rel-enemy: var(--danger);
+  --rel-unknown: #8b9096;
+
   --charcoal-950: #0c0d0f;
   --charcoal-900: #16171a;
   --charcoal-800: #1e2023;

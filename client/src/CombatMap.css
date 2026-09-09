@@ -555,6 +555,10 @@
   fill: #8fd0e0;
 }
 
+.combat-token-effect-dot--marked {
+  fill: #e0c53f;
+}
+
 .combat-token-label {
   text-anchor: middle;
   font-size: 11px;

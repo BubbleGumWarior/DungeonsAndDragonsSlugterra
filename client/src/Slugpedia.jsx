@@ -41,7 +41,12 @@ export default function Slugpedia({ onClose }) {
       byName.get(entry.name).push(entry);
     }
     return [...byName.entries()]
-      .map(([name, variants]) => ({ name, variants }))
+      .map(([name, variants]) => ({
+        name,
+        // A caught variant leads the card; slugs only ever seen on an NPC sit
+        // behind it with their stats redacted.
+        variants: [...variants].sort((a, b) => Number(b.discovered) - Number(a.discovered)),
+      }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [entries]);
 
@@ -59,7 +64,8 @@ export default function Slugpedia({ onClose }) {
       <div className="slug-modal slug-modal--wide" onClick={(e) => e.stopPropagation()}>
         <h2>Slugpedia</h2>
         <p className="slugpedia-hint">
-          Every slug the party has ever encountered -- assigned to a player, or seen on an NPC in combat.
+          Every slug the party has ever encountered -- assigned to a player, or seen on an NPC in combat. Slugs only
+          seen on an NPC show their name and forms, but their stats and abilities stay sealed until a player catches one.
         </p>
 
         {loading ? (
@@ -73,7 +79,7 @@ export default function Slugpedia({ onClose }) {
               const primary = variants[0];
               return (
                 <div key={name} className="slugpedia-group">
-                  <SlugCard slug={primary} size="sm" />
+                  <SlugCard slug={primary} size="sm" redacted={!primary.discovered} />
                   {variants.length > 1 && (
                     <button type="button" className="slugpedia-expand" onClick={() => toggleExpanded(name)}>
                       <span>
@@ -87,7 +93,7 @@ export default function Slugpedia({ onClose }) {
                   {open && (
                     <div className="slugpedia-variants">
                       {variants.map((variant) => (
-                        <SlugCard key={variant.id} slug={variant} size="sm" />
+                        <SlugCard key={variant.id} slug={variant} size="sm" redacted={!variant.discovered} />
                       ))}
                     </div>
                   )}
