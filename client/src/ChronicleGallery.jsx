@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { EyeIcon, EyeSlashIcon, PencilSimpleIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
@@ -132,7 +132,44 @@ export default function ChronicleGallery() {
 
   const [segment, setSegment] = useState("met");
   const [filter, setFilter] = useState("all");
+  const [gridPhase, setGridPhase] = useState("in"); // "in" | "out" -- drives the grid shrink/grow transition
   const [modal, setModal] = useState(null); // { type: "new" } | { type: "edit", id } | { type: "guess", id }
+
+  // Switch the visible segment/filter with a shrink-out then grow-in on the
+  // card grid, rather than swapping the contents instantly.
+  const swapTimer = useRef(null);
+  const changeView = useCallback(
+    (next) => {
+      const nextSegment = next.segment ?? segment;
+      const nextFilter = next.filter ?? filter;
+      if (nextSegment === segment && nextFilter === filter) return;
+      if (swapTimer.current) clearTimeout(swapTimer.current);
+      setGridPhase("out");
+      swapTimer.current = setTimeout(() => {
+        setSegment(nextSegment);
+        setFilter(nextFilter);
+        setGridPhase("in");
+        swapTimer.current = null;
+      }, 180);
+    },
+    [segment, filter]
+  );
+  useEffect(() => () => swapTimer.current && clearTimeout(swapTimer.current), []);
+
+  // Sliding pill behind the active segment tab.
+  const segmentRef = useRef(null);
+  const [thumb, setThumb] = useState(null); // { left, width } | null
+  useLayoutEffect(() => {
+    const root = segmentRef.current;
+    if (!root) return;
+    const measure = () => {
+      const active = root.querySelector('[aria-selected="true"]');
+      if (active) setThumb({ left: active.offsetLeft, width: active.offsetWidth });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [segment, isDungeonMaster]);
 
   const authHeaders = useCallback((extra) => ({ Authorization: `Bearer ${token}`, ...extra }), [token]);
 
@@ -354,15 +391,22 @@ export default function ChronicleGallery() {
   return (
     <div className="chronicle">
       <div className="chronicle-toolbar">
-        <div className="chronicle-segment" role="tablist" aria-label="Chronicle segment">
-          <button role="tab" aria-selected={segment === "met"} onClick={() => setSegment("met")}>
+        <div className="chronicle-segment" role="tablist" aria-label="Chronicle segment" ref={segmentRef}>
+          {thumb && (
+            <span
+              className="chronicle-segment-thumb"
+              aria-hidden="true"
+              style={{ transform: `translateX(${thumb.left}px)`, width: `${thumb.width}px` }}
+            />
+          )}
+          <button role="tab" aria-selected={segment === "met"} onClick={() => changeView({ segment: "met" })}>
             Met
           </button>
-          <button role="tab" aria-selected={segment === "party"} onClick={() => setSegment("party")}>
+          <button role="tab" aria-selected={segment === "party"} onClick={() => changeView({ segment: "party" })}>
             Party
           </button>
           {isDungeonMaster && (
-            <button role="tab" aria-selected={segment === "grunts"} onClick={() => setSegment("grunts")}>
+            <button role="tab" aria-selected={segment === "grunts"} onClick={() => changeView({ segment: "grunts" })}>
               Grunts
             </button>
           )}
@@ -379,7 +423,7 @@ export default function ChronicleGallery() {
                 type="button"
                 className="chronicle-chip"
                 aria-pressed={filter === f.key}
-                onClick={() => setFilter(f.key)}
+                onClick={() => changeView({ filter: f.key })}
               >
                 {f.dot && <span className="chronicle-chip-dot" style={{ "--dot": f.dot }} />}
                 {f.label}
@@ -399,6 +443,7 @@ export default function ChronicleGallery() {
         )}
       </div>
 
+      <div className={`chronicle-view ${gridPhase === "out" ? "is-leaving" : "is-entering"}`}>
       {segment === "grunts" ? (
         grunts.length === 0 ? (
           <p className="chronicle-empty">No grunts yet. Add a minion type the party keeps running into.</p>
@@ -406,8 +451,8 @@ export default function ChronicleGallery() {
           <p className="chronicle-empty">No grunts match this filter.</p>
         ) : (
           <div className="chronicle-grid">
-            {filteredGrunts.map((g) => (
-              <div key={g.id} className="chronicle-cell">
+            {filteredGrunts.map((g, i) => (
+              <div key={g.id} className="chronicle-cell" style={{ "--i": i }}>
                 <div className="chronicle-grunt-card" style={{ "--rel": relDot(g.relationship) }}>
                   {g.image ? (
                     <img className="chronicle-grunt-img" src={g.image} alt="" />
@@ -450,10 +495,11 @@ export default function ChronicleGallery() {
         </p>
       ) : (
         <div className="chronicle-grid">
-          {filtered.map((entry) => (
+          {filtered.map((entry, i) => (
             <div
               key={entry.key}
               className={`chronicle-cell ${entry.kind === "npc" && !entry.revealed ? "chronicle-cell--hidden" : ""}`}
+              style={{ "--i": i }}
             >
               <ChronicleCard
                 entry={entry}
@@ -513,6 +559,7 @@ export default function ChronicleGallery() {
           ))}
         </div>
       )}
+      </div>
 
       {modal?.type && modal.type !== "guess" && modal.type !== "grunt" && (
         <div className="slug-modal-backdrop" onClick={() => setModal(null)}>

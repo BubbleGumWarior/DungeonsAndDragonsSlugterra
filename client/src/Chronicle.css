@@ -22,13 +22,26 @@
 }
 
 .chronicle-segment {
+  position: relative;
   display: inline-flex;
   padding: 3px;
   background: var(--charcoal-950);
   border: 1px solid var(--charcoal-600);
   border-radius: 999px;
 }
+.chronicle-segment-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--gold), var(--gold-dim));
+  transition: transform 0.32s var(--ease-out), width 0.32s var(--ease-out);
+  pointer-events: none;
+}
 .chronicle-segment button {
+  position: relative;
+  z-index: 1;
   appearance: none;
   border: 0;
   background: transparent;
@@ -40,10 +53,9 @@
   padding: 8px 18px;
   border-radius: 999px;
   cursor: pointer;
-  transition: color 0.16s var(--ease-out), background 0.16s var(--ease-out);
+  transition: color 0.2s var(--ease-out);
 }
 .chronicle-segment button[aria-selected="true"] {
-  background: linear-gradient(180deg, var(--gold), var(--gold-dim));
   color: #1a1206;
 }
 .chronicle-segment button:focus-visible {
@@ -122,6 +134,48 @@
 }
 .chronicle-cell--hidden .chronicle-card {
   opacity: 0.55;
+}
+
+/* Segment / filter switch: old cards shrink away, new ones grow in. */
+.chronicle-view {
+  transform-origin: top center;
+}
+.chronicle-view.is-leaving .chronicle-cell,
+.chronicle-view.is-leaving .chronicle-empty {
+  animation: chronicle-pop-out 0.16s var(--ease-out) forwards;
+}
+.chronicle-view.is-entering .chronicle-cell,
+.chronicle-view.is-entering .chronicle-empty {
+  animation: chronicle-pop-in 0.3s var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * 22ms);
+}
+@keyframes chronicle-pop-out {
+  to {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+}
+@keyframes chronicle-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chronicle-segment-thumb {
+    transition: none;
+  }
+  .chronicle-view.is-leaving .chronicle-cell,
+  .chronicle-view.is-leaving .chronicle-empty,
+  .chronicle-view.is-entering .chronicle-cell,
+  .chronicle-view.is-entering .chronicle-empty {
+    animation: none;
+  }
 }
 
 .chronicle-cell-actions {
