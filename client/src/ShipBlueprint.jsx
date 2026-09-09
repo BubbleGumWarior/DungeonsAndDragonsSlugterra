@@ -60,8 +60,18 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
 
   const stageRef = useRef(null);
   const fileRef = useRef(null);
+  const detailRef = useRef(null);
   const dragRef = useRef(null); // { id, moved }
   const justDraggedRef = useRef(false); // set on a real drag so the trailing click doesn't open the panel
+
+  // The deck plan can be tall on a wide screen, pushing the detail panel well
+  // below the fold -- so opening a compartment drops the page down to it. The
+  // panel is in the DOM by the time this passive effect runs (same commit as
+  // selectedId), and scrollIntoView forces the layout it needs.
+  useEffect(() => {
+    if (!selectedId) return;
+    detailRef.current?.scrollIntoView({ block: "start" });
+  }, [selectedId]);
 
   // The DM edits whichever ship is being shown; players always see the active
   // one. `viewShipId` is the id currently rendered (active ship, or a
@@ -422,7 +432,7 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
       )}
 
       {selected && (
-        <div className="ship-detail">
+        <div className="ship-detail" ref={detailRef}>
           <button
             type="button"
             className="ship-detail-close"

@@ -239,12 +239,12 @@
   border-color: var(--gold);
 }
 
-/* Below 950px there are simply too many nav items (up to eight, for a DM)
+/* Below 1175px there are simply too many nav items (up to eight, for a DM)
    to fit in a row at any size without either overflowing or shrinking to
    illegible icon-only buttons. Instead the row becomes a hamburger button
    that drops the actions down as a full-width, vertically stacked panel --
    plenty of room to keep every label readable. */
-@media (max-width: 950px) {
+@media (max-width: 1175px) {
   .navbar {
     padding: 12px 16px;
   }

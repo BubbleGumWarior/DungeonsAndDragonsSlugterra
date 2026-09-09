@@ -1,5 +1,8 @@
 .ship-wrap {
-  width: min(100%, 1100px);
+  /* At least 80% of the viewport once there's room for it, so the deck plan
+     opens up on wide / ultrawide screens instead of staying boxed at 1100px.
+     Never wider than the page's own content box. */
+  width: min(100%, max(1100px, 80vw));
   margin: 0 auto;
 }
 
@@ -140,20 +143,18 @@
 
 /* The deck plan itself */
 .ship-stage-outer {
-  display: flex;
-  justify-content: center;
   border: 1px solid var(--charcoal-600);
   border-radius: 14px;
   overflow: hidden;
   background: #0c0d0f;
 }
 
-/* Shrink-wraps the image so node percentages resolve against the picture,
-   not any letterboxing. */
+/* Fills the (wide) wrapper; the image stretches to match and the nodes,
+   positioned in %, follow it. */
 .ship-stage {
   position: relative;
   line-height: 0;
-  max-width: 100%;
+  width: 100%;
 }
 
 .ship-stage--placing {
@@ -162,9 +163,7 @@
 
 .ship-plan-img {
   display: block;
-  max-width: 100%;
-  max-height: 74vh;
-  width: auto;
+  width: 100%;
   height: auto;
   user-select: none;
 }
@@ -275,6 +274,8 @@
 .ship-detail {
   position: relative;
   margin-top: 16px;
+  /* The wrapper can be very wide on ultrawides -- keep the text column sane. */
+  max-width: 760px;
   padding: 20px;
   background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 82%);
   border: 1px solid var(--charcoal-600);
