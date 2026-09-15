@@ -344,6 +344,15 @@ function ShotEffect({ fx, onDone }) {
       // stopped, ease-out, then burst on arrival.
       const t = Math.min(1, (elapsed - revealElapsed) / settleMs);
       boltPos = lerp(settleFrom, fx.impactPoint, 1 - Math.pow(1 - t, 3));
+    } else if (fx.outcome === "miss" && revealElapsed != null && fx.targetPos && elapsed < burstAt) {
+      // A miss's deflected impact point differs from where the bolt was
+      // aimed. Keep the bolt's natural forward progress along the flight,
+      // but bend its aim from the target toward the wide point over the rest
+      // of the flight -- a smooth veer, not the sideways snap onto the new
+      // deflected line that read as the bolt teleporting.
+      const f = phasedFraction(elapsed, totalMs);
+      const bend = Math.min(1, (elapsed - revealElapsed) / Math.max(1, burstAt - revealElapsed));
+      boltPos = lerp(lerp(fx.attackerPos, fx.targetPos, f), lerp(fx.attackerPos, fx.impactPoint, f), bend);
     } else if (elapsed < burstAt) {
       boltPos = lerp(fx.attackerPos, fx.impactPoint, phasedFraction(elapsed, totalMs));
     } else {

@@ -551,6 +551,20 @@ export default function CombatPage() {
     return encounter.combatants.find((c) => c.id === actingCombatant.mountedOn) || null;
   }, [encounter, actingCombatant]);
 
+  // Whether there's any mecha this combatant could actually mount -- a live
+  // (non-disabled) one they own is in the fight. Nothing to mount => the
+  // Mount button stays disabled. NPCs (no refUserId) keep the old behaviour;
+  // the DM can put them on any mecha.
+  const hasMountableMecha = useMemo(() => {
+    if (!encounter || !actingCombatant) return false;
+    return encounter.combatants.some(
+      (c) =>
+        c.kind === "mecha" &&
+        !c.disabled &&
+        (actingCombatant.refUserId == null || c.data?.ownerUserId === actingCombatant.refUserId)
+    );
+  }, [encounter, actingCombatant]);
+
   // A mounted rider moves at their mecha's speed and spends the mecha's AP; a
   // lone mecha covers a character's walk times its own speed. Mirrors the
   // server's /actions/move math -- preview only.
@@ -1039,6 +1053,7 @@ export default function CombatPage() {
             weaponSwitch={weaponSwitch}
             reloadInfo={reloadInfo}
             mountedMecha={mountedMecha}
+            hasMountableMecha={hasMountableMecha}
             onArmMode={setMode}
             onCancelMode={cancelMode}
             onAction={runAction}

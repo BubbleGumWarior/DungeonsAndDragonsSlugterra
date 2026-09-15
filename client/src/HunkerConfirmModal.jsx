@@ -2,13 +2,13 @@ import { CampfireIcon } from "@phosphor-icons/react";
 import "./SlugManagement.css";
 import "./SlugActionModal.css";
 
-// Hunker Down now dumps *all* remaining AP into the heal (one 1d4 + CON roll
-// per AP). Anyone with more than 1 AP left gets this confirm first so a stray
-// click doesn't quietly burn their whole turn -- see CombatPage's runAction.
+// Hunker Down dumps *all* remaining AP into the heal -- a flat max(1, CON mod)
+// Grit per AP, no roll. Anyone with more than 1 AP left gets this confirm first
+// so a stray click doesn't quietly burn their whole turn -- see CombatPage's
+// runAction.
 export default function HunkerConfirmModal({ ap, conMod = 0, onConfirm, onClose }) {
-  const min = Math.max(1, ap * (1 + conMod));
-  const max = Math.max(1, ap * (4 + conMod));
-  const conText = conMod === 0 ? "" : ` ${conMod > 0 ? "+" : "-"} ${Math.abs(conMod)}`;
+  const perAp = Math.max(1, conMod);
+  const heal = Math.max(1, ap * perAp);
 
   return (
     <div className="slug-modal-backdrop" onClick={onClose}>
@@ -16,7 +16,7 @@ export default function HunkerConfirmModal({ ap, conMod = 0, onConfirm, onClose 
         <h2>Hunker Down</h2>
         <p className="slug-action-modal-hint">
           This spends <strong>all {ap} remaining AP</strong> and ends your turn. You recover
-          {" "}1d4{conText} Grit per AP spent -- roughly <strong>{min}&ndash;{max} Grit</strong>.
+          {" "}{perAp} Grit per AP spent -- <strong>{heal} Grit</strong>.
         </p>
         <div className="slug-action-grid">
           <button type="button" className="slug-action-item" onClick={onConfirm}>

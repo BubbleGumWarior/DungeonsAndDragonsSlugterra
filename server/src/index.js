@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import "dotenv/config";
 import { initSchema, pool } from "./db.js";
-import { seedDefaultSlugTemplates, backfillSlugTemplateRarity } from "./seedDefaultSlugs.js";
+import { seedDefaultSlugTemplates, backfillSlugTemplateRarity, backfillSpeedstingerRicochet } from "./seedDefaultSlugs.js";
 import authRouter from "./routes/auth.js";
 import adminRouter from "./routes/admin.js";
 import charactersRouter from "./routes/characters.js";
@@ -105,6 +105,7 @@ setupWebSocket(server);
 initSchema()
   .then(() => seedDefaultSlugTemplates())
   .then(() => backfillSlugTemplateRarity())
+  .then(() => backfillSpeedstingerRicochet())
   .then(() => {
     server.listen(port, () => console.log(`Server listening on port ${port}`));
   })

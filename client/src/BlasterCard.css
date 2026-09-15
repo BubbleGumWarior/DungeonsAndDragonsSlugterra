@@ -317,6 +317,11 @@
   height: 12px;
 }
 
+.blaster-card-slot--filled.blaster-card-slot--dragover {
+  background: rgba(201, 162, 75, 0.3);
+  box-shadow: 0 0 0 2px var(--gold);
+}
+
 .blaster-card-slot--filled span {
   overflow: hidden;
   text-overflow: ellipsis;

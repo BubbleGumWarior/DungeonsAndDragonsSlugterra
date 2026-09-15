@@ -55,6 +55,7 @@ export default function CombatHotbar({
   weaponSwitch,
   reloadInfo,
   mountedMecha = null,
+  hasMountableMecha = true,
   onArmMode,
   onCancelMode,
   onAction,
@@ -116,7 +117,7 @@ export default function CombatHotbar({
             label="Mount"
             apCost={MOUNT_AP_COST}
             active={mode?.type === "mount"}
-            disabled={ap < MOUNT_AP_COST}
+            disabled={ap < MOUNT_AP_COST || !hasMountableMecha}
             onClick={() => onArmMode(mode?.type === "mount" ? null : { type: "mount" })}
           />
         )}

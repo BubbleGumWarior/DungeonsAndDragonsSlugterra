@@ -38,6 +38,8 @@ export default function MechaModCard({ mod, mechas = [], editable = false, dragg
               // view. Deferred a tick because scrolling synchronously inside
               // dragstart yanks this element out from under the drag ghost
               // mid-snapshot and aborts the drag (same fix as PlayerSlugs).
+              // The scroll position is restored on dragend by the page's
+              // useDragScrollRestore() hook.
               if (mechas.length > 0) {
                 setTimeout(() => window.scrollTo({ top: 0, behavior: "auto" }), 0);
               }

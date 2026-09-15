@@ -2112,7 +2112,7 @@
     "causesJam": false,
     "piercesWalls": false,
     "causesChain": false,
-    "ricochets": false,
+    "ricochets": true,
     "ultraFast": false,
     "causesInvisible": false,
     "causesFear": false,

@@ -834,7 +834,7 @@ export async function initSchema() {
   const bespokeFlags = [
     "pierces_walls", // Bladier -- Attack breaks through the first wall in its path instead of being blocked
     "causes_chain", // Speedstinger -- generalizes Electricity's chain arc to any type
-    "ricochets", // Speedstinger -- a landed hit bounces on to a second target with its own full counter window
+    "ricochets", // Speedstinger -- once the shot connects it caroms 4 more times to the nearest other combatant, each an independent counter-clash
     "ultra_fast", // Zeus -- shrinks the counter window (and bolt flight time) way down
     "causes_invisible", // Thugglet -- self-targeted, hides the token from other players for 1 turn
     "causes_fear", // Frightgeist -- target's whole next turn is spent fleeing away from the shooter

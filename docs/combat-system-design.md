@@ -56,7 +56,7 @@ for the whole encounter.
 | Shoot Slug | `slug.apCost` (1–3, already on the slug) | Fire the slug currently chambered in the active weapon's selected magazine slot at a target in range + line of sight. Triggers the counter-clash window (§6) if the target has a loaded slug they can both react with *and* afford (its `apCost` ≤ their leftover AP). |
 | Reload | `blaster.reloadApCost` (flat, one action) | Re-chamber **every** slug in the active weapon that has returned to hand but is sitting unloaded (`loaded = false`, cooldown done — see §4's return-to-hand cooldown), and clear any "jammed" (failed-quality) shot. |
 | Swap Active Weapon | 0 (free, once per turn) | Switch which equipped blaster (Primary/Secondary) is active, matching the existing weapon-cycling UI. |
-| Hunker Down | **all remaining AP** | Sinks every remaining AP into a heal — one **1d4 + CON modifier** roll per AP spent, summed (min 1 overall). Ends the turn. Cannot be done the same turn you were hit. The client asks for confirmation first whenever more than 1 AP would be spent. |
+| Hunker Down | **all remaining AP** | Sinks every remaining AP into a heal — a flat **`max(1, CON modifier)` Grit per AP spent**, no roll. Ends the turn. Cannot be done the same turn you were hit. The client asks for confirmation first whenever more than 1 AP would be spent. |
 | Mount / Dismount Mecha | 1 | Board or leave a mecha token within `MOUNT_RANGE` (**one Move's worth of walking**, `MOVE_SPEED_PER_AP` units). While armed, the map shows the range ring and highlights every in-range mecha. |
 | Ram (mecha) | 2, **from the mecha's AP** | Drive a mounted mecha into a target in `MOUNT_RANGE`; happens on the *rider's* turn. An unmounted mecha cannot ram. See §8. |
 | Free custom action (DM only) | DM sets cost | Escape hatch for narrative actions the system doesn't model. |
@@ -112,9 +112,11 @@ turns knockback on at all, always at the flat short distance, never doubled. See
 `slugKnockbackDistance()` in `combatRules.js`.
 
 **Ice** no longer roots on hit. Instead, firing an Ice slug always leaves a
-circular icy patch (`ICE_PATCH_RADIUS` map units) on the ground at the shot's
-impact point — regardless of whether it goes on to hit, miss, or get countered —
-and that patch persists for the rest of the encounter. Any non-mecha combatant
+circular icy patch (`ICE_PATCH_RADIUS` map units) on the ground where the bolt
+actually came to rest — dead on the target for a hit, out at the deflected wide
+point for a miss, the clash point for a countered shot, the fizzle point for one
+that fell short — and that patch persists for the rest of the encounter. It never
+lands on a target the shot visibly sailed past. Any non-mecha combatant
 whose Move destination lands inside one has a flat `ICE_SLIP_CHANCE` (50%) chance
 of slipping: the move still happens, but their remaining AP is immediately zeroed
 out, ending their turn on the spot. See `findHazardAt()`/`addIceHazard()`.
@@ -226,8 +228,9 @@ size, on a hit **or** a miss, since either way something real just detonated the
 
 A sixth per-slug boolean flag, `hazardMaker` — generalizes Ice's "leaves a patch on
 the ground" pattern (§4) to any type, except this patch actually hurts. On any
-Attack shot from a flagged slug, a `type: "damage"` hazard entry appears at the
-impact point — same unconditional hit/miss/out-of-range trigger as Ice, tagged with
+Attack shot from a flagged slug, a `type: "damage"` hazard entry appears where the
+bolt actually came to rest (same rule as Ice above — target on a hit, the
+deflected wide point on a miss, the clash/fizzle point otherwise), tagged with
 the firing slug's own type and `clashPower`, `HAZARD_RADIUS` (180 map units).
 Persists for the rest of the encounter, same as Ice's patches. Its actual
 appearance (the DB write and the broadcast) is deferred to land only once the
@@ -322,7 +325,10 @@ the encounter re-loads everything along with clearing cooldowns.
    `missDeflection()` rotates the true impact point a few degrees around the
    attacker (`MISS_DEFLECTION_DEG = 12`, random left/right, same distance),
    and the `combat-shot-resolved` broadcast carries that point so the bolt
-   visibly goes wide instead. The deflected ray gets its own wall check
+   visibly goes wide instead. Once that point arrives, the client bends the
+   bolt's aim from the target toward the wide point over the rest of the
+   flight — a smooth veer, not a sideways snap onto the new deflected line.
+   The deflected ray gets its own wall check
    (the true path being clear doesn't guarantee the rotated one is) --
    otherwise a miss could visibly clip straight through a wall. The map also
    gets a brief gold/yellow border
@@ -350,7 +356,15 @@ the encounter re-loads everything along with clearing cooldowns.
    arrives. The knockout-roll consequence of hitting a wall, if any, still
    fires **immediately**, independent of whether Grit hit 0 — that's a
    separate mechanic (a DC save prompt) whose sequencing against the
-   grit-hits-0 roll depends on staying synchronous.
+   grit-hits-0 roll depends on staying synchronous. If the shoved target is a
+   **mounted rider**, the shove also has a flat `KNOCKBACK_DISMOUNT_CHANCE`
+   (60%) of throwing them out of the saddle: the rider tumbles off (and is
+   still shoved), the mecha holds its ground.
+7. **Out of range / wall-blocked.** A shot that can't reach its target never
+   gets close enough to be worth animating — nothing launches, no
+   `combat-shot-resolved` reveal goes out, so there's no bolt, no burst and no
+   miss sound. Only the Combat Log records the wasted shot; any terrain the
+   slug leaves still appears where the shot fizzled out.
 
 **Delayed resolution.** Wall-breaking and knockback aren't special cases anymore —
 the whole outcome of a Shoot Slug action (or a counter-clash's resolution, once one
@@ -435,6 +449,10 @@ offered; if you can't afford any, no window opens at all. This is why the AP for
 (§3) is generous — you're expected to hold a few points back each turn to stay able
 to react.
 
+**No window opens** if you're unconscious/disabled, or **disarmed** (Cynosure) —
+a counter-clash is a Shoot Slug on someone else's turn, so the same blanket
+lockout as §5's `disarmed` check applies. See `findEligibleCounterSlugs`.
+
 **Window duration** is now a flat constant, the same for every shot — no more
 type/quality/dex-driven variability:
 ```
@@ -510,11 +528,17 @@ slow phase, so the launch reads as visibly simultaneous with the sound. See
   - `attackerWins = attacker.clashPower > defender.clashDefense`
   - `defenderWins = defender.clashPower > attacker.clashDefense`
   - Both true → **double break**: both slugs bounce off, no damage either way, both
-    slugs spend an energy pip and are ejected from their magazine slots.
+    slugs spend an energy pip and are ejected.
   - Only attacker wins → defender takes the hit per §5 damage rules; defender's
     counter slug is ejected/spent for nothing.
   - Only defender wins → **reflected**: attacker takes the damage instead, using the
     defender's slug's power/type; attacker's original slug is ejected.
+
+  An **ejected** slug is flung out of the barrel exactly like a fired one — it
+  keeps its magazine slot, counts down the same `SLUG_RETURN_TURNS`
+  return-to-hand cooldown, then waits on a Reload. It is *not* stripped out of
+  the weapon (which would make a countered slug vanish from the combat slug
+  panel with no in-combat way to re-equip it).
   - Neither wins → clean **clash bounce**: no damage to either side, both slugs
     spend an energy pip.
 - Both participating slugs always spend one energy pip on a counter attempt
@@ -679,5 +703,5 @@ your house-rule instinct:
   big you draw maps; easy to retune once you see a real map.
 - Counter-clash `BASE_WINDOW = 3200ms` — is a few seconds the right feel, or should
   it be snappier/more forgiving?
-- Knockout DC escalation (`10 + pips used`) and Hunker Down heal (`1d4 + CON`) — both
+- Knockout DC escalation (`10 + pips used`) and Hunker Down heal (`max(1, CON) per AP`) — both
   arbitrary, said so you can veto.

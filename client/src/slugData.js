@@ -142,7 +142,7 @@ export const SLUG_TRAITS = [
   { key: "causesJam", label: "Causes Jam", description: "Hit or miss, the target's next shot automatically misfires." },
   { key: "piercesWalls", label: "Pierces Walls", description: "An Attack breaks through the first wall in its path." },
   { key: "causesChain", label: "Causes Chain", description: "Adds Electricity's uncounterable half-power arc to any type." },
-  { key: "ricochets", label: "Ricochets", description: "A landed hit bounces to a second target with its own counter-clash." },
+  { key: "ricochets", label: "Ricochets", description: "Once the shot connects, it caroms 4 more times to the nearest other combatant, each with its own counter-clash." },
   { key: "ultraFast", label: "Ultra Fast", description: "Shrinks the counter window and speeds up the bolt itself." },
   { key: "causesInvisible", label: "Causes Invisible", description: "Self/ally only -- hides the token from other players for 1 turn." },
   { key: "causesFear", label: "Causes Fear", description: "The target's entire next turn is spent fleeing the shooter." },

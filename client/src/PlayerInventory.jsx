@@ -4,6 +4,7 @@ import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import BlasterCard from "./BlasterCard.jsx";
 import ModCard from "./ModCard.jsx";
+import { useDragScrollRestore } from "./useDragScrollRestore.js";
 import "./PlayerSlugs.css";
 import "./PlayerInventory.css";
 
@@ -17,6 +18,7 @@ export default function PlayerInventory() {
   const [mods, setMods] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [dragOverSlot, setDragOverSlot] = useState(null);
+  useDragScrollRestore();
 
   useEffect(() => {
     Promise.all([
@@ -59,13 +61,33 @@ export default function PlayerInventory() {
     });
   }, [modUpdate, user]);
 
-  function equipMod(modId, blasterId) {
-    setMods((prev) => prev.map((m) => (m.id === modId ? { ...m, equippedBlasterId: blasterId } : m)));
-    fetch(`/api/mods/${modId}/equip`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ blasterId }),
-    }).catch(() => {});
+  // `displaceModId` is the mod already sitting in the slot the new one was
+  // dropped onto -- unequip it first so the blaster has an open slot (the
+  // server rejects an equip when every slot is full).
+  function equipMod(modId, blasterId, displaceModId = null) {
+    setMods((prev) =>
+      prev.map((m) => {
+        if (m.id === modId) return { ...m, equippedBlasterId: blasterId };
+        if (displaceModId != null && m.id === displaceModId) return { ...m, equippedBlasterId: null };
+        return m;
+      })
+    );
+    const displace =
+      displaceModId != null
+        ? fetch(`/api/mods/${displaceModId}/unequip`, {
+            method: "PATCH",
+            headers: { Authorization: `Bearer ${token}` },
+          })
+        : Promise.resolve();
+    displace
+      .then(() =>
+        fetch(`/api/mods/${modId}/equip`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ blasterId }),
+        })
+      )
+      .catch(() => {});
   }
 
   function unequipMod(mod) {
@@ -177,7 +199,7 @@ export default function PlayerInventory() {
                 equippedMods={mods.filter((m) => m.equippedBlasterId === blaster.id)}
                 editableSlots
                 onUnequipMod={unequipMod}
-                onDropMod={(modId) => equipMod(modId, blaster.id)}
+                onDropMod={(modId, displaceModId) => equipMod(modId, blaster.id, displaceModId)}
                 draggableEquip
               />
             ))}

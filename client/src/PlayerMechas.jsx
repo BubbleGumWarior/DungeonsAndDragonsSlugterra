@@ -3,6 +3,7 @@ import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import MechaCard from "./MechaCard.jsx";
 import MechaModCard from "./MechaModCard.jsx";
+import { useDragScrollRestore } from "./useDragScrollRestore.js";
 import "./PlayerSlugs.css";
 import "./PlayerInventory.css";
 
@@ -12,6 +13,7 @@ export default function PlayerMechas() {
   const [mechas, setMechas] = useState([]);
   const [mods, setMods] = useState([]);
   const [loaded, setLoaded] = useState(false);
+  useDragScrollRestore();
 
   useEffect(() => {
     Promise.all([
@@ -54,13 +56,33 @@ export default function PlayerMechas() {
     });
   }, [mechaModUpdate, user]);
 
-  function equipMod(modId, mechaId) {
-    setMods((prev) => prev.map((m) => (m.id === modId ? { ...m, equippedMechaId: mechaId } : m)));
-    fetch(`/api/mecha-mods/${modId}/equip`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ mechaId }),
-    }).catch(() => {});
+  // `displaceModId` is the mod already in the slot the new one was dropped onto
+  // -- unequip it first so the mecha has an open slot (the server rejects an
+  // equip when every slot is full).
+  function equipMod(modId, mechaId, displaceModId = null) {
+    setMods((prev) =>
+      prev.map((m) => {
+        if (m.id === modId) return { ...m, equippedMechaId: mechaId };
+        if (displaceModId != null && m.id === displaceModId) return { ...m, equippedMechaId: null };
+        return m;
+      })
+    );
+    const displace =
+      displaceModId != null
+        ? fetch(`/api/mecha-mods/${displaceModId}/unequip`, {
+            method: "PATCH",
+            headers: { Authorization: `Bearer ${token}` },
+          })
+        : Promise.resolve();
+    displace
+      .then(() =>
+        fetch(`/api/mecha-mods/${modId}/equip`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ mechaId }),
+        })
+      )
+      .catch(() => {});
   }
 
   function unequipMod(mod) {
@@ -95,7 +117,7 @@ export default function PlayerMechas() {
                 equippedMods={mods.filter((m) => m.equippedMechaId === mecha.id)}
                 editableSlots
                 onUnequipMod={unequipMod}
-                onDropMod={(modId) => equipMod(modId, mecha.id)}
+                onDropMod={(modId, displaceModId) => equipMod(modId, mecha.id, displaceModId)}
               />
             ))}
           </div>

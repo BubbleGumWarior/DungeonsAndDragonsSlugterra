@@ -32,12 +32,24 @@ export default function MechaCard({
 }) {
   const [flipped, setFlipped] = useState(false);
   const [modDragOver, setModDragOver] = useState(false);
+  const [replaceDragOverModId, setReplaceDragOverModId] = useState(null);
   const tier = tierInfo(mecha.tier);
   const stats = effectiveStats(mecha, equippedMods);
   const modModes = unlockedModes(equippedMods);
   const bikeActive = modModes.has("bike");
   const openSlots = Math.max(0, mecha.modSlots - equippedMods.length);
-  const acceptsModDrop = editableSlots && Boolean(onDropMod) && openSlots > 0;
+  const canDropMods = editableSlots && Boolean(onDropMod);
+  const acceptsModDrop = canDropMods && openSlots > 0;
+
+  // Dropping a mod onto a filled slot swaps it out -- no need to remove it first.
+  function handleReplaceDrop(occupantModId, e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setReplaceDragOverModId(null);
+    setModDragOver(false);
+    const modId = Number(e.dataTransfer.getData("text/plain"));
+    if (Number.isInteger(modId) && modId !== occupantModId) onDropMod?.(modId, occupantModId);
+  }
 
   return (
     <div
@@ -174,9 +186,22 @@ export default function MechaCard({
             >
               {equippedMods.map((mod) => (
                 <div
-                  className="mecha-card-slot mecha-card-slot--filled"
+                  className={`mecha-card-slot mecha-card-slot--filled ${replaceDragOverModId === mod.id ? "mecha-card-slot--dragover" : ""}`}
                   key={mod.id}
                   onClick={editableSlots ? (e) => { e.stopPropagation(); onUnequipMod?.(mod); } : undefined}
+                  onDragOver={
+                    canDropMods
+                      ? (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          e.dataTransfer.dropEffect = "move";
+                          setReplaceDragOverModId(mod.id);
+                          setModDragOver(false);
+                        }
+                      : undefined
+                  }
+                  onDragLeave={canDropMods ? () => setReplaceDragOverModId((prev) => (prev === mod.id ? null : prev)) : undefined}
+                  onDrop={canDropMods ? (e) => handleReplaceDrop(mod.id, e) : undefined}
                   title={editableSlots ? `Remove ${mod.name}` : mod.name}
                 >
                   <EngineIcon weight="bold" />

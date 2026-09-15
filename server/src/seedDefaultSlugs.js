@@ -139,3 +139,40 @@ export async function backfillSlugTemplateRarity() {
   if (updated > 0) console.log(`Backfilled rarity on ${updated} slug template(s).`);
   return { updated };
 }
+
+// Speedstinger shipped with its whole ricochet mechanic wired up in combat
+// code (see maybeRicochet in routes/combat.js) but the `ricochets` flag was
+// never actually set TRUE on it -- in the source CSV, the generated JSON, or
+// any seeded row -- so it never once bounced. The data is fixed now, but
+// seedDefaultSlugTemplates() only ever INSERTs new names; it never updates a
+// row that's already there. This turns the flag on for the existing
+// Speedstinger template and every slug instance minted from it -- but only
+// where it's still FALSE, so a DM who has since deliberately toggled it
+// (either direction) is never overridden. One-off, same shape as
+// backfillSlugTemplateRarity above; a no-op once every Speedstinger row has
+// it set.
+export async function backfillSpeedstingerRicochet() {
+  const { rows: templates } = await pool.query(
+    "UPDATE slug_templates SET ricochets = true WHERE name = 'Speedstinger' AND ricochets = false RETURNING id"
+  );
+  const templateIds = templates.map((r) => r.id);
+  let instanceCount = 0;
+  if (templateIds.length > 0) {
+    const { rowCount } = await pool.query(
+      "UPDATE slugs SET ricochets = true WHERE ricochets = false AND (template_id = ANY($1::int[]) OR name = 'Speedstinger')",
+      [templateIds]
+    );
+    instanceCount = rowCount;
+  } else {
+    // Template already correct (or renamed/deleted) -- still catch loose
+    // instances that predate the fix.
+    const { rowCount } = await pool.query(
+      "UPDATE slugs SET ricochets = true WHERE ricochets = false AND name = 'Speedstinger'"
+    );
+    instanceCount = rowCount;
+  }
+  if (templateIds.length > 0 || instanceCount > 0) {
+    console.log(`Backfilled ricochets on ${templateIds.length} Speedstinger template(s) and ${instanceCount} slug(s).`);
+  }
+  return { templates: templateIds.length, instances: instanceCount };
+}

@@ -44,6 +44,7 @@ import {
   resolveClash,
   rangePenalty,
   KNOCKBACK_DISTANCE,
+  KNOCKBACK_DISMOUNT_CHANCE,
   SHOT_FLIGHT_MULTIPLIER,
   slugKnockbackDistance,
   tickStatusEffects,
@@ -66,6 +67,7 @@ import {
   HAZARD_RADIUS,
   HAZARD_DAMAGE_FRACTION,
   CHAIN_RADIUS,
+  RICOCHET_MAX_BOUNCES,
   ULTRA_FAST_WINDOW_FACTOR,
   INVISIBLE_DURATION_TURNS,
   FEAR_FLEE_AP_EQUIVALENT,
@@ -109,6 +111,7 @@ import {
   reverseMoveDestination,
   isInsideAnyZone,
   DECOY_COUNT,
+  DECOY_MAX_RADIUS,
   randomDecoyOffset,
   loyaltyAccuracyModifier,
   applyLoyaltyToSlug,
@@ -1449,7 +1452,7 @@ router.post("/actions/hunker-down", async (req, res) => {
       return res.status(400).json({ error: "No AP left to hunker down." });
     }
 
-    // Sinks every remaining AP into the heal -- one 1d4 + CON roll per AP.
+    // Sinks every remaining AP into the heal -- a flat max(1, CON mod) Grit per AP.
     const apSpent = combatant.current_ap;
     const conMod = combatant.data?.conMod ?? 0;
     const heal = hunkerHeal(conMod, apSpent);
@@ -1569,11 +1572,20 @@ function cleanupExpiredKnockouts() {
   }
 }
 
+// A clash flings the slug out of the barrel, but -- exactly like an ordinary
+// fired slug (see spendEnergyPip) -- it stays in its magazine slot and
+// returns to hand after SLUG_RETURN_TURNS, then waits on a Reload. It is NOT
+// stripped out of the weapon: doing that made a countered slug vanish from
+// the combat slug panel mid-fight with no in-combat way to get it back.
+// spendEnergyPip has already run for both clash participants by the time we
+// get here (it sets `loaded` per the slug's own self-load rule), so this only
+// needs to (re)assert the full return-to-hand cooldown -- the slug was just
+// flung out in a clash and owes the same SLUG_RETURN_TURNS as a fired one.
 async function ejectSlug(slugId) {
   if (!slugId) return;
   const { rows } = await pool.query(
-    "UPDATE slugs SET equipped_blaster_id = NULL, magazine_slot = NULL WHERE id = $1 RETURNING *",
-    [slugId]
+    "UPDATE slugs SET cooldown_turns_left = $1 WHERE id = $2 RETURNING *",
+    [SLUG_RETURN_TURNS, slugId]
   );
   if (rows[0]) broadcastAll({ type: "slug-updated", userId: rows[0].user_id, slug: toClientSlug(rows[0]) });
 }
@@ -1655,6 +1667,10 @@ async function rechargeAnotherSlug(userId, excludeSlugId) {
 
 async function findEligibleCounterSlugs(target) {
   if (target.unconscious || target.disabled) return [];
+  // Cynosure: a disarmed blaster can't be fired at all -- same blanket
+  // lockout as the disarmed check in /actions/shoot, so a counter-clash
+  // (which is just a Shoot Slug on someone else's turn) is out too.
+  if (target.status_effects?.disarmed?.turnsLeft > 0) return [];
   // Only the slug(s) loaded into whichever weapon slot is currently active
   // can counter -- same rule as firing on your own turn (see /actions/shoot).
   const activeSlot = target.data?.activeWeaponSlot ?? PRIMARY_WEAPON_SLOT;
@@ -1703,27 +1719,45 @@ async function findEligibleCounterSlugs(target) {
 // up 25x (see docs/combat-system-design.md §4's chain row, "within 8 units
 // of target"), so chain basically never found anyone at this map's actual
 // scale. Now uses CHAIN_RADIUS (8 * RANGE_SCALE) like everything else.
-async function findChainTarget(encounterId, fromCombatantId, excludeCombatantId) {
+// `excludeCombatantId` is always barred (the shooter -- a shot never chains
+// or ricochets back into its own owner). `fromCombatantId` (the combatant
+// the shot is leaving) is preferred-against but not hard-barred: with
+// `allowFrom`, it's returned as a last resort when nothing else qualifies,
+// which is what lets a 1v1 Speedstinger ricochet keep bouncing off the lone
+// enemy. `maxRadius` caps how far the search reaches -- CHAIN_RADIUS for the
+// electricity chain arc, Infinity for the ricochet ("always the closest,
+// wherever they are").
+async function findChainTarget(encounterId, fromCombatantId, excludeCombatantId, { maxRadius = CHAIN_RADIUS, allowFrom = false } = {}) {
   const from = await getCombatant(fromCombatantId);
   if (!from) return null;
   const { rows } = await pool.query(
-    "SELECT * FROM combatants WHERE encounter_id = $1 AND id != $2 AND id != $3 AND unconscious = false AND disabled = false",
-    [encounterId, fromCombatantId, excludeCombatantId]
+    "SELECT * FROM combatants WHERE encounter_id = $1 AND id != $2 AND unconscious = false AND disabled = false",
+    [encounterId, excludeCombatantId]
   );
   let nearest = null;
   let nearestDist = Infinity;
+  let fromFallback = null; // the from-combatant itself, used only when allowFrom and nothing else is in reach
+  let fromFallbackDist = Infinity;
   for (const c of rows) {
     // A decoy only ever pops from being directly targeted (see dealHit) --
     // it's not a legitimate incidental chain/splash target.
     if (c.kind === "decoy") continue;
     if (c.current_grit === null && c.current_structure === null) continue;
     const d = distance({ x: from.x, y: from.y }, { x: c.x, y: c.y });
-    if (d <= CHAIN_RADIUS && d < nearestDist) {
+    if (d > maxRadius) continue;
+    if (c.id === fromCombatantId) {
+      if (allowFrom && d < fromFallbackDist) {
+        fromFallback = c;
+        fromFallbackDist = d;
+      }
+      continue;
+    }
+    if (d < nearestDist) {
       nearest = c;
       nearestDist = d;
     }
   }
-  return nearest;
+  return nearest || fromFallback;
 }
 
 // Every living, conscious combatant within AOE_RADIUS of `origin` (a hit's
@@ -2533,8 +2567,17 @@ async function dealHit(
     const swapsPosition = Boolean(slug.swaps_position && !isSelfTarget);
     const shooterOldPos = { x: shooter.x, y: shooter.y };
     const targetOldPos = { x: target.x, y: target.y };
+    // If the target was riding a mecha and the shooter is on foot, the swap
+    // doesn't just trade spots -- the shooter lands in the saddle and the
+    // target is thrown clear. The mecha itself doesn't move (it's already at
+    // targetOldPos, which is exactly where the shooter is warping to).
+    const stealsMount = swapsPosition && target.mounted_on != null && shooter.mounted_on == null;
     if (swapsPosition) {
-      await updateCombatant(shooter.id, { x: targetOldPos.x, y: targetOldPos.y });
+      await updateCombatant(shooter.id, {
+        x: targetOldPos.x,
+        y: targetOldPos.y,
+        ...(stealsMount ? { mounted_on: target.mounted_on } : {}),
+      });
     }
     // Psi: friction_shift, always a debuff (no self-target branch, unlike
     // Perplexus's split pools) -- picks between rooting the target in place
@@ -2634,6 +2677,7 @@ async function dealHit(
       damaged_this_turn: isSelfTarget ? target.damaged_this_turn : true,
       status_effects: JSON.stringify(nextStatus),
       ...(swapsPosition ? { x: shooterOldPos.x, y: shooterOldPos.y } : {}),
+      ...(stealsMount ? { mounted_on: null } : {}),
     });
     await syncCharacterFromCombatant(updated);
     log = isSelfTarget
@@ -2647,15 +2691,24 @@ async function dealHit(
       if (markNotes.length > 0) log += ` Static arcs to the marked: ${markNotes.join(", ")}.`;
     }
 
-    // Mirage Coil, self-targeted -- spawn the decoys now that `updated`
-    // (this combatant's just-written status_effects) is on hand, then layer
-    // the mirage entry on top of it with a second, small write.
+    // Mirage Coil, self-targeted -- the real slinger also blurs to a fresh
+    // random spot as the decoys appear, so anyone who watched where they were
+    // standing can't just keep firing at that spot. Move the owner first,
+    // then spawn the decoys scattered around the *new* position, then layer
+    // the mirage entry on top of the just-written status_effects.
     if (spawnMirage) {
-      const decoyIds = await spawnMirageDecoys(updated);
+      const mapRow = (await pool.query("SELECT map_width, map_height FROM encounters WHERE id = $1", [encounterId])).rows[0];
+      const shifted = clampToMapBounds(
+        scatterPoint({ x: updated.x, y: updated.y }, DECOY_MAX_RADIUS),
+        mapRow?.map_width ?? 1600,
+        mapRow?.map_height ?? 900
+      );
+      const movedOwner = await updateCombatant(target.id, { x: shifted.x, y: shifted.y });
+      const decoyIds = await spawnMirageDecoys(movedOwner);
       await updateCombatant(target.id, {
-        status_effects: JSON.stringify({ ...(updated.status_effects || {}), mirage: { decoyIds } }),
+        status_effects: JSON.stringify({ ...(movedOwner.status_effects || {}), mirage: { decoyIds } }),
       });
-      log += ` ${DECOY_COUNT} decoys shimmer into being around ${target.name}!`;
+      log += ` ${DECOY_COUNT} decoys shimmer into being as ${target.name} blurs aside!`;
     }
 
     // The status effect itself never deals damage on this same hit (see
@@ -2682,6 +2735,9 @@ async function dealHit(
     }
     if (swapsPosition) {
       log += ` ${shooter.name} and ${target.name} swap places in a flicker of light!`;
+      if (stealsMount) {
+        log += ` ${shooter.name} materializes in the saddle -- ${target.name} is thrown to the ground!`;
+      }
     }
     if (frictionResult) {
       log += ` ${target.name}'s friction shifts -- ${FRICTION_EFFECT_LABELS[frictionResult]}.`;
@@ -2752,6 +2808,13 @@ async function dealHit(
         if (kb.hitWall) {
           log += ` ${target.name} is knocked into a wall!`;
           knockedIntoWall = true;
+        }
+        // A shove that catches a mounted rider has a flat chance of throwing
+        // them out of the saddle -- the rider tumbles off (and gets shoved by
+        // the scheduled knockback above), the mecha holds its ground.
+        if (target.mounted_on != null && Math.random() < KNOCKBACK_DISMOUNT_CHANCE) {
+          await updateCombatant(target.id, { mounted_on: null });
+          log += ` ${target.name} is knocked clean out of the saddle!`;
         }
       }
     }
@@ -3088,19 +3151,22 @@ async function launchAndOfferCounter(offer) {
 
 // Fires `slug` at `target` as a fresh, independently-counterable shot, with
 // the *visual* origin at `originPos` -- which for Speedstinger's ricochet is
-// the first target's own position, not the true shooter's. Ownership (whose
-// slug this is, for energy/cooldown/recharge purposes) always stays with
-// `attackerId`. Shares the exact range/wall-block logic the main Attack flow
-// uses, just condensed since there's no HTTP request to respond to here.
-async function fireSecondaryShot({ encounterId, attackerId, attackerName, originPos, target, slug, blaster, walls }) {
+// the previous target's own position, not the true shooter's. Ownership
+// (whose slug this is, for energy/cooldown/recharge purposes) always stays
+// with `attackerId`. `ricochetCount` is how many bounces deep this leg is
+// (1 = the first carom off the primary hit); it rides along on the offer so
+// maybeRicochet can stop the chain at RICOCHET_MAX_BOUNCES. Only ever used
+// for ricochet legs, so unlike the main Attack flow it ignores weapon/type
+// max range entirely -- a caroming bounce always reaches its chosen target
+// unless a wall physically stops it.
+async function fireSecondaryShot({ encounterId, attackerId, attackerName, originPos, target, slug, blaster, walls, ricochetCount = 1 }) {
   const tb = typeBallistics(slug.type);
   const targetPos = { x: target.x, y: target.y };
-  const combinedRange = Math.max(blaster.range, tb.range);
   const dist = distance(originPos, targetPos);
   const wallHit = firstWallHit(originPos, targetPos, walls);
   const wallBlocks = Boolean(wallHit) && tb.trait !== "phase";
   const wallDist = wallBlocks ? wallHit.hit.t * dist : Infinity;
-  const stopDist = Math.min(combinedRange, wallDist);
+  const stopDist = wallDist;
   const reaches = dist <= stopDist;
   const impactPoint = reaches ? targetPos : pointAtDistance(originPos, targetPos, stopDist);
   const rawWindowMs = shotFlightMs(dist, blaster.range);
@@ -3127,16 +3193,18 @@ async function fireSecondaryShot({ encounterId, attackerId, attackerName, origin
     targetPos,
     impactPoint,
     windowMs,
-    // Stops maybeRicochet from firing again off of this already-bounced
-    // shot -- Speedstinger bounces exactly once (B -> C, never C -> D...).
+    // Flags this as a bounce (suppresses terrain marks + the chain arc on
+    // its own hit -- see applyShotTerrain / dealHit); ricochetCount tracks
+    // how deep the chain is so maybeRicochet can cap it.
     isRicochetLeg: true,
+    ricochetCount,
   };
 
   if (!reaches) {
     broadcastShotFx({ ...offer, outcome: null });
     broadcastShotResolved(offer, { outcome: "out-of-range" });
     scheduleAfterFlight(firedAt, windowMs, async () => {
-      await pushCombatLog(encounterId, `${slug.name} ricochets wide, missing ${target.name} entirely.`);
+      await pushCombatLog(encounterId, `${slug.name} ricochets into a wall and stops.`);
       await broadcastEncounter(encounterId);
     });
     await broadcastEncounter(encounterId);
@@ -3148,32 +3216,57 @@ async function fireSecondaryShot({ encounterId, attackerId, attackerName, origin
 }
 
 // Speedstinger's ricochet (see causes_chain/ricochets in dealHit's docs):
-// after a shot actually connects with its primary target (an uncontested
-// hit, or a countered one where the attacker still won the clash), the same
-// full-power shot bounces on to a second nearby target, launched visually
-// from the first target's own position, with its own completely independent
-// counter-clash opportunity. Only bounces once.
-async function maybeRicochet(offer, hitTargetId) {
-  if (!offer.slug.ricochets || offer.isRicochetLeg) return;
+// once a shot connects with a target (an uncountered hit OR miss, a countered
+// one where the attacker still won the clash, or -- when Speedstinger is the
+// *counter* slug and wins -- the reflected shot landing back on the
+// attacker), the same full-power shot caroms on to the nearest other
+// combatant, launched visually from that target's own position, with its own
+// completely independent counter-clash opportunity.
+//
+// Bounces RICOCHET_MAX_BOUNCES times total: `offer.ricochetCount` is how many
+// bounces produced THIS offer (0/undefined for the primary shot, 1 for the
+// first carom, ...), and each new leg gets the next number. The chain also
+// dies early if a leg hits a wall, loses a clash, or finds no valid target.
+// Target selection ignores range ("always the closest"), never picks the
+// shooter, and prefers someone other than the combatant just left -- but
+// falls back to that same combatant in a 1v1 so the count still plays out.
+//
+// `ricochetSlug`/`shooterId`/`shooterName` default to the original shot's
+// attacker + slug, but the counter path overrides all three: the bouncing
+// slug is the defender's counter slug, and ownership (energy/cooldown, and
+// who the next target is offered a counter against) stays with the defender.
+// The bounced leg reuses offer.blaster purely as an accuracy proxy -- a
+// counter clash carries no blaster of its own.
+async function maybeRicochet(
+  offer,
+  hitTargetId,
+  { ricochetSlug = offer.slug, shooterId = offer.attackerCombatantId, shooterName = offer.attackerName } = {}
+) {
+  const bouncesSoFar = offer.ricochetCount || 0;
+  if (!ricochetSlug.ricochets || bouncesSoFar >= RICOCHET_MAX_BOUNCES) return;
   const bounceFrom = await getCombatant(hitTargetId);
   if (!bounceFrom) return;
-  const nextTarget = await findChainTarget(offer.encounterId, hitTargetId, offer.attackerCombatantId);
+  const nextTarget = await findChainTarget(offer.encounterId, hitTargetId, shooterId, {
+    maxRadius: Infinity,
+    allowFrom: true,
+  });
   if (!nextTarget) {
-    await pushCombatLog(offer.encounterId, `${offer.slug.name} ricochets off ${bounceFrom.name} but finds no one else nearby.`);
+    await pushCombatLog(offer.encounterId, `${ricochetSlug.name} ricochets off ${bounceFrom.name} but finds no one else to hit.`);
     await broadcastEncounter(offer.encounterId);
     return;
   }
-  await pushCombatLog(offer.encounterId, `${offer.slug.name} ricochets off ${bounceFrom.name} toward ${nextTarget.name}!`);
+  await pushCombatLog(offer.encounterId, `${ricochetSlug.name} ricochets off ${bounceFrom.name} toward ${nextTarget.name}!`);
   const wallsRow = (await pool.query("SELECT walls FROM encounters WHERE id = $1", [offer.encounterId])).rows[0];
   await fireSecondaryShot({
     encounterId: offer.encounterId,
-    attackerId: offer.attackerCombatantId,
-    attackerName: offer.attackerName,
+    attackerId: shooterId,
+    attackerName: shooterName,
     originPos: { x: bounceFrom.x, y: bounceFrom.y },
     target: nextTarget,
-    slug: offer.slug,
+    slug: ricochetSlug,
     blaster: offer.blaster,
     walls: wallsRow?.walls || [],
+    ricochetCount: bouncesSoFar + 1,
   });
 }
 
@@ -3313,7 +3406,16 @@ async function resolveNormalHit(offer) {
           log += " It detonates harmlessly, catching no one.";
         }
       }
+      // The bolt still glances off a missed target -- Speedstinger's carom
+      // continues from here regardless of whether this leg connected.
+      await maybeRicochet(offer, target.id);
     }
+    // Any terrain this slug leaves (ice/damage patch, fire trail, star wall,
+    // pods, zones) lands where the bolt actually came to rest: dead on the
+    // target for a hit, out at the deflected wide point for a miss -- never
+    // on a target the shot visibly sailed past. A ricochet leg leaves
+    // nothing (applyShotTerrain no-ops on isRicochetLeg).
+    await applyShotTerrain(offer, hit ? offer.impactPoint : deflected);
     await pushCombatLog(offer.encounterId, log);
     await broadcastEncounter(offer.encounterId);
   });
@@ -3336,10 +3438,10 @@ async function resolveCounterOffer(id, chosenSlugId) {
 
   if (!counterSlugRow || !canAffordCounter) {
     // No counter (declined, timed out, or no longer affordable) -- the shot
-    // flies on to the target untouched, terrain and all, exactly as if none
-    // had been offered.
+    // flies on exactly as if none had been offered. resolveNormalHit now
+    // places the terrain itself, at the real impact point (target on a hit,
+    // the deflected wide point on a miss).
     await resolveNormalHit(offer);
-    scheduleShotTerrain(offer, offer.impactPoint);
     return { pending: false, countered: false };
   }
 
@@ -3443,6 +3545,16 @@ async function resolveCounterOffer(id, chosenSlugId) {
         originPos: offer.targetPos,
       });
       log = `${offer.targetName}'s ${counterSlugRow.name} reflects the shot back at ${offer.attackerName}! ${hitLog}`;
+      // Speedstinger as the counter slug: the reflected shot doesn't just
+      // hit the attacker, it caroms off them on to another nearby enemy --
+      // its own independent counter-clash, owned by the defender. This is a
+      // fresh shot, so its bounce count starts at 0 regardless of how deep
+      // the incoming shot's own chain was.
+      await maybeRicochet({ ...offer, ricochetCount: 0 }, offer.attackerCombatantId, {
+        ricochetSlug: reflectingSlug,
+        shooterId: offer.targetCombatantId,
+        shooterName: offer.targetName,
+      });
     }
 
     const counterApCost = counterSlugRow.ap_cost || 0;
@@ -4039,19 +4151,15 @@ router.post("/actions/shoot", async (req, res) => {
     }
 
     if (!reaches) {
-      // Deliberately worded the same as an ordinary miss -- nobody is told
-      // whether this was a range problem or a wall in the way, only that
-      // the shot didn't land. The outcome reveal is immediate ("the
-      // direction"); the log entry is a result of it, so it waits for the
-      // flight to actually finish, same as everything else.
-      broadcastShotResolved(offer, { outcome: "out-of-range" });
+      // Out of range / blocked by a wall: the shot never gets close enough
+      // to be worth animating, so nothing launches and no resolve reveal
+      // goes out -- no bolt, no burst, no miss sound. Only the Combat Log
+      // records the wasted shot, and any terrain the slug leaves still
+      // appears where it fizzled out (impactPoint is already clamped there).
       scheduleAfterFlight(firedAt, windowMs, async () => {
         await pushCombatLog(attacker.encounter_id, `${attacker.name}'s ${slug.name} goes wide of ${target.name}.`);
         await broadcastEncounter(attacker.encounter_id);
       });
-      // A shot that falls short still leaves its terrain where it fizzled
-      // out (impactPoint is already clamped to that spot) -- matches the old
-      // unconditional behaviour, and no counter is ever offered here.
       scheduleShotTerrain(offer, impactPoint);
       const encounter = await broadcastEncounter(attacker.encounter_id);
       return res.json({ pending: false, encounter });
@@ -4063,8 +4171,9 @@ router.post("/actions/shoot", async (req, res) => {
       // (clash point if the slug loses, target if it smashes through).
       return res.json({ pending: true, counterId: fxId, windowMs });
     }
-    // No counter available: the shot flies straight to the target, terrain lands there.
-    scheduleShotTerrain(offer, impactPoint);
+    // No counter available: launchAndOfferCounter already ran resolveNormalHit,
+    // which places the terrain itself at the real impact point (target on a
+    // hit, the deflected wide point on a miss).
     const encounter = await broadcastEncounter(attacker.encounter_id);
     res.json({ pending: false, encounter });
   } catch (err) {

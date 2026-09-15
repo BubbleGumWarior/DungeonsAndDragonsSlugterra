@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowClockwiseIcon, BookOpenIcon, TargetIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
+import { useDragScrollRestore } from "./useDragScrollRestore.js";
 import SlugCard from "./SlugCard.jsx";
 import Slugpedia from "./Slugpedia.jsx";
 import "./Panel.css";
@@ -20,6 +21,9 @@ export default function PlayerSlugs() {
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [error, setError] = useState(null);
   const [slugpediaOpen, setSlugpediaOpen] = useState(false);
+  // dragstart jumps the page to the top so the weapon slots are in view; this
+  // returns the player to where they picked the card up once the drag ends.
+  useDragScrollRestore();
 
   useEffect(() => {
     Promise.all([
@@ -124,15 +128,41 @@ export default function PlayerSlugs() {
   // actually persisted it, with the error silently swallowed. Now the
   // optimistic update is rolled back and surfaced if the request doesn't
   // actually succeed.
-  function loadSlug(slugId, blasterId, slot) {
+  // `displaceSlugId` is the slug currently sitting in the target magazine slot,
+  // if any -- dropping a slug onto a filled slot replaces its occupant, so we
+  // unload that one first (the server rejects a load into an occupied slot).
+  function loadSlug(slugId, blasterId, slot, displaceSlugId = null) {
     setError(null);
     const previous = slugs;
-    setSlugs((prev) => prev.map((s) => (s.id === slugId ? { ...s, equippedBlasterId: blasterId, magazineSlot: slot } : s)));
-    fetch(`/api/slugs/${slugId}/load`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ blasterId, slot }),
-    })
+    setSlugs((prev) =>
+      prev.map((s) => {
+        if (s.id === slugId) return { ...s, equippedBlasterId: blasterId, magazineSlot: slot };
+        if (displaceSlugId != null && s.id === displaceSlugId) {
+          return { ...s, equippedBlasterId: null, magazineSlot: null };
+        }
+        return s;
+      })
+    );
+    const displace =
+      displaceSlugId != null
+        ? fetch(`/api/slugs/${displaceSlugId}/unload`, {
+            method: "PATCH",
+            headers: { Authorization: `Bearer ${token}` },
+          }).then(async (res) => {
+            if (!res.ok) {
+              const data = await res.json().catch(() => ({}));
+              throw new Error(data.error || "Could not free that magazine slot.");
+            }
+          })
+        : Promise.resolve();
+    displace
+      .then(() =>
+        fetch(`/api/slugs/${slugId}/load`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ blasterId, slot }),
+        })
+      )
       .then(async (res) => {
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
@@ -172,8 +202,8 @@ export default function PlayerSlugs() {
     const slugId = Number(e.dataTransfer.getData("text/plain"));
     if (!Number.isInteger(slugId)) return;
     const occupant = slugs.find((s) => s.equippedBlasterId === activeWeapon.id && s.magazineSlot === slot);
-    if (occupant && occupant.id !== slugId) return;
-    loadSlug(slugId, activeWeapon.id, slot);
+    if (occupant && occupant.id === slugId) return;
+    loadSlug(slugId, activeWeapon.id, slot, occupant ? occupant.id : null);
   }
 
   function handleSlotClick(slot) {
@@ -221,7 +251,7 @@ export default function PlayerSlugs() {
                   {SLOT_LABELS[activeWeapon?.equipSlot] ?? ""}
                 </span>
                 <span className="slug-loadout-weapon-name">{activeWeapon?.name}</span>
-                <span className="slug-loadout-weapon-hint">Drag a slug below into an empty slot to load it.</span>
+                <span className="slug-loadout-weapon-hint">Drag a slug below onto a slot to load it — drop onto a filled slot to swap.</span>
               </div>
             </div>
             {equippedBlasters.length > 1 && (
@@ -295,6 +325,8 @@ export default function PlayerSlugs() {
                         // card never actually picks up. Letting dragstart
                         // finish first, then scrolling on the next tick,
                         // keeps the already-captured drag alive.
+                        // The scroll position is restored on dragend by
+                        // useDragScrollRestore().
                         if (equippedBlasters.length > 0) {
                           setTimeout(() => window.scrollTo({ top: 0, behavior: "auto" }), 0);
                         }

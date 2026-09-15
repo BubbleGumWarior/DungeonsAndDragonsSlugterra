@@ -122,15 +122,12 @@ export const SLUG_RETURN_TURNS = 3;
 
 // ---- Hunker Down ------------------------------------------------------
 
-// Hunker Down spends every remaining AP on patching yourself up: one
-// 1d4 + CON-modifier roll per AP consumed, all summed. Min 1 overall so a
-// deeply negative CON can never turn it into a wasted turn.
+// Hunker Down spends every remaining AP on patching yourself up: a flat
+// `max(1, CON modifier)` Grit per AP consumed, no roll. The per-AP floor of 1
+// means a zero or negative CON still gets something back rather than a wasted
+// turn.
 export function hunkerHeal(conModifier, apSpent = 1) {
-  let total = 0;
-  for (let i = 0; i < Math.max(1, apSpent); i++) {
-    total += 1 + Math.floor(Math.random() * 4) + conModifier; // 1d4 + CON
-  }
-  return Math.max(1, total);
+  return Math.max(1, conModifier) * Math.max(1, apSpent);
 }
 
 // ---- Shooting -----------------------------------------------------------
@@ -157,6 +154,11 @@ export const KNOCKBACK_DISTANCE = 16; // map units a knockback shove covers -- a
 // the flat short distance, never doubled.
 export const KNOCKBACK_SHORT_DISTANCE = KNOCKBACK_DISTANCE; // 16
 export const KNOCKBACK_LARGE_DISTANCE = KNOCKBACK_DISTANCE * 2; // 32
+
+// A knockback hit that lands on a mounted rider has this chance of jarring
+// them clean out of the saddle -- the shove throws the rider, the mecha stays
+// put (see the dismount roll in dealHit's knockback block).
+export const KNOCKBACK_DISMOUNT_CHANCE = 0.6;
 
 export function slugKnockbackDistance(type, causesKnockback) {
   if (type === "Metal") return causesKnockback ? KNOCKBACK_SHORT_DISTANCE * 2 : KNOCKBACK_SHORT_DISTANCE;
@@ -253,7 +255,10 @@ export function reverseMoveDestination(from, to) {
 // never reach this branch of dealHit to begin with), instantly trades the
 // shooter's and target's map positions. No numbers to tune here -- it's a
 // straight swap of two already-legal positions, so there's nothing to wall-
-// check or clamp to map bounds either. See the swapsPosition block in
+// check or clamp to map bounds either. If the target was riding a mecha (and
+// the shooter is on foot), the swap also hijacks the ride: the shooter lands
+// in the saddle the target just occupied and the target is dumped on the
+// ground at the shooter's old spot. See the swapsPosition block in
 // routes/combat.js's dealHit.
 
 // -- Psi: friction_shift picks (via the same offer.effectChoice the shoot
@@ -801,17 +806,31 @@ export function clampToMapBounds(point, mapWidth, mapHeight) {
 
 // -- Speedstinger: generalizes Electricity's "chain" trait to any type via
 // causesChain (see TYPE_BALLISTICS's trait === "chain" check), *and* adds a
-// second, independent "ricochet" flag: after a primary hit actually lands
-// (uncountered, or countered but the attacker still won the clash), the same
-// full-power shot continues on to a second nearby target, who gets their own
-// completely separate counter-clash opportunity -- unlike the chain arc
-// (fixed half power, never counterable), a ricochet is exactly as
-// counterable and as strong as the original shot, just visually launched
-// from the first target's position instead of the shooter's. Only bounces
-// once (B -> C, not C -> D...). Reuses findChainTarget's own search (fixed
-// below to a real map-scale radius -- it was still using a pre-RANGE_SCALE
-// literal).
-export const CHAIN_RADIUS = 32 * RANGE_SCALE; // 4x the original 8 -- shared by both the chain arc and Speedstinger's ricochet search
+// second, independent "ricochet" flag: after a shot connects, the same
+// full-power shot caroms on to another target, who gets their own completely
+// separate counter-clash opportunity -- unlike the chain arc (fixed half
+// power, never counterable), a ricochet is exactly as counterable and as
+// strong as the original shot, just visually launched from the hit target's
+// position instead of the shooter's. A shot "connects" for this purpose when
+// it's uncountered (hit OR miss -- the bolt still glances off), when it's
+// countered but the attacker still wins the clash, *and* when Speedstinger
+// is the counter slug and wins -- the reflected shot caroms off the attacker
+// on to another enemy, owned by the defender.
+//
+// It bounces RICOCHET_MAX_BOUNCES times total (each leg carries its own
+// ricochetCount; the chain stops when that reaches the cap, or when a wall
+// blocks a leg, or a clash bounces one dead). Each leg's target is the
+// nearest combatant to the bounce point that isn't the shooter -- with no
+// range cap ("always the closest") -- preferring one other than the target
+// it's leaving, but falling back to that same target when it's the only one
+// left (so a 1v1 still ping-pongs the full count). A target hit early in the
+// chain is fair game again on a later bounce.
+//
+// Reuses findChainTarget's own search (fixed below to a real map-scale
+// radius -- it was still using a pre-RANGE_SCALE literal -- though the
+// ricochet path opts out of that radius entirely).
+export const CHAIN_RADIUS = 32 * RANGE_SCALE; // 4x the original 8 -- the chain arc's search radius (the ricochet passes maxRadius: Infinity instead)
+export const RICOCHET_MAX_BOUNCES = 4; // Speedstinger: caroms this many times after the shot first connects
 
 // -- Zeus: shrinks the counter-clash window (and, for free, the projectile's
 // own flight time -- the client's bolt speed is already driven directly off

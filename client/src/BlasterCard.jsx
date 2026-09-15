@@ -26,12 +26,24 @@ export default function BlasterCard({
   onDropMod,
 }) {
   const [modDragOver, setModDragOver] = useState(false);
+  const [replaceDragOverModId, setReplaceDragOverModId] = useState(null);
   const quality = qualityInfo(blaster.quality);
   const accuracy = effectiveAccuracy(blaster, equippedMods);
   const reloadApCost = effectiveReloadApCost(blaster, equippedMods);
   const openSlots = Math.max(0, blaster.modSlots - equippedMods.length);
   const equipSlotLabel = blaster.equipSlot != null ? EQUIP_SLOT_LABELS[blaster.equipSlot] : null;
-  const acceptsModDrop = editableSlots && Boolean(onDropMod) && openSlots > 0;
+  const canDropMods = editableSlots && Boolean(onDropMod);
+  const acceptsModDrop = canDropMods && openSlots > 0;
+
+  // Dropping a mod onto a filled slot swaps it out -- no need to unequip first.
+  function handleReplaceDrop(occupantModId, e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setReplaceDragOverModId(null);
+    setModDragOver(false);
+    const modId = Number(e.dataTransfer.getData("text/plain"));
+    if (Number.isInteger(modId) && modId !== occupantModId) onDropMod?.(modId, occupantModId);
+  }
   const effectNote = BASE_TYPE_EFFECT_NOTES[blaster.baseType];
 
   return (
@@ -120,9 +132,22 @@ export default function BlasterCard({
         >
           {equippedMods.map((mod) => (
             <div
-              className="blaster-card-slot blaster-card-slot--filled"
+              className={`blaster-card-slot blaster-card-slot--filled ${replaceDragOverModId === mod.id ? "blaster-card-slot--dragover" : ""}`}
               key={mod.id}
               onClick={editableSlots ? (e) => { e.stopPropagation(); onUnequipMod?.(mod); } : undefined}
+              onDragOver={
+                canDropMods
+                  ? (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.dataTransfer.dropEffect = "move";
+                      setReplaceDragOverModId(mod.id);
+                      setModDragOver(false);
+                    }
+                  : undefined
+              }
+              onDragLeave={canDropMods ? () => setReplaceDragOverModId((prev) => (prev === mod.id ? null : prev)) : undefined}
+              onDrop={canDropMods ? (e) => handleReplaceDrop(mod.id, e) : undefined}
               title={editableSlots ? `Unequip ${mod.name}` : mod.name}
             >
               <WrenchIcon weight="bold" />

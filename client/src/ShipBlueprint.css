@@ -1,8 +1,8 @@
 .ship-wrap {
-  /* At least 80% of the viewport once there's room for it, so the deck plan
-     opens up on wide / ultrawide screens instead of staying boxed at 1100px.
-     Never wider than the page's own content box. */
-  width: min(100%, max(1100px, 80vw));
+  /* Deck plan spans ~90% of the viewport at every window size (no fixed
+     max), so it opens right up on wide / ultrawide screens. `100%` only
+     wins on a sub-400px screen, where it just prevents overflow. */
+  width: min(100%, 90vw);
   margin: 0 auto;
 }
 
