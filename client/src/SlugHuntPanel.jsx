@@ -8,9 +8,10 @@ import { PLANETS } from "./planetData.js";
 import "./Panel.css";
 import "./SlugHuntPanel.css";
 
-// The party hunts on one of the system's eight charted worlds -- shared with
-// the Galaxy Map (see planetData.js). The index is campaign_settings
-// .slug_hunt_area, kept in sync with slugHuntOdds.json's `areas`.
+// The party hunts on one of the charted worlds across the Three Clusters --
+// shared with the Galaxy Map (see planetData.js). The index is
+// campaign_settings.slug_hunt_area, kept in sync with slugHuntOdds.json's
+// `areas`.
 const AREAS = PLANETS;
 
 export default function SlugHuntPanel({ isDungeonMaster = false }) {
@@ -150,10 +151,19 @@ export default function SlugHuntPanel({ isDungeonMaster = false }) {
                 value={areaIndex}
                 onChange={(e) => setArea(Number(e.target.value))}
               >
-                {AREAS.map((a, i) => (
-                  <option key={a.name} value={i}>
-                    {`${i + 1} — ${a.name}`}
-                  </option>
+                {Object.entries(
+                  AREAS.reduce((groups, a, i) => {
+                    (groups[a.clusterName] ??= []).push({ ...a, index: i });
+                    return groups;
+                  }, {})
+                ).map(([clusterName, worlds]) => (
+                  <optgroup key={clusterName} label={clusterName}>
+                    {worlds.map((a) => (
+                      <option key={a.name} value={a.index}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
               <button
@@ -281,7 +291,8 @@ export default function SlugHuntPanel({ isDungeonMaster = false }) {
             >
               <XIcon weight="bold" />
             </button>
-            <h2>{`${areaIndex + 1} — ${area.name}`}</h2>
+            <p className="slughunt-area-modal-kicker">{area.clusterName}</p>
+            <h2>{area.name}</h2>
             <p className="slughunt-area-modal-body">{area.blurb}</p>
           </div>
         </div>

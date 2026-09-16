@@ -22,7 +22,7 @@ function requireDungeonMaster(req, res, next) {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ODDS_PATH = path.join(__dirname, "..", "data", "slugHuntOdds.json");
 
-// { areas: [...8 names], oddsByArea: { [name]: [{name,type,chance}] } } --
+// { areas: [...17 names], oddsByArea: { [name]: [{name,type,chance}] } } --
 // generated from docs/Slugs - OG Slugs.csv, same source as the client copy
 // at client/src/slugHuntOdds.json. A distribution per area summing to ~100%.
 let ODDS = { areas: [], oddsByArea: {} };

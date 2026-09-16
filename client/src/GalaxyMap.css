@@ -18,6 +18,61 @@
   fill: none;
   stroke: rgba(205, 214, 255, 0.16);
   stroke-width: 1;
+  opacity: 1;
+  transition: opacity 0.6s var(--ease-out);
+}
+
+.galaxy-orbit--hidden {
+  opacity: 0;
+}
+
+.galaxy-cluster {
+  transition: opacity 0.25s var(--ease-out);
+  outline: none;
+}
+
+.galaxy-cluster--back {
+  cursor: pointer;
+}
+
+.galaxy-cluster--back:hover .galaxy-orbit,
+.galaxy-cluster--back:focus-visible .galaxy-orbit {
+  stroke: rgba(205, 214, 255, 0.32);
+}
+
+.galaxy-cluster-star-hit {
+  cursor: pointer;
+}
+
+.galaxy-cluster-label {
+  fill: var(--ink-dim);
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-anchor: middle;
+  letter-spacing: 0.5px;
+  paint-order: stroke;
+  stroke: #07070b;
+  stroke-width: 4;
+  pointer-events: none;
+  outline: none;
+}
+
+.galaxy-cluster-label--focused {
+  fill: var(--gold-soft);
+}
+
+.galaxy-cluster-label--back {
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.galaxy-cluster-label--back:hover,
+.galaxy-cluster-label--back:focus-visible {
+  fill: var(--ink);
+}
+
+.galaxy-star-glow {
+  pointer-events: none;
 }
 
 .galaxy-sun {
@@ -25,13 +80,46 @@
   animation: galaxy-sun-pulse 6s var(--ease-out) infinite;
 }
 
-.galaxy-sun-glow {
+.galaxy-star--red-giant .galaxy-star-glow {
   animation: galaxy-sun-pulse 6s var(--ease-out) infinite;
 }
+
+.galaxy-star--binary circle {
+  filter: drop-shadow(0 0 14px rgba(207, 232, 255, 0.5));
+}
+
+.galaxy-accretion-disc {
+  filter: drop-shadow(0 0 10px rgba(192, 123, 255, 0.5));
+}
+
 
 @keyframes galaxy-sun-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.82; }
+}
+
+.galaxy-threshold {
+  cursor: pointer;
+  outline: none;
+}
+
+.galaxy-threshold-debris {
+  pointer-events: none;
+}
+
+.galaxy-debris-piece {
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 0.4;
+}
+
+.galaxy-debris-spark {
+  fill: #e8c98a;
+  opacity: 0.85;
+  filter: drop-shadow(0 0 2px rgba(232, 201, 138, 0.8));
+}
+
+.galaxy-threshold-label {
+  font-size: 12px;
 }
 
 .galaxy-planet {
@@ -221,8 +309,12 @@
 
 @media (prefers-reduced-motion: reduce) {
   .galaxy-sun,
-  .galaxy-sun-glow,
+  .galaxy-star--red-giant .galaxy-star-glow,
   .galaxy-planet--party .galaxy-planet-ring {
     animation: none;
+  }
+
+  .galaxy-orbit {
+    transition: none;
   }
 }

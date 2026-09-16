@@ -167,12 +167,13 @@ router.get("/", async (req, res) => {
   }
 });
 
-// The DM points the party at one of the eight layers (0-7) -- drives the
-// dashboard Slug Hunt panel for everyone (see client SlugHuntPanel.jsx).
+// The DM points the party at one of the 17 charted worlds across the Three
+// Clusters (0-16, flat index -- see client planetData.js's PLANETS) -- drives
+// the dashboard Slug Hunt panel for everyone (see client SlugHuntPanel.jsx).
 router.post("/slug-hunt-area", requireDungeonMaster, async (req, res) => {
   const area = Number(req.body?.area);
-  if (!Number.isInteger(area) || area < 0 || area > 7) {
-    return res.status(400).json({ error: "Area must be a whole number between 0 and 7." });
+  if (!Number.isInteger(area) || area < 0 || area > 16) {
+    return res.status(400).json({ error: "Area must be a whole number between 0 and 16." });
   }
   try {
     await pool.query("UPDATE campaign_settings SET slug_hunt_area = $1 WHERE id = 1", [area]);
