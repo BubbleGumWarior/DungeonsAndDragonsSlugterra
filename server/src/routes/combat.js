@@ -38,6 +38,8 @@ import {
   typeBallistics,
   COUNTER_WINDOW_MS,
   shotFlightMs,
+  shotTooClose,
+  SHOT_SLOW_PHASE_MS,
   shotDistanceFraction,
   lerpPoint,
   isSupportiveSlug,
@@ -3470,25 +3472,41 @@ async function resolveCounterOffer(id, chosenSlugId) {
   const firesVoided =
     (offer.slug.voids_fire_clash && counterSlugRow.type === "Fire") ||
     (counterSlugRow.voids_fire_clash && offer.slug.type === "Fire");
-  const outcome = firesVoided
-    ? "bounce"
-    : resolveClash({
-        attackerPower: offer.slug.clash_power * attackerClashMultiplier,
-        attackerDefense: offer.slug.clash_defense * attackerClashMultiplier,
-        defenderPower: counterSlugRow.clash_power * defenderClashMultiplier,
-        defenderDefense: counterSlugRow.clash_defense * defenderClashMultiplier,
-      });
 
-  // Where the two bolts actually meet. The incoming shot has been in the
-  // air for counterAtMs by the time the counter launches (clamped to the
-  // flight window); from wherever it had got to, both bolts close the
-  // remaining gap and collide halfway. A snappy reaction meets the shot far
-  // from the defender, a last-instant one almost on top of them -- instead
-  // of always colliding at the geometric midpoint. Drives both where the
-  // clash renders (client) and where a losing pod-spawner drops its pods.
+  // Where the two bolts actually meet, and how much flight time that leaves
+  // the counter slug itself. The incoming shot has been in the air for
+  // counterAtMs by the time the counter launches (clamped to the flight
+  // window); from wherever it had got to, both bolts close the remaining
+  // gap and collide halfway. A snappy reaction meets the shot far from the
+  // defender, a last-instant one almost on top of them -- instead of always
+  // colliding at the geometric midpoint. Drives both where the clash
+  // renders (client) and where a losing pod-spawner drops its pods.
   const counterAtMs = Math.max(0, Math.min(offer.windowMs, Date.now() - offer.firedAt));
   const shotPosAtCounter = lerpPoint(offer.attackerPos, offer.impactPoint, shotDistanceFraction(counterAtMs, offer.windowMs));
   const clashPoint = lerpPoint(shotPosAtCounter, offer.impactPoint, 0.5);
+
+  // The counter slug has the same fixed windup as any other shot (see
+  // SHOT_SLOW_PHASE_MS / shotTooClose) -- reacting doesn't launch it already
+  // up to speed. The clash always lands at offer.windowMs regardless of when
+  // the counter fired (see above), so counterFlightMs is exactly how long
+  // the counter slug itself has, start to clash. React late enough that
+  // this dips under the windup and the counter slug never actually gets
+  // moving in time: it loses the clash outright, whatever its own
+  // power/defense would otherwise have done -- there's nothing there yet to
+  // smother a voided fire clash or bounce off of, either.
+  const counterFlightMs = offer.windowMs - counterAtMs;
+  const counterNeverWoundUp = counterFlightMs < SHOT_SLOW_PHASE_MS;
+
+  const outcome = counterNeverWoundUp
+    ? "attacker-wins"
+    : firesVoided
+      ? "bounce"
+      : resolveClash({
+          attackerPower: offer.slug.clash_power * attackerClashMultiplier,
+          attackerDefense: offer.slug.clash_defense * attackerClashMultiplier,
+          defenderPower: counterSlugRow.clash_power * defenderClashMultiplier,
+          defenderDefense: counterSlugRow.clash_defense * defenderClashMultiplier,
+        });
 
   // The clash math (who wins) is "the direction" -- fine to know and reveal
   // right away. What it actually *does* (ejects, damage) is held back for
@@ -3528,7 +3546,9 @@ async function resolveCounterOffer(id, chosenSlugId) {
         mindScrambleEffect: offer.effectChoice,
         frictionEffect: offer.effectChoice,
       });
-      log = `${offer.attackerName}'s ${offer.slug.name} smashes through ${offer.targetName}'s counter! ${hitLog}`;
+      log = counterNeverWoundUp
+        ? `${offer.targetName}'s ${counterSlugRow.name} never gets up to speed before ${offer.attackerName}'s ${offer.slug.name} smashes through! ${hitLog}`
+        : `${offer.attackerName}'s ${offer.slug.name} smashes through ${offer.targetName}'s counter! ${hitLog}`;
       // B's counter didn't actually stop the shot (it still connected) --
       // Speedstinger's ricochet continues on to a second target exactly like
       // an uncontested hit would.
@@ -3964,6 +3984,32 @@ router.post("/actions/shoot", async (req, res) => {
     // raw stored value (see itemRules.js) rather than migrated.
     const combinedRange = Math.max(blaster.range, tb.range);
     const dist = distance(attackerPos, targetPos);
+
+    // Point-blank failure: at this weapon's own default speed (see
+    // shotFlightMs), the target is close enough that the shot would have to
+    // land before the slug even finishes its fixed windup out of the
+    // barrel. That can't happen -- the windup never compresses -- so the
+    // shot just fails outright instead, exactly like a jam (no launch, no
+    // counter offered). Being too close is bad.
+    if (shotTooClose(dist, blaster.range)) {
+      broadcastShotFx({
+        fxId,
+        attackerCombatantId: attacker.id,
+        targetCombatantId: target.id,
+        attackerPos,
+        targetPos: attackerPos,
+        impactPoint: attackerPos,
+        slug,
+        windowMs: 0,
+        outcome: "too-close",
+      });
+      await pushCombatLog(
+        attacker.encounter_id,
+        `${attacker.name}'s ${slug.name} is fired at point-blank range -- it never has time to arm before it'd hit, and the shot fizzles!`
+      );
+      const encounter = await broadcastEncounter(attacker.encounter_id);
+      return res.json({ pending: false, encounter });
+    }
 
     // Neither running out of range nor a wall in the way rejects the shot or
     // tells the shooter why -- it always fires, always costs the AP/energy,

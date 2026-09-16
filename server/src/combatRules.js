@@ -544,19 +544,36 @@ export const SHOT_FLIGHT_MS = SHOT_SLOW_PHASE_MS + SHOT_FAST_PHASE_MS; // 3330ms
 export const COUNTER_WINDOW_MS = SHOT_FLIGHT_MS; // 3330ms
 
 // A shot's *actual* flight time (and so its reaction window, which always
-// matches it) scales down for a target that's close relative to the
-// equipped weapon's own range -- a long-reach weapon (e.g. a Sniper Rig)
-// makes a close shot feel snappy, a short-reach weapon stays at the full
-// fixed duration even at short range. Scales on the weapon's own range, not
-// the type-vs-weapon combinedRange used for reach -- that's what actually
-// ties *speed* specifically to the equipped weapon. Never drops below
-// SHOT_MIN_SPEED_FRACTION of the full flight, so even a point-blank shot is
-// still readable.
-export const SHOT_MIN_SPEED_FRACTION = 0.35;
-
+// matches it) is driven by the equipped weapon's own default speed: a shot
+// at exactly the weapon's max range takes the full COUNTER_WINDOW_MS (the
+// old fixed duration every shot used to take, no matter its distance) --
+// so that duration *is* "how long it takes to cross this weapon's max
+// range" now, and anything closer arrives faster. A long-reach weapon (e.g.
+// a Sniper Rig) is therefore a strictly faster weapon than a short-reach one
+// at the same absolute distance, not just a farther-reaching one. Scales on
+// the weapon's own range, not the type-vs-weapon combinedRange used for
+// reach -- that's what actually ties *speed* specifically to the equipped
+// weapon. Never exceeds the full COUNTER_WINDOW_MS (a shot can't outrange
+// its own weapon here); there's no floor at the close end any more -- see
+// shotTooClose below for what replaces it.
 export function shotFlightMs(dist, weaponRange) {
-  const fraction = Math.max(SHOT_MIN_SPEED_FRACTION, Math.min(1, dist / Math.max(1, weaponRange)));
+  const fraction = Math.min(1, dist / Math.max(1, weaponRange));
   return Math.round(COUNTER_WINDOW_MS * fraction);
+}
+
+// The slug's windup -- the slow crawl out of the blaster, SHOT_SLOW_PHASE_MS
+// -- is a fixed animation beat, never compressed to fit a shorter flight.
+// That means there's a hard floor on how close a target can be and still
+// get a normal shot: if the weapon's default speed would cross the distance
+// in less time than the windup alone takes, the slug would have to land
+// before it even finishes leaving the barrel. Rather than compress the
+// windup (breaking the "always constant" rule) or let the shot land
+// instantly, that shot just fails outright -- too close, full stop. Checked
+// against the raw distance-based flight time, not the target's own
+// reaction-window modifiers (ultra_fast/reactionWindowFactor) -- those
+// change how hard the shot is to react to, not the physical travel time.
+export function shotTooClose(dist, weaponRange) {
+  return shotFlightMs(dist, weaponRange) < SHOT_SLOW_PHASE_MS;
 }
 
 // The client's ShotEffect animation always plays for windowMs *
@@ -737,6 +754,14 @@ export function firstWallHit(from, to, walls, ignoreWallIds = []) {
     if (ignoreWallIds.includes(wall.id)) continue;
     const hit = segmentIntersection(from, to, { x: wall.x1, y: wall.y1 }, { x: wall.x2, y: wall.y2 });
     if (!hit) continue;
+    // A hit at t ~ 0 means `from` itself sits on the wall's line -- e.g. a
+    // fire-trail/star wall drawn right through the shooter's and target's own
+    // squares (see addTrailWall/formStarWall in routes/combat.js), or a DM
+    // wall dragged onto an occupied tile. That must never block leaving the
+    // spot you're already standing on, or a combatant on that exact point
+    // gets permanently walled in with no way to move. Only a wall actually
+    // crossed partway along the path blocks it.
+    if (hit.t < 1e-6) continue;
     if (!nearest || hit.t < nearest.hit.t) {
       nearest = { wall, hit };
     }

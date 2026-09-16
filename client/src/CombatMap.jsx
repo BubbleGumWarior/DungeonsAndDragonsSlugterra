@@ -28,6 +28,8 @@ function playShotSound(sliderVolume) {
 //   hazard -- a hazard area was created, at the moment it appears
 //   geyser -- a Pressure Tick steam pod fired
 //   zeus   -- a Zeus slug was shot; plays once the launch sound has finished
+//   self   -- a slug fired at the shooter's own combatant, in place of the
+//             normal launch sound (see the isSelfShot check below)
 // Filenames are capital-cased to match the actual files in client/public/ --
 // Vite's static serving is case-sensitive (a lowercase miss falls through to
 // the SPA's index.html, which then can't be decoded as audio).
@@ -39,6 +41,7 @@ const COMBAT_SFX = {
   hazard: "/Hazard.mp3",
   geyser: "/Geyser.mp3",
   zeus: "/Zeus.mp3",
+  self: "/Self.mp3",
 };
 function playCombatSfx(name, sliderVolume) {
   const src = COMBAT_SFX[name];
@@ -179,12 +182,17 @@ function ShotEffect({ fx, onDone }) {
   const revealElapsedRef = useRef(null);
   const settleFromRef = useRef(null);
 
-  const isJam = fx.outcome === "jam";
+  // A jam (random misfire) and a too-close failure (the target's inside the
+  // weapon's fixed windup distance -- see shotTooClose in combatRules.js)
+  // both mean the same thing visually: nothing ever left the barrel. Both
+  // arrive as a single self-contained combat-shot-fx with the outcome
+  // already set, no flight, no counter.
+  const isJam = fx.outcome === "jam" || fx.outcome === "too-close";
   const totalMs = Math.max(400, (fx.windowMs || SHOT_FLIGHT_MS) * SHOT_FLIGHT_MULTIPLIER);
 
   // Freeze the reveal state the first frame the outcome is known (for an
-  // ordinary, uncontested shot -- a jam is self-contained, and a countered
-  // shot has its own choreography).
+  // ordinary, uncontested shot -- a jam/too-close failure is self-contained,
+  // and a countered shot has its own choreography).
   if (fx.outcome != null && !isJam && !fx.countered && revealElapsedRef.current == null) {
     revealElapsedRef.current = elapsed;
     settleFromRef.current = lastBoltPosRef.current;
@@ -744,11 +752,13 @@ export default function CombatMap({
       at: performance.now(),
       totalMs: Math.max(400, (shotFx.windowMs || SHOT_FLIGHT_MS) * SHOT_FLIGHT_MULTIPLIER),
     });
-    if (shotFx.outcome === "jam") {
+    if (shotFx.outcome === "jam" || shotFx.outcome === "too-close") {
       setMisfireFlash(true);
       setTimeout(() => setMisfireFlash(false), 3000);
-      // The shot completely failed -- nothing left the barrel. No launch
-      // sound (nothing flew); the misfire gets its own sound instead.
+      // The shot completely failed -- nothing left the barrel, whether from
+      // a random misfire (jam) or from being fired too close to arm (see
+      // shotTooClose in combatRules.js). No launch sound (nothing flew);
+      // the failure gets its own sound instead.
       playCombatSfx("fail", sfxVolume("fail"));
     } else if (shotFx.pod) {
       // A Pressure Tick steam pod going off -- its own sound, not a slug
@@ -756,10 +766,16 @@ export default function CombatMap({
       playCombatSfx("geyser", sfxVolume("geyser"));
     } else {
       // The slug actually left the blaster -- play the launch sound. Not on
-      // a jam/misfire, since then it never went anywhere.
-      playShotSound(soundVolume);
+      // a jam/misfire, since then it never went anywhere. A self-targeted
+      // shot (same isSelfShot convention as routes/combat.js) is a self-buff,
+      // not an attack, so it gets its own distinct cue instead.
+      if (shotFx.attackerId != null && shotFx.attackerId === shotFx.targetId) {
+        playCombatSfx("self", sfxVolume("self"));
+      } else {
+        playShotSound(soundVolume);
+      }
       // Zeus flies as a blur -- its own thunderclap follows once the launch
-      // sound has run its course.
+      // sound has run its course, self-targeted or not.
       if (shotFx.slugName === "Zeus") {
         setTimeout(() => playCombatSfx("zeus", sfxVolume("zeus")), SOUND_DURATION_MS);
       }

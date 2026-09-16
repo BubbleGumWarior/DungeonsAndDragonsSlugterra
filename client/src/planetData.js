@@ -27,28 +27,33 @@ export const CLUSTERS = [
     starType: "red-giant",
     blurb:
       "Orbiting a dying red giant. The Combine built its wealth and reputation on two things: the Yoke — a discipline that lets a Threxan fully bind and control a bonded slug — and the hunting culture that grew out of it. Civilian slug ownership is banned throughout their territory; Yoked slugs run their industry, their labor, and their military. They are widely feared, openly transactional, and will do business with almost anyone who can pay.",
+    // Ordered inner -> outer by how hot/livable each world's own description
+    // implies it is: volcanic/geyser/geothermal worlds closest to the dying
+    // giant, then the industrial and capital worlds, with the open grassland
+    // reserve -- the one world that actually needs mild, plant-friendly
+    // conditions -- farthest out.
     worlds: [
-      {
-        name: "Kessa-9",
-        color: "#b7c25a",
-        orbitRx: 70,
-        orbitRy: 43,
-        sizeR: 14,
-        periodSec: 55,
-        phaseDeg: 20,
-        blurb:
-          "Open grassland rolls to every horizon under Threxa's dim red sky, kept deliberately without roads, towers, or permanent settlement. The Combine polices it just enough to keep the hunting grounds pristine — sanctioned parties come and go, and the tall grass never quite loses the smell of old blood. Slugs run wild here in numbers found almost nowhere else in the Expanse, which is exactly the point.",
-      },
       {
         name: "Cindrath",
         color: "#d5623c",
+        orbitRx: 70,
+        orbitRy: 43,
+        sizeR: 15,
+        periodSec: 55,
+        phaseDeg: 140,
+        blurb:
+          "A volcanic world of black glass ridges and slow rivers of lava, chosen for Threxa's fleet command precisely because nothing grows here to get in the way. Warden recruits drill on obstacle courses laid over cooling flow fields, the heat a constant test of endurance. Command spires rise from the ash-fall like teeth, lit orange from below.",
+      },
+      {
+        name: "Pyrsis Barrens",
+        color: "#c9a98f",
         orbitRx: 108,
         orbitRy: 67,
         sizeR: 15,
         periodSec: 85,
-        phaseDeg: 140,
+        phaseDeg: 80,
         blurb:
-          "A volcanic world of black glass ridges and slow rivers of lava, chosen for Threxa's fleet command precisely because nothing grows here to get in the way. Warden recruits drill on obstacle courses laid over cooling flow fields, the heat a constant test of endurance. Command spires rise from the ash-fall like teeth, lit orange from below.",
+          "A flat, scalding expanse of geysers and mineral crust, used almost exclusively as a Threxa labor camp. Steam rolls low and constant, swallowing sound and sight past a few dozen metres, and the ground is never quite as solid as it looks. Nobody is sent here who has a choice in the matter.",
       },
       {
         name: "Ashfall Rift",
@@ -62,15 +67,15 @@ export const CLUSTERS = [
           "Steep, geothermal-scarred mountains vent steam and heat from fissures that never quite close. An occupied population works the mineral seams under Threxa oversight, terraces and rope-bridges strung between ridgelines heavy with drifting ash. The air tastes of sulfur and effort.",
       },
       {
-        name: "Pyrsis Barrens",
-        color: "#c9a98f",
+        name: "Vorn's Forge",
+        color: "#8f97a3",
         orbitRx: 184,
         orbitRy: 114,
-        sizeR: 15,
+        sizeR: 16,
         periodSec: 150,
-        phaseDeg: 80,
+        phaseDeg: 320,
         blurb:
-          "A flat, scalding expanse of geysers and mineral crust, used almost exclusively as a Threxa labor camp. Steam rolls low and constant, swallowing sound and sight past a few dozen metres, and the ground is never quite as solid as it looks. Nobody is sent here who has a choice in the matter.",
+          "A shipyard world humming with industrial scale — hulls under construction, cargo lifters, and processing floors where captured slugs are bonded and yoked before shipping out across the Expanse. The work never stops; neither does the noise.",
       },
       {
         name: "The Wellspring",
@@ -84,15 +89,15 @@ export const CLUSTERS = [
           "The Combine's capital, raised inside ruins far older than Threxa itself — vast stone halls whose builders nobody now remembers. At its heart sits the Grand Coliseum, where sanctioned hunts and duels are broadcast across the whole Expanse. Power here runs on spectacle as much as on the Yoke.",
       },
       {
-        name: "Vorn's Forge",
-        color: "#8f97a3",
+        name: "Kessa-9",
+        color: "#b7c25a",
         orbitRx: 260,
         orbitRy: 161,
-        sizeR: 16,
+        sizeR: 14,
         periodSec: 230,
-        phaseDeg: 320,
+        phaseDeg: 20,
         blurb:
-          "A shipyard world humming with industrial scale — hulls under construction, cargo lifters, and processing floors where captured slugs are bonded and yoked before shipping out across the Expanse. The work never stops; neither does the noise.",
+          "Open grassland rolls to every horizon under Threxa's dim red sky, kept deliberately without roads, towers, or permanent settlement. The Combine polices it just enough to keep the hunting grounds pristine — sanctioned parties come and go, and the tall grass never quite loses the smell of old blood. Slugs run wild here in numbers found almost nowhere else in the Expanse, which is exactly the point.",
       },
     ],
   },
@@ -103,14 +108,39 @@ export const CLUSTERS = [
     starType: "binary",
     blurb:
       "Orbiting a close binary star pair. The Concord isn't a military power — it's a trade alliance, plural and pragmatic, that does business with everyone, Threxa included, and stays carefully neutral in anything it calls \"internal\" to another power's affairs. Wealth and access matter more here than ideology.",
+    // Ordered inner -> outer by how much each world's description leans on
+    // the binary pair's light and warmth: jungle and farmland need it most,
+    // the finance world -- all towers and paperwork, "coldly fair" -- least.
     worlds: [
+      {
+        name: "Virid Canopy",
+        color: "#6fae55",
+        orbitRx: 80,
+        orbitRy: 50,
+        sizeR: 17,
+        periodSec: 60,
+        phaseDeg: 170,
+        blurb:
+          "A dense jungle world held as a Concord resource concession, its endless canopy worked for timber and rare compounds found nowhere else. Extraction crews clear paths that the forest reclaims within a season. Under all that green, something is always still growing back.",
+      },
+      {
+        name: "Solenne",
+        color: "#d0c26a",
+        orbitRx: 122,
+        orbitRy: 76,
+        sizeR: 13,
+        periodSec: 95,
+        phaseDeg: 250,
+        blurb:
+          "Wide cultivated fields and orchard terraces stretch under the soft double daylight of the binary pair, supplying much of the Lattice's food. Life here is unhurried and practical, the kind of place that quietly keeps an entire trade alliance fed.",
+      },
       {
         name: "Maren's Deep",
         color: "#3f8fc4",
-        orbitRx: 80,
-        orbitRy: 50,
+        orbitRx: 165,
+        orbitRy: 102,
         sizeR: 15,
-        periodSec: 60,
+        periodSec: 135,
         phaseDeg: 10,
         blurb:
           "An ocean world with no true land, its long-settled population living in floating city-states that rise and fall gently on the swell. Government, history, and old grudges all run deep here, independent of the Concord that nominally hosts them. Light off the twin suns scatters silver across open water in every direction.",
@@ -118,46 +148,24 @@ export const CLUSTERS = [
       {
         name: "Aurelia Docks",
         color: "#cbb98a",
-        orbitRx: 122,
-        orbitRy: 76,
+        orbitRx: 207,
+        orbitRy: 128,
         sizeR: 16,
-        periodSec: 95,
+        periodSec: 175,
         phaseDeg: 130,
         blurb:
           "A sprawling shipyard-and-market world treated as neutral ground by every power in the Three Clusters. Threxan agents, Dominion officers, Concord traders, and plenty of people who'd rather not say who they work for all do business here in the open. If it can be bought, sold, or smuggled, it passes through the Docks eventually.",
       },
       {
-        name: "Solenne",
-        color: "#d0c26a",
-        orbitRx: 165,
-        orbitRy: 102,
-        sizeR: 13,
-        periodSec: 135,
-        phaseDeg: 250,
-        blurb:
-          "Wide cultivated fields and orchard terraces stretch under the soft double daylight of the binary pair, supplying much of the Lattice's food. Life here is unhurried and practical, the kind of place that quietly keeps an entire trade alliance fed.",
-      },
-      {
         name: "Kethrun Reach",
         color: "#5b8a8f",
-        orbitRx: 207,
-        orbitRy: 128,
+        orbitRx: 250,
+        orbitRy: 155,
         sizeR: 12,
-        periodSec: 175,
+        periodSec: 220,
         phaseDeg: 40,
         blurb:
           "A world of towers, ledgers, and courts — the place to go for contracts, shipping law, and ownership disputes across the Lattice. Nothing moves here without paperwork, and paperwork here can move mountains. It is scrupulously, coldly fair, which is its own kind of ruthless.",
-      },
-      {
-        name: "Virid Canopy",
-        color: "#6fae55",
-        orbitRx: 250,
-        orbitRy: 155,
-        sizeR: 17,
-        periodSec: 220,
-        phaseDeg: 170,
-        blurb:
-          "A dense jungle world held as a Concord resource concession, its endless canopy worked for timber and rare compounds found nowhere else. Extraction crews clear paths that the forest reclaims within a season. Under all that green, something is always still growing back.",
       },
     ],
   },
@@ -168,17 +176,21 @@ export const CLUSTERS = [
     starType: "black-hole",
     blurb:
       "Orbiting the accretion disc of a black hole. The Dominion is a militarist, expansionist power, openly rivalrous with Threxa over territory and resources rather than ideology. Their economy runs on conscription and total-war production rather than slugs or trade.",
+    // Ordered inner -> outer by proximity to the accretion disc's heat: the
+    // one explicitly warm world (the swamp) sits closest, the icebound
+    // capital -- deliberately hardened by cold and distance -- farthest, with
+    // the border station (watching the *edge* of Dominion space) out near it.
     worlds: [
       {
-        name: "Kaeloth Prime",
-        color: "#a9d6e5",
+        name: "Marrek's Hold",
+        color: "#4f6b4a",
         orbitRx: 80,
         orbitRy: 50,
-        sizeR: 16,
+        sizeR: 15,
         periodSec: 65,
-        phaseDeg: 300,
+        phaseDeg: 190,
         blurb:
-          "An icebound homeworld under the pale, restless light thrown off the accretion disc, its cities built low and armored against the cold. Every street here answers to the Dominion's military command, and every child grows up expecting conscription. It is beautiful in a hard, unforgiving way — glacier-blue, silent, absolutely disciplined.",
+          "A swamp world held under open Dominion occupation, its wetlands threaded with patrol causeways and checkpoint towers. The air is thick, warm, and always faintly toxic; the locals have learned exactly how far they're allowed to go, and no further.",
       },
       {
         name: "Drennow Yards",
@@ -192,15 +204,15 @@ export const CLUSTERS = [
           "An asteroid-belt complex strung with docking scaffolds and foundries, building the Dominion's warships one hull at a time. Rock and metal drift between work sites in slow, engineered orbits, and the accretion disc's glow never quite reaches the shadowed depths between them.",
       },
       {
-        name: "Marrek's Hold",
-        color: "#4f6b4a",
+        name: "Vhalden",
+        color: "#a08a6a",
         orbitRx: 165,
         orbitRy: 102,
-        sizeR: 15,
+        sizeR: 14,
         periodSec: 140,
-        phaseDeg: 190,
+        phaseDeg: 150,
         blurb:
-          "A swamp world held under open Dominion occupation, its wetlands threaded with patrol causeways and checkpoint towers. The air is thick, warm, and always faintly toxic; the locals have learned exactly how far they're allowed to go, and no further.",
+          "A harsh, wind-scoured training world where Dominion conscripts are broken down and rebuilt into soldiers. Obstacle ranges scar the terrain for kilometres in every direction, and the drop in temperature at night is considered part of the curriculum.",
       },
       {
         name: "Ossuary Station",
@@ -214,15 +226,15 @@ export const CLUSTERS = [
           "A fortified outpost bristling with sensor arrays and gun emplacements, watching the border with Threxa space around the clock. Named, the story goes, for what was found drifting nearby when the Dominion first claimed the position. Nothing about it has gotten less grim since.",
       },
       {
-        name: "Vhalden",
-        color: "#a08a6a",
+        name: "Kaeloth Prime",
+        color: "#a9d6e5",
         orbitRx: 250,
         orbitRy: 155,
-        sizeR: 14,
+        sizeR: 16,
         periodSec: 225,
-        phaseDeg: 150,
+        phaseDeg: 300,
         blurb:
-          "A harsh, wind-scoured training world where Dominion conscripts are broken down and rebuilt into soldiers. Obstacle ranges scar the terrain for kilometres in every direction, and the drop in temperature at night is considered part of the curriculum.",
+          "An icebound homeworld under the pale, restless light thrown off the accretion disc, its cities built low and armored against the cold. Every street here answers to the Dominion's military command, and every child grows up expecting conscription. It is beautiful in a hard, unforgiving way — glacier-blue, silent, absolutely disciplined.",
       },
     ],
   },

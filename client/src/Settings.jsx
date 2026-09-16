@@ -53,6 +53,7 @@ const COMBAT_SFX = [
   { id: "hazard", label: "Hazard forms", src: "/Hazard.mp3", sub: "A hazard area created on the battlefield." },
   { id: "geyser", label: "Geyser pod", src: "/Geyser.mp3", sub: "A Pressure Tick pod erupting." },
   { id: "zeus", label: "Zeus thunderclap", src: "/Zeus.mp3", sub: "Follows the launch sound when a Zeus slug is shot." },
+  { id: "self", label: "Self-targeted shot", src: "/Self.mp3", sub: "Plays instead of the launch sound when you target yourself." },
 ];
 const SFX_DEFAULT_VOLUME = 0.5;
 

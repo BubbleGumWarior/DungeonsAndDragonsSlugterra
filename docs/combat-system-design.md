@@ -453,8 +453,9 @@ to react.
 a counter-clash is a Shoot Slug on someone else's turn, so the same blanket
 lockout as §5's `disarmed` check applies. See `findEligibleCounterSlugs`.
 
-**Window duration** is now a flat constant, the same for every shot — no more
-type/quality/dex-driven variability:
+**Window duration** no longer takes type/quality/dex into account — it's
+driven purely by the equipped weapon's own range and the actual shot
+distance:
 ```
 SHOT_SOUND_MS          = 1830ms   // slugterra-velocity.mp3's actual length
 SHOT_TRANSFORM_LEAD_MS = 1000ms   // transforms this much before the sound ends
@@ -466,9 +467,30 @@ COUNTER_WINDOW_MS      = SHOT_FLIGHT_MS   // 3330ms
 Explicit targets the DM asked for: the slug crawls out slowly, then
 "transforms" and covers the rest of the distance in a flat burst — while the
 launch sound is still playing for its last second, not waiting for the sound
-to finish first. The reaction window now runs the *entire* fixed flight
-total (3330ms), by construction — a defender can wait right up until the
-shot would actually land, and never past it.
+to finish first. The reaction window always runs the shot's *entire* flight,
+by construction — a defender can wait right up until the shot would
+actually land, and never past it.
+
+**Speed now depends on range** (`shotFlightMs(dist, weaponRange)` in
+`combatRules.js`): a shot at exactly the equipped weapon's own max range
+takes the full `COUNTER_WINDOW_MS` above — the old fixed duration every shot
+used to take, regardless of distance — and anything closer arrives
+proportionally faster (`windowMs = COUNTER_WINDOW_MS * dist / weaponRange`).
+A longer-range weapon (a Sniper Rig) is therefore a strictly *faster* weapon
+than a short-range one at the same absolute distance, not just a
+farther-reaching one, and its reaction window shrinks to match (harder to
+counter up close).
+
+The windup (`SHOT_SLOW_PHASE_MS`, the slow crawl below) is a fixed animation
+beat that never compresses to fit a shorter flight. That puts a hard floor
+on how close a target can be: if the weapon's default speed would cross the
+distance in less time than the windup alone takes, the slug would have to
+land before it even finishes leaving the barrel. Rather than compress the
+windup or let the shot land instantly, `shotTooClose(dist, weaponRange)`
+catches this and the shot fails outright instead — no launch, no counter
+offered, resolved exactly like a jam (`combat-shot-fx` with
+`outcome: "too-close"`, checked in the Attack flow in `routes/combat.js`
+right after distance is known). **Being too close is bad.**
 
 On the client, a shot's flight animation always plays for
 `windowMs * SHOT_FLIGHT_MULTIPLIER` (currently 1, since the window now *is*
@@ -520,11 +542,28 @@ slow phase, so the launch reads as visibly simultaneous with the sound. See
 `phasedFraction()` in `CombatMap.jsx`, mirrored by `SHOT_SLOW_PHASE_MS`/
 `SHOT_FAST_PHASE_MS`/`COUNTER_WINDOW_MS` in `combatRules.js`.
 
+**The counter slug has the same fixed windup as the original shot.** The clash
+always lands at `offer.windowMs` (the moment the original shot would have
+landed — see above), no matter when the defender actually fires; that leaves
+the counter slug with `counterFlightMs = offer.windowMs - counterAtMs` of its
+own flight time before the collision. If that's less than `SHOT_SLOW_PHASE_MS`
+— the reaction came in late enough that the counter slug can't even finish
+leaving the barrel before the clash — it **loses the clash outright**
+(`shotTooClose`'s same "the windup never compresses" rule, applied to the
+defender's side): forced to `attacker-wins`, skipping the power/defense
+comparison and the fire-void check entirely, since there's no counter slug
+up to speed yet to smother anything or bounce off of. A snappy counter has
+(nearly) the full flight to itself and clashes normally; one thrown right as
+the window is about to close has almost none, and just loses. See
+`counterNeverWoundUp` in `routes/combat.js`.
+
 **Resolution**, once a counter slug is chosen (or the window lapses with no counter):
 
 - **No counter** → normal hit resolution, §5.
-- **Counter chosen** → mutual clash (both sides' `clashPower`/`clashDefense` already
-  include their own loyalty tier's modifier — see "Loyalty tier modifiers" above):
+- **Counter chosen too late to wind up** → **attacker wins automatically**, per above.
+- **Counter chosen (and wound up in time)** → mutual clash (both sides' `clashPower`/
+  `clashDefense` already include their own loyalty tier's modifier — see
+  "Loyalty tier modifiers" above):
   - `attackerWins = attacker.clashPower > defender.clashDefense`
   - `defenderWins = defender.clashPower > attacker.clashDefense`
   - Both true → **double break**: both slugs bounce off, no damage either way, both

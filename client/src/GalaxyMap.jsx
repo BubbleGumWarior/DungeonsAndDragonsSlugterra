@@ -51,7 +51,17 @@ function starField(count) {
 // renders as a scatter of tumbling wreckage fragments instead of a sphere.
 // Generated once from a tiny seeded PRNG so the field is stable across
 // renders.
-const DEBRIS_SHADES = ["#8a6a52", "#6b5643", "#a98a6e", "#5c5c5c", "#7d7d7d", "#4a4038"];
+// Each pair is [lit face, shadowed face] for one hull-fragment tone -- fed to
+// a diagonal per-piece gradient (defined once in <defs>) so every chunk of
+// debris reads as a small beveled block instead of a flat-colored rectangle.
+const DEBRIS_SHADE_PAIRS = [
+  ["#c9a988", "#4a3626"],
+  ["#9c8268", "#332619"],
+  ["#d9c0a3", "#5e4a37"],
+  ["#8f8f8f", "#2b2b2b"],
+  ["#adadad", "#3d3d3d"],
+  ["#736657", "#211c17"],
+];
 function debrisField(radius, count) {
   let seed = 51423;
   const rand = () => {
@@ -67,7 +77,7 @@ function debrisField(radius, count) {
       w: 2.5 + rand() * 6,
       h: 1.5 + rand() * 4,
       rot: rand() * 360,
-      fill: DEBRIS_SHADES[Math.floor(rand() * DEBRIS_SHADES.length)],
+      shadeIndex: Math.floor(rand() * DEBRIS_SHADE_PAIRS.length),
       spark: i % 4 === 0,
     };
   });
@@ -123,16 +133,16 @@ function ClusterStar({ starType, tSec }) {
   if (starType === "binary") {
     const angle = (tSec / 34) * Math.PI * 2;
     const off = 28;
+    const stars = [
+      { cx: off * Math.cos(angle), cy: off * Math.sin(angle) * 0.55, r: 23 },
+      { cx: -off * Math.cos(angle), cy: -off * Math.sin(angle) * 0.55, r: 19 },
+    ].sort((a, b) => a.cy - b.cy); // farther (smaller y) first, nearer (larger y) drawn on top
     return (
       <g className="galaxy-star galaxy-star--binary">
         <circle className="galaxy-star-glow" r={110} fill="url(#galaxy-glow-binary)" />
-        <circle cx={off * Math.cos(angle)} cy={off * Math.sin(angle) * 0.55} r={23} fill="url(#galaxy-star-binary)" />
-        <circle
-          cx={-off * Math.cos(angle)}
-          cy={-off * Math.sin(angle) * 0.55}
-          r={19}
-          fill="url(#galaxy-star-binary)"
-        />
+        {stars.map((s, i) => (
+          <circle key={i} cx={s.cx} cy={s.cy} r={s.r} fill="url(#galaxy-star-binary)" />
+        ))}
       </g>
     );
   }
@@ -354,6 +364,12 @@ export default function GalaxyMap({ isDungeonMaster = false }) {
             <stop offset="55%" stopColor="#ffffff" stopOpacity="0" />
             <stop offset="100%" stopColor="#000000" stopOpacity="0.45" />
           </radialGradient>
+          {DEBRIS_SHADE_PAIRS.map(([lit, shadow], i) => (
+            <linearGradient key={i} id={`galaxy-debris-shade-${i}`} x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor={lit} />
+              <stop offset="100%" stopColor={shadow} />
+            </linearGradient>
+          ))}
         </defs>
 
         <rect x="0" y="0" width={VIEW_W} height={VIEW_H} fill="url(#galaxy-space)" />
@@ -392,7 +408,7 @@ export default function GalaxyMap({ isDungeonMaster = false }) {
                 width={d.w}
                 height={d.h}
                 rx={0.6}
-                fill={d.fill}
+                fill={`url(#galaxy-debris-shade-${d.shadeIndex})`}
                 transform={`rotate(${d.rot} ${d.x} ${d.y})`}
               />
             ))}

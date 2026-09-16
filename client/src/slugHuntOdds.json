@@ -1,336 +1,24 @@
 {
   "areas": [
-    "Kessa-9",
     "Cindrath",
-    "Ashfall Rift",
     "Pyrsis Barrens",
-    "The Wellspring",
+    "Ashfall Rift",
     "Vorn's Forge",
+    "The Wellspring",
+    "Kessa-9",
+    "Virid Canopy",
+    "Solenne",
     "Maren's Deep",
     "Aurelia Docks",
-    "Solenne",
     "Kethrun Reach",
-    "Virid Canopy",
-    "Kaeloth Prime",
-    "Drennow Yards",
     "Marrek's Hold",
-    "Ossuary Station",
+    "Drennow Yards",
     "Vhalden",
+    "Ossuary Station",
+    "Kaeloth Prime",
     "The Threshold"
   ],
   "oddsByArea": {
-    "Kessa-9": [
-      {
-        "name": "Flopper",
-        "type": "None",
-        "chance": 4.9
-      },
-      {
-        "name": "Puffshroom",
-        "type": "Plant",
-        "chance": 4.5
-      },
-      {
-        "name": "Fernwick",
-        "type": "Plant",
-        "chance": 4.1
-      },
-      {
-        "name": "Driftmoth",
-        "type": "Air",
-        "chance": 4.0
-      },
-      {
-        "name": "Dustkin",
-        "type": "Earth",
-        "chance": 3.5
-      },
-      {
-        "name": "Sagebloom",
-        "type": "Plant",
-        "chance": 3.5
-      },
-      {
-        "name": "Tremorock",
-        "type": "Earth",
-        "chance": 3.2
-      },
-      {
-        "name": "Gazzer",
-        "type": "Air",
-        "chance": 3.1
-      },
-      {
-        "name": "Hoverbug",
-        "type": "Air",
-        "chance": 3.1
-      },
-      {
-        "name": "Ventus",
-        "type": "Air",
-        "chance": 3.1
-      },
-      {
-        "name": "Driplet",
-        "type": "Water",
-        "chance": 3.0
-      },
-      {
-        "name": "Ripplet",
-        "type": "Water",
-        "chance": 3.0
-      },
-      {
-        "name": "Vinedrill",
-        "type": "Plant",
-        "chance": 2.9
-      },
-      {
-        "name": "Aquabeek",
-        "type": "Water",
-        "chance": 2.8
-      },
-      {
-        "name": "Dirt Urchin",
-        "type": "Earth",
-        "chance": 2.7
-      },
-      {
-        "name": "Tormato",
-        "type": "Air",
-        "chance": 2.6
-      },
-      {
-        "name": "Bubbaleone",
-        "type": "Water",
-        "chance": 2.3
-      },
-      {
-        "name": "Graspvine",
-        "type": "Plant",
-        "chance": 2.3
-      },
-      {
-        "name": "Crystalyd",
-        "type": "Earth",
-        "chance": 2.2
-      },
-      {
-        "name": "Diggrix",
-        "type": "Earth",
-        "chance": 2.2
-      },
-      {
-        "name": "Hop Rock",
-        "type": "Earth",
-        "chance": 2.2
-      },
-      {
-        "name": "Sand Angler",
-        "type": "Earth",
-        "chance": 2.2
-      },
-      {
-        "name": "Glowdab",
-        "type": "Light",
-        "chance": 2.0
-      },
-      {
-        "name": "Mantis",
-        "type": "Water",
-        "chance": 1.9
-      },
-      {
-        "name": "Geoshard",
-        "type": "Earth",
-        "chance": 1.8
-      },
-      {
-        "name": "Rammstone",
-        "type": "Earth",
-        "chance": 1.8
-      },
-      {
-        "name": "Tidbit",
-        "type": "Healing",
-        "chance": 1.8
-      },
-      {
-        "name": "Pressure Tick",
-        "type": "Water",
-        "chance": 1.5
-      },
-      {
-        "name": "Wisplet",
-        "type": "Unique",
-        "chance": 1.5
-      },
-      {
-        "name": "Caligo",
-        "type": "Water",
-        "chance": 1.1
-      },
-      {
-        "name": "Arachnet",
-        "type": "Unique",
-        "chance": 1.0
-      },
-      {
-        "name": "Jellyish",
-        "type": "Unique",
-        "chance": 1.0
-      },
-      {
-        "name": "Phosphora",
-        "type": "Light",
-        "chance": 1.0
-      },
-      {
-        "name": "Soot Pup",
-        "type": "Toxic",
-        "chance": 1.0
-      },
-      {
-        "name": "Spark Mite",
-        "type": "Electricity",
-        "chance": 1.0
-      },
-      {
-        "name": "Thugglet",
-        "type": "Psychic",
-        "chance": 1.0
-      },
-      {
-        "name": "Zephur",
-        "type": "Energy",
-        "chance": 1.0
-      },
-      {
-        "name": "Flatulorhinkus",
-        "type": "Toxic",
-        "chance": 0.8
-      },
-      {
-        "name": "Hypnogrif",
-        "type": "Psychic",
-        "chance": 0.8
-      },
-      {
-        "name": "Lariat",
-        "type": "Unique",
-        "chance": 0.8
-      },
-      {
-        "name": "Pieper",
-        "type": "Psychic",
-        "chance": 0.8
-      },
-      {
-        "name": "Psi",
-        "type": "Energy",
-        "chance": 0.8
-      },
-      {
-        "name": "Thornlash",
-        "type": "Plant",
-        "chance": 0.8
-      },
-      {
-        "name": "Neotox",
-        "type": "Toxic",
-        "chance": 0.6
-      },
-      {
-        "name": "Slyren",
-        "type": "Psychic",
-        "chance": 0.6
-      },
-      {
-        "name": "Tazerling",
-        "type": "Electricity",
-        "chance": 0.6
-      },
-      {
-        "name": "Fandango",
-        "type": "Energy",
-        "chance": 0.5
-      },
-      {
-        "name": "Lentus",
-        "type": "Energy",
-        "chance": 0.5
-      },
-      {
-        "name": "Mirage Coil",
-        "type": "Light",
-        "chance": 0.5
-      },
-      {
-        "name": "Sapheart",
-        "type": "Healing",
-        "chance": 0.5
-      },
-      {
-        "name": "Tesser",
-        "type": "Energy",
-        "chance": 0.5
-      },
-      {
-        "name": "Xmitter",
-        "type": "Electricity",
-        "chance": 0.5
-      },
-      {
-        "name": "Arcling",
-        "type": "Electricity",
-        "chance": 0.4
-      },
-      {
-        "name": "Cybercut",
-        "type": "Electricity",
-        "chance": 0.4
-      },
-      {
-        "name": "Enigmo",
-        "type": "Light",
-        "chance": 0.4
-      },
-      {
-        "name": "Eunoa",
-        "type": "Psychic",
-        "chance": 0.4
-      },
-      {
-        "name": "Perplexus",
-        "type": "Psychic",
-        "chance": 0.3
-      },
-      {
-        "name": "Boon Doc",
-        "type": "Healing",
-        "chance": 0.2
-      },
-      {
-        "name": "Meduslug",
-        "type": "Psychic",
-        "chance": 0.2
-      },
-      {
-        "name": "Keystone",
-        "type": "Energy",
-        "chance": 0.1
-      },
-      {
-        "name": "Mimkey",
-        "type": "Unique",
-        "chance": 0.1
-      },
-      {
-        "name": "Zeus",
-        "type": "Electricity",
-        "chance": 0.1
-      }
-    ],
     "Cindrath": [
       {
         "name": "Echo-ash",
@@ -695,418 +383,6 @@
       {
         "name": "Boon Doc",
         "type": "Healing",
-        "chance": 0.1
-      },
-      {
-        "name": "Meduslug",
-        "type": "Psychic",
-        "chance": 0.1
-      },
-      {
-        "name": "Mimkey",
-        "type": "Unique",
-        "chance": 0.1
-      }
-    ],
-    "Ashfall Rift": [
-      {
-        "name": "Dustkin",
-        "type": "Earth",
-        "chance": 4.5
-      },
-      {
-        "name": "Tremorock",
-        "type": "Earth",
-        "chance": 4.5
-      },
-      {
-        "name": "Dirt Urchin",
-        "type": "Earth",
-        "chance": 3.8
-      },
-      {
-        "name": "Crystalyd",
-        "type": "Earth",
-        "chance": 3.1
-      },
-      {
-        "name": "Diggrix",
-        "type": "Earth",
-        "chance": 3.1
-      },
-      {
-        "name": "Hop Rock",
-        "type": "Earth",
-        "chance": 3.1
-      },
-      {
-        "name": "Sand Angler",
-        "type": "Earth",
-        "chance": 3.1
-      },
-      {
-        "name": "Cindermite",
-        "type": "Fire",
-        "chance": 2.7
-      },
-      {
-        "name": "Cobblet",
-        "type": "Metal",
-        "chance": 2.7
-      },
-      {
-        "name": "Echo-ash",
-        "type": "Fire",
-        "chance": 2.7
-      },
-      {
-        "name": "Driftmoth",
-        "type": "Air",
-        "chance": 2.4
-      },
-      {
-        "name": "Geoshard",
-        "type": "Earth",
-        "chance": 2.4
-      },
-      {
-        "name": "Rammstone",
-        "type": "Earth",
-        "chance": 2.4
-      },
-      {
-        "name": "Firenzar",
-        "type": "Fire",
-        "chance": 1.9
-      },
-      {
-        "name": "Gazzer",
-        "type": "Air",
-        "chance": 1.9
-      },
-      {
-        "name": "Hoverbug",
-        "type": "Air",
-        "chance": 1.9
-      },
-      {
-        "name": "Polero",
-        "type": "Metal",
-        "chance": 1.9
-      },
-      {
-        "name": "Ventus",
-        "type": "Air",
-        "chance": 1.9
-      },
-      {
-        "name": "Murkling",
-        "type": "Dark",
-        "chance": 1.8
-      },
-      {
-        "name": "Tormato",
-        "type": "Air",
-        "chance": 1.6
-      },
-      {
-        "name": "Blastipede",
-        "type": "Fire",
-        "chance": 1.5
-      },
-      {
-        "name": "Flaringo",
-        "type": "Fire",
-        "chance": 1.5
-      },
-      {
-        "name": "Grenuke",
-        "type": "Fire",
-        "chance": 1.5
-      },
-      {
-        "name": "Lavalynx",
-        "type": "Fire",
-        "chance": 1.5
-      },
-      {
-        "name": "Slicksilver",
-        "type": "Metal",
-        "chance": 1.5
-      },
-      {
-        "name": "Soot Pup",
-        "type": "Toxic",
-        "chance": 1.5
-      },
-      {
-        "name": "Spark Mite",
-        "type": "Electricity",
-        "chance": 1.5
-      },
-      {
-        "name": "Speedstinger",
-        "type": "Metal",
-        "chance": 1.5
-      },
-      {
-        "name": "Armashelt",
-        "type": "Metal",
-        "chance": 1.1
-      },
-      {
-        "name": "Bladier",
-        "type": "Metal",
-        "chance": 1.1
-      },
-      {
-        "name": "Flatulorhinkus",
-        "type": "Toxic",
-        "chance": 1.1
-      },
-      {
-        "name": "Forgesmelter",
-        "type": "Fire",
-        "chance": 1.1
-      },
-      {
-        "name": "Infurnus",
-        "type": "Fire",
-        "chance": 1.1
-      },
-      {
-        "name": "Makobreaker",
-        "type": "Metal",
-        "chance": 1.1
-      },
-      {
-        "name": "Thresher",
-        "type": "Metal",
-        "chance": 1.1
-      },
-      {
-        "name": "Driplet",
-        "type": "Water",
-        "chance": 1.0
-      },
-      {
-        "name": "Flopper",
-        "type": "None",
-        "chance": 1.0
-      },
-      {
-        "name": "Frightgeist",
-        "type": "Dark",
-        "chance": 1.0
-      },
-      {
-        "name": "Glowdab",
-        "type": "Light",
-        "chance": 1.0
-      },
-      {
-        "name": "Ripplet",
-        "type": "Water",
-        "chance": 1.0
-      },
-      {
-        "name": "Aquabeek",
-        "type": "Water",
-        "chance": 0.9
-      },
-      {
-        "name": "Chillnip",
-        "type": "Ice",
-        "chance": 0.9
-      },
-      {
-        "name": "Neotox",
-        "type": "Toxic",
-        "chance": 0.9
-      },
-      {
-        "name": "Tazerling",
-        "type": "Electricity",
-        "chance": 0.9
-      },
-      {
-        "name": "Anchorage",
-        "type": "Metal",
-        "chance": 0.8
-      },
-      {
-        "name": "Bubbaleone",
-        "type": "Water",
-        "chance": 0.8
-      },
-      {
-        "name": "Emberblade",
-        "type": "Fire",
-        "chance": 0.8
-      },
-      {
-        "name": "Hexlet",
-        "type": "Dark",
-        "chance": 0.7
-      },
-      {
-        "name": "Negashade",
-        "type": "Dark",
-        "chance": 0.7
-      },
-      {
-        "name": "Wisplet",
-        "type": "Unique",
-        "chance": 0.7
-      },
-      {
-        "name": "Xmitter",
-        "type": "Electricity",
-        "chance": 0.7
-      },
-      {
-        "name": "Zephur",
-        "type": "Energy",
-        "chance": 0.7
-      },
-      {
-        "name": "Arcling",
-        "type": "Electricity",
-        "chance": 0.6
-      },
-      {
-        "name": "Cybercut",
-        "type": "Electricity",
-        "chance": 0.6
-      },
-      {
-        "name": "Frostcrawler",
-        "type": "Ice",
-        "chance": 0.6
-      },
-      {
-        "name": "Mantis",
-        "type": "Water",
-        "chance": 0.6
-      },
-      {
-        "name": "Narwhaddle",
-        "type": "Ice",
-        "chance": 0.6
-      },
-      {
-        "name": "Psi",
-        "type": "Energy",
-        "chance": 0.6
-      },
-      {
-        "name": "Thugglet",
-        "type": "Psychic",
-        "chance": 0.6
-      },
-      {
-        "name": "Arachnet",
-        "type": "Unique",
-        "chance": 0.5
-      },
-      {
-        "name": "Cynosure",
-        "type": "Metal",
-        "chance": 0.5
-      },
-      {
-        "name": "Frostfire",
-        "type": "Fire",
-        "chance": 0.5
-      },
-      {
-        "name": "Hypnogrif",
-        "type": "Psychic",
-        "chance": 0.5
-      },
-      {
-        "name": "Jellyish",
-        "type": "Unique",
-        "chance": 0.5
-      },
-      {
-        "name": "Phosphora",
-        "type": "Light",
-        "chance": 0.5
-      },
-      {
-        "name": "Pieper",
-        "type": "Psychic",
-        "chance": 0.5
-      },
-      {
-        "name": "Pressure Tick",
-        "type": "Water",
-        "chance": 0.5
-      },
-      {
-        "name": "Caligo",
-        "type": "Water",
-        "chance": 0.4
-      },
-      {
-        "name": "Fandango",
-        "type": "Energy",
-        "chance": 0.4
-      },
-      {
-        "name": "Lariat",
-        "type": "Unique",
-        "chance": 0.4
-      },
-      {
-        "name": "Lentus",
-        "type": "Energy",
-        "chance": 0.4
-      },
-      {
-        "name": "Slyren",
-        "type": "Psychic",
-        "chance": 0.4
-      },
-      {
-        "name": "Tesser",
-        "type": "Energy",
-        "chance": 0.4
-      },
-      {
-        "name": "Eunoa",
-        "type": "Psychic",
-        "chance": 0.3
-      },
-      {
-        "name": "Mirage Coil",
-        "type": "Light",
-        "chance": 0.3
-      },
-      {
-        "name": "Regulator",
-        "type": "Fire",
-        "chance": 0.3
-      },
-      {
-        "name": "Enigmo",
-        "type": "Light",
-        "chance": 0.2
-      },
-      {
-        "name": "Perplexus",
-        "type": "Psychic",
-        "chance": 0.2
-      },
-      {
-        "name": "Zeus",
-        "type": "Electricity",
-        "chance": 0.2
-      },
-      {
-        "name": "Keystone",
-        "type": "Energy",
         "chance": 0.1
       },
       {
@@ -1532,6 +808,780 @@
         "chance": 0.1
       }
     ],
+    "Ashfall Rift": [
+      {
+        "name": "Dustkin",
+        "type": "Earth",
+        "chance": 4.5
+      },
+      {
+        "name": "Tremorock",
+        "type": "Earth",
+        "chance": 4.5
+      },
+      {
+        "name": "Dirt Urchin",
+        "type": "Earth",
+        "chance": 3.8
+      },
+      {
+        "name": "Crystalyd",
+        "type": "Earth",
+        "chance": 3.1
+      },
+      {
+        "name": "Diggrix",
+        "type": "Earth",
+        "chance": 3.1
+      },
+      {
+        "name": "Hop Rock",
+        "type": "Earth",
+        "chance": 3.1
+      },
+      {
+        "name": "Sand Angler",
+        "type": "Earth",
+        "chance": 3.1
+      },
+      {
+        "name": "Cindermite",
+        "type": "Fire",
+        "chance": 2.7
+      },
+      {
+        "name": "Cobblet",
+        "type": "Metal",
+        "chance": 2.7
+      },
+      {
+        "name": "Echo-ash",
+        "type": "Fire",
+        "chance": 2.7
+      },
+      {
+        "name": "Driftmoth",
+        "type": "Air",
+        "chance": 2.4
+      },
+      {
+        "name": "Geoshard",
+        "type": "Earth",
+        "chance": 2.4
+      },
+      {
+        "name": "Rammstone",
+        "type": "Earth",
+        "chance": 2.4
+      },
+      {
+        "name": "Firenzar",
+        "type": "Fire",
+        "chance": 1.9
+      },
+      {
+        "name": "Gazzer",
+        "type": "Air",
+        "chance": 1.9
+      },
+      {
+        "name": "Hoverbug",
+        "type": "Air",
+        "chance": 1.9
+      },
+      {
+        "name": "Polero",
+        "type": "Metal",
+        "chance": 1.9
+      },
+      {
+        "name": "Ventus",
+        "type": "Air",
+        "chance": 1.9
+      },
+      {
+        "name": "Murkling",
+        "type": "Dark",
+        "chance": 1.8
+      },
+      {
+        "name": "Tormato",
+        "type": "Air",
+        "chance": 1.6
+      },
+      {
+        "name": "Blastipede",
+        "type": "Fire",
+        "chance": 1.5
+      },
+      {
+        "name": "Flaringo",
+        "type": "Fire",
+        "chance": 1.5
+      },
+      {
+        "name": "Grenuke",
+        "type": "Fire",
+        "chance": 1.5
+      },
+      {
+        "name": "Lavalynx",
+        "type": "Fire",
+        "chance": 1.5
+      },
+      {
+        "name": "Slicksilver",
+        "type": "Metal",
+        "chance": 1.5
+      },
+      {
+        "name": "Soot Pup",
+        "type": "Toxic",
+        "chance": 1.5
+      },
+      {
+        "name": "Spark Mite",
+        "type": "Electricity",
+        "chance": 1.5
+      },
+      {
+        "name": "Speedstinger",
+        "type": "Metal",
+        "chance": 1.5
+      },
+      {
+        "name": "Armashelt",
+        "type": "Metal",
+        "chance": 1.1
+      },
+      {
+        "name": "Bladier",
+        "type": "Metal",
+        "chance": 1.1
+      },
+      {
+        "name": "Flatulorhinkus",
+        "type": "Toxic",
+        "chance": 1.1
+      },
+      {
+        "name": "Forgesmelter",
+        "type": "Fire",
+        "chance": 1.1
+      },
+      {
+        "name": "Infurnus",
+        "type": "Fire",
+        "chance": 1.1
+      },
+      {
+        "name": "Makobreaker",
+        "type": "Metal",
+        "chance": 1.1
+      },
+      {
+        "name": "Thresher",
+        "type": "Metal",
+        "chance": 1.1
+      },
+      {
+        "name": "Driplet",
+        "type": "Water",
+        "chance": 1.0
+      },
+      {
+        "name": "Flopper",
+        "type": "None",
+        "chance": 1.0
+      },
+      {
+        "name": "Frightgeist",
+        "type": "Dark",
+        "chance": 1.0
+      },
+      {
+        "name": "Glowdab",
+        "type": "Light",
+        "chance": 1.0
+      },
+      {
+        "name": "Ripplet",
+        "type": "Water",
+        "chance": 1.0
+      },
+      {
+        "name": "Aquabeek",
+        "type": "Water",
+        "chance": 0.9
+      },
+      {
+        "name": "Chillnip",
+        "type": "Ice",
+        "chance": 0.9
+      },
+      {
+        "name": "Neotox",
+        "type": "Toxic",
+        "chance": 0.9
+      },
+      {
+        "name": "Tazerling",
+        "type": "Electricity",
+        "chance": 0.9
+      },
+      {
+        "name": "Anchorage",
+        "type": "Metal",
+        "chance": 0.8
+      },
+      {
+        "name": "Bubbaleone",
+        "type": "Water",
+        "chance": 0.8
+      },
+      {
+        "name": "Emberblade",
+        "type": "Fire",
+        "chance": 0.8
+      },
+      {
+        "name": "Hexlet",
+        "type": "Dark",
+        "chance": 0.7
+      },
+      {
+        "name": "Negashade",
+        "type": "Dark",
+        "chance": 0.7
+      },
+      {
+        "name": "Wisplet",
+        "type": "Unique",
+        "chance": 0.7
+      },
+      {
+        "name": "Xmitter",
+        "type": "Electricity",
+        "chance": 0.7
+      },
+      {
+        "name": "Zephur",
+        "type": "Energy",
+        "chance": 0.7
+      },
+      {
+        "name": "Arcling",
+        "type": "Electricity",
+        "chance": 0.6
+      },
+      {
+        "name": "Cybercut",
+        "type": "Electricity",
+        "chance": 0.6
+      },
+      {
+        "name": "Frostcrawler",
+        "type": "Ice",
+        "chance": 0.6
+      },
+      {
+        "name": "Mantis",
+        "type": "Water",
+        "chance": 0.6
+      },
+      {
+        "name": "Narwhaddle",
+        "type": "Ice",
+        "chance": 0.6
+      },
+      {
+        "name": "Psi",
+        "type": "Energy",
+        "chance": 0.6
+      },
+      {
+        "name": "Thugglet",
+        "type": "Psychic",
+        "chance": 0.6
+      },
+      {
+        "name": "Arachnet",
+        "type": "Unique",
+        "chance": 0.5
+      },
+      {
+        "name": "Cynosure",
+        "type": "Metal",
+        "chance": 0.5
+      },
+      {
+        "name": "Frostfire",
+        "type": "Fire",
+        "chance": 0.5
+      },
+      {
+        "name": "Hypnogrif",
+        "type": "Psychic",
+        "chance": 0.5
+      },
+      {
+        "name": "Jellyish",
+        "type": "Unique",
+        "chance": 0.5
+      },
+      {
+        "name": "Phosphora",
+        "type": "Light",
+        "chance": 0.5
+      },
+      {
+        "name": "Pieper",
+        "type": "Psychic",
+        "chance": 0.5
+      },
+      {
+        "name": "Pressure Tick",
+        "type": "Water",
+        "chance": 0.5
+      },
+      {
+        "name": "Caligo",
+        "type": "Water",
+        "chance": 0.4
+      },
+      {
+        "name": "Fandango",
+        "type": "Energy",
+        "chance": 0.4
+      },
+      {
+        "name": "Lariat",
+        "type": "Unique",
+        "chance": 0.4
+      },
+      {
+        "name": "Lentus",
+        "type": "Energy",
+        "chance": 0.4
+      },
+      {
+        "name": "Slyren",
+        "type": "Psychic",
+        "chance": 0.4
+      },
+      {
+        "name": "Tesser",
+        "type": "Energy",
+        "chance": 0.4
+      },
+      {
+        "name": "Eunoa",
+        "type": "Psychic",
+        "chance": 0.3
+      },
+      {
+        "name": "Mirage Coil",
+        "type": "Light",
+        "chance": 0.3
+      },
+      {
+        "name": "Regulator",
+        "type": "Fire",
+        "chance": 0.3
+      },
+      {
+        "name": "Enigmo",
+        "type": "Light",
+        "chance": 0.2
+      },
+      {
+        "name": "Perplexus",
+        "type": "Psychic",
+        "chance": 0.2
+      },
+      {
+        "name": "Zeus",
+        "type": "Electricity",
+        "chance": 0.2
+      },
+      {
+        "name": "Keystone",
+        "type": "Energy",
+        "chance": 0.1
+      },
+      {
+        "name": "Meduslug",
+        "type": "Psychic",
+        "chance": 0.1
+      },
+      {
+        "name": "Mimkey",
+        "type": "Unique",
+        "chance": 0.1
+      }
+    ],
+    "Vorn's Forge": [
+      {
+        "name": "Cobblet",
+        "type": "Metal",
+        "chance": 5.5
+      },
+      {
+        "name": "Cindermite",
+        "type": "Fire",
+        "chance": 4.0
+      },
+      {
+        "name": "Echo-ash",
+        "type": "Fire",
+        "chance": 4.0
+      },
+      {
+        "name": "Polero",
+        "type": "Metal",
+        "chance": 3.9
+      },
+      {
+        "name": "Spark Mite",
+        "type": "Electricity",
+        "chance": 3.7
+      },
+      {
+        "name": "Slicksilver",
+        "type": "Metal",
+        "chance": 3.1
+      },
+      {
+        "name": "Speedstinger",
+        "type": "Metal",
+        "chance": 3.1
+      },
+      {
+        "name": "Firenzar",
+        "type": "Fire",
+        "chance": 2.8
+      },
+      {
+        "name": "Tazerling",
+        "type": "Electricity",
+        "chance": 2.4
+      },
+      {
+        "name": "Armashelt",
+        "type": "Metal",
+        "chance": 2.3
+      },
+      {
+        "name": "Bladier",
+        "type": "Metal",
+        "chance": 2.3
+      },
+      {
+        "name": "Makobreaker",
+        "type": "Metal",
+        "chance": 2.3
+      },
+      {
+        "name": "Thresher",
+        "type": "Metal",
+        "chance": 2.3
+      },
+      {
+        "name": "Blastipede",
+        "type": "Fire",
+        "chance": 2.2
+      },
+      {
+        "name": "Flaringo",
+        "type": "Fire",
+        "chance": 2.2
+      },
+      {
+        "name": "Grenuke",
+        "type": "Fire",
+        "chance": 2.2
+      },
+      {
+        "name": "Lavalynx",
+        "type": "Fire",
+        "chance": 2.2
+      },
+      {
+        "name": "Flopper",
+        "type": "None",
+        "chance": 1.9
+      },
+      {
+        "name": "Soot Pup",
+        "type": "Toxic",
+        "chance": 1.9
+      },
+      {
+        "name": "Xmitter",
+        "type": "Electricity",
+        "chance": 1.9
+      },
+      {
+        "name": "Murkling",
+        "type": "Dark",
+        "chance": 1.7
+      },
+      {
+        "name": "Anchorage",
+        "type": "Metal",
+        "chance": 1.6
+      },
+      {
+        "name": "Forgesmelter",
+        "type": "Fire",
+        "chance": 1.6
+      },
+      {
+        "name": "Infurnus",
+        "type": "Fire",
+        "chance": 1.6
+      },
+      {
+        "name": "Zephur",
+        "type": "Energy",
+        "chance": 1.5
+      },
+      {
+        "name": "Arcling",
+        "type": "Electricity",
+        "chance": 1.4
+      },
+      {
+        "name": "Cybercut",
+        "type": "Electricity",
+        "chance": 1.4
+      },
+      {
+        "name": "Flatulorhinkus",
+        "type": "Toxic",
+        "chance": 1.4
+      },
+      {
+        "name": "Driftmoth",
+        "type": "Air",
+        "chance": 1.2
+      },
+      {
+        "name": "Dustkin",
+        "type": "Earth",
+        "chance": 1.2
+      },
+      {
+        "name": "Neotox",
+        "type": "Toxic",
+        "chance": 1.2
+      },
+      {
+        "name": "Psi",
+        "type": "Energy",
+        "chance": 1.2
+      },
+      {
+        "name": "Wisplet",
+        "type": "Unique",
+        "chance": 1.2
+      },
+      {
+        "name": "Cynosure",
+        "type": "Metal",
+        "chance": 1.1
+      },
+      {
+        "name": "Emberblade",
+        "type": "Fire",
+        "chance": 1.1
+      },
+      {
+        "name": "Tremorock",
+        "type": "Earth",
+        "chance": 1.1
+      },
+      {
+        "name": "Dirt Urchin",
+        "type": "Earth",
+        "chance": 1.0
+      },
+      {
+        "name": "Gazzer",
+        "type": "Air",
+        "chance": 1.0
+      },
+      {
+        "name": "Hoverbug",
+        "type": "Air",
+        "chance": 1.0
+      },
+      {
+        "name": "Ventus",
+        "type": "Air",
+        "chance": 1.0
+      },
+      {
+        "name": "Frightgeist",
+        "type": "Dark",
+        "chance": 0.9
+      },
+      {
+        "name": "Glowdab",
+        "type": "Light",
+        "chance": 0.9
+      },
+      {
+        "name": "Arachnet",
+        "type": "Unique",
+        "chance": 0.8
+      },
+      {
+        "name": "Crystalyd",
+        "type": "Earth",
+        "chance": 0.8
+      },
+      {
+        "name": "Diggrix",
+        "type": "Earth",
+        "chance": 0.8
+      },
+      {
+        "name": "Fandango",
+        "type": "Energy",
+        "chance": 0.8
+      },
+      {
+        "name": "Frostfire",
+        "type": "Fire",
+        "chance": 0.8
+      },
+      {
+        "name": "Hop Rock",
+        "type": "Earth",
+        "chance": 0.8
+      },
+      {
+        "name": "Jellyish",
+        "type": "Unique",
+        "chance": 0.8
+      },
+      {
+        "name": "Lentus",
+        "type": "Energy",
+        "chance": 0.8
+      },
+      {
+        "name": "Sand Angler",
+        "type": "Earth",
+        "chance": 0.8
+      },
+      {
+        "name": "Tesser",
+        "type": "Energy",
+        "chance": 0.8
+      },
+      {
+        "name": "Tormato",
+        "type": "Air",
+        "chance": 0.8
+      },
+      {
+        "name": "Hexlet",
+        "type": "Dark",
+        "chance": 0.7
+      },
+      {
+        "name": "Negashade",
+        "type": "Dark",
+        "chance": 0.7
+      },
+      {
+        "name": "Geoshard",
+        "type": "Earth",
+        "chance": 0.6
+      },
+      {
+        "name": "Lariat",
+        "type": "Unique",
+        "chance": 0.6
+      },
+      {
+        "name": "Rammstone",
+        "type": "Earth",
+        "chance": 0.6
+      },
+      {
+        "name": "Thugglet",
+        "type": "Psychic",
+        "chance": 0.6
+      },
+      {
+        "name": "Hypnogrif",
+        "type": "Psychic",
+        "chance": 0.5
+      },
+      {
+        "name": "Phosphora",
+        "type": "Light",
+        "chance": 0.5
+      },
+      {
+        "name": "Pieper",
+        "type": "Psychic",
+        "chance": 0.5
+      },
+      {
+        "name": "Regulator",
+        "type": "Fire",
+        "chance": 0.5
+      },
+      {
+        "name": "Zeus",
+        "type": "Electricity",
+        "chance": 0.4
+      },
+      {
+        "name": "Slyren",
+        "type": "Psychic",
+        "chance": 0.3
+      },
+      {
+        "name": "Enigmo",
+        "type": "Light",
+        "chance": 0.2
+      },
+      {
+        "name": "Eunoa",
+        "type": "Psychic",
+        "chance": 0.2
+      },
+      {
+        "name": "Keystone",
+        "type": "Energy",
+        "chance": 0.2
+      },
+      {
+        "name": "Mirage Coil",
+        "type": "Light",
+        "chance": 0.2
+      },
+      {
+        "name": "Perplexus",
+        "type": "Psychic",
+        "chance": 0.2
+      },
+      {
+        "name": "Meduslug",
+        "type": "Psychic",
+        "chance": 0.1
+      },
+      {
+        "name": "Mimkey",
+        "type": "Unique",
+        "chance": 0.1
+      }
+    ],
     "The Wellspring": [
       {
         "name": "Wisplet",
@@ -1944,165 +1994,864 @@
         "chance": 0.2
       }
     ],
-    "Vorn's Forge": [
-      {
-        "name": "Cobblet",
-        "type": "Metal",
-        "chance": 5.5
-      },
-      {
-        "name": "Cindermite",
-        "type": "Fire",
-        "chance": 4.0
-      },
-      {
-        "name": "Echo-ash",
-        "type": "Fire",
-        "chance": 4.0
-      },
-      {
-        "name": "Polero",
-        "type": "Metal",
-        "chance": 3.9
-      },
-      {
-        "name": "Spark Mite",
-        "type": "Electricity",
-        "chance": 3.7
-      },
-      {
-        "name": "Slicksilver",
-        "type": "Metal",
-        "chance": 3.1
-      },
-      {
-        "name": "Speedstinger",
-        "type": "Metal",
-        "chance": 3.1
-      },
-      {
-        "name": "Firenzar",
-        "type": "Fire",
-        "chance": 2.8
-      },
-      {
-        "name": "Tazerling",
-        "type": "Electricity",
-        "chance": 2.4
-      },
-      {
-        "name": "Armashelt",
-        "type": "Metal",
-        "chance": 2.3
-      },
-      {
-        "name": "Bladier",
-        "type": "Metal",
-        "chance": 2.3
-      },
-      {
-        "name": "Makobreaker",
-        "type": "Metal",
-        "chance": 2.3
-      },
-      {
-        "name": "Thresher",
-        "type": "Metal",
-        "chance": 2.3
-      },
-      {
-        "name": "Blastipede",
-        "type": "Fire",
-        "chance": 2.2
-      },
-      {
-        "name": "Flaringo",
-        "type": "Fire",
-        "chance": 2.2
-      },
-      {
-        "name": "Grenuke",
-        "type": "Fire",
-        "chance": 2.2
-      },
-      {
-        "name": "Lavalynx",
-        "type": "Fire",
-        "chance": 2.2
-      },
+    "Kessa-9": [
       {
         "name": "Flopper",
         "type": "None",
-        "chance": 1.9
+        "chance": 4.9
       },
       {
-        "name": "Soot Pup",
-        "type": "Toxic",
-        "chance": 1.9
+        "name": "Puffshroom",
+        "type": "Plant",
+        "chance": 4.5
       },
       {
-        "name": "Xmitter",
-        "type": "Electricity",
-        "chance": 1.9
-      },
-      {
-        "name": "Murkling",
-        "type": "Dark",
-        "chance": 1.7
-      },
-      {
-        "name": "Anchorage",
-        "type": "Metal",
-        "chance": 1.6
-      },
-      {
-        "name": "Forgesmelter",
-        "type": "Fire",
-        "chance": 1.6
-      },
-      {
-        "name": "Infurnus",
-        "type": "Fire",
-        "chance": 1.6
-      },
-      {
-        "name": "Zephur",
-        "type": "Energy",
-        "chance": 1.5
-      },
-      {
-        "name": "Arcling",
-        "type": "Electricity",
-        "chance": 1.4
-      },
-      {
-        "name": "Cybercut",
-        "type": "Electricity",
-        "chance": 1.4
-      },
-      {
-        "name": "Flatulorhinkus",
-        "type": "Toxic",
-        "chance": 1.4
+        "name": "Fernwick",
+        "type": "Plant",
+        "chance": 4.1
       },
       {
         "name": "Driftmoth",
         "type": "Air",
-        "chance": 1.2
+        "chance": 4.0
       },
       {
         "name": "Dustkin",
         "type": "Earth",
-        "chance": 1.2
+        "chance": 3.5
       },
       {
-        "name": "Neotox",
+        "name": "Sagebloom",
+        "type": "Plant",
+        "chance": 3.5
+      },
+      {
+        "name": "Tremorock",
+        "type": "Earth",
+        "chance": 3.2
+      },
+      {
+        "name": "Gazzer",
+        "type": "Air",
+        "chance": 3.1
+      },
+      {
+        "name": "Hoverbug",
+        "type": "Air",
+        "chance": 3.1
+      },
+      {
+        "name": "Ventus",
+        "type": "Air",
+        "chance": 3.1
+      },
+      {
+        "name": "Driplet",
+        "type": "Water",
+        "chance": 3.0
+      },
+      {
+        "name": "Ripplet",
+        "type": "Water",
+        "chance": 3.0
+      },
+      {
+        "name": "Vinedrill",
+        "type": "Plant",
+        "chance": 2.9
+      },
+      {
+        "name": "Aquabeek",
+        "type": "Water",
+        "chance": 2.8
+      },
+      {
+        "name": "Dirt Urchin",
+        "type": "Earth",
+        "chance": 2.7
+      },
+      {
+        "name": "Tormato",
+        "type": "Air",
+        "chance": 2.6
+      },
+      {
+        "name": "Bubbaleone",
+        "type": "Water",
+        "chance": 2.3
+      },
+      {
+        "name": "Graspvine",
+        "type": "Plant",
+        "chance": 2.3
+      },
+      {
+        "name": "Crystalyd",
+        "type": "Earth",
+        "chance": 2.2
+      },
+      {
+        "name": "Diggrix",
+        "type": "Earth",
+        "chance": 2.2
+      },
+      {
+        "name": "Hop Rock",
+        "type": "Earth",
+        "chance": 2.2
+      },
+      {
+        "name": "Sand Angler",
+        "type": "Earth",
+        "chance": 2.2
+      },
+      {
+        "name": "Glowdab",
+        "type": "Light",
+        "chance": 2.0
+      },
+      {
+        "name": "Mantis",
+        "type": "Water",
+        "chance": 1.9
+      },
+      {
+        "name": "Geoshard",
+        "type": "Earth",
+        "chance": 1.8
+      },
+      {
+        "name": "Rammstone",
+        "type": "Earth",
+        "chance": 1.8
+      },
+      {
+        "name": "Tidbit",
+        "type": "Healing",
+        "chance": 1.8
+      },
+      {
+        "name": "Pressure Tick",
+        "type": "Water",
+        "chance": 1.5
+      },
+      {
+        "name": "Wisplet",
+        "type": "Unique",
+        "chance": 1.5
+      },
+      {
+        "name": "Caligo",
+        "type": "Water",
+        "chance": 1.1
+      },
+      {
+        "name": "Arachnet",
+        "type": "Unique",
+        "chance": 1.0
+      },
+      {
+        "name": "Jellyish",
+        "type": "Unique",
+        "chance": 1.0
+      },
+      {
+        "name": "Phosphora",
+        "type": "Light",
+        "chance": 1.0
+      },
+      {
+        "name": "Soot Pup",
         "type": "Toxic",
-        "chance": 1.2
+        "chance": 1.0
+      },
+      {
+        "name": "Spark Mite",
+        "type": "Electricity",
+        "chance": 1.0
+      },
+      {
+        "name": "Thugglet",
+        "type": "Psychic",
+        "chance": 1.0
+      },
+      {
+        "name": "Zephur",
+        "type": "Energy",
+        "chance": 1.0
+      },
+      {
+        "name": "Flatulorhinkus",
+        "type": "Toxic",
+        "chance": 0.8
+      },
+      {
+        "name": "Hypnogrif",
+        "type": "Psychic",
+        "chance": 0.8
+      },
+      {
+        "name": "Lariat",
+        "type": "Unique",
+        "chance": 0.8
+      },
+      {
+        "name": "Pieper",
+        "type": "Psychic",
+        "chance": 0.8
       },
       {
         "name": "Psi",
         "type": "Energy",
+        "chance": 0.8
+      },
+      {
+        "name": "Thornlash",
+        "type": "Plant",
+        "chance": 0.8
+      },
+      {
+        "name": "Neotox",
+        "type": "Toxic",
+        "chance": 0.6
+      },
+      {
+        "name": "Slyren",
+        "type": "Psychic",
+        "chance": 0.6
+      },
+      {
+        "name": "Tazerling",
+        "type": "Electricity",
+        "chance": 0.6
+      },
+      {
+        "name": "Fandango",
+        "type": "Energy",
+        "chance": 0.5
+      },
+      {
+        "name": "Lentus",
+        "type": "Energy",
+        "chance": 0.5
+      },
+      {
+        "name": "Mirage Coil",
+        "type": "Light",
+        "chance": 0.5
+      },
+      {
+        "name": "Sapheart",
+        "type": "Healing",
+        "chance": 0.5
+      },
+      {
+        "name": "Tesser",
+        "type": "Energy",
+        "chance": 0.5
+      },
+      {
+        "name": "Xmitter",
+        "type": "Electricity",
+        "chance": 0.5
+      },
+      {
+        "name": "Arcling",
+        "type": "Electricity",
+        "chance": 0.4
+      },
+      {
+        "name": "Cybercut",
+        "type": "Electricity",
+        "chance": 0.4
+      },
+      {
+        "name": "Enigmo",
+        "type": "Light",
+        "chance": 0.4
+      },
+      {
+        "name": "Eunoa",
+        "type": "Psychic",
+        "chance": 0.4
+      },
+      {
+        "name": "Perplexus",
+        "type": "Psychic",
+        "chance": 0.3
+      },
+      {
+        "name": "Boon Doc",
+        "type": "Healing",
+        "chance": 0.2
+      },
+      {
+        "name": "Meduslug",
+        "type": "Psychic",
+        "chance": 0.2
+      },
+      {
+        "name": "Keystone",
+        "type": "Energy",
+        "chance": 0.1
+      },
+      {
+        "name": "Mimkey",
+        "type": "Unique",
+        "chance": 0.1
+      },
+      {
+        "name": "Zeus",
+        "type": "Electricity",
+        "chance": 0.1
+      }
+    ],
+    "Virid Canopy": [
+      {
+        "name": "Puffshroom",
+        "type": "Plant",
+        "chance": 5.4
+      },
+      {
+        "name": "Fernwick",
+        "type": "Plant",
+        "chance": 4.8
+      },
+      {
+        "name": "Tidbit",
+        "type": "Healing",
+        "chance": 4.3
+      },
+      {
+        "name": "Soot Pup",
+        "type": "Toxic",
+        "chance": 4.2
+      },
+      {
+        "name": "Sagebloom",
+        "type": "Plant",
+        "chance": 4.1
+      },
+      {
+        "name": "Vinedrill",
+        "type": "Plant",
+        "chance": 3.3
+      },
+      {
+        "name": "Flatulorhinkus",
+        "type": "Toxic",
+        "chance": 3.2
+      },
+      {
+        "name": "Driplet",
+        "type": "Water",
+        "chance": 3.1
+      },
+      {
+        "name": "Ripplet",
+        "type": "Water",
+        "chance": 3.1
+      },
+      {
+        "name": "Aquabeek",
+        "type": "Water",
+        "chance": 2.9
+      },
+      {
+        "name": "Neotox",
+        "type": "Toxic",
+        "chance": 2.7
+      },
+      {
+        "name": "Graspvine",
+        "type": "Plant",
+        "chance": 2.6
+      },
+      {
+        "name": "Bubbaleone",
+        "type": "Water",
+        "chance": 2.4
+      },
+      {
+        "name": "Wisplet",
+        "type": "Unique",
+        "chance": 2.1
+      },
+      {
+        "name": "Mantis",
+        "type": "Water",
+        "chance": 2.0
+      },
+      {
+        "name": "Thugglet",
+        "type": "Psychic",
+        "chance": 1.7
+      },
+      {
+        "name": "Driftmoth",
+        "type": "Air",
+        "chance": 1.6
+      },
+      {
+        "name": "Dustkin",
+        "type": "Earth",
+        "chance": 1.6
+      },
+      {
+        "name": "Flopper",
+        "type": "None",
+        "chance": 1.6
+      },
+      {
+        "name": "Glowdab",
+        "type": "Light",
+        "chance": 1.6
+      },
+      {
+        "name": "Pressure Tick",
+        "type": "Water",
+        "chance": 1.6
+      },
+      {
+        "name": "Murkling",
+        "type": "Dark",
+        "chance": 1.4
+      },
+      {
+        "name": "Tremorock",
+        "type": "Earth",
+        "chance": 1.4
+      },
+      {
+        "name": "Arachnet",
+        "type": "Unique",
+        "chance": 1.3
+      },
+      {
+        "name": "Hypnogrif",
+        "type": "Psychic",
+        "chance": 1.3
+      },
+      {
+        "name": "Jellyish",
+        "type": "Unique",
+        "chance": 1.3
+      },
+      {
+        "name": "Pieper",
+        "type": "Psychic",
+        "chance": 1.3
+      },
+      {
+        "name": "Caligo",
+        "type": "Water",
+        "chance": 1.2
+      },
+      {
+        "name": "Dirt Urchin",
+        "type": "Earth",
+        "chance": 1.2
+      },
+      {
+        "name": "Gazzer",
+        "type": "Air",
+        "chance": 1.2
+      },
+      {
+        "name": "Hoverbug",
+        "type": "Air",
+        "chance": 1.2
+      },
+      {
+        "name": "Sapheart",
+        "type": "Healing",
+        "chance": 1.2
+      },
+      {
+        "name": "Ventus",
+        "type": "Air",
+        "chance": 1.2
+      },
+      {
+        "name": "Crystalyd",
+        "type": "Earth",
+        "chance": 1.0
+      },
+      {
+        "name": "Diggrix",
+        "type": "Earth",
+        "chance": 1.0
+      },
+      {
+        "name": "Hop Rock",
+        "type": "Earth",
+        "chance": 1.0
+      },
+      {
+        "name": "Lariat",
+        "type": "Unique",
+        "chance": 1.0
+      },
+      {
+        "name": "Sand Angler",
+        "type": "Earth",
+        "chance": 1.0
+      },
+      {
+        "name": "Slyren",
+        "type": "Psychic",
+        "chance": 1.0
+      },
+      {
+        "name": "Spark Mite",
+        "type": "Electricity",
+        "chance": 1.0
+      },
+      {
+        "name": "Tormato",
+        "type": "Air",
+        "chance": 1.0
+      },
+      {
+        "name": "Thornlash",
+        "type": "Plant",
+        "chance": 0.9
+      },
+      {
+        "name": "Frightgeist",
+        "type": "Dark",
+        "chance": 0.8
+      },
+      {
+        "name": "Geoshard",
+        "type": "Earth",
+        "chance": 0.8
+      },
+      {
+        "name": "Phosphora",
+        "type": "Light",
+        "chance": 0.8
+      },
+      {
+        "name": "Rammstone",
+        "type": "Earth",
+        "chance": 0.8
+      },
+      {
+        "name": "Cindermite",
+        "type": "Fire",
+        "chance": 0.7
+      },
+      {
+        "name": "Echo-ash",
+        "type": "Fire",
+        "chance": 0.7
+      },
+      {
+        "name": "Eunoa",
+        "type": "Psychic",
+        "chance": 0.7
+      },
+      {
+        "name": "Tazerling",
+        "type": "Electricity",
+        "chance": 0.7
+      },
+      {
+        "name": "Zephur",
+        "type": "Energy",
+        "chance": 0.7
+      },
+      {
+        "name": "Hexlet",
+        "type": "Dark",
+        "chance": 0.6
+      },
+      {
+        "name": "Negashade",
+        "type": "Dark",
+        "chance": 0.6
+      },
+      {
+        "name": "Boon Doc",
+        "type": "Healing",
+        "chance": 0.5
+      },
+      {
+        "name": "Firenzar",
+        "type": "Fire",
+        "chance": 0.5
+      },
+      {
+        "name": "Perplexus",
+        "type": "Psychic",
+        "chance": 0.5
+      },
+      {
+        "name": "Psi",
+        "type": "Energy",
+        "chance": 0.5
+      },
+      {
+        "name": "Xmitter",
+        "type": "Electricity",
+        "chance": 0.5
+      },
+      {
+        "name": "Arcling",
+        "type": "Electricity",
+        "chance": 0.4
+      },
+      {
+        "name": "Blastipede",
+        "type": "Fire",
+        "chance": 0.4
+      },
+      {
+        "name": "Cybercut",
+        "type": "Electricity",
+        "chance": 0.4
+      },
+      {
+        "name": "Flaringo",
+        "type": "Fire",
+        "chance": 0.4
+      },
+      {
+        "name": "Grenuke",
+        "type": "Fire",
+        "chance": 0.4
+      },
+      {
+        "name": "Lavalynx",
+        "type": "Fire",
+        "chance": 0.4
+      },
+      {
+        "name": "Mirage Coil",
+        "type": "Light",
+        "chance": 0.4
+      },
+      {
+        "name": "Enigmo",
+        "type": "Light",
+        "chance": 0.3
+      },
+      {
+        "name": "Fandango",
+        "type": "Energy",
+        "chance": 0.3
+      },
+      {
+        "name": "Forgesmelter",
+        "type": "Fire",
+        "chance": 0.3
+      },
+      {
+        "name": "Infurnus",
+        "type": "Fire",
+        "chance": 0.3
+      },
+      {
+        "name": "Lentus",
+        "type": "Energy",
+        "chance": 0.3
+      },
+      {
+        "name": "Meduslug",
+        "type": "Psychic",
+        "chance": 0.3
+      },
+      {
+        "name": "Tesser",
+        "type": "Energy",
+        "chance": 0.3
+      },
+      {
+        "name": "Emberblade",
+        "type": "Fire",
+        "chance": 0.2
+      },
+      {
+        "name": "Frostfire",
+        "type": "Fire",
+        "chance": 0.1
+      },
+      {
+        "name": "Keystone",
+        "type": "Energy",
+        "chance": 0.1
+      },
+      {
+        "name": "Mimkey",
+        "type": "Unique",
+        "chance": 0.1
+      },
+      {
+        "name": "Regulator",
+        "type": "Fire",
+        "chance": 0.1
+      },
+      {
+        "name": "Zeus",
+        "type": "Electricity",
+        "chance": 0.1
+      }
+    ],
+    "Solenne": [
+      {
+        "name": "Puffshroom",
+        "type": "Plant",
+        "chance": 5.5
+      },
+      {
+        "name": "Fernwick",
+        "type": "Plant",
+        "chance": 5.4
+      },
+      {
+        "name": "Sagebloom",
+        "type": "Plant",
+        "chance": 4.6
+      },
+      {
+        "name": "Tidbit",
+        "type": "Healing",
+        "chance": 4.3
+      },
+      {
+        "name": "Flopper",
+        "type": "None",
+        "chance": 4.1
+      },
+      {
+        "name": "Vinedrill",
+        "type": "Plant",
+        "chance": 3.8
+      },
+      {
+        "name": "Dustkin",
+        "type": "Earth",
+        "chance": 3.5
+      },
+      {
+        "name": "Tremorock",
+        "type": "Earth",
+        "chance": 3.2
+      },
+      {
+        "name": "Driplet",
+        "type": "Water",
+        "chance": 2.9
+      },
+      {
+        "name": "Graspvine",
+        "type": "Plant",
+        "chance": 2.9
+      },
+      {
+        "name": "Ripplet",
+        "type": "Water",
+        "chance": 2.9
+      },
+      {
+        "name": "Aquabeek",
+        "type": "Water",
+        "chance": 2.7
+      },
+      {
+        "name": "Dirt Urchin",
+        "type": "Earth",
+        "chance": 2.7
+      },
+      {
+        "name": "Driftmoth",
+        "type": "Air",
+        "chance": 2.4
+      },
+      {
+        "name": "Glowdab",
+        "type": "Light",
+        "chance": 2.4
+      },
+      {
+        "name": "Bubbaleone",
+        "type": "Water",
+        "chance": 2.3
+      },
+      {
+        "name": "Crystalyd",
+        "type": "Earth",
+        "chance": 2.3
+      },
+      {
+        "name": "Diggrix",
+        "type": "Earth",
+        "chance": 2.3
+      },
+      {
+        "name": "Hop Rock",
+        "type": "Earth",
+        "chance": 2.3
+      },
+      {
+        "name": "Sand Angler",
+        "type": "Earth",
+        "chance": 2.3
+      },
+      {
+        "name": "Mantis",
+        "type": "Water",
+        "chance": 1.9
+      },
+      {
+        "name": "Gazzer",
+        "type": "Air",
+        "chance": 1.8
+      },
+      {
+        "name": "Geoshard",
+        "type": "Earth",
+        "chance": 1.8
+      },
+      {
+        "name": "Hoverbug",
+        "type": "Air",
+        "chance": 1.8
+      },
+      {
+        "name": "Rammstone",
+        "type": "Earth",
+        "chance": 1.8
+      },
+      {
+        "name": "Ventus",
+        "type": "Air",
+        "chance": 1.8
+      },
+      {
+        "name": "Pressure Tick",
+        "type": "Water",
+        "chance": 1.5
+      },
+      {
+        "name": "Tormato",
+        "type": "Air",
+        "chance": 1.5
+      },
+      {
+        "name": "Phosphora",
+        "type": "Light",
+        "chance": 1.2
+      },
+      {
+        "name": "Sapheart",
+        "type": "Healing",
+        "chance": 1.2
+      },
+      {
+        "name": "Soot Pup",
+        "type": "Toxic",
         "chance": 1.2
       },
       {
@@ -2111,48 +2860,28 @@
         "chance": 1.2
       },
       {
-        "name": "Cynosure",
-        "type": "Metal",
+        "name": "Caligo",
+        "type": "Water",
         "chance": 1.1
       },
       {
-        "name": "Emberblade",
-        "type": "Fire",
+        "name": "Thornlash",
+        "type": "Plant",
         "chance": 1.1
       },
       {
-        "name": "Tremorock",
-        "type": "Earth",
-        "chance": 1.1
-      },
-      {
-        "name": "Dirt Urchin",
-        "type": "Earth",
-        "chance": 1.0
-      },
-      {
-        "name": "Gazzer",
-        "type": "Air",
-        "chance": 1.0
-      },
-      {
-        "name": "Hoverbug",
-        "type": "Air",
-        "chance": 1.0
-      },
-      {
-        "name": "Ventus",
-        "type": "Air",
-        "chance": 1.0
-      },
-      {
-        "name": "Frightgeist",
-        "type": "Dark",
+        "name": "Flatulorhinkus",
+        "type": "Toxic",
         "chance": 0.9
       },
       {
-        "name": "Glowdab",
-        "type": "Light",
+        "name": "Spark Mite",
+        "type": "Electricity",
+        "chance": 0.9
+      },
+      {
+        "name": "Zephur",
+        "type": "Energy",
         "chance": 0.9
       },
       {
@@ -2161,68 +2890,28 @@
         "chance": 0.8
       },
       {
-        "name": "Crystalyd",
-        "type": "Earth",
-        "chance": 0.8
-      },
-      {
-        "name": "Diggrix",
-        "type": "Earth",
-        "chance": 0.8
-      },
-      {
-        "name": "Fandango",
-        "type": "Energy",
-        "chance": 0.8
-      },
-      {
-        "name": "Frostfire",
-        "type": "Fire",
-        "chance": 0.8
-      },
-      {
-        "name": "Hop Rock",
-        "type": "Earth",
-        "chance": 0.8
-      },
-      {
         "name": "Jellyish",
         "type": "Unique",
         "chance": 0.8
       },
       {
-        "name": "Lentus",
+        "name": "Neotox",
+        "type": "Toxic",
+        "chance": 0.8
+      },
+      {
+        "name": "Thugglet",
+        "type": "Psychic",
+        "chance": 0.8
+      },
+      {
+        "name": "Psi",
         "type": "Energy",
-        "chance": 0.8
-      },
-      {
-        "name": "Sand Angler",
-        "type": "Earth",
-        "chance": 0.8
-      },
-      {
-        "name": "Tesser",
-        "type": "Energy",
-        "chance": 0.8
-      },
-      {
-        "name": "Tormato",
-        "type": "Air",
-        "chance": 0.8
-      },
-      {
-        "name": "Hexlet",
-        "type": "Dark",
         "chance": 0.7
       },
       {
-        "name": "Negashade",
-        "type": "Dark",
-        "chance": 0.7
-      },
-      {
-        "name": "Geoshard",
-        "type": "Earth",
+        "name": "Hypnogrif",
+        "type": "Psychic",
         "chance": 0.6
       },
       {
@@ -2231,69 +2920,79 @@
         "chance": 0.6
       },
       {
-        "name": "Rammstone",
-        "type": "Earth",
-        "chance": 0.6
-      },
-      {
-        "name": "Thugglet",
-        "type": "Psychic",
-        "chance": 0.6
-      },
-      {
-        "name": "Hypnogrif",
-        "type": "Psychic",
-        "chance": 0.5
-      },
-      {
-        "name": "Phosphora",
+        "name": "Mirage Coil",
         "type": "Light",
-        "chance": 0.5
+        "chance": 0.6
       },
       {
         "name": "Pieper",
         "type": "Psychic",
-        "chance": 0.5
+        "chance": 0.6
       },
       {
-        "name": "Regulator",
-        "type": "Fire",
-        "chance": 0.5
-      },
-      {
-        "name": "Zeus",
+        "name": "Tazerling",
         "type": "Electricity",
+        "chance": 0.6
+      },
+      {
+        "name": "Boon Doc",
+        "type": "Healing",
+        "chance": 0.5
+      },
+      {
+        "name": "Fandango",
+        "type": "Energy",
+        "chance": 0.5
+      },
+      {
+        "name": "Lentus",
+        "type": "Energy",
+        "chance": 0.5
+      },
+      {
+        "name": "Tesser",
+        "type": "Energy",
+        "chance": 0.5
+      },
+      {
+        "name": "Enigmo",
+        "type": "Light",
         "chance": 0.4
       },
       {
         "name": "Slyren",
         "type": "Psychic",
+        "chance": 0.4
+      },
+      {
+        "name": "Xmitter",
+        "type": "Electricity",
+        "chance": 0.4
+      },
+      {
+        "name": "Arcling",
+        "type": "Electricity",
         "chance": 0.3
       },
       {
-        "name": "Enigmo",
-        "type": "Light",
-        "chance": 0.2
+        "name": "Cybercut",
+        "type": "Electricity",
+        "chance": 0.3
       },
       {
         "name": "Eunoa",
+        "type": "Psychic",
+        "chance": 0.3
+      },
+      {
+        "name": "Perplexus",
         "type": "Psychic",
         "chance": 0.2
       },
       {
         "name": "Keystone",
         "type": "Energy",
-        "chance": 0.2
-      },
-      {
-        "name": "Mirage Coil",
-        "type": "Light",
-        "chance": 0.2
-      },
-      {
-        "name": "Perplexus",
-        "type": "Psychic",
-        "chance": 0.2
+        "chance": 0.1
       },
       {
         "name": "Meduslug",
@@ -2303,6 +3002,11 @@
       {
         "name": "Mimkey",
         "type": "Unique",
+        "chance": 0.1
+      },
+      {
+        "name": "Zeus",
+        "type": "Electricity",
         "chance": 0.1
       }
     ],
@@ -3130,318 +3834,6 @@
         "chance": 0.2
       }
     ],
-    "Solenne": [
-      {
-        "name": "Puffshroom",
-        "type": "Plant",
-        "chance": 5.5
-      },
-      {
-        "name": "Fernwick",
-        "type": "Plant",
-        "chance": 5.4
-      },
-      {
-        "name": "Sagebloom",
-        "type": "Plant",
-        "chance": 4.6
-      },
-      {
-        "name": "Tidbit",
-        "type": "Healing",
-        "chance": 4.3
-      },
-      {
-        "name": "Flopper",
-        "type": "None",
-        "chance": 4.1
-      },
-      {
-        "name": "Vinedrill",
-        "type": "Plant",
-        "chance": 3.8
-      },
-      {
-        "name": "Dustkin",
-        "type": "Earth",
-        "chance": 3.5
-      },
-      {
-        "name": "Tremorock",
-        "type": "Earth",
-        "chance": 3.2
-      },
-      {
-        "name": "Driplet",
-        "type": "Water",
-        "chance": 2.9
-      },
-      {
-        "name": "Graspvine",
-        "type": "Plant",
-        "chance": 2.9
-      },
-      {
-        "name": "Ripplet",
-        "type": "Water",
-        "chance": 2.9
-      },
-      {
-        "name": "Aquabeek",
-        "type": "Water",
-        "chance": 2.7
-      },
-      {
-        "name": "Dirt Urchin",
-        "type": "Earth",
-        "chance": 2.7
-      },
-      {
-        "name": "Driftmoth",
-        "type": "Air",
-        "chance": 2.4
-      },
-      {
-        "name": "Glowdab",
-        "type": "Light",
-        "chance": 2.4
-      },
-      {
-        "name": "Bubbaleone",
-        "type": "Water",
-        "chance": 2.3
-      },
-      {
-        "name": "Crystalyd",
-        "type": "Earth",
-        "chance": 2.3
-      },
-      {
-        "name": "Diggrix",
-        "type": "Earth",
-        "chance": 2.3
-      },
-      {
-        "name": "Hop Rock",
-        "type": "Earth",
-        "chance": 2.3
-      },
-      {
-        "name": "Sand Angler",
-        "type": "Earth",
-        "chance": 2.3
-      },
-      {
-        "name": "Mantis",
-        "type": "Water",
-        "chance": 1.9
-      },
-      {
-        "name": "Gazzer",
-        "type": "Air",
-        "chance": 1.8
-      },
-      {
-        "name": "Geoshard",
-        "type": "Earth",
-        "chance": 1.8
-      },
-      {
-        "name": "Hoverbug",
-        "type": "Air",
-        "chance": 1.8
-      },
-      {
-        "name": "Rammstone",
-        "type": "Earth",
-        "chance": 1.8
-      },
-      {
-        "name": "Ventus",
-        "type": "Air",
-        "chance": 1.8
-      },
-      {
-        "name": "Pressure Tick",
-        "type": "Water",
-        "chance": 1.5
-      },
-      {
-        "name": "Tormato",
-        "type": "Air",
-        "chance": 1.5
-      },
-      {
-        "name": "Phosphora",
-        "type": "Light",
-        "chance": 1.2
-      },
-      {
-        "name": "Sapheart",
-        "type": "Healing",
-        "chance": 1.2
-      },
-      {
-        "name": "Soot Pup",
-        "type": "Toxic",
-        "chance": 1.2
-      },
-      {
-        "name": "Wisplet",
-        "type": "Unique",
-        "chance": 1.2
-      },
-      {
-        "name": "Caligo",
-        "type": "Water",
-        "chance": 1.1
-      },
-      {
-        "name": "Thornlash",
-        "type": "Plant",
-        "chance": 1.1
-      },
-      {
-        "name": "Flatulorhinkus",
-        "type": "Toxic",
-        "chance": 0.9
-      },
-      {
-        "name": "Spark Mite",
-        "type": "Electricity",
-        "chance": 0.9
-      },
-      {
-        "name": "Zephur",
-        "type": "Energy",
-        "chance": 0.9
-      },
-      {
-        "name": "Arachnet",
-        "type": "Unique",
-        "chance": 0.8
-      },
-      {
-        "name": "Jellyish",
-        "type": "Unique",
-        "chance": 0.8
-      },
-      {
-        "name": "Neotox",
-        "type": "Toxic",
-        "chance": 0.8
-      },
-      {
-        "name": "Thugglet",
-        "type": "Psychic",
-        "chance": 0.8
-      },
-      {
-        "name": "Psi",
-        "type": "Energy",
-        "chance": 0.7
-      },
-      {
-        "name": "Hypnogrif",
-        "type": "Psychic",
-        "chance": 0.6
-      },
-      {
-        "name": "Lariat",
-        "type": "Unique",
-        "chance": 0.6
-      },
-      {
-        "name": "Mirage Coil",
-        "type": "Light",
-        "chance": 0.6
-      },
-      {
-        "name": "Pieper",
-        "type": "Psychic",
-        "chance": 0.6
-      },
-      {
-        "name": "Tazerling",
-        "type": "Electricity",
-        "chance": 0.6
-      },
-      {
-        "name": "Boon Doc",
-        "type": "Healing",
-        "chance": 0.5
-      },
-      {
-        "name": "Fandango",
-        "type": "Energy",
-        "chance": 0.5
-      },
-      {
-        "name": "Lentus",
-        "type": "Energy",
-        "chance": 0.5
-      },
-      {
-        "name": "Tesser",
-        "type": "Energy",
-        "chance": 0.5
-      },
-      {
-        "name": "Enigmo",
-        "type": "Light",
-        "chance": 0.4
-      },
-      {
-        "name": "Slyren",
-        "type": "Psychic",
-        "chance": 0.4
-      },
-      {
-        "name": "Xmitter",
-        "type": "Electricity",
-        "chance": 0.4
-      },
-      {
-        "name": "Arcling",
-        "type": "Electricity",
-        "chance": 0.3
-      },
-      {
-        "name": "Cybercut",
-        "type": "Electricity",
-        "chance": 0.3
-      },
-      {
-        "name": "Eunoa",
-        "type": "Psychic",
-        "chance": 0.3
-      },
-      {
-        "name": "Perplexus",
-        "type": "Psychic",
-        "chance": 0.2
-      },
-      {
-        "name": "Keystone",
-        "type": "Energy",
-        "chance": 0.1
-      },
-      {
-        "name": "Meduslug",
-        "type": "Psychic",
-        "chance": 0.1
-      },
-      {
-        "name": "Mimkey",
-        "type": "Unique",
-        "chance": 0.1
-      },
-      {
-        "name": "Zeus",
-        "type": "Electricity",
-        "chance": 0.1
-      }
-    ],
     "Kethrun Reach": [
       {
         "name": "Flopper",
@@ -3729,200 +4121,170 @@
         "chance": 0.3
       }
     ],
-    "Virid Canopy": [
-      {
-        "name": "Puffshroom",
-        "type": "Plant",
-        "chance": 5.4
-      },
-      {
-        "name": "Fernwick",
-        "type": "Plant",
-        "chance": 4.8
-      },
-      {
-        "name": "Tidbit",
-        "type": "Healing",
-        "chance": 4.3
-      },
+    "Marrek's Hold": [
       {
         "name": "Soot Pup",
         "type": "Toxic",
-        "chance": 4.2
-      },
-      {
-        "name": "Sagebloom",
-        "type": "Plant",
-        "chance": 4.1
-      },
-      {
-        "name": "Vinedrill",
-        "type": "Plant",
-        "chance": 3.3
+        "chance": 5.8
       },
       {
         "name": "Flatulorhinkus",
         "type": "Toxic",
-        "chance": 3.2
+        "chance": 4.9
       },
       {
         "name": "Driplet",
         "type": "Water",
-        "chance": 3.1
+        "chance": 4.4
+      },
+      {
+        "name": "Puffshroom",
+        "type": "Plant",
+        "chance": 4.4
       },
       {
         "name": "Ripplet",
         "type": "Water",
-        "chance": 3.1
+        "chance": 4.4
       },
       {
         "name": "Aquabeek",
         "type": "Water",
-        "chance": 2.9
+        "chance": 4.1
+      },
+      {
+        "name": "Fernwick",
+        "type": "Plant",
+        "chance": 4.1
       },
       {
         "name": "Neotox",
         "type": "Toxic",
-        "chance": 2.7
+        "chance": 4.1
+      },
+      {
+        "name": "Bubbaleone",
+        "type": "Water",
+        "chance": 3.5
+      },
+      {
+        "name": "Murkling",
+        "type": "Dark",
+        "chance": 3.5
+      },
+      {
+        "name": "Sagebloom",
+        "type": "Plant",
+        "chance": 3.5
+      },
+      {
+        "name": "Mantis",
+        "type": "Water",
+        "chance": 2.8
+      },
+      {
+        "name": "Vinedrill",
+        "type": "Plant",
+        "chance": 2.8
       },
       {
         "name": "Graspvine",
         "type": "Plant",
-        "chance": 2.6
-      },
-      {
-        "name": "Bubbaleone",
-        "type": "Water",
-        "chance": 2.4
-      },
-      {
-        "name": "Wisplet",
-        "type": "Unique",
-        "chance": 2.1
-      },
-      {
-        "name": "Mantis",
-        "type": "Water",
-        "chance": 2.0
-      },
-      {
-        "name": "Thugglet",
-        "type": "Psychic",
-        "chance": 1.7
-      },
-      {
-        "name": "Driftmoth",
-        "type": "Air",
-        "chance": 1.6
-      },
-      {
-        "name": "Dustkin",
-        "type": "Earth",
-        "chance": 1.6
-      },
-      {
-        "name": "Flopper",
-        "type": "None",
-        "chance": 1.6
-      },
-      {
-        "name": "Glowdab",
-        "type": "Light",
-        "chance": 1.6
+        "chance": 2.2
       },
       {
         "name": "Pressure Tick",
         "type": "Water",
-        "chance": 1.6
+        "chance": 2.2
       },
       {
-        "name": "Murkling",
-        "type": "Dark",
-        "chance": 1.4
-      },
-      {
-        "name": "Tremorock",
+        "name": "Dustkin",
         "type": "Earth",
-        "chance": 1.4
+        "chance": 1.9
       },
       {
-        "name": "Arachnet",
-        "type": "Unique",
-        "chance": 1.3
-      },
-      {
-        "name": "Hypnogrif",
-        "type": "Psychic",
-        "chance": 1.3
-      },
-      {
-        "name": "Jellyish",
-        "type": "Unique",
-        "chance": 1.3
-      },
-      {
-        "name": "Pieper",
-        "type": "Psychic",
-        "chance": 1.3
+        "name": "Frightgeist",
+        "type": "Dark",
+        "chance": 1.9
       },
       {
         "name": "Caligo",
         "type": "Water",
-        "chance": 1.2
+        "chance": 1.7
+      },
+      {
+        "name": "Tidbit",
+        "type": "Healing",
+        "chance": 1.7
+      },
+      {
+        "name": "Tremorock",
+        "type": "Earth",
+        "chance": 1.7
       },
       {
         "name": "Dirt Urchin",
+        "type": "Earth",
+        "chance": 1.5
+      },
+      {
+        "name": "Hexlet",
+        "type": "Dark",
+        "chance": 1.4
+      },
+      {
+        "name": "Negashade",
+        "type": "Dark",
+        "chance": 1.4
+      },
+      {
+        "name": "Driftmoth",
+        "type": "Air",
+        "chance": 1.3
+      },
+      {
+        "name": "Flopper",
+        "type": "None",
+        "chance": 1.3
+      },
+      {
+        "name": "Crystalyd",
+        "type": "Earth",
+        "chance": 1.2
+      },
+      {
+        "name": "Diggrix",
+        "type": "Earth",
+        "chance": 1.2
+      },
+      {
+        "name": "Hop Rock",
+        "type": "Earth",
+        "chance": 1.2
+      },
+      {
+        "name": "Sand Angler",
         "type": "Earth",
         "chance": 1.2
       },
       {
         "name": "Gazzer",
         "type": "Air",
-        "chance": 1.2
+        "chance": 1.0
+      },
+      {
+        "name": "Geoshard",
+        "type": "Earth",
+        "chance": 1.0
       },
       {
         "name": "Hoverbug",
         "type": "Air",
-        "chance": 1.2
+        "chance": 1.0
       },
       {
-        "name": "Sapheart",
-        "type": "Healing",
-        "chance": 1.2
-      },
-      {
-        "name": "Ventus",
-        "type": "Air",
-        "chance": 1.2
-      },
-      {
-        "name": "Crystalyd",
+        "name": "Rammstone",
         "type": "Earth",
-        "chance": 1.0
-      },
-      {
-        "name": "Diggrix",
-        "type": "Earth",
-        "chance": 1.0
-      },
-      {
-        "name": "Hop Rock",
-        "type": "Earth",
-        "chance": 1.0
-      },
-      {
-        "name": "Lariat",
-        "type": "Unique",
-        "chance": 1.0
-      },
-      {
-        "name": "Sand Angler",
-        "type": "Earth",
-        "chance": 1.0
-      },
-      {
-        "name": "Slyren",
-        "type": "Psychic",
         "chance": 1.0
       },
       {
@@ -3931,471 +4293,64 @@
         "chance": 1.0
       },
       {
-        "name": "Tormato",
+        "name": "Ventus",
         "type": "Air",
         "chance": 1.0
       },
       {
-        "name": "Thornlash",
-        "type": "Plant",
-        "chance": 0.9
-      },
-      {
-        "name": "Frightgeist",
-        "type": "Dark",
-        "chance": 0.8
-      },
-      {
-        "name": "Geoshard",
-        "type": "Earth",
-        "chance": 0.8
-      },
-      {
-        "name": "Phosphora",
-        "type": "Light",
-        "chance": 0.8
-      },
-      {
-        "name": "Rammstone",
-        "type": "Earth",
-        "chance": 0.8
-      },
-      {
-        "name": "Cindermite",
-        "type": "Fire",
-        "chance": 0.7
-      },
-      {
-        "name": "Echo-ash",
-        "type": "Fire",
-        "chance": 0.7
-      },
-      {
-        "name": "Eunoa",
-        "type": "Psychic",
-        "chance": 0.7
-      },
-      {
-        "name": "Tazerling",
-        "type": "Electricity",
-        "chance": 0.7
-      },
-      {
-        "name": "Zephur",
-        "type": "Energy",
-        "chance": 0.7
-      },
-      {
-        "name": "Hexlet",
-        "type": "Dark",
-        "chance": 0.6
-      },
-      {
-        "name": "Negashade",
-        "type": "Dark",
-        "chance": 0.6
-      },
-      {
-        "name": "Boon Doc",
-        "type": "Healing",
-        "chance": 0.5
-      },
-      {
-        "name": "Firenzar",
-        "type": "Fire",
-        "chance": 0.5
-      },
-      {
-        "name": "Perplexus",
-        "type": "Psychic",
-        "chance": 0.5
-      },
-      {
-        "name": "Psi",
-        "type": "Energy",
-        "chance": 0.5
-      },
-      {
-        "name": "Xmitter",
-        "type": "Electricity",
-        "chance": 0.5
-      },
-      {
-        "name": "Arcling",
-        "type": "Electricity",
-        "chance": 0.4
-      },
-      {
-        "name": "Blastipede",
-        "type": "Fire",
-        "chance": 0.4
-      },
-      {
-        "name": "Cybercut",
-        "type": "Electricity",
-        "chance": 0.4
-      },
-      {
-        "name": "Flaringo",
-        "type": "Fire",
-        "chance": 0.4
-      },
-      {
-        "name": "Grenuke",
-        "type": "Fire",
-        "chance": 0.4
-      },
-      {
-        "name": "Lavalynx",
-        "type": "Fire",
-        "chance": 0.4
-      },
-      {
-        "name": "Mirage Coil",
-        "type": "Light",
-        "chance": 0.4
-      },
-      {
-        "name": "Enigmo",
-        "type": "Light",
-        "chance": 0.3
-      },
-      {
-        "name": "Fandango",
-        "type": "Energy",
-        "chance": 0.3
-      },
-      {
-        "name": "Forgesmelter",
-        "type": "Fire",
-        "chance": 0.3
-      },
-      {
-        "name": "Infurnus",
-        "type": "Fire",
-        "chance": 0.3
-      },
-      {
-        "name": "Lentus",
-        "type": "Energy",
-        "chance": 0.3
-      },
-      {
-        "name": "Meduslug",
-        "type": "Psychic",
-        "chance": 0.3
-      },
-      {
-        "name": "Tesser",
-        "type": "Energy",
-        "chance": 0.3
-      },
-      {
-        "name": "Emberblade",
-        "type": "Fire",
-        "chance": 0.2
-      },
-      {
-        "name": "Frostfire",
-        "type": "Fire",
-        "chance": 0.1
-      },
-      {
-        "name": "Keystone",
-        "type": "Energy",
-        "chance": 0.1
-      },
-      {
-        "name": "Mimkey",
+        "name": "Wisplet",
         "type": "Unique",
-        "chance": 0.1
-      },
-      {
-        "name": "Regulator",
-        "type": "Fire",
-        "chance": 0.1
-      },
-      {
-        "name": "Zeus",
-        "type": "Electricity",
-        "chance": 0.1
-      }
-    ],
-    "Kaeloth Prime": [
-      {
-        "name": "Chillnip",
-        "type": "Ice",
-        "chance": 6.0
+        "chance": 1.0
       },
       {
         "name": "Cobblet",
         "type": "Metal",
-        "chance": 4.4
-      },
-      {
-        "name": "Frostcrawler",
-        "type": "Ice",
-        "chance": 4.3
-      },
-      {
-        "name": "Narwhaddle",
-        "type": "Ice",
-        "chance": 4.3
-      },
-      {
-        "name": "Driftmoth",
-        "type": "Air",
-        "chance": 3.4
-      },
-      {
-        "name": "Murkling",
-        "type": "Dark",
-        "chance": 3.1
-      },
-      {
-        "name": "Polero",
-        "type": "Metal",
-        "chance": 3.0
-      },
-      {
-        "name": "Driplet",
-        "type": "Water",
-        "chance": 2.7
-      },
-      {
-        "name": "Ripplet",
-        "type": "Water",
-        "chance": 2.7
-      },
-      {
-        "name": "Gazzer",
-        "type": "Air",
-        "chance": 2.6
-      },
-      {
-        "name": "Hoverbug",
-        "type": "Air",
-        "chance": 2.6
-      },
-      {
-        "name": "Ventus",
-        "type": "Air",
-        "chance": 2.6
-      },
-      {
-        "name": "Aquabeek",
-        "type": "Water",
-        "chance": 2.5
-      },
-      {
-        "name": "Slicksilver",
-        "type": "Metal",
-        "chance": 2.4
-      },
-      {
-        "name": "Speedstinger",
-        "type": "Metal",
-        "chance": 2.4
-      },
-      {
-        "name": "Tormato",
-        "type": "Air",
-        "chance": 2.2
-      },
-      {
-        "name": "Bubbaleone",
-        "type": "Water",
-        "chance": 2.1
-      },
-      {
-        "name": "Spark Mite",
-        "type": "Electricity",
-        "chance": 2.0
-      },
-      {
-        "name": "Armashelt",
-        "type": "Metal",
-        "chance": 1.8
-      },
-      {
-        "name": "Bladier",
-        "type": "Metal",
-        "chance": 1.8
-      },
-      {
-        "name": "Makobreaker",
-        "type": "Metal",
-        "chance": 1.8
-      },
-      {
-        "name": "Thresher",
-        "type": "Metal",
-        "chance": 1.8
-      },
-      {
-        "name": "Frightgeist",
-        "type": "Dark",
-        "chance": 1.7
-      },
-      {
-        "name": "Mantis",
-        "type": "Water",
-        "chance": 1.7
-      },
-      {
-        "name": "Dustkin",
-        "type": "Earth",
-        "chance": 1.4
-      },
-      {
-        "name": "Flopper",
-        "type": "None",
-        "chance": 1.4
-      },
-      {
-        "name": "Glowdab",
-        "type": "Light",
-        "chance": 1.4
-      },
-      {
-        "name": "Pressure Tick",
-        "type": "Water",
-        "chance": 1.4
-      },
-      {
-        "name": "Anchorage",
-        "type": "Metal",
-        "chance": 1.3
-      },
-      {
-        "name": "Hexlet",
-        "type": "Dark",
-        "chance": 1.3
-      },
-      {
-        "name": "Negashade",
-        "type": "Dark",
-        "chance": 1.3
-      },
-      {
-        "name": "Tazerling",
-        "type": "Electricity",
-        "chance": 1.3
-      },
-      {
-        "name": "Tremorock",
-        "type": "Earth",
-        "chance": 1.2
-      },
-      {
-        "name": "Dirt Urchin",
-        "type": "Earth",
-        "chance": 1.1
-      },
-      {
-        "name": "Caligo",
-        "type": "Water",
-        "chance": 1.0
-      },
-      {
-        "name": "Wisplet",
-        "type": "Unique",
-        "chance": 1.0
-      },
-      {
-        "name": "Xmitter",
-        "type": "Electricity",
-        "chance": 1.0
-      },
-      {
-        "name": "Zephur",
-        "type": "Energy",
-        "chance": 1.0
-      },
-      {
-        "name": "Crystalyd",
-        "type": "Earth",
         "chance": 0.9
       },
       {
-        "name": "Cynosure",
-        "type": "Metal",
-        "chance": 0.9
-      },
-      {
-        "name": "Diggrix",
-        "type": "Earth",
-        "chance": 0.9
-      },
-      {
-        "name": "Hop Rock",
-        "type": "Earth",
-        "chance": 0.9
-      },
-      {
-        "name": "Sand Angler",
-        "type": "Earth",
-        "chance": 0.9
+        "name": "Thornlash",
+        "type": "Plant",
+        "chance": 0.8
       },
       {
         "name": "Thugglet",
         "type": "Psychic",
-        "chance": 0.9
-      },
-      {
-        "name": "Arcling",
-        "type": "Electricity",
         "chance": 0.8
       },
       {
-        "name": "Cybercut",
-        "type": "Electricity",
-        "chance": 0.8
-      },
-      {
-        "name": "Psi",
-        "type": "Energy",
+        "name": "Tormato",
+        "type": "Air",
         "chance": 0.8
       },
       {
         "name": "Arachnet",
         "type": "Unique",
-        "chance": 0.7
-      },
-      {
-        "name": "Geoshard",
-        "type": "Earth",
-        "chance": 0.7
+        "chance": 0.6
       },
       {
         "name": "Hypnogrif",
         "type": "Psychic",
-        "chance": 0.7
+        "chance": 0.6
       },
       {
         "name": "Jellyish",
         "type": "Unique",
-        "chance": 0.7
-      },
-      {
-        "name": "Phosphora",
-        "type": "Light",
-        "chance": 0.7
+        "chance": 0.6
       },
       {
         "name": "Pieper",
         "type": "Psychic",
-        "chance": 0.7
+        "chance": 0.6
       },
       {
-        "name": "Rammstone",
-        "type": "Earth",
-        "chance": 0.7
+        "name": "Polero",
+        "type": "Metal",
+        "chance": 0.6
       },
       {
-        "name": "Fandango",
-        "type": "Energy",
-        "chance": 0.5
+        "name": "Tazerling",
+        "type": "Electricity",
+        "chance": 0.6
       },
       {
         "name": "Lariat",
@@ -4403,8 +4358,13 @@
         "chance": 0.5
       },
       {
-        "name": "Lentus",
-        "type": "Energy",
+        "name": "Sapheart",
+        "type": "Healing",
+        "chance": 0.5
+      },
+      {
+        "name": "Slicksilver",
+        "type": "Metal",
         "chance": 0.5
       },
       {
@@ -4413,28 +4373,88 @@
         "chance": 0.5
       },
       {
-        "name": "Tesser",
+        "name": "Speedstinger",
+        "type": "Metal",
+        "chance": 0.5
+      },
+      {
+        "name": "Xmitter",
+        "type": "Electricity",
+        "chance": 0.5
+      },
+      {
+        "name": "Zephur",
         "type": "Energy",
         "chance": 0.5
       },
       {
+        "name": "Arcling",
+        "type": "Electricity",
+        "chance": 0.4
+      },
+      {
+        "name": "Armashelt",
+        "type": "Metal",
+        "chance": 0.4
+      },
+      {
+        "name": "Bladier",
+        "type": "Metal",
+        "chance": 0.4
+      },
+      {
+        "name": "Cybercut",
+        "type": "Electricity",
+        "chance": 0.4
+      },
+      {
+        "name": "Makobreaker",
+        "type": "Metal",
+        "chance": 0.4
+      },
+      {
+        "name": "Psi",
+        "type": "Energy",
+        "chance": 0.4
+      },
+      {
+        "name": "Thresher",
+        "type": "Metal",
+        "chance": 0.4
+      },
+      {
+        "name": "Anchorage",
+        "type": "Metal",
+        "chance": 0.3
+      },
+      {
         "name": "Eunoa",
         "type": "Psychic",
-        "chance": 0.4
+        "chance": 0.3
       },
       {
-        "name": "Mirage Coil",
-        "type": "Light",
-        "chance": 0.4
+        "name": "Fandango",
+        "type": "Energy",
+        "chance": 0.3
       },
       {
-        "name": "Enigmo",
-        "type": "Light",
+        "name": "Lentus",
+        "type": "Energy",
+        "chance": 0.3
+      },
+      {
+        "name": "Tesser",
+        "type": "Energy",
+        "chance": 0.3
+      },
+      {
+        "name": "Boon Doc",
+        "type": "Healing",
         "chance": 0.2
       },
       {
-        "name": "Meduslug",
-        "type": "Psychic",
+        "name": "Cynosure",
+        "type": "Metal",
         "chance": 0.2
       },
       {
@@ -4443,18 +4463,23 @@
         "chance": 0.2
       },
       {
-        "name": "Zeus",
-        "type": "Electricity",
-        "chance": 0.2
-      },
-      {
         "name": "Keystone",
         "type": "Energy",
         "chance": 0.1
       },
       {
+        "name": "Meduslug",
+        "type": "Psychic",
+        "chance": 0.1
+      },
+      {
         "name": "Mimkey",
         "type": "Unique",
+        "chance": 0.1
+      },
+      {
+        "name": "Zeus",
+        "type": "Electricity",
         "chance": 0.1
       }
     ],
@@ -4820,635 +4845,6 @@
         "chance": 0.1
       }
     ],
-    "Marrek's Hold": [
-      {
-        "name": "Soot Pup",
-        "type": "Toxic",
-        "chance": 5.8
-      },
-      {
-        "name": "Flatulorhinkus",
-        "type": "Toxic",
-        "chance": 4.9
-      },
-      {
-        "name": "Driplet",
-        "type": "Water",
-        "chance": 4.4
-      },
-      {
-        "name": "Puffshroom",
-        "type": "Plant",
-        "chance": 4.4
-      },
-      {
-        "name": "Ripplet",
-        "type": "Water",
-        "chance": 4.4
-      },
-      {
-        "name": "Aquabeek",
-        "type": "Water",
-        "chance": 4.1
-      },
-      {
-        "name": "Fernwick",
-        "type": "Plant",
-        "chance": 4.1
-      },
-      {
-        "name": "Neotox",
-        "type": "Toxic",
-        "chance": 4.1
-      },
-      {
-        "name": "Bubbaleone",
-        "type": "Water",
-        "chance": 3.5
-      },
-      {
-        "name": "Murkling",
-        "type": "Dark",
-        "chance": 3.5
-      },
-      {
-        "name": "Sagebloom",
-        "type": "Plant",
-        "chance": 3.5
-      },
-      {
-        "name": "Mantis",
-        "type": "Water",
-        "chance": 2.8
-      },
-      {
-        "name": "Vinedrill",
-        "type": "Plant",
-        "chance": 2.8
-      },
-      {
-        "name": "Graspvine",
-        "type": "Plant",
-        "chance": 2.2
-      },
-      {
-        "name": "Pressure Tick",
-        "type": "Water",
-        "chance": 2.2
-      },
-      {
-        "name": "Dustkin",
-        "type": "Earth",
-        "chance": 1.9
-      },
-      {
-        "name": "Frightgeist",
-        "type": "Dark",
-        "chance": 1.9
-      },
-      {
-        "name": "Caligo",
-        "type": "Water",
-        "chance": 1.7
-      },
-      {
-        "name": "Tidbit",
-        "type": "Healing",
-        "chance": 1.7
-      },
-      {
-        "name": "Tremorock",
-        "type": "Earth",
-        "chance": 1.7
-      },
-      {
-        "name": "Dirt Urchin",
-        "type": "Earth",
-        "chance": 1.5
-      },
-      {
-        "name": "Hexlet",
-        "type": "Dark",
-        "chance": 1.4
-      },
-      {
-        "name": "Negashade",
-        "type": "Dark",
-        "chance": 1.4
-      },
-      {
-        "name": "Driftmoth",
-        "type": "Air",
-        "chance": 1.3
-      },
-      {
-        "name": "Flopper",
-        "type": "None",
-        "chance": 1.3
-      },
-      {
-        "name": "Crystalyd",
-        "type": "Earth",
-        "chance": 1.2
-      },
-      {
-        "name": "Diggrix",
-        "type": "Earth",
-        "chance": 1.2
-      },
-      {
-        "name": "Hop Rock",
-        "type": "Earth",
-        "chance": 1.2
-      },
-      {
-        "name": "Sand Angler",
-        "type": "Earth",
-        "chance": 1.2
-      },
-      {
-        "name": "Gazzer",
-        "type": "Air",
-        "chance": 1.0
-      },
-      {
-        "name": "Geoshard",
-        "type": "Earth",
-        "chance": 1.0
-      },
-      {
-        "name": "Hoverbug",
-        "type": "Air",
-        "chance": 1.0
-      },
-      {
-        "name": "Rammstone",
-        "type": "Earth",
-        "chance": 1.0
-      },
-      {
-        "name": "Spark Mite",
-        "type": "Electricity",
-        "chance": 1.0
-      },
-      {
-        "name": "Ventus",
-        "type": "Air",
-        "chance": 1.0
-      },
-      {
-        "name": "Wisplet",
-        "type": "Unique",
-        "chance": 1.0
-      },
-      {
-        "name": "Cobblet",
-        "type": "Metal",
-        "chance": 0.9
-      },
-      {
-        "name": "Thornlash",
-        "type": "Plant",
-        "chance": 0.8
-      },
-      {
-        "name": "Thugglet",
-        "type": "Psychic",
-        "chance": 0.8
-      },
-      {
-        "name": "Tormato",
-        "type": "Air",
-        "chance": 0.8
-      },
-      {
-        "name": "Arachnet",
-        "type": "Unique",
-        "chance": 0.6
-      },
-      {
-        "name": "Hypnogrif",
-        "type": "Psychic",
-        "chance": 0.6
-      },
-      {
-        "name": "Jellyish",
-        "type": "Unique",
-        "chance": 0.6
-      },
-      {
-        "name": "Pieper",
-        "type": "Psychic",
-        "chance": 0.6
-      },
-      {
-        "name": "Polero",
-        "type": "Metal",
-        "chance": 0.6
-      },
-      {
-        "name": "Tazerling",
-        "type": "Electricity",
-        "chance": 0.6
-      },
-      {
-        "name": "Lariat",
-        "type": "Unique",
-        "chance": 0.5
-      },
-      {
-        "name": "Sapheart",
-        "type": "Healing",
-        "chance": 0.5
-      },
-      {
-        "name": "Slicksilver",
-        "type": "Metal",
-        "chance": 0.5
-      },
-      {
-        "name": "Slyren",
-        "type": "Psychic",
-        "chance": 0.5
-      },
-      {
-        "name": "Speedstinger",
-        "type": "Metal",
-        "chance": 0.5
-      },
-      {
-        "name": "Xmitter",
-        "type": "Electricity",
-        "chance": 0.5
-      },
-      {
-        "name": "Zephur",
-        "type": "Energy",
-        "chance": 0.5
-      },
-      {
-        "name": "Arcling",
-        "type": "Electricity",
-        "chance": 0.4
-      },
-      {
-        "name": "Armashelt",
-        "type": "Metal",
-        "chance": 0.4
-      },
-      {
-        "name": "Bladier",
-        "type": "Metal",
-        "chance": 0.4
-      },
-      {
-        "name": "Cybercut",
-        "type": "Electricity",
-        "chance": 0.4
-      },
-      {
-        "name": "Makobreaker",
-        "type": "Metal",
-        "chance": 0.4
-      },
-      {
-        "name": "Psi",
-        "type": "Energy",
-        "chance": 0.4
-      },
-      {
-        "name": "Thresher",
-        "type": "Metal",
-        "chance": 0.4
-      },
-      {
-        "name": "Anchorage",
-        "type": "Metal",
-        "chance": 0.3
-      },
-      {
-        "name": "Eunoa",
-        "type": "Psychic",
-        "chance": 0.3
-      },
-      {
-        "name": "Fandango",
-        "type": "Energy",
-        "chance": 0.3
-      },
-      {
-        "name": "Lentus",
-        "type": "Energy",
-        "chance": 0.3
-      },
-      {
-        "name": "Tesser",
-        "type": "Energy",
-        "chance": 0.3
-      },
-      {
-        "name": "Boon Doc",
-        "type": "Healing",
-        "chance": 0.2
-      },
-      {
-        "name": "Cynosure",
-        "type": "Metal",
-        "chance": 0.2
-      },
-      {
-        "name": "Perplexus",
-        "type": "Psychic",
-        "chance": 0.2
-      },
-      {
-        "name": "Keystone",
-        "type": "Energy",
-        "chance": 0.1
-      },
-      {
-        "name": "Meduslug",
-        "type": "Psychic",
-        "chance": 0.1
-      },
-      {
-        "name": "Mimkey",
-        "type": "Unique",
-        "chance": 0.1
-      },
-      {
-        "name": "Zeus",
-        "type": "Electricity",
-        "chance": 0.1
-      }
-    ],
-    "Ossuary Station": [
-      {
-        "name": "Murkling",
-        "type": "Dark",
-        "chance": 8.4
-      },
-      {
-        "name": "Cobblet",
-        "type": "Metal",
-        "chance": 5.1
-      },
-      {
-        "name": "Frightgeist",
-        "type": "Dark",
-        "chance": 4.7
-      },
-      {
-        "name": "Polero",
-        "type": "Metal",
-        "chance": 3.6
-      },
-      {
-        "name": "Hexlet",
-        "type": "Dark",
-        "chance": 3.5
-      },
-      {
-        "name": "Negashade",
-        "type": "Dark",
-        "chance": 3.5
-      },
-      {
-        "name": "Thugglet",
-        "type": "Psychic",
-        "chance": 3.0
-      },
-      {
-        "name": "Flopper",
-        "type": "None",
-        "chance": 2.8
-      },
-      {
-        "name": "Slicksilver",
-        "type": "Metal",
-        "chance": 2.8
-      },
-      {
-        "name": "Spark Mite",
-        "type": "Electricity",
-        "chance": 2.8
-      },
-      {
-        "name": "Speedstinger",
-        "type": "Metal",
-        "chance": 2.8
-      },
-      {
-        "name": "Wisplet",
-        "type": "Unique",
-        "chance": 2.8
-      },
-      {
-        "name": "Hypnogrif",
-        "type": "Psychic",
-        "chance": 2.3
-      },
-      {
-        "name": "Pieper",
-        "type": "Psychic",
-        "chance": 2.3
-      },
-      {
-        "name": "Armashelt",
-        "type": "Metal",
-        "chance": 2.1
-      },
-      {
-        "name": "Bladier",
-        "type": "Metal",
-        "chance": 2.1
-      },
-      {
-        "name": "Makobreaker",
-        "type": "Metal",
-        "chance": 2.1
-      },
-      {
-        "name": "Thresher",
-        "type": "Metal",
-        "chance": 2.1
-      },
-      {
-        "name": "Dustkin",
-        "type": "Earth",
-        "chance": 1.9
-      },
-      {
-        "name": "Zephur",
-        "type": "Energy",
-        "chance": 1.9
-      },
-      {
-        "name": "Arachnet",
-        "type": "Unique",
-        "chance": 1.8
-      },
-      {
-        "name": "Jellyish",
-        "type": "Unique",
-        "chance": 1.8
-      },
-      {
-        "name": "Tazerling",
-        "type": "Electricity",
-        "chance": 1.8
-      },
-      {
-        "name": "Slyren",
-        "type": "Psychic",
-        "chance": 1.7
-      },
-      {
-        "name": "Tremorock",
-        "type": "Earth",
-        "chance": 1.7
-      },
-      {
-        "name": "Anchorage",
-        "type": "Metal",
-        "chance": 1.5
-      },
-      {
-        "name": "Dirt Urchin",
-        "type": "Earth",
-        "chance": 1.4
-      },
-      {
-        "name": "Driftmoth",
-        "type": "Air",
-        "chance": 1.4
-      },
-      {
-        "name": "Lariat",
-        "type": "Unique",
-        "chance": 1.4
-      },
-      {
-        "name": "Psi",
-        "type": "Energy",
-        "chance": 1.4
-      },
-      {
-        "name": "Xmitter",
-        "type": "Electricity",
-        "chance": 1.4
-      },
-      {
-        "name": "Crystalyd",
-        "type": "Earth",
-        "chance": 1.2
-      },
-      {
-        "name": "Diggrix",
-        "type": "Earth",
-        "chance": 1.2
-      },
-      {
-        "name": "Eunoa",
-        "type": "Psychic",
-        "chance": 1.2
-      },
-      {
-        "name": "Hop Rock",
-        "type": "Earth",
-        "chance": 1.2
-      },
-      {
-        "name": "Sand Angler",
-        "type": "Earth",
-        "chance": 1.2
-      },
-      {
-        "name": "Gazzer",
-        "type": "Air",
-        "chance": 1.1
-      },
-      {
-        "name": "Hoverbug",
-        "type": "Air",
-        "chance": 1.1
-      },
-      {
-        "name": "Ventus",
-        "type": "Air",
-        "chance": 1.1
-      },
-      {
-        "name": "Arcling",
-        "type": "Electricity",
-        "chance": 1.0
-      },
-      {
-        "name": "Cybercut",
-        "type": "Electricity",
-        "chance": 1.0
-      },
-      {
-        "name": "Cynosure",
-        "type": "Metal",
-        "chance": 1.0
-      },
-      {
-        "name": "Fandango",
-        "type": "Energy",
-        "chance": 1.0
-      },
-      {
-        "name": "Lentus",
-        "type": "Energy",
-        "chance": 1.0
-      },
-      {
-        "name": "Tesser",
-        "type": "Energy",
-        "chance": 1.0
-      },
-      {
-        "name": "Geoshard",
-        "type": "Earth",
-        "chance": 0.9
-      },
-      {
-        "name": "Rammstone",
-        "type": "Earth",
-        "chance": 0.9
-      },
-      {
-        "name": "Tormato",
-        "type": "Air",
-        "chance": 0.9
-      },
-      {
-        "name": "Perplexus",
-        "type": "Psychic",
-        "chance": 0.8
-      },
-      {
-        "name": "Meduslug",
-        "type": "Psychic",
-        "chance": 0.5
-      },
-      {
-        "name": "Keystone",
-        "type": "Energy",
-        "chance": 0.3
-      },
-      {
-        "name": "Zeus",
-        "type": "Electricity",
-        "chance": 0.3
-      },
-      {
-        "name": "Mimkey",
-        "type": "Unique",
-        "chance": 0.2
-      }
-    ],
     "Vhalden": [
       {
         "name": "Dustkin",
@@ -5803,6 +5199,610 @@
       {
         "name": "Meduslug",
         "type": "Psychic",
+        "chance": 0.1
+      },
+      {
+        "name": "Mimkey",
+        "type": "Unique",
+        "chance": 0.1
+      }
+    ],
+    "Ossuary Station": [
+      {
+        "name": "Murkling",
+        "type": "Dark",
+        "chance": 8.4
+      },
+      {
+        "name": "Cobblet",
+        "type": "Metal",
+        "chance": 5.1
+      },
+      {
+        "name": "Frightgeist",
+        "type": "Dark",
+        "chance": 4.7
+      },
+      {
+        "name": "Polero",
+        "type": "Metal",
+        "chance": 3.6
+      },
+      {
+        "name": "Hexlet",
+        "type": "Dark",
+        "chance": 3.5
+      },
+      {
+        "name": "Negashade",
+        "type": "Dark",
+        "chance": 3.5
+      },
+      {
+        "name": "Thugglet",
+        "type": "Psychic",
+        "chance": 3.0
+      },
+      {
+        "name": "Flopper",
+        "type": "None",
+        "chance": 2.8
+      },
+      {
+        "name": "Slicksilver",
+        "type": "Metal",
+        "chance": 2.8
+      },
+      {
+        "name": "Spark Mite",
+        "type": "Electricity",
+        "chance": 2.8
+      },
+      {
+        "name": "Speedstinger",
+        "type": "Metal",
+        "chance": 2.8
+      },
+      {
+        "name": "Wisplet",
+        "type": "Unique",
+        "chance": 2.8
+      },
+      {
+        "name": "Hypnogrif",
+        "type": "Psychic",
+        "chance": 2.3
+      },
+      {
+        "name": "Pieper",
+        "type": "Psychic",
+        "chance": 2.3
+      },
+      {
+        "name": "Armashelt",
+        "type": "Metal",
+        "chance": 2.1
+      },
+      {
+        "name": "Bladier",
+        "type": "Metal",
+        "chance": 2.1
+      },
+      {
+        "name": "Makobreaker",
+        "type": "Metal",
+        "chance": 2.1
+      },
+      {
+        "name": "Thresher",
+        "type": "Metal",
+        "chance": 2.1
+      },
+      {
+        "name": "Dustkin",
+        "type": "Earth",
+        "chance": 1.9
+      },
+      {
+        "name": "Zephur",
+        "type": "Energy",
+        "chance": 1.9
+      },
+      {
+        "name": "Arachnet",
+        "type": "Unique",
+        "chance": 1.8
+      },
+      {
+        "name": "Jellyish",
+        "type": "Unique",
+        "chance": 1.8
+      },
+      {
+        "name": "Tazerling",
+        "type": "Electricity",
+        "chance": 1.8
+      },
+      {
+        "name": "Slyren",
+        "type": "Psychic",
+        "chance": 1.7
+      },
+      {
+        "name": "Tremorock",
+        "type": "Earth",
+        "chance": 1.7
+      },
+      {
+        "name": "Anchorage",
+        "type": "Metal",
+        "chance": 1.5
+      },
+      {
+        "name": "Dirt Urchin",
+        "type": "Earth",
+        "chance": 1.4
+      },
+      {
+        "name": "Driftmoth",
+        "type": "Air",
+        "chance": 1.4
+      },
+      {
+        "name": "Lariat",
+        "type": "Unique",
+        "chance": 1.4
+      },
+      {
+        "name": "Psi",
+        "type": "Energy",
+        "chance": 1.4
+      },
+      {
+        "name": "Xmitter",
+        "type": "Electricity",
+        "chance": 1.4
+      },
+      {
+        "name": "Crystalyd",
+        "type": "Earth",
+        "chance": 1.2
+      },
+      {
+        "name": "Diggrix",
+        "type": "Earth",
+        "chance": 1.2
+      },
+      {
+        "name": "Eunoa",
+        "type": "Psychic",
+        "chance": 1.2
+      },
+      {
+        "name": "Hop Rock",
+        "type": "Earth",
+        "chance": 1.2
+      },
+      {
+        "name": "Sand Angler",
+        "type": "Earth",
+        "chance": 1.2
+      },
+      {
+        "name": "Gazzer",
+        "type": "Air",
+        "chance": 1.1
+      },
+      {
+        "name": "Hoverbug",
+        "type": "Air",
+        "chance": 1.1
+      },
+      {
+        "name": "Ventus",
+        "type": "Air",
+        "chance": 1.1
+      },
+      {
+        "name": "Arcling",
+        "type": "Electricity",
+        "chance": 1.0
+      },
+      {
+        "name": "Cybercut",
+        "type": "Electricity",
+        "chance": 1.0
+      },
+      {
+        "name": "Cynosure",
+        "type": "Metal",
+        "chance": 1.0
+      },
+      {
+        "name": "Fandango",
+        "type": "Energy",
+        "chance": 1.0
+      },
+      {
+        "name": "Lentus",
+        "type": "Energy",
+        "chance": 1.0
+      },
+      {
+        "name": "Tesser",
+        "type": "Energy",
+        "chance": 1.0
+      },
+      {
+        "name": "Geoshard",
+        "type": "Earth",
+        "chance": 0.9
+      },
+      {
+        "name": "Rammstone",
+        "type": "Earth",
+        "chance": 0.9
+      },
+      {
+        "name": "Tormato",
+        "type": "Air",
+        "chance": 0.9
+      },
+      {
+        "name": "Perplexus",
+        "type": "Psychic",
+        "chance": 0.8
+      },
+      {
+        "name": "Meduslug",
+        "type": "Psychic",
+        "chance": 0.5
+      },
+      {
+        "name": "Keystone",
+        "type": "Energy",
+        "chance": 0.3
+      },
+      {
+        "name": "Zeus",
+        "type": "Electricity",
+        "chance": 0.3
+      },
+      {
+        "name": "Mimkey",
+        "type": "Unique",
+        "chance": 0.2
+      }
+    ],
+    "Kaeloth Prime": [
+      {
+        "name": "Chillnip",
+        "type": "Ice",
+        "chance": 6.0
+      },
+      {
+        "name": "Cobblet",
+        "type": "Metal",
+        "chance": 4.4
+      },
+      {
+        "name": "Frostcrawler",
+        "type": "Ice",
+        "chance": 4.3
+      },
+      {
+        "name": "Narwhaddle",
+        "type": "Ice",
+        "chance": 4.3
+      },
+      {
+        "name": "Driftmoth",
+        "type": "Air",
+        "chance": 3.4
+      },
+      {
+        "name": "Murkling",
+        "type": "Dark",
+        "chance": 3.1
+      },
+      {
+        "name": "Polero",
+        "type": "Metal",
+        "chance": 3.0
+      },
+      {
+        "name": "Driplet",
+        "type": "Water",
+        "chance": 2.7
+      },
+      {
+        "name": "Ripplet",
+        "type": "Water",
+        "chance": 2.7
+      },
+      {
+        "name": "Gazzer",
+        "type": "Air",
+        "chance": 2.6
+      },
+      {
+        "name": "Hoverbug",
+        "type": "Air",
+        "chance": 2.6
+      },
+      {
+        "name": "Ventus",
+        "type": "Air",
+        "chance": 2.6
+      },
+      {
+        "name": "Aquabeek",
+        "type": "Water",
+        "chance": 2.5
+      },
+      {
+        "name": "Slicksilver",
+        "type": "Metal",
+        "chance": 2.4
+      },
+      {
+        "name": "Speedstinger",
+        "type": "Metal",
+        "chance": 2.4
+      },
+      {
+        "name": "Tormato",
+        "type": "Air",
+        "chance": 2.2
+      },
+      {
+        "name": "Bubbaleone",
+        "type": "Water",
+        "chance": 2.1
+      },
+      {
+        "name": "Spark Mite",
+        "type": "Electricity",
+        "chance": 2.0
+      },
+      {
+        "name": "Armashelt",
+        "type": "Metal",
+        "chance": 1.8
+      },
+      {
+        "name": "Bladier",
+        "type": "Metal",
+        "chance": 1.8
+      },
+      {
+        "name": "Makobreaker",
+        "type": "Metal",
+        "chance": 1.8
+      },
+      {
+        "name": "Thresher",
+        "type": "Metal",
+        "chance": 1.8
+      },
+      {
+        "name": "Frightgeist",
+        "type": "Dark",
+        "chance": 1.7
+      },
+      {
+        "name": "Mantis",
+        "type": "Water",
+        "chance": 1.7
+      },
+      {
+        "name": "Dustkin",
+        "type": "Earth",
+        "chance": 1.4
+      },
+      {
+        "name": "Flopper",
+        "type": "None",
+        "chance": 1.4
+      },
+      {
+        "name": "Glowdab",
+        "type": "Light",
+        "chance": 1.4
+      },
+      {
+        "name": "Pressure Tick",
+        "type": "Water",
+        "chance": 1.4
+      },
+      {
+        "name": "Anchorage",
+        "type": "Metal",
+        "chance": 1.3
+      },
+      {
+        "name": "Hexlet",
+        "type": "Dark",
+        "chance": 1.3
+      },
+      {
+        "name": "Negashade",
+        "type": "Dark",
+        "chance": 1.3
+      },
+      {
+        "name": "Tazerling",
+        "type": "Electricity",
+        "chance": 1.3
+      },
+      {
+        "name": "Tremorock",
+        "type": "Earth",
+        "chance": 1.2
+      },
+      {
+        "name": "Dirt Urchin",
+        "type": "Earth",
+        "chance": 1.1
+      },
+      {
+        "name": "Caligo",
+        "type": "Water",
+        "chance": 1.0
+      },
+      {
+        "name": "Wisplet",
+        "type": "Unique",
+        "chance": 1.0
+      },
+      {
+        "name": "Xmitter",
+        "type": "Electricity",
+        "chance": 1.0
+      },
+      {
+        "name": "Zephur",
+        "type": "Energy",
+        "chance": 1.0
+      },
+      {
+        "name": "Crystalyd",
+        "type": "Earth",
+        "chance": 0.9
+      },
+      {
+        "name": "Cynosure",
+        "type": "Metal",
+        "chance": 0.9
+      },
+      {
+        "name": "Diggrix",
+        "type": "Earth",
+        "chance": 0.9
+      },
+      {
+        "name": "Hop Rock",
+        "type": "Earth",
+        "chance": 0.9
+      },
+      {
+        "name": "Sand Angler",
+        "type": "Earth",
+        "chance": 0.9
+      },
+      {
+        "name": "Thugglet",
+        "type": "Psychic",
+        "chance": 0.9
+      },
+      {
+        "name": "Arcling",
+        "type": "Electricity",
+        "chance": 0.8
+      },
+      {
+        "name": "Cybercut",
+        "type": "Electricity",
+        "chance": 0.8
+      },
+      {
+        "name": "Psi",
+        "type": "Energy",
+        "chance": 0.8
+      },
+      {
+        "name": "Arachnet",
+        "type": "Unique",
+        "chance": 0.7
+      },
+      {
+        "name": "Geoshard",
+        "type": "Earth",
+        "chance": 0.7
+      },
+      {
+        "name": "Hypnogrif",
+        "type": "Psychic",
+        "chance": 0.7
+      },
+      {
+        "name": "Jellyish",
+        "type": "Unique",
+        "chance": 0.7
+      },
+      {
+        "name": "Phosphora",
+        "type": "Light",
+        "chance": 0.7
+      },
+      {
+        "name": "Pieper",
+        "type": "Psychic",
+        "chance": 0.7
+      },
+      {
+        "name": "Rammstone",
+        "type": "Earth",
+        "chance": 0.7
+      },
+      {
+        "name": "Fandango",
+        "type": "Energy",
+        "chance": 0.5
+      },
+      {
+        "name": "Lariat",
+        "type": "Unique",
+        "chance": 0.5
+      },
+      {
+        "name": "Lentus",
+        "type": "Energy",
+        "chance": 0.5
+      },
+      {
+        "name": "Slyren",
+        "type": "Psychic",
+        "chance": 0.5
+      },
+      {
+        "name": "Tesser",
+        "type": "Energy",
+        "chance": 0.5
+      },
+      {
+        "name": "Eunoa",
+        "type": "Psychic",
+        "chance": 0.4
+      },
+      {
+        "name": "Mirage Coil",
+        "type": "Light",
+        "chance": 0.4
+      },
+      {
+        "name": "Enigmo",
+        "type": "Light",
+        "chance": 0.2
+      },
+      {
+        "name": "Meduslug",
+        "type": "Psychic",
+        "chance": 0.2
+      },
+      {
+        "name": "Perplexus",
+        "type": "Psychic",
+        "chance": 0.2
+      },
+      {
+        "name": "Zeus",
+        "type": "Electricity",
+        "chance": 0.2
+      },
+      {
+        "name": "Keystone",
+        "type": "Energy",
         "chance": 0.1
       },
       {

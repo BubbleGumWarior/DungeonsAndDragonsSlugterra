@@ -21,7 +21,7 @@ const THEMES = ["burgundy", "navy", "green", "purple", "orange", "pink", "teal",
 const VOICE_INPUT_MODES = ["live", "push_to_talk"];
 // Keys allowed in the combat_sfx_volumes map -- mirrors CombatMap.jsx's
 // COMBAT_SFX / Settings.jsx's COMBAT_SFX list.
-const COMBAT_SFX_KEYS = ["fail", "miss", "hit", "break", "hazard", "geyser", "zeus"];
+const COMBAT_SFX_KEYS = ["fail", "miss", "hit", "break", "hazard", "geyser", "zeus", "self"];
 
 router.post("/preferences", async (req, res) => {
   const { theme, soundVolume, voiceInputMode, voiceCueVolume, masterVolume, combatSfxVolumes } = req.body ?? {};
