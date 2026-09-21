@@ -29,12 +29,20 @@ import slugpediaRouter from "./routes/slugpedia.js";
 import slugHuntRouter from "./routes/slugHunt.js";
 import shipsRouter from "./routes/ships.js";
 import voiceRouter from "./routes/voice.js";
+import imagesRouter from "./routes/images.js";
+import { imageMiddleware } from "./imageStore.js";
 import { requireAuth } from "./middleware/auth.js";
 import { setupWebSocket, getOnlineUserIds } from "./ws.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
+
+// Big embedded images travel as cached /api/img/<hash> URLs instead of inline
+// base64 -- see imageStore.js. The image endpoint itself sits outside the
+// wrapper (it serves raw bytes, and needs no auth for an <img> tag).
+app.use("/api/img", imagesRouter);
+app.use("/api", imageMiddleware);
 
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);

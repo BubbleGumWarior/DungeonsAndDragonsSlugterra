@@ -27,6 +27,9 @@ function CounterCard({ offer, onDone }) {
   // The incoming slug's transformed art -- normally already cached (see
   // CounterClashPrompt below), so this is a synchronous hit with no flash.
   const incomingImage = useSlugImage(offer.slugId, token);
+  // A dual shot brings a second slug -- shown alongside the first.
+  const partnerImage = useSlugImage(offer.partnerSlugId, token);
+  const isDual = offer.partnerSlugId != null;
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -90,9 +93,23 @@ function CounterCard({ offer, onDone }) {
     <div className="counter-prompt-card">
       <div className="counter-prompt-head">
         {incomingImage ? (
-          <span className="counter-prompt-portrait" style={{ "--type-color": typeColor(offer.slugType) }}>
-            <img src={incomingImage} alt={offer.slugName} />
-            <span className="counter-prompt-portrait-type">{offer.slugType}</span>
+          <span className={isDual ? "counter-prompt-portraits" : undefined}>
+            <span
+              className={`counter-prompt-portrait ${isDual ? "counter-prompt-portrait--dual" : ""}`}
+              style={{ "--type-color": typeColor(offer.slugType) }}
+            >
+              <img src={incomingImage} alt={offer.primarySlugName || offer.slugName} />
+              <span className="counter-prompt-portrait-type">{offer.slugType}</span>
+            </span>
+            {isDual && partnerImage && (
+              <span
+                className="counter-prompt-portrait counter-prompt-portrait--dual counter-prompt-portrait--second"
+                style={{ "--type-color": typeColor(offer.secondaryType) }}
+              >
+                <img src={partnerImage} alt={offer.partnerSlugName} />
+                <span className="counter-prompt-portrait-type">{offer.secondaryType}</span>
+              </span>
+            )}
           </span>
         ) : (
           <span className="counter-prompt-icon">
@@ -104,6 +121,14 @@ function CounterCard({ offer, onDone }) {
             {offer.attackerName} fires {offer.slugName}
             {offer.forNpc && offer.defenderName ? ` at ${offer.defenderName}` : ""}!
           </p>
+          {offer.comboName && (
+            <p className="counter-prompt-combo">
+              <strong>{offer.comboName}</strong>
+              {offer.comboSummary ? ` -- ${offer.comboSummary}` : ""}
+            </p>
+          )}
+          {isDual && !offer.comboName && offer.comboSummary && <p className="counter-prompt-combo">{offer.comboSummary}</p>}
+          {offer.mega && <p className="counter-prompt-mega">MEGA MORPH -- double power, double speed</p>}
           <h3 className="counter-prompt-title">
             {offer.forNpc ? `Counter for ${offer.defenderName || "the NPC"}?` : "Counter with a slug?"}
           </h3>
@@ -166,6 +191,7 @@ export default function CounterClashPrompt() {
   }, [slugArmed, token]);
   useEffect(() => {
     if (shotFx?.slugId != null) prefetchSlugImage(shotFx.slugId, token);
+    if (shotFx?.partnerSlugId != null) prefetchSlugImage(shotFx.partnerSlugId, token);
   }, [shotFx, token]);
 
   useEffect(() => {

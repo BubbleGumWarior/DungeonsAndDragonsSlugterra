@@ -21,6 +21,7 @@ function toClientTemplate(row) {
     effect: row.effect,
     accuracyBonus: row.accuracy_bonus,
     reloadApBonus: row.reload_ap_bonus,
+    grantsDualShot: Boolean(row.grants_dual_shot),
     createdAt: row.created_at,
   };
 }
@@ -36,7 +37,7 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const { name, effect, accuracyBonus, reloadApBonus } = req.body || {};
+  const { name, effect, accuracyBonus, reloadApBonus, grantsDualShot } = req.body || {};
 
   const validation = validateModFields({ name, effect, accuracyBonus, reloadApBonus });
   if (!validation.valid) {
@@ -45,10 +46,10 @@ router.post("/", async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      `INSERT INTO mod_templates (name, effect, accuracy_bonus, reload_ap_bonus)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO mod_templates (name, effect, accuracy_bonus, reload_ap_bonus, grants_dual_shot)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [name.trim(), effect ?? null, accuracyBonus, reloadApBonus]
+      [name.trim(), effect ?? null, accuracyBonus, reloadApBonus, Boolean(grantsDualShot)]
     );
     res.status(201).json({ template: toClientTemplate(rows[0]) });
   } catch (err) {
@@ -59,7 +60,7 @@ router.post("/", async (req, res) => {
 
 router.patch("/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const { name, effect, accuracyBonus, reloadApBonus } = req.body || {};
+  const { name, effect, accuracyBonus, reloadApBonus, grantsDualShot } = req.body || {};
 
   const validation = validateModFields({ name, effect, accuracyBonus, reloadApBonus });
   if (!validation.valid) {
@@ -68,10 +69,10 @@ router.patch("/:id", async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      `UPDATE mod_templates SET name = $1, effect = $2, accuracy_bonus = $3, reload_ap_bonus = $4
-       WHERE id = $5
+      `UPDATE mod_templates SET name = $1, effect = $2, accuracy_bonus = $3, reload_ap_bonus = $4, grants_dual_shot = $5
+       WHERE id = $6
        RETURNING *`,
-      [name.trim(), effect ?? null, accuracyBonus, reloadApBonus, id]
+      [name.trim(), effect ?? null, accuracyBonus, reloadApBonus, Boolean(grantsDualShot), id]
     );
     if (!rows[0]) {
       return res.status(404).json({ error: "Template not found." });

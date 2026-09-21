@@ -9,6 +9,7 @@ import CombatSlugPanel from "./CombatSlugPanel.jsx";
 import CombatRoster from "./CombatRoster.jsx";
 import CombatLog from "./CombatLog.jsx";
 import SlugActionModal, { MEGA_MORPH_MIN_RANGE, MEGA_MORPH_PIP_COST } from "./SlugActionModal.jsx";
+import { DUAL_SHOT_BASE_TYPE, canJoinDualShot } from "./dualShot.js";
 import MindScrambleModal from "./MindScrambleModal.jsx";
 import FrictionModal from "./FrictionModal.jsx";
 import HunkerConfirmModal from "./HunkerConfirmModal.jsx";
@@ -339,6 +340,8 @@ export default function CombatPage() {
   const [error, setError] = useState(null);
   const [allSlugs, setAllSlugs] = useState([]);
   const [allBlasters, setAllBlasters] = useState([]);
+  // Only read to learn which blasters carry a dual-shot mod (see dualInfoFor).
+  const [allMods, setAllMods] = useState([]);
   const [actionPicker, setActionPicker] = useState(null); // slug awaiting an Attack/Break Wall/Make Wall/Build Bridge choice
   const [mindScramblePicker, setMindScramblePicker] = useState(null); // Perplexus awaiting an effect choice
   const [frictionPicker, setFrictionPicker] = useState(null); // Psi awaiting a friction choice
@@ -402,6 +405,10 @@ export default function CombatPage() {
     fetch(blasterUrl, { headers: authHeaders(token) })
       .then((res) => res.json())
       .then((data) => setAllBlasters(data.blasters || []))
+      .catch(() => {});
+    fetch(isDM ? "/api/mods" : "/api/mods/me", { headers: authHeaders(token) })
+      .then((res) => res.json())
+      .then((data) => setAllMods(data.mods || []))
       .catch(() => {});
     // gearChanged: an NPC was just kitted out. Its per-row slug/blaster
     // broadcasts arrive as a burst the live state can't hold (only the last
@@ -819,6 +826,7 @@ export default function CombatPage() {
             ...(isEnvAction ? { targetPoint: { x: target.x, y: target.y } } : { targetId: target.id }),
             ...(mode.effectChoice ? { effectChoice: mode.effectChoice } : {}),
             ...(mode.megaMorph ? { megaMorph: true } : {}),
+            ...(mode.partnerSlugId ? { partnerSlugId: mode.partnerSlugId } : {}),
           })
         );
       } catch (err) {
@@ -874,7 +882,7 @@ export default function CombatPage() {
     // as before.
     // A DM-approved Mega Morph slug gets the same picker, for its extra
     // "Shoot Mega Morph" choice.
-    if (slug.breaksWalls || slug.wallMaker || slug.bridgeMaker || slug.megaMorphAllowed) {
+    if (slug.breaksWalls || slug.wallMaker || slug.bridgeMaker || slug.megaMorphAllowed || dualInfoFor(slug)) {
       setActionPicker(slug);
       return;
     }
@@ -896,8 +904,22 @@ export default function CombatPage() {
     setMode({ type: "shoot", slugId: slug.id, slugName: slug.name, actionType: "attack" });
   }
 
-  function handlePickSlugAction(slug, actionType) {
+  function handlePickSlugAction(slug, actionType, extra) {
     setActionPicker(null);
+    // Dual Shot: an Attack carrying a partner slug (and maybe Mega Morph) --
+    // the partner's art is announced too so every client can prefetch it.
+    if (actionType === "dual-shot") {
+      announceArmedSlug(extra.partnerSlug);
+      setMode({
+        type: "shoot",
+        slugId: slug.id,
+        slugName: `${slug.name} + ${extra.partnerSlug.name}`,
+        actionType: "attack",
+        partnerSlugId: extra.partnerSlug.id,
+        ...(extra.megaMorph ? { megaMorph: true } : {}),
+      });
+      return;
+    }
     // A Mega Morph is an Attack on a slinger with a flag on it -- see the
     // server's /actions/shoot.
     if (actionType === "mega-morph") {
@@ -905,6 +927,27 @@ export default function CombatPage() {
       return;
     }
     setMode({ type: "shoot", slugId: slug.id, slugName: slug.name, actionType });
+  }
+
+  // Dual-shot options for a slug, or null if it can't offer any: its weapon
+  // must be a Twin Slinger or carry a dual-shot mod, the slug itself must be
+  // bonded enough, and at least one other slug must share the weapon.
+  // Mirrors the server's blasterCanDualShot/dualShotPairError -- which
+  // re-validate everything.
+  function dualInfoFor(slug) {
+    if (!slug || !canJoinDualShot(slug)) return null;
+    const blaster = allBlasters.find((b) => b.id === slug.equippedBlasterId);
+    if (!blaster) return null;
+    const capable =
+      blaster.baseType === DUAL_SHOT_BASE_TYPE || allMods.some((m) => m.equippedBlasterId === blaster.id && m.grantsDualShot);
+    if (!capable) return null;
+    const partners = eligibleSlugs.filter((s) => s.id !== slug.id && s.equippedBlasterId === slug.equippedBlasterId);
+    if (partners.length === 0) return null;
+    const rangeReason =
+      (blaster.range ?? 0) < MEGA_MORPH_MIN_RANGE
+        ? `Needs a weapon with a range of ${MEGA_MORPH_MIN_RANGE}+ (this one has ${blaster.range ?? 0}).`
+        : null;
+    return { partners, rangeReason };
   }
 
   // Why the picked slug can't Mega Morph right now, or null if it can. Mirrors
@@ -1115,6 +1158,7 @@ export default function CombatPage() {
         <SlugActionModal
           slug={actionPicker}
           megaBlockedReason={megaBlockedReasonFor(actionPicker)}
+          dual={dualInfoFor(actionPicker)}
           onPick={handlePickSlugAction}
           onClose={() => setActionPicker(null)}
         />

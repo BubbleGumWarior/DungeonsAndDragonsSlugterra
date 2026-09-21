@@ -18,14 +18,14 @@ export default function SlugImage({ protoformImage, velocityImage, size = "md", 
       <div className={`slug-image-flipper ${flipped ? "slug-image-flipper--flipped" : ""}`}>
         <div className="slug-image-face slug-image-face--front">
           {protoformImage ? (
-            <img src={protoformImage} alt="Protoform" />
+            <img src={protoformImage} alt="Protoform" loading="lazy" decoding="async" />
           ) : (
             <CircleDashedIcon weight="duotone" />
           )}
         </div>
         <div className="slug-image-face slug-image-face--back">
           {velocityImage ? (
-            <img src={velocityImage} alt="Velocity form" />
+            <img src={velocityImage} alt="Velocity form" loading="lazy" decoding="async" />
           ) : (
             <CircleDashedIcon weight="duotone" />
           )}

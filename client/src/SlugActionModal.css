@@ -138,10 +138,7 @@
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  background: linear-gradient(90deg, #c4b5fd, #f9a8d4, #fde68a);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: #e9d5ff;
 }
 
 .slug-action-mega-tag {
@@ -192,4 +189,229 @@
   .slug-action-mega {
     animation: none;
   }
+}
+
+/* Dual Shot -- a second special slab (cyan/amber, distinct from Mega Morph's
+   violet/magenta) opening the partner picker. */
+.slug-action-dual {
+  --dual-a: #22d3ee;
+  --dual-b: #f5a524;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 14px 16px;
+  text-align: left;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  color: var(--ink);
+  cursor: pointer;
+  background:
+    linear-gradient(160deg, #0f2129, #0b141a) padding-box,
+    linear-gradient(115deg, var(--dual-a), var(--dual-b), var(--dual-a)) border-box;
+  box-shadow: 0 0 18px rgba(34, 211, 238, 0.28), 0 0 30px rgba(245, 165, 36, 0.12);
+  transition: transform 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
+}
+
+.slug-action-dual:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 26px rgba(34, 211, 238, 0.45), 0 0 42px rgba(245, 165, 36, 0.2);
+}
+
+.slug-action-dual-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.slug-action-dual-icon {
+  width: 22px;
+  height: 22px;
+  color: var(--dual-a);
+  filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.6));
+}
+
+.slug-action-dual-title {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #67e8f9;
+}
+
+.slug-action-dual-tag {
+  margin-left: auto;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.slug-action-dual-desc {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.slug-action-dual-desc strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* Partner picker step */
+.slug-dual-partners {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.slug-dual-partner {
+  --type-color: var(--gold);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  text-align: left;
+  border-radius: 10px;
+  background: var(--charcoal-900);
+  border: 1px solid color-mix(in srgb, var(--type-color) 35%, var(--charcoal-700));
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), background 0.15s var(--ease-out);
+}
+
+.slug-dual-partner:hover:not(:disabled) {
+  border-color: var(--type-color);
+}
+
+.slug-dual-partner--picked {
+  border-color: var(--type-color);
+  background: color-mix(in srgb, var(--type-color) 16%, var(--charcoal-900));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--type-color) 35%, transparent);
+}
+
+.slug-dual-partner:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.slug-dual-partner-name {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.slug-dual-partner-type {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--type-color);
+}
+
+.slug-dual-partner-stats {
+  font-size: 10.5px;
+  color: var(--ink-dim);
+}
+
+.slug-dual-partner-note {
+  font-size: 9.5px;
+  font-style: italic;
+  color: var(--ink-dim);
+}
+
+.slug-dual-preview {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #0f2129, #0b141a);
+  border: 1px solid rgba(34, 211, 238, 0.35);
+}
+
+.slug-dual-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #67e8f9;
+}
+
+.slug-dual-preview-combo {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #67e8f9;
+}
+
+.slug-dual-preview-pair {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.slug-dual-preview-summary {
+  margin: 6px 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+}
+
+.slug-dual-preview-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+
+.slug-dual-preview-stats strong {
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.slug-dual-mega {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.slug-dual-mega input {
+  margin-top: 3px;
+  accent-color: #ec4899;
+}
+
+.slug-dual-mega strong {
+  color: var(--ink);
+}
+
+.slug-dual-mega em {
+  color: #f9a8d4;
+}
+
+.slug-dual-mega--disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.slug-dual-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.slug-dual-fire {
+  flex: 1;
 }

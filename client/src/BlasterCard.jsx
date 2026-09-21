@@ -57,7 +57,7 @@ export default function BlasterCard({
     >
       <div className="blaster-card-top">
         <div className="blaster-card-image">
-          {blaster.image ? <img src={blaster.image} alt={blaster.name} /> : <TargetIcon weight="duotone" />}
+          {blaster.image ? <img src={blaster.image} alt={blaster.name} loading="lazy" decoding="async" /> : <TargetIcon weight="duotone" />}
         </div>
         <div className="blaster-card-identity">
           <h3 className="blaster-card-name">{blaster.name}</h3>

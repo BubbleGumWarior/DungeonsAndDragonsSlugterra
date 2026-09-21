@@ -83,6 +83,17 @@ export default function ModForm({ mode, initialValues, players, onSubmit, onCanc
         />
       </div>
 
+      <label className="mod-form-check">
+        <input
+          type="checkbox"
+          checked={Boolean(fields.grantsDualShot)}
+          onChange={(e) => update("grantsDualShot", e.target.checked)}
+        />
+        <span>
+          <strong>Allows Dual Shot</strong> -- the blaster this is equipped on can fire two fully bonded slugs as one fused bolt.
+        </span>
+      </label>
+
       {error && <div className="slug-form-error">{error}</div>}
 
       <div className="slug-form-actions">

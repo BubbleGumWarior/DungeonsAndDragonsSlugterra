@@ -24,6 +24,7 @@ function toClientMod(row) {
     effect: row.effect,
     accuracyBonus: row.accuracy_bonus,
     reloadApBonus: row.reload_ap_bonus,
+    grantsDualShot: Boolean(row.grants_dual_shot),
     equippedBlasterId: row.equipped_blaster_id,
     createdAt: row.created_at,
   };
@@ -50,7 +51,7 @@ router.get("/", requireDungeonMaster, async (req, res) => {
 });
 
 router.post("/", requireDungeonMaster, async (req, res) => {
-  const { userId, templateId, name, effect, accuracyBonus, reloadApBonus } = req.body || {};
+  const { userId, templateId, name, effect, accuracyBonus, reloadApBonus, grantsDualShot } = req.body || {};
 
   const validation = validateModFields({ name, effect, accuracyBonus, reloadApBonus });
   if (!validation.valid) {
@@ -62,10 +63,10 @@ router.post("/", requireDungeonMaster, async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      `INSERT INTO mods (template_id, user_id, name, effect, accuracy_bonus, reload_ap_bonus)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO mods (template_id, user_id, name, effect, accuracy_bonus, reload_ap_bonus, grants_dual_shot)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [Number.isInteger(templateId) ? templateId : null, userId, name.trim(), effect ?? null, accuracyBonus, reloadApBonus]
+      [Number.isInteger(templateId) ? templateId : null, userId, name.trim(), effect ?? null, accuracyBonus, reloadApBonus, Boolean(grantsDualShot)]
     );
 
     const mod = toClientMod(rows[0]);
@@ -79,7 +80,7 @@ router.post("/", requireDungeonMaster, async (req, res) => {
 
 router.patch("/:id", requireDungeonMaster, async (req, res) => {
   const id = Number(req.params.id);
-  const { name, effect, accuracyBonus, reloadApBonus } = req.body || {};
+  const { name, effect, accuracyBonus, reloadApBonus, grantsDualShot } = req.body || {};
 
   const validation = validateModFields({ name, effect, accuracyBonus, reloadApBonus });
   if (!validation.valid) {
@@ -88,10 +89,10 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      `UPDATE mods SET name = $1, effect = $2, accuracy_bonus = $3, reload_ap_bonus = $4
-       WHERE id = $5
+      `UPDATE mods SET name = $1, effect = $2, accuracy_bonus = $3, reload_ap_bonus = $4, grants_dual_shot = $5
+       WHERE id = $6
        RETURNING *`,
-      [name.trim(), effect ?? null, accuracyBonus, reloadApBonus, id]
+      [name.trim(), effect ?? null, accuracyBonus, reloadApBonus, Boolean(grantsDualShot), id]
     );
 
     if (!rows[0]) {

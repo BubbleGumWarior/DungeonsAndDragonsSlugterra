@@ -88,5 +88,6 @@ export function defaultModFields() {
     effect: "",
     accuracyBonus: 0,
     reloadApBonus: 0,
+    grantsDualShot: false,
   };
 }

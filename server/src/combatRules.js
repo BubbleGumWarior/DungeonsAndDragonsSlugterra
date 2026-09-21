@@ -533,6 +533,200 @@ export function typeBallistics(type) {
   return TYPE_BALLISTICS[type] || TYPE_BALLISTICS.Unique;
 }
 
+// ---- Dual shots ---------------------------------------------------------------
+//
+// Two slugs fired as one bolt (see /actions/shoot's partnerSlugId). The pair
+// becomes a single synthetic "fused" slug -- built by buildDualShotSlug and
+// carrying `dual` (the combo/trait data) plus `secondary_type` -- so the one
+// bolt, one reaction window and one clash all keep working off "a slug". Where
+// the code used to read a single element's `tb.trait`, it now asks
+// slugHasTrait, which a fused slug answers from its combo instead.
+
+export const DUAL_SHOT_MIN_LOYALTY = 3; // both slugs must be at least this bonded (Loyal/Bonded)
+export const DUAL_SHOT_BASE_TYPE = "Twin Slinger"; // this base type can always dual shot; a mod can grant it to any other
+
+// Each element's baseline on-hit trait, the ids the combat code checks for.
+// (Air/Unique have none; Healing/None never dual shot.)
+const ELEMENT_TRAITS = {
+  Dark: "phase",
+  Earth: "knockback-large",
+  Electricity: "chain",
+  Energy: "recharge",
+  Fire: "burn",
+  Ice: "ice",
+  Light: "blind",
+  Metal: "knockback-short",
+  Plant: "snare",
+  Psychic: "stun",
+  Toxic: "poison",
+  Water: "douse",
+};
+
+// Named element combos, keyed by the two element names sorted alphabetically
+// and joined with "+". A listed pair REPLACES both elements' own traits with
+// `traits` and (optionally) switches on extra slug flags / tuning knobs:
+//   flags        -- boolean slug flags forced on (reuses existing mechanics)
+//   damageMult   -- multiplies the hit's damage
+//   burnMult     -- multiplies the burn DoT's per-turn damage
+//   poisonStacks -- poison stacks added per hit (default 1)
+//   chainFull    -- the chain arc hits at full power instead of half
+//   iceMult      -- ice patch radius multiplier
+// Any pair NOT listed here just fires both elements' traits together. Energy
+// paired with anything is "Overcharge" (see buildDualShotSlug).
+export const DUAL_COMBOS = {
+  "Fire+Water": { name: "Steam", summary: "A scalding steam cloud at the impact point, and the target is blinded. No burn -- the two cancel out.", traits: ["blind"], flags: { clears_fire_terrain: true } },
+  "Fire+Ice": { name: "Thermal Shock", summary: "x1.5 damage. No burn and no ice patch.", traits: [], damageMult: 1.5 },
+  "Air+Fire": { name: "Firestorm", summary: "Burn, plus a blast radius -- everyone caught is burned.", traits: ["burn"], flags: { aoe_blast: true } },
+  "Fire+Plant": { name: "Wildfire", summary: "Burn plus snare, and the burn deals double damage.", traits: ["burn", "snare"], burnMult: 2 },
+  "Fire+Toxic": { name: "Noxious Blaze", summary: "Burn plus poison, and the poison adds 2 stacks.", traits: ["burn", "poison"], poisonStacks: 2 },
+  "Earth+Fire": { name: "Magma", summary: "Large knockback, and a damaging hazard patch where it lands.", traits: ["knockback-large"], flags: { hazard_maker: true } },
+  "Fire+Metal": { name: "Molten", summary: "Pierces the first wall in its path, plus burn.", traits: ["burn"], flags: { pierces_walls: true } },
+  "Electricity+Fire": { name: "Plasma", summary: "Burn, and the chain arc burns too.", traits: ["chain", "burn"] },
+  "Fire+Light": { name: "Solar Flare", summary: "Blind plus burn.", traits: ["burn", "blind"] },
+  "Ice+Water": { name: "Deep Freeze", summary: "A large ice patch plus snare.", traits: ["ice", "snare"], iceMult: 2 },
+  "Electricity+Water": { name: "Conduction", summary: "The chain arc hits at full power instead of half.", traits: ["chain"], chainFull: true },
+  "Earth+Water": { name: "Mudslide", summary: "Snare plus a slippery patch.", traits: ["snare", "ice"] },
+  "Air+Water": { name: "Tempest", summary: "Large knockback.", traits: ["knockback-large"] },
+  "Air+Ice": { name: "Whiteout", summary: "Snare plus blind.", traits: ["snare", "blind"] },
+  "Electricity+Ice": { name: "Cryo Shock", summary: "Stun.", traits: ["stun"] },
+  "Electricity+Metal": { name: "Railgun", summary: "Pierces the first wall in its path, plus a chain arc.", traits: ["chain"], flags: { pierces_walls: true } },
+  "Electricity+Psychic": { name: "Overload", summary: "Stun plus disarm.", traits: ["stun"], flags: { causes_disarm: true } },
+  "Dark+Light": { name: "Eclipse", summary: "Blind, and the shot phases through walls.", traits: ["phase", "blind"] },
+  "Dark+Psychic": { name: "Nightmare", summary: "Fear -- the target flees -- plus -1 AP.", traits: ["stun"], flags: { causes_fear: true } },
+  "Dark+Toxic": { name: "Blight", summary: "Poison, and the shot phases through walls.", traits: ["poison", "phase"] },
+  "Earth+Metal": { name: "Avalanche", summary: "Large knockback, and breaks through the first wall in its path.", traits: ["knockback-large"], flags: { pierces_walls: true } },
+  "Earth+Plant": { name: "Rootquake", summary: "Snare plus large knockback.", traits: ["snare", "knockback-large"] },
+  "Plant+Toxic": { name: "Venom Vine", summary: "Poison with an extra stack, plus snare.", traits: ["poison", "snare"], poisonStacks: 2 },
+  "Light+Psychic": { name: "Hallucination", summary: "Confusion -- the target's shots risk firing wildly off target.", traits: [], flags: { causes_confusion: true } },
+};
+
+const OVERCHARGE = { name: "Overcharge", summary: "The partner's effect plus a 2-pip refund instead of 1." };
+
+export function dualComboKey(typeA, typeB) {
+  return [typeA, typeB].sort().join("+");
+}
+
+// Slug row keys that are booleans but NOT ability flags -- left alone when a
+// fused slug ORs its two slugs' flags together.
+const NON_FLAG_BOOLEANS = new Set(["loaded", "mega_morph_allowed"]);
+
+// A shot's element(s): one for a normal slug, two for a fused dual shot.
+export function slugHasType(slug, type) {
+  return slug?.type === type || slug?.secondary_type === type;
+}
+
+export function slugTraits(slug) {
+  if (slug?.dual) return slug.dual.traits;
+  const trait = typeBallistics(slug?.type).trait;
+  return trait ? [trait] : [];
+}
+
+export function slugHasTrait(slug, trait) {
+  return slugTraits(slug).includes(trait);
+}
+
+// typeBallistics for a slug: identical to typeBallistics(slug.type) for a
+// normal one. A fused pair uses the SHORTER range, the WORSE accuracy and both
+// elements' power modifiers summed; its `trait` is null since the real traits
+// live in slugTraits.
+export function slugBallistics(slug) {
+  const tb = typeBallistics(slug?.type);
+  if (!slug?.secondary_type) return tb;
+  const other = typeBallistics(slug.secondary_type);
+  return {
+    ...tb,
+    range: Math.min(tb.range, other.range),
+    accuracyMod: Math.min(tb.accuracyMod, other.accuracyMod),
+    powerMod: tb.powerMod + other.powerMod,
+    trait: null,
+  };
+}
+
+// Knockback distance for a fused shot, derived from its traits -- the same
+// numbers slugKnockbackDistance gives Metal/Earth, with causes_knockback
+// doubling them the same way. A normal slug still goes through
+// slugKnockbackDistance directly (see shotKnockbackDistance).
+export function shotKnockbackDistance(slug) {
+  if (!slug?.dual) return slugKnockbackDistance(slug.type, slug.causes_knockback);
+  if (slug.dual.traits.includes("knockback-large")) {
+    return slug.causes_knockback ? KNOCKBACK_LARGE_DISTANCE * 2 : KNOCKBACK_LARGE_DISTANCE;
+  }
+  if (slug.dual.traits.includes("knockback-short")) {
+    return slug.causes_knockback ? KNOCKBACK_SHORT_DISTANCE * 2 : KNOCKBACK_SHORT_DISTANCE;
+  }
+  return slug.causes_knockback ? KNOCKBACK_SHORT_DISTANCE : 0;
+}
+
+// Every slug id that took part in a shot -- both halves of a dual shot. Used
+// to eject / cool down everything that flew.
+export function shotSlugIds(slug) {
+  return slug?.dual_slug_ids ?? [slug?.id];
+}
+
+// Whether two slugs may be fired together, as an error string, or null if
+// they can. Pure and mirrored client-side (client/src/dualShot.js) for the
+// partner picker. Expects raw slug rows (snake_case).
+export function dualShotPairError(a, b) {
+  if (!a || !b || a.id === b.id) return "Pick two different slugs.";
+  for (const s of [a, b]) {
+    if (s.type === "Healing" || s.type === "None") return `${s.name} can't be fired in a dual shot.`;
+    if ((s.loyalty_tier ?? 0) < DUAL_SHOT_MIN_LOYALTY) return `${s.name} isn't loyal enough -- both slugs need loyalty tier ${DUAL_SHOT_MIN_LOYALTY}+.`;
+    if (s.uncounterable) return `${s.name} is uncounterable and can't be fired in a dual shot.`;
+    if (s.ultra_fast) return `${s.name} is ultra-fast and can't be fired in a dual shot.`;
+  }
+  if (a.type === b.type) return "Both slugs share an element -- a dual shot needs two different elements.";
+  const needsPicker = (s) => Boolean(s.mind_scramble || s.friction_shift);
+  if (needsPicker(a) && needsPicker(b)) return "Both slugs need an effect picked -- only one of them can be in a dual shot.";
+  return null;
+}
+
+// Builds the fused slug for a dual shot from the two slugs' effective rows
+// (loyalty already folded in, see applyLoyaltyToSlug). `a` is the slug the
+// player picked first -- it lends its name/loyalty/id to the fused slug. Power
+// adds, defense takes the higher, AP is the higher plus 1, flags OR together,
+// and traits come from the combo table (or both elements', if unlisted).
+export function buildDualShotSlug(a, b) {
+  const combo = DUAL_COMBOS[dualComboKey(a.type, b.type)] ?? null;
+  const isOvercharge = !combo && (a.type === "Energy" || b.type === "Energy");
+
+  const baseTraits = [...new Set([ELEMENT_TRAITS[a.type], ELEMENT_TRAITS[b.type]].filter(Boolean))];
+  const traits = combo ? combo.traits : baseTraits;
+
+  const flags = {};
+  for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    const isFlag = typeof a[key] === "boolean" || typeof b[key] === "boolean";
+    if (isFlag && !NON_FLAG_BOOLEANS.has(key)) flags[key] = Boolean(a[key] || b[key]);
+  }
+  Object.assign(flags, combo?.flags);
+
+  return {
+    ...a,
+    ...flags,
+    name: `${a.name} + ${b.name}`,
+    secondary_type: b.type,
+    clash_power: a.clash_power + b.clash_power,
+    clash_defense: Math.max(a.clash_defense, b.clash_defense),
+    ap_cost: Math.max(a.ap_cost || 0, b.ap_cost || 0) + 1,
+    dual_slug_ids: [a.id, b.id],
+    dual: {
+      primaryName: a.name,
+      partnerId: b.id,
+      partnerName: b.name,
+      primaryType: a.type,
+      partnerType: b.type,
+      comboName: combo?.name ?? (isOvercharge ? OVERCHARGE.name : null),
+      comboSummary: combo?.summary ?? (isOvercharge ? OVERCHARGE.summary : "Both elements' effects apply."),
+      traits,
+      damageMult: combo?.damageMult ?? 1,
+      burnMult: combo?.burnMult ?? 1,
+      poisonStacks: combo?.poisonStacks ?? 1,
+      chainFull: Boolean(combo?.chainFull),
+      iceMult: combo?.iceMult ?? 1,
+      refundPips: isOvercharge ? 2 : 1,
+    },
+  };
+}
+
 export function rollD20() {
   return 1 + Math.floor(Math.random() * 20);
 }

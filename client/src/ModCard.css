@@ -158,3 +158,10 @@
   gap: 8px;
   justify-content: flex-end;
 }
+
+.mod-card-bonus--dual {
+  color: #1a1024;
+  background: linear-gradient(90deg, #c4b5fd, #f9a8d4);
+  border-color: transparent;
+  font-weight: 800;
+}

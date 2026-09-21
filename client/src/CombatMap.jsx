@@ -281,6 +281,8 @@ function ShotEffect({ fx, onDone }) {
   }, []);
 
   const color = typeColor(fx.slugType);
+  // A dual shot's second element -- its bolt is drawn as a pair, one per colour.
+  const color2 = fx.secondaryType ? typeColor(fx.secondaryType) : null;
 
   if (isJam) {
     const opacity = Math.max(0, 1 - elapsed / lifetimeMs);
@@ -393,7 +395,7 @@ function ShotEffect({ fx, onDone }) {
     }
     if (boltPos) {
       lastBoltPosRef.current = boltPos;
-      bolts.push({ pos: boltPos, color, mega: fx.mega, angle: headingDeg(fx.attackerPos, fx.impactPoint) });
+      bolts.push({ pos: boltPos, color, color2, mega: fx.mega, angle: headingDeg(fx.attackerPos, fx.impactPoint) });
     }
   } else {
     // The counter doesn't launch until the defender reacts -- until then the
@@ -412,6 +414,7 @@ function ShotEffect({ fx, onDone }) {
         bolts.push({
           pos: lerp(fx.attackerPos, fx.impactPoint, phasedFraction(elapsed, totalMs)),
           color,
+          color2,
           mega: fx.mega,
           angle: headingDeg(fx.attackerPos, fx.impactPoint),
         });
@@ -419,7 +422,7 @@ function ShotEffect({ fx, onDone }) {
         // Linear from each bolt's position when the counter fired -- both are
         // up to speed by now, no slow launch-out to reproduce.
         const t = (elapsed - counterAtMs) / Math.max(1, clashAt - counterAtMs);
-        bolts.push({ pos: lerp(shotPosAtCounter, mid, t), color, mega: fx.mega, angle: headingDeg(shotPosAtCounter, mid) });
+        bolts.push({ pos: lerp(shotPosAtCounter, mid, t), color, color2, mega: fx.mega, angle: headingDeg(shotPosAtCounter, mid) });
         bolts.push({ pos: lerp(fx.targetPos, mid, t), color: counterColor });
       }
     } else {
@@ -432,6 +435,7 @@ function ShotEffect({ fx, onDone }) {
           bolts.push({
             pos: lerp(mid, fx.impactPoint, aftermathElapsed / aftermathMs),
             color,
+            color2,
             mega: fx.mega,
             angle: headingDeg(mid, fx.impactPoint),
           });
@@ -465,19 +469,46 @@ function ShotEffect({ fx, onDone }) {
 
   return (
     <>
-      {bolts.map((b, i) =>
-        b.mega ? (
-          <path
-            key={`bolt-${i}`}
-            className="shot-fx-bolt shot-fx-bolt--mega"
-            d={MEGA_BOLT_PATH}
-            transform={`translate(${b.pos.x} ${b.pos.y}) rotate(${b.angle})`}
-            style={{ "--fx-color": b.color }}
-          />
-        ) : (
-          <circle key={`bolt-${i}`} className="shot-fx-bolt" cx={b.pos.x} cy={b.pos.y} r={7} style={{ "--fx-color": b.color }} />
-        )
-      )}
+      {bolts.flatMap((b, i) => {
+        // A dual shot flies as a side-by-side pair, one bolt per element
+        // colour, offset across its line of travel; a Mega Morph's bolts are
+        // teardrops instead of circles (both can combine).
+        const shapes = b.color2
+          ? [
+              { color: b.color, offset: -7 },
+              { color: b.color2, offset: 7 },
+            ]
+          : [{ color: b.color, offset: 0 }];
+        return shapes.map((shape, j) => {
+          const key = `bolt-${i}-${j}`;
+          const style = { "--fx-color": shape.color };
+          if (b.mega) {
+            return (
+              <path
+                key={key}
+                className="shot-fx-bolt shot-fx-bolt--mega"
+                d={MEGA_BOLT_PATH}
+                transform={`translate(${b.pos.x} ${b.pos.y}) rotate(${b.angle}) translate(0 ${shape.offset}) scale(${b.color2 ? 0.75 : 1})`}
+                style={style}
+              />
+            );
+          }
+          if (b.color2) {
+            return (
+              <circle
+                key={key}
+                className="shot-fx-bolt"
+                cx={0}
+                cy={0}
+                r={6}
+                transform={`translate(${b.pos.x} ${b.pos.y}) rotate(${b.angle}) translate(0 ${shape.offset})`}
+                style={style}
+              />
+            );
+          }
+          return <circle key={key} className="shot-fx-bolt" cx={b.pos.x} cy={b.pos.y} r={7} style={style} />;
+        });
+      })}
       {bursts.map((b, i) =>
         b.kind === "clash" ? (
           // Two overlapping, screen-blended circles (one per slug's type

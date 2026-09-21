@@ -1,5 +1,6 @@
 import { WebSocketServer } from "ws";
 import jwt from "jsonwebtoken";
+import { imagifyPayload } from "./imageStore.js";
 
 const userSockets = new Map();
 
@@ -163,7 +164,8 @@ export function setupWebSocket(server) {
 export function notifyUser(userId, payload) {
   const set = userSockets.get(userId);
   if (!set) return;
-  const message = JSON.stringify(payload);
+  // Big embedded images go out as cached /api/img URLs, not inline -- see imageStore.js.
+  const message = JSON.stringify(imagifyPayload(payload));
   for (const ws of set) {
     if (ws.readyState === ws.OPEN) {
       ws.send(message);
@@ -172,7 +174,7 @@ export function notifyUser(userId, payload) {
 }
 
 export function broadcastAll(payload) {
-  const message = JSON.stringify(payload);
+  const message = JSON.stringify(imagifyPayload(payload));
   for (const set of userSockets.values()) {
     for (const ws of set) {
       if (ws.readyState === ws.OPEN) {

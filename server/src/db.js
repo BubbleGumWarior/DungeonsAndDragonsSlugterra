@@ -526,6 +526,14 @@ const DEFAULT_BLASTER_MOD_TEMPLATES = [
     accuracyBonus: 2,
     reloadApBonus: 1,
   },
+  {
+    name: "Twin Link Coupler",
+    effect:
+      "A paired feed rail and synchronised firing cam that lets the weapon chamber and discharge two slugs in one pull, fusing their energies into a single bolt. Both slugs must be fully bonded to the slinger, and their elements combine into something new.",
+    accuracyBonus: 0,
+    reloadApBonus: 1,
+    grantsDualShot: true,
+  },
 ];
 
 // Idempotent per name -- seeds the full blaster mod catalog on a fresh
@@ -534,10 +542,10 @@ const DEFAULT_BLASTER_MOD_TEMPLATES = [
 async function seedDefaultBlasterModTemplates() {
   for (const m of DEFAULT_BLASTER_MOD_TEMPLATES) {
     await pool.query(
-      `INSERT INTO mod_templates (name, effect, accuracy_bonus, reload_ap_bonus)
-       SELECT $1, $2, $3, $4
+      `INSERT INTO mod_templates (name, effect, accuracy_bonus, reload_ap_bonus, grants_dual_shot)
+       SELECT $1, $2, $3, $4, $5
        WHERE NOT EXISTS (SELECT 1 FROM mod_templates WHERE name = $1)`,
-      [m.name, m.effect, m.accuracyBonus, m.reloadApBonus]
+      [m.name, m.effect, m.accuracyBonus, m.reloadApBonus, Boolean(m.grantsDualShot)]
     );
   }
 }
@@ -961,6 +969,11 @@ export async function initSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+
+  // A mod with this set lets the blaster it's equipped on fire dual shots (two
+  // slugs as one fused bolt) -- Twin Slingers can always, see blasterCanDualShot.
+  await pool.query(`ALTER TABLE mod_templates ADD COLUMN IF NOT EXISTS grants_dual_shot BOOLEAN NOT NULL DEFAULT false;`);
+  await pool.query(`ALTER TABLE mods ADD COLUMN IF NOT EXISTS grants_dual_shot BOOLEAN NOT NULL DEFAULT false;`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS mecha_templates (

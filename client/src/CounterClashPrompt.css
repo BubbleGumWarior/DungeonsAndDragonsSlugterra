@@ -206,3 +206,38 @@
   color: #fff;
   background: color-mix(in srgb, var(--type-color, #000) 70%, rgba(0, 0, 0, 0.55));
 }
+
+/* Dual shot: two smaller portraits, overlapping, one per slug. */
+.counter-prompt-portraits {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.counter-prompt-portrait--dual {
+  width: 60px;
+  height: 60px;
+}
+
+.counter-prompt-portrait--second {
+  margin-left: -14px;
+}
+
+.counter-prompt-combo {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #67e8f9;
+}
+
+.counter-prompt-combo strong {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.counter-prompt-mega {
+  margin: 3px 0 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #f9a8d4;
+}

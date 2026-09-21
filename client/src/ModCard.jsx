@@ -34,6 +34,7 @@ export default function ModCard({ mod, blasters = [], editable = false, draggabl
             {mod.reloadApBonus !== 0 && (
               <span className="mod-card-bonus">Reload AP {formatSigned(mod.reloadApBonus)}</span>
             )}
+            {mod.grantsDualShot && <span className="mod-card-bonus mod-card-bonus--dual">Dual Shot</span>}
           </div>
         </div>
       </div>

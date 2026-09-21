@@ -48,7 +48,14 @@ import {
   KNOCKBACK_DISTANCE,
   KNOCKBACK_DISMOUNT_CHANCE,
   SHOT_FLIGHT_MULTIPLIER,
-  slugKnockbackDistance,
+  shotKnockbackDistance,
+  slugBallistics,
+  slugHasTrait,
+  slugHasType,
+  shotSlugIds,
+  dualShotPairError,
+  buildDualShotSlug,
+  DUAL_SHOT_BASE_TYPE,
   tickStatusEffects,
   computeBurnDamage,
   BURN_DURATION_TURNS,
@@ -1666,11 +1673,13 @@ async function tickSlugCooldowns(combatant) {
   }
 }
 
-async function rechargeAnotherSlug(userId, excludeSlugId) {
+// `excludeSlugIds` is one id or an array -- a dual shot excludes both slugs
+// that flew, so the refund can't land back on its own partner.
+async function rechargeAnotherSlug(userId, excludeSlugIds) {
   if (!userId) return null;
   const { rows } = await pool.query(
-    "SELECT * FROM slugs WHERE user_id = $1 AND equipped_blaster_id IS NOT NULL AND id != $2",
-    [userId, excludeSlugId]
+    "SELECT * FROM slugs WHERE user_id = $1 AND equipped_blaster_id IS NOT NULL AND id != ALL($2::int[])",
+    [userId, [].concat(excludeSlugIds)]
   );
   for (const slug of rows) {
     const pips = slug.energy_pips || [];
@@ -1938,14 +1947,14 @@ function scheduleKnockback(encounterId, targetCombatantId, destination, windowMs
 // Called once, right when the shot launches, at its already-computed
 // impact point -- independent of whether it goes on to hit, miss, or clash,
 // same as a wall-break's impact location.
-async function addIceHazard(encounterId, point) {
+async function addIceHazard(encounterId, point, radiusMult = 1) {
   try {
     const { rows } = await pool.query("SELECT hazards, next_hazard_id FROM encounters WHERE id = $1", [encounterId]);
     if (!rows[0]) return;
     const hazardId = rows[0].next_hazard_id;
     const hazards = [
       ...(rows[0].hazards || []),
-      { id: hazardId, type: "ice", x: point.x, y: point.y, radius: ICE_PATCH_RADIUS },
+      { id: hazardId, type: "ice", x: point.x, y: point.y, radius: ICE_PATCH_RADIUS * radiusMult },
     ];
     await pool.query("UPDATE encounters SET hazards = $1, next_hazard_id = $2 WHERE id = $3", [
       JSON.stringify(hazards),
@@ -2488,7 +2497,7 @@ async function dealHit(
     return "it bounces off harmlessly.";
   }
 
-  const tb = typeBallistics(slug.type);
+  const tb = slugBallistics(slug);
   // slug.clash_power already has its loyalty tier's modifier folded in (see
   // applyLoyaltyToSlug) by the time it reaches here -- this, the Healing
   // amount above, and every burn/cone/hazard/pod calc below that reads
@@ -2499,6 +2508,8 @@ async function dealHit(
   // clashing like Emberblade's clash_tripled) -- reuses the same multiplier
   // constant since it's the same "x3" the design already established.
   if (slug.damage_tripled) amount *= CLASH_TRIPLE_MULTIPLIER;
+  // Thermal Shock and friends (see DUAL_COMBOS): a dual-shot combo can scale the hit.
+  if (slug.dual?.damageMult > 1) amount = Math.floor(amount * slug.dual.damageMult);
   if (half) amount = Math.floor(amount / 2);
 
   if (skipDamageResolution) {
@@ -2507,7 +2518,7 @@ async function dealHit(
     const armor = target.data?.armor ?? 0;
     // Electricity fries circuitry -- double whatever damage actually reaches
     // Structure (applied after armor, so armor still does its job first).
-    const electricMult = slug.type === "Electricity" ? ELECTRIC_MECHA_DAMAGE_MULTIPLIER : 1;
+    const electricMult = slugHasType(slug, "Electricity") ? ELECTRIC_MECHA_DAMAGE_MULTIPLIER : 1;
     const dmg = Math.max(0, amount - armor) * electricMult;
     const newStructure = Math.max(0, (target.current_structure ?? 0) - dmg);
     await updateCombatant(target.id, { current_structure: newStructure });
@@ -2531,7 +2542,7 @@ async function dealHit(
     // A mounted rider's mecha soaks 75% of the hit as Structure.
     let riderAbsorbNote = "";
     if (!isSelfTarget) {
-      const split = await absorbRiderDamage(target, gritDamage, { electric: slug.type === "Electricity" });
+      const split = await absorbRiderDamage(target, gritDamage, { electric: slugHasType(slug, "Electricity") });
       gritDamage = split.riderDamage;
       riderAbsorbNote = split.note;
     }
@@ -2542,28 +2553,30 @@ async function dealHit(
     // advanceTurn). Snare fully blocks Move (see /actions/move) instead of
     // costing extra AP.
     const wasBurning = Boolean(target.status_effects?.burning);
-    const wasDoused = tb.trait === "douse" && wasBurning;
+    const wasDoused = slugHasTrait(slug, "douse") && wasBurning;
     let burnDamage = 0;
-    if (tb.trait === "burn" && !isSelfTarget) {
+    if (slugHasTrait(slug, "burn") && !isSelfTarget) {
       // Doesn't stack -- a fresh Fire hit just refreshes the duration and
-      // recalculates the damage off this hit's own clashPower.
-      burnDamage = computeBurnDamage(slug.clash_power);
+      // recalculates the damage off this hit's own clashPower. (Wildfire's
+      // dual-shot combo doubles it -- burnMult.)
+      burnDamage = computeBurnDamage(slug.clash_power) * (slug.dual?.burnMult ?? 1);
       nextStatus.burning = { turnsLeft: BURN_DURATION_TURNS, damage: burnDamage };
     }
     let poisonStacks = 0;
-    if (tb.trait === "poison" && !isSelfTarget) {
+    if (slugHasTrait(slug, "poison") && !isSelfTarget) {
       // Stacks -- each poisoning hit adds a stack (more damage/turn) and
-      // resets the shared duration back to the full length.
-      poisonStacks = (nextStatus.poison?.stacks || 0) + 1;
+      // resets the shared duration back to the full length. A dual-shot combo
+      // can add more than one at once (poisonStacks).
+      poisonStacks = (nextStatus.poison?.stacks || 0) + (slug.dual?.poisonStacks ?? 1);
       nextStatus.poison = { stacks: poisonStacks, turnsLeft: POISON_DURATION_TURNS };
     }
-    if (tb.trait === "snare" && !isSelfTarget) nextStatus.snared = { turnsLeft: SNARE_DURATION_TURNS };
+    if (slugHasTrait(slug, "snare") && !isSelfTarget) nextStatus.snared = { turnsLeft: SNARE_DURATION_TURNS };
     // Perplexus's mind_scramble replaces Psychic's own baseline stun
     // entirely (see the block below) -- without this gate it'd just be a
     // strictly-better Psychic slug, stun plus a bonus effect.
-    if (tb.trait === "stun" && !isSelfTarget && !slug.mind_scramble && !slug.emotion_surge) nextStatus.stunned = true;
-    if (tb.trait === "blind" && !isSelfTarget) nextStatus.blinded = true;
-    if (tb.trait === "douse") delete nextStatus.burning;
+    if (slugHasTrait(slug, "stun") && !isSelfTarget && !slug.mind_scramble && !slug.emotion_surge) nextStatus.stunned = true;
+    if (slugHasTrait(slug, "blind") && !isSelfTarget) nextStatus.blinded = true;
+    if (slugHasTrait(slug, "douse")) delete nextStatus.burning;
     // Perplexus -- 3 debuffs fired at someone else, 2 buffs fired at
     // yourself (isSelfTarget picks the pool, not a !isSelfTarget gate like
     // every flag below). mindScrambleEffect (the shoot route's own
@@ -2709,7 +2722,7 @@ async function dealHit(
     // Arcling: 25% of this same hit's damage also splashes onto every other
     // marked combatant, global, no radius -- see applyMarkedSplash.
     if (slug.static_mark) {
-      const markNotes = await applyMarkedSplash(encounterId, shooter.id, target.id, gritDamage, slug.type === "Electricity");
+      const markNotes = await applyMarkedSplash(encounterId, shooter.id, target.id, gritDamage, slugHasType(slug, "Electricity"));
       if (markNotes.length > 0) log += ` Static arcs to the marked: ${markNotes.join(", ")}.`;
     }
 
@@ -2737,19 +2750,19 @@ async function dealHit(
     // tickStatusEffects) -- without an explicit log line here, inflicting
     // one reads as if nothing happened until it actually ticks on the
     // target's next turn.
-    if (tb.trait === "burn" && !isSelfTarget) {
+    if (slugHasTrait(slug, "burn") && !isSelfTarget) {
       log += ` ${target.name} catches fire -- ${burnDamage} Grit damage at the start of each of their next ${BURN_DURATION_TURNS} turns.`;
     }
-    if (tb.trait === "poison" && !isSelfTarget) {
+    if (slugHasTrait(slug, "poison") && !isSelfTarget) {
       log += ` ${target.name} is poisoned (${poisonStacks * POISON_DAMAGE_PER_STACK} Grit/turn for ${POISON_DURATION_TURNS} turns${poisonStacks > 1 ? `, ${poisonStacks} stacks` : ""}).`;
     }
-    if (tb.trait === "snare" && !isSelfTarget) {
+    if (slugHasTrait(slug, "snare") && !isSelfTarget) {
       log += ` ${target.name} is snared -- can't Move for ${SNARE_DURATION_TURNS} of their own turns.`;
     }
-    if (tb.trait === "stun" && !isSelfTarget) {
+    if (slugHasTrait(slug, "stun") && !isSelfTarget) {
       log += ` ${target.name} is stunned -- they'll lose 1 AP on their next turn.`;
     }
-    if (tb.trait === "blind" && !isSelfTarget) {
+    if (slugHasTrait(slug, "blind") && !isSelfTarget) {
       log += ` ${target.name} is blinded -- their next attack roll has disadvantage.`;
     }
     if (mindScrambleResult) {
@@ -2767,10 +2780,10 @@ async function dealHit(
     if (wasDoused) {
       log += ` The water douses ${target.name}'s flames.`;
     }
-    if (slug.causes_blind && !isSelfTarget && tb.trait !== "blind") {
+    if (slug.causes_blind && !isSelfTarget && !slugHasTrait(slug, "blind")) {
       log += ` ${target.name} is blinded -- their next attack roll has disadvantage.`;
     }
-    if (slug.causes_snare && !isSelfTarget && tb.trait !== "snare") {
+    if (slug.causes_snare && !isSelfTarget && !slugHasTrait(slug, "snare")) {
       log += ` ${target.name} is snared -- can't Move for ${SNARE_DURATION_TURNS} of their own turns.`;
     }
     if (slug.causes_shock && !isSelfTarget) {
@@ -2792,9 +2805,12 @@ async function dealHit(
       log += ` ${target.name} fades from sight.`;
     }
 
-    if (tb.trait === "recharge") {
-      const rechargedName = await rechargeAnotherSlug(shooter.ref_user_id, slug.id);
-      if (rechargedName) log += ` ${shooter.name}'s ${rechargedName} recovers an energy pip.`;
+    if (slugHasTrait(slug, "recharge")) {
+      // Overcharge (Energy in a dual shot) refunds 2 pips instead of 1.
+      for (let i = 0; i < (slug.dual?.refundPips ?? 1); i++) {
+        const rechargedName = await rechargeAnotherSlug(shooter.ref_user_id, shotSlugIds(slug));
+        if (rechargedName) log += ` ${shooter.name}'s ${rechargedName} recovers an energy pip.`;
+      }
     }
 
     // Electricity's own trait, or any slug flagged causes_chain (Speedstinger
@@ -2804,13 +2820,21 @@ async function dealHit(
     // strictly the lightning-arc effect on the *primary* hit; without this,
     // the ricocheted shot landing on its own target would re-trigger a
     // second, unwanted chain arc off of *that* hit too.
-    if ((tb.trait === "chain" || slug.causes_chain) && !half && !isSplash && !isRicochetLeg) {
+    if ((slugHasTrait(slug, "chain") || slug.causes_chain) && !half && !isSplash && !isRicochetLeg) {
       const chainTarget = await findChainTarget(encounterId, target.id, shooter.id);
       if (chainTarget) {
         // A fast, forced-yellow bolt -- purely visual, no counter offer (the
         // arc calls dealHit directly below, same as it always has).
         broadcastChainFx({ fromPos: { x: target.x, y: target.y }, toPos: { x: chainTarget.x, y: chainTarget.y } });
-        const chainLog = await dealHit(encounterId, shooter.id, chainTarget.id, slug, { half: true });
+        // Conduction (Water+Electricity) arcs at full power; isSplash then
+        // stops that full-power hit re-arcing, since `half` no longer does.
+        const chainLog = await dealHit(
+          encounterId,
+          shooter.id,
+          chainTarget.id,
+          slug,
+          slug.dual?.chainFull ? { isSplash: true } : { half: true }
+        );
         log += ` It arcs to ${chainTarget.name}: ${chainLog}`;
       }
     }
@@ -2818,7 +2842,7 @@ async function dealHit(
     let knockedIntoWall = false;
     // Metal/Earth always shove on hit; any other type only does if its
     // template has causes_knockback ticked -- see slugKnockbackDistance.
-    const kbDistance = isSelfTarget ? 0 : slugKnockbackDistance(slug.type, slug.causes_knockback);
+    const kbDistance = isSelfTarget ? 0 : shotKnockbackDistance(slug);
     if (kbDistance > 0) {
       const encRow = (await pool.query("SELECT walls, zones FROM encounters WHERE id = $1", [encounterId])).rows[0];
       // Anchorage's zone suppresses knockback entirely for anyone inside it.
@@ -2935,6 +2959,10 @@ function broadcastShotFx(fx) {
       aoe: Boolean(fx.slug.aoe_blast),
       // A Mega Morph shot's bolt is drawn as a teardrop, not the usual circle.
       mega: Boolean(fx.slug.mega_morphed),
+      // A dual shot: the second element (its bolt shows both colours) and the
+      // partner slug's id, so clients can prefetch its art too.
+      secondaryType: fx.slug.secondary_type ?? null,
+      partnerSlugId: fx.slug.dual?.partnerId ?? null,
     },
   });
 }
@@ -3073,7 +3101,7 @@ async function applyShotTerrain(offer, endPoint) {
   if (offer.isRicochetLeg) return;
   const { slug } = offer;
   const eid = offer.encounterId;
-  if (slug.type === "Ice") await addIceHazard(eid, endPoint);
+  if (slugHasTrait(slug, "ice")) await addIceHazard(eid, endPoint, slug.dual?.iceMult ?? 1);
   if (slug.hazard_maker) await addDamageHazard(eid, endPoint, slug);
   if (slug.trail_wall) await addTrailWall(eid, offer.attackerPos, endPoint, slug.type);
   if (slug.star_wall) await formStarWall(eid, endPoint, slug);
@@ -3148,6 +3176,15 @@ async function launchAndOfferCounter(offer) {
         // The incoming slug's id -- the prompt shows its transformed art,
         // already cached client-side from the slug-armed/shot-fx signals.
         slugId: offer.slug.id ?? null,
+        // Dual shot: the second slug and element, plus the combo they make --
+        // the prompt shows both slugs' art and names the combo.
+        secondaryType: offer.slug.secondary_type ?? null,
+        partnerSlugId: offer.slug.dual?.partnerId ?? null,
+        primarySlugName: offer.slug.dual?.primaryName ?? null,
+        partnerSlugName: offer.slug.dual?.partnerName ?? null,
+        comboName: offer.slug.dual?.comboName ?? null,
+        comboSummary: offer.slug.dual?.comboSummary ?? null,
+        mega: Boolean(offer.slug.mega_morphed),
         // How much of the shot's fixed windup is still left -- the slug can't
         // be identified until it's out of the barrel and transformed, so the
         // prompt holds back until then (the window itself, windowMs, still
@@ -3195,11 +3232,10 @@ async function launchAndOfferCounter(offer) {
 // max range entirely -- a caroming bounce always reaches its chosen target
 // unless a wall physically stops it.
 async function fireSecondaryShot({ encounterId, attackerId, attackerName, originPos, target, slug, blaster, walls, ricochetCount = 1 }) {
-  const tb = typeBallistics(slug.type);
   const targetPos = { x: target.x, y: target.y };
   const dist = distance(originPos, targetPos);
   const wallHit = firstWallHit(originPos, targetPos, walls);
-  const wallBlocks = Boolean(wallHit) && tb.trait !== "phase";
+  const wallBlocks = Boolean(wallHit) && !slugHasTrait(slug, "phase");
   const wallDist = wallBlocks ? wallHit.hit.t * dist : Infinity;
   const stopDist = wallDist;
   const reaches = dist <= stopDist;
@@ -3328,7 +3364,7 @@ async function resolveNormalHit(offer) {
   }
 
   const quality = QUALITY_TIERS[offer.blaster.quality] || QUALITY_TIERS[0];
-  const tb = typeBallistics(offer.slug.type);
+  const tb = slugBallistics(offer.slug);
   // Uses offer.attackerPos (the shot's real visual origin), not a fresh
   // attacker.x/y -- normally identical (the attacker can't move mid-
   // resolution), but this is also what lets Speedstinger's ricochet leg
@@ -3502,7 +3538,7 @@ async function resolveCounterOffer(id, chosenSlugId) {
   // no ejects), just guaranteed instead of a resolveClash roll of the dice.
   const firesVoided =
     (offer.slug.voids_fire_clash && counterSlugRow.type === "Fire") ||
-    (counterSlugRow.voids_fire_clash && offer.slug.type === "Fire");
+    (counterSlugRow.voids_fire_clash && slugHasType(offer.slug, "Fire"));
 
   // Where the two bolts actually meet, and how much flight time that leaves
   // the counter slug itself. The incoming shot has been in the air for
@@ -3555,7 +3591,7 @@ async function resolveCounterOffer(id, chosenSlugId) {
   scheduleAfterFlight(offer.firedAt, offer.windowMs, async () => {
     let log;
     if (outcome === "double-break") {
-      await ejectSlug(offer.slug.id);
+      for (const id of shotSlugIds(offer.slug)) await ejectSlug(id);
       await ejectSlug(counterSlugRow.id);
       log = `${offer.attackerName}'s ${offer.slug.name} and ${offer.targetName}'s ${counterSlugRow.name} clash head-on and both go flying -- no damage.`;
     } else if (outcome === "bounce") {
@@ -3585,7 +3621,8 @@ async function resolveCounterOffer(id, chosenSlugId) {
       // an uncontested hit would.
       await maybeRicochet(offer, offer.targetCombatantId);
     } else {
-      await ejectSlug(offer.slug.id);
+      // Both halves of a dual shot go flying when it loses the clash.
+      for (const id of shotSlugIds(offer.slug)) await ejectSlug(id);
       const reflectingSlug =
         defenderClashMultiplier > 1 ? { ...counterSlugRow, clash_power: counterSlugRow.clash_power * defenderClashMultiplier } : counterSlugRow;
       // The counter-slug's own "shooter" is the defender, launched from
@@ -3897,6 +3934,16 @@ async function resolveEnvironmentShot({ actionType, attacker, slug, blaster, tb,
   return { pending: false, encounter };
 }
 
+// Whether a weapon can fire dual shots: a Twin Slinger always can, and any
+// other blaster can if it has a mod with grants_dual_shot equipped (mods only
+// ever belong to players, so an NPC's blaster needs to be a Twin Slinger).
+async function blasterCanDualShot(blaster) {
+  if (blaster.base_type === DUAL_SHOT_BASE_TYPE) return true;
+  if (!blaster.id) return false;
+  const { rows } = await pool.query("SELECT 1 FROM mods WHERE equipped_blaster_id = $1 AND grants_dual_shot LIMIT 1", [blaster.id]);
+  return rows.length > 0;
+}
+
 // A shooter picked a slug but hasn't chosen a target yet. Purely a heads-up
 // so every connected client can fetch and cache that slug's art now, and have
 // it ready the instant a counter window opens -- nothing here changes combat
@@ -3933,6 +3980,9 @@ router.post("/actions/shoot", async (req, res) => {
   // A Mega Morph is a variant of Attack (it targets a slinger), so it rides
   // along as a flag on an "attack" instead of being its own action type.
   const megaMorph = actionType === "attack" && req.body?.megaMorph === true;
+  // Same for a dual shot: an Attack with a second slug (partnerSlugId).
+  const partnerSlugId = actionType === "attack" && Number.isInteger(req.body?.partnerSlugId) ? req.body.partnerSlugId : null;
+  const dualShot = partnerSlugId !== null;
   try {
     const attacker = await getCombatant(attackerId);
     if (!attacker) return res.status(404).json({ error: "Combatant not found." });
@@ -3963,23 +4013,48 @@ router.post("/actions/shoot", async (req, res) => {
     const resolved = await resolveShooterSlugAndBlaster(attacker, req, { slugId, npcSlug, npcBlaster });
     if (resolved.error) return res.status(400).json({ error: resolved.error });
     const { blaster } = resolved;
+
+    // Dual shot: a second slug from the same weapon fired together with the
+    // first as one fused bolt (see buildDualShotSlug). Everything below this
+    // block just sees "the slug" -- the fused one.
+    let shotSlug = resolved.slug;
+    let partner = null;
+    if (dualShot) {
+      if (!(await blasterCanDualShot(blaster))) {
+        return res.status(400).json({ error: "This weapon can't fire a dual shot -- it needs to be a Twin Slinger, or carry a mod that allows it." });
+      }
+      const partnerResolved = await resolveShooterSlugAndBlaster(attacker, req, { slugId: partnerSlugId });
+      if (partnerResolved.error) return res.status(400).json({ error: partnerResolved.error });
+      if (partnerResolved.blaster.id !== blaster.id) {
+        return res.status(400).json({ error: "Both slugs of a dual shot must be loaded in the same weapon." });
+      }
+      const pairError = dualShotPairError(resolved.slug, partnerResolved.slug);
+      if (pairError) return res.status(400).json({ error: pairError });
+      partner = partnerResolved.slug;
+      shotSlug = buildDualShotSlug(resolved.slug, partner);
+    }
+
     if (megaMorph) {
-      if (!resolved.slug.mega_morph_allowed) {
-        return res.status(400).json({ error: "That slug isn't able to Mega Morph." });
+      // With a dual shot, BOTH slugs must be able to Mega Morph and each
+      // burns MEGA_MORPH_PIP_COST pips.
+      for (const s of [resolved.slug, partner].filter(Boolean)) {
+        if (!s.mega_morph_allowed) {
+          return res.status(400).json({ error: `${s.name} isn't able to Mega Morph.` });
+        }
+        const livePips = Array.isArray(s.energy_pips) ? s.energy_pips.filter(Boolean).length : 0;
+        if (livePips < MEGA_MORPH_PIP_COST) {
+          return res.status(400).json({ error: `A Mega Morph burns ${MEGA_MORPH_PIP_COST} energy pips -- ${s.name} only has ${livePips}.` });
+        }
       }
       if ((blaster.range ?? 0) < MEGA_MORPH_MIN_RANGE) {
         return res.status(400).json({ error: `A Mega Morph needs a weapon with a range of at least ${MEGA_MORPH_MIN_RANGE}.` });
-      }
-      const livePips = Array.isArray(resolved.slug.energy_pips) ? resolved.slug.energy_pips.filter(Boolean).length : 0;
-      if (livePips < MEGA_MORPH_PIP_COST) {
-        return res.status(400).json({ error: `A Mega Morph burns ${MEGA_MORPH_PIP_COST} energy pips -- this slug only has ${livePips}.` });
       }
     }
     // Cannon lends +3 clash power to whatever it fires (see
     // applyBlasterTypeToSlug) -- a cloned slug, so the DB row is untouched and
     // the boost rides through both the clash comparison and the hit's damage.
     // A Mega Morph then doubles that effective number.
-    const boostedSlug = applyBlasterTypeToSlug(blaster, resolved.slug);
+    const boostedSlug = applyBlasterTypeToSlug(blaster, shotSlug);
     const slug = megaMorph ? applyMegaMorphToSlug(boostedSlug) : boostedSlug;
     // Gatling fires everything for 2 less AP (floored at 1). Every AP check
     // and spend below this point uses shotApCost, not the slug's raw ap_cost.
@@ -3998,10 +4073,21 @@ router.post("/actions/shoot", async (req, res) => {
     if (attacker.current_ap < shotApCost) return res.status(400).json({ error: "Not enough AP." });
 
     const attackerPos = { x: attacker.x, y: attacker.y };
-    const tb = typeBallistics(slug.type);
+    const tb = slugBallistics(slug);
 
     await updateCombatant(attacker.id, { current_ap: attacker.current_ap - shotApCost });
-    if (slug.id != null) await spendEnergyPip(slug.id, megaMorph ? MEGA_MORPH_PIP_COST : 1);
+    // Every slug that flies -- both halves of a dual shot -- burns its pips
+    // and starts its own return-to-hand cooldown.
+    for (const id of shotSlugIds(slug)) {
+      if (id != null) await spendEnergyPip(id, megaMorph ? MEGA_MORPH_PIP_COST : 1);
+    }
+    if (dualShot) {
+      const { comboName } = slug.dual;
+      await pushCombatLog(
+        attacker.encounter_id,
+        `${attacker.name} fires a DUAL SHOT -- ${slug.dual.primaryName} + ${slug.dual.partnerName}${comboName ? `: ${comboName}!` : "!"}`
+      );
+    }
     if (megaMorph) {
       await pushCombatLog(attacker.encounter_id, `${attacker.name}'s ${slug.name} MEGA MORPHS!`);
     }
@@ -4109,8 +4195,9 @@ router.post("/actions/shoot", async (req, res) => {
     // Bladier: the one slug whose Attack punches straight through the first
     // wall in its path instead of being stopped by it (or needing the
     // separate Break Wall action) -- see the scheduled break below.
-    const pierces = Boolean(wallHit) && slug.pierces_walls && tb.trait !== "phase";
-    const wallBlocks = Boolean(wallHit) && tb.trait !== "phase" && !pierces;
+    const phases = slugHasTrait(slug, "phase");
+    const pierces = Boolean(wallHit) && slug.pierces_walls && !phases;
+    const wallBlocks = Boolean(wallHit) && !phases && !pierces;
     const wallDist = wallBlocks ? wallHit.hit.t * dist : Infinity;
     const stopDist = Math.min(combinedRange, wallDist);
     const reaches = dist <= stopDist;

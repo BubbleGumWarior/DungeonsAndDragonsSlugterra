@@ -278,3 +278,23 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Mod editor: the "Allows Dual Shot" checkbox row. */
+.mod-form-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.mod-form-check input {
+  margin-top: 3px;
+  accent-color: var(--gold);
+}
+
+.mod-form-check strong {
+  color: var(--ink);
+}
