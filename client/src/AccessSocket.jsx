@@ -37,6 +37,12 @@ export default function AccessSocket({ children }) {
   const [counterOffered, setCounterOffered] = useState(null);
   const [knockoutRollOffered, setKnockoutRollOffered] = useState(null);
   const [shotFx, setShotFx] = useState(null);
+  // Best-effort "a shooter armed this slug" heads-up (a single latest slot --
+  // fine here, it only warms an image cache; see slugImageCache.js).
+  const [slugArmed, setSlugArmed] = useState(null);
+  // An NPC/grunt was just kitted out with blasters and slugs -- see
+  // equipNpcCombatant. Consumers refetch their gear lists on it.
+  const [gearChanged, setGearChanged] = useState(null);
   const [shotResolved, setShotResolved] = useState(null);
   const [combatLogEntry, setCombatLogEntry] = useState(null);
   const [npcTemplatesUpdate, setNpcTemplatesUpdate] = useState(null);
@@ -287,6 +293,16 @@ export default function AccessSocket({ children }) {
         return;
       }
 
+      if (data.type === "combat-gear-changed") {
+        setGearChanged(data.at ?? Date.now());
+        return;
+      }
+
+      if (data.type === "combat-slug-armed") {
+        setSlugArmed({ slugId: data.slugId, at: data.at });
+        return;
+      }
+
       if (data.type === "combat-shot-fx") {
         setShotFx(data.fx);
         return;
@@ -412,6 +428,8 @@ export default function AccessSocket({ children }) {
         counterOffered,
         knockoutRollOffered,
         shotFx,
+        slugArmed,
+        gearChanged,
         shotResolved,
         combatLogEntry,
         npcTemplatesUpdate,

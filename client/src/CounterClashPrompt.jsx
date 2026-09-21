@@ -3,6 +3,8 @@ import { ShieldWarningIcon, XIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import { typeColor } from "./slugData.js";
+import { prefetchSlugImage } from "./slugImageCache.js";
+import { useSlugImage } from "./useSlugImage.js";
 import "./Panel.css";
 import "./CounterClashPrompt.css";
 
@@ -11,6 +13,20 @@ function CounterCard({ offer, onDone }) {
   const [remaining, setRemaining] = useState(offer.windowMs);
   const [resolving, setResolving] = useState(false);
   const startRef = useRef(Date.now());
+  // The prompt only appears once the shot's windup is over -- until the slug
+  // has left the barrel and transformed there's nothing to identify yet. The
+  // countdown below still runs from the moment the offer arrived (the real
+  // window isn't extended), so a late reveal shows an already part-spent bar.
+  // A window that ends before the windup does never reveals at all.
+  const [revealed, setRevealed] = useState(() => !(offer.revealAfterMs > 0));
+  useEffect(() => {
+    if (revealed) return undefined;
+    const timeout = setTimeout(() => setRevealed(true), offer.revealAfterMs);
+    return () => clearTimeout(timeout);
+  }, [revealed, offer]);
+  // The incoming slug's transformed art -- normally already cached (see
+  // CounterClashPrompt below), so this is a synchronous hit with no flash.
+  const incomingImage = useSlugImage(offer.slugId, token);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -50,6 +66,7 @@ function CounterCard({ offer, onDone }) {
   const respondRef = useRef(respond);
   respondRef.current = respond;
   useEffect(() => {
+    if (!revealed) return undefined; // no responding to a prompt nobody can see yet
     function onKeyDown(e) {
       if (e.key === "Escape") {
         respondRef.current(null);
@@ -63,16 +80,25 @@ function CounterCard({ offer, onDone }) {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [offer]);
+  }, [offer, revealed]);
 
   const percent = Math.max(0, Math.min(100, (remaining / offer.windowMs) * 100));
+
+  if (!revealed) return null;
 
   return (
     <div className="counter-prompt-card">
       <div className="counter-prompt-head">
-        <span className="counter-prompt-icon">
-          <ShieldWarningIcon weight="duotone" />
-        </span>
+        {incomingImage ? (
+          <span className="counter-prompt-portrait" style={{ "--type-color": typeColor(offer.slugType) }}>
+            <img src={incomingImage} alt={offer.slugName} />
+            <span className="counter-prompt-portrait-type">{offer.slugType}</span>
+          </span>
+        ) : (
+          <span className="counter-prompt-icon">
+            <ShieldWarningIcon weight="duotone" />
+          </span>
+        )}
         <div>
           <p className="counter-prompt-kicker">
             {offer.attackerName} fires {offer.slugName}
@@ -126,8 +152,21 @@ function CounterCard({ offer, onDone }) {
 }
 
 export default function CounterClashPrompt() {
-  const { counterOffered } = useLiveState();
+  const { token } = useAuth();
+  const { counterOffered, slugArmed, shotFx } = useLiveState();
   const [offer, setOffer] = useState(null);
+
+  // Warm the incoming slug's art as early as possible so the counter window
+  // never waits on it: when a shooter merely picks a slug (before choosing a
+  // target), and again when the shot actually launches as a second chance if
+  // that first signal was missed. Everyone connected does this, not just
+  // whoever ends up being shot at -- nobody knows the target yet.
+  useEffect(() => {
+    if (slugArmed) prefetchSlugImage(slugArmed.slugId, token);
+  }, [slugArmed, token]);
+  useEffect(() => {
+    if (shotFx?.slugId != null) prefetchSlugImage(shotFx.slugId, token);
+  }, [shotFx, token]);
 
   useEffect(() => {
     if (!counterOffered) return;

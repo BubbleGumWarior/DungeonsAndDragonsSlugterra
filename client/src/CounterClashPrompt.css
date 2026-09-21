@@ -170,3 +170,39 @@
   margin-top: 10px;
   width: 100%;
 }
+
+/* The incoming slug's transformed art, so a defender can learn to recognise
+   what is coming and how to counter it. Element-coloured frame. */
+.counter-prompt-portrait {
+  position: relative;
+  flex-shrink: 0;
+  width: 76px;
+  height: 76px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid var(--type-color, var(--maroon-500));
+  box-shadow: 0 0 16px color-mix(in srgb, var(--type-color, var(--danger)) 45%, transparent);
+  background: var(--charcoal-950);
+}
+
+.counter-prompt-portrait img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.counter-prompt-portrait-type {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 2px 0;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  background: color-mix(in srgb, var(--type-color, #000) 70%, rgba(0, 0, 0, 0.55));
+}

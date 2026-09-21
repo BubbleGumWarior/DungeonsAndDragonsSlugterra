@@ -74,9 +74,27 @@ const RESOLVE_SETTLE_MIN_MS = 160;
 const RESOLVE_SETTLE_MAX_MS = 380;
 const RESOLVE_SETTLE_PX_MS = 3.2; // ms of skid per px of gap, before clamping
 
+// How far the "still waiting on a resolve" bolt is allowed to travel along
+// its own flight curve before it must be revealed one way or another. Capped
+// below 1 so a shot that offers a counter (whose outcome isn't known until
+// the window closes, right at totalMs) never visually completes its approach
+// before that reveal arrives -- see the !fx.outcome branch below.
+const PENDING_MAX_FRACTION = 0.92;
+
 function lerp(a, b, t) {
   return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
 }
+
+// Heading of the segment a -> b in SVG degrees (0 = +x, clockwise), used to
+// point a Mega Morph bolt's teardrop along its line of flight.
+function headingDeg(a, b) {
+  return (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+}
+
+// A Mega Morph bolt: a teardrop instead of the ordinary round bolt. Drawn
+// pointing along +x (round head leading at the origin, tapering tail behind)
+// and rotated into place by the caller.
+const MEGA_BOLT_PATH = "M -30 0 C -18 -3 -8 -10 0 -10 A 10 10 0 0 1 0 10 C -8 10 -18 3 -30 0 Z";
 
 // A shot's flight: attacker -> impactPoint over `windowMs * SHOT_FLIGHT_MULTIPLIER`.
 // The reaction window now runs the *entire* flight -- a defender can wait
@@ -339,13 +357,20 @@ function ShotEffect({ fx, onDone }) {
   if (!fx.countered) {
     let boltPos = null;
     if (!fx.outcome) {
-      // The resolve update hasn't landed yet -- ride the phased curve to the
-      // last known impact point and hold there (phasedFraction saturates at
-      // 1 past totalMs). Never guess a burst here: a miss's real, deflected
-      // landing spot isn't known until that update arrives, and bursting on
-      // this stale point is exactly what used to show an explosion at the
-      // target on a shot that really missed. See stillWaiting below.
-      boltPos = lerp(fx.attackerPos, fx.impactPoint, phasedFraction(elapsed, totalMs));
+      // The resolve update hasn't landed yet -- ride the phased curve toward
+      // the last known impact point, but never quite finish the approach
+      // (phasedFraction saturates at 1 past totalMs, which would park the
+      // bolt exactly on the target). A shot that offered a counter only
+      // resolves once that window closes, right as totalMs is reached -- if
+      // the bolt had already fully landed by then, a miss's skid to its real
+      // (deflected) point reads as the bolt leaving a target it just hit,
+      // not as it missing. Stopping short keeps it visibly still inbound, so
+      // the skid below reads as finishing the flight, not reversing out of
+      // one. Never guess a burst here: a miss's real, deflected landing spot
+      // isn't known until the resolve update arrives, and bursting on this
+      // stale point is exactly what used to show an explosion at the target
+      // on a shot that really missed. See stillWaiting below.
+      boltPos = lerp(fx.attackerPos, fx.impactPoint, Math.min(PENDING_MAX_FRACTION, phasedFraction(elapsed, totalMs)));
     } else if (skidMode && elapsed < burstAt) {
       // The outcome arrived too late for the bolt to reach the real impact
       // point on its normal curve -- skid it there from wherever it had
@@ -368,7 +393,7 @@ function ShotEffect({ fx, onDone }) {
     }
     if (boltPos) {
       lastBoltPosRef.current = boltPos;
-      bolts.push({ pos: boltPos, color });
+      bolts.push({ pos: boltPos, color, mega: fx.mega, angle: headingDeg(fx.attackerPos, fx.impactPoint) });
     }
   } else {
     // The counter doesn't launch until the defender reacts -- until then the
@@ -384,12 +409,17 @@ function ShotEffect({ fx, onDone }) {
     const shotPosAtCounter = lerp(fx.attackerPos, fx.impactPoint, phasedFraction(counterAtMs, totalMs));
     if (elapsed < clashAt) {
       if (elapsed < counterAtMs) {
-        bolts.push({ pos: lerp(fx.attackerPos, fx.impactPoint, phasedFraction(elapsed, totalMs)), color });
+        bolts.push({
+          pos: lerp(fx.attackerPos, fx.impactPoint, phasedFraction(elapsed, totalMs)),
+          color,
+          mega: fx.mega,
+          angle: headingDeg(fx.attackerPos, fx.impactPoint),
+        });
       } else {
         // Linear from each bolt's position when the counter fired -- both are
         // up to speed by now, no slow launch-out to reproduce.
         const t = (elapsed - counterAtMs) / Math.max(1, clashAt - counterAtMs);
-        bolts.push({ pos: lerp(shotPosAtCounter, mid, t), color });
+        bolts.push({ pos: lerp(shotPosAtCounter, mid, t), color, mega: fx.mega, angle: headingDeg(shotPosAtCounter, mid) });
         bolts.push({ pos: lerp(fx.targetPos, mid, t), color: counterColor });
       }
     } else {
@@ -399,7 +429,12 @@ function ShotEffect({ fx, onDone }) {
         if (aftermathElapsed < aftermathMs) {
           // Linear, not phasedFraction -- a post-clash continuation is
           // already up to speed, no slow launch-out to reproduce.
-          bolts.push({ pos: lerp(mid, fx.impactPoint, aftermathElapsed / aftermathMs), color });
+          bolts.push({
+            pos: lerp(mid, fx.impactPoint, aftermathElapsed / aftermathMs),
+            color,
+            mega: fx.mega,
+            angle: headingDeg(mid, fx.impactPoint),
+          });
         } else {
           bursts.push({
             pos: fx.impactPoint,
@@ -430,9 +465,19 @@ function ShotEffect({ fx, onDone }) {
 
   return (
     <>
-      {bolts.map((b, i) => (
-        <circle key={`bolt-${i}`} className="shot-fx-bolt" cx={b.pos.x} cy={b.pos.y} r={7} style={{ "--fx-color": b.color }} />
-      ))}
+      {bolts.map((b, i) =>
+        b.mega ? (
+          <path
+            key={`bolt-${i}`}
+            className="shot-fx-bolt shot-fx-bolt--mega"
+            d={MEGA_BOLT_PATH}
+            transform={`translate(${b.pos.x} ${b.pos.y}) rotate(${b.angle})`}
+            style={{ "--fx-color": b.color }}
+          />
+        ) : (
+          <circle key={`bolt-${i}`} className="shot-fx-bolt" cx={b.pos.x} cy={b.pos.y} r={7} style={{ "--fx-color": b.color }} />
+        )
+      )}
       {bursts.map((b, i) =>
         b.kind === "clash" ? (
           // Two overlapping, screen-blended circles (one per slug's type
@@ -516,7 +561,7 @@ function statusEffectBadges(statusEffects) {
   return badges;
 }
 
-function Token({ combatant, isActive, isSelected, isActing, draggable, pos, onMouseDown, dimmed, mountTarget }) {
+function Token({ combatant, isActive, isSelected, isActing, draggable, isDragging, pos, onMouseDown, dimmed, mountTarget }) {
   // A mounted rider rides small, tucked onto the upper-right of the mecha's
   // token so the two read as one entity (the server keeps their positions in
   // lockstep -- see /actions/move).
@@ -538,7 +583,7 @@ function Token({ combatant, isActive, isSelected, isActing, draggable, pos, onMo
 
   return (
     <g
-      className={`combat-token combat-token--${combatant.kind} ${downed ? "combat-token--down" : ""} ${isActing ? "combat-token--acting" : ""} ${draggable ? "combat-token--draggable" : ""} ${dimmed ? "combat-token--invisible" : ""}`}
+      className={`combat-token combat-token--${combatant.kind} ${downed ? "combat-token--down" : ""} ${isActing ? "combat-token--acting" : ""} ${draggable ? "combat-token--draggable" : ""} ${dimmed ? "combat-token--invisible" : ""} ${isDragging ? "combat-token--dragging" : ""}`}
       transform={`translate(${pos.x + offX}, ${pos.y + offY})`}
       onMouseDown={(e) => {
         e.stopPropagation();
@@ -625,6 +670,13 @@ export default function CombatMap({
   const mapFileInputRef = useRef(null);
   const [drawing, setDrawing] = useState(null); // {x1,y1,x2,y2} while dragging a wall
   const [drag, setDrag] = useState(null); // {combatant, originX, originY, x, y, moved, startClientX, startClientY}
+  // A dropped token's position, held here from the instant of drop until the
+  // server confirms the move -- without it, `drag` clearing on mouseup would
+  // make the token fall back to its stale pre-move spot (encounter.combatants
+  // hasn't updated yet) for one or more frames, then glide forward again once
+  // it does. Keyed by combatant id (also the mount partner's id, when a
+  // mounted rider is what's being dragged -- see handleMouseUp).
+  const [settlePositions, setSettlePositions] = useState(() => new Map());
   const [activeShots, setActiveShots] = useState([]);
   const [misfireFlash, setMisfireFlash] = useState(false);
   const [missFlash, setMissFlash] = useState(false);
@@ -857,6 +909,25 @@ export default function CombatMap({
     );
   }, [shotResolved]);
 
+  // Drop the settle override for a combatant as soon as the server-confirmed
+  // position actually reaches it (or the combatant's gone -- e.g. removed
+  // from the encounter mid-drag).
+  useEffect(() => {
+    setSettlePositions((prev) => {
+      if (prev.size === 0) return prev;
+      let changed = false;
+      const next = new Map(prev);
+      for (const [id, pt] of prev) {
+        const c = encounter.combatants.find((cc) => cc.id === id);
+        if (!c || (Math.abs(c.x - pt.x) < 0.5 && Math.abs(c.y - pt.y) < 0.5)) {
+          next.delete(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [encounter.combatants]);
+
   function removeShot(id) {
     setActiveShots((prev) => prev.filter((s) => s.id !== id));
     shotFlightMeta.current.delete(id);
@@ -952,7 +1023,29 @@ export default function CombatMap({
     }
     if (drag) {
       if (drag.moved) {
-        onTokenDragEnd?.(drag.combatant, { x: drag.x, y: drag.y });
+        const point = { x: drag.x, y: drag.y };
+        const overrideIds =
+          drag.combatant.mountedOn != null ? [drag.combatant.id, drag.combatant.mountedOn] : [drag.combatant.id];
+        setSettlePositions((prev) => {
+          const next = new Map(prev);
+          overrideIds.forEach((id) => next.set(id, point));
+          return next;
+        });
+        // Safety net: if the move request errors out (no encounter update
+        // ever arrives to reconcile against, see the settlePositions effect
+        // below), don't leave the token stuck showing the attempted drop
+        // spot forever -- fall back to wherever it actually is.
+        overrideIds.forEach((id) => {
+          setTimeout(() => {
+            setSettlePositions((prev) => {
+              if (!prev.has(id)) return prev;
+              const next = new Map(prev);
+              next.delete(id);
+              return next;
+            });
+          }, 4000);
+        });
+        onTokenDragEnd?.(drag.combatant, point);
       } else {
         onTokenClick?.(drag.combatant);
       }
@@ -1151,7 +1244,8 @@ export default function CombatMap({
             // moves as one.
             const followsDrag =
               drag && (drag.combatant.id === c.id || (drag.combatant.mountedOn != null && drag.combatant.mountedOn === c.id));
-            const pos = followsDrag ? { x: drag.x, y: drag.y } : { x: c.x, y: c.y };
+            const settled = settlePositions.get(c.id);
+            const pos = followsDrag ? { x: drag.x, y: drag.y } : settled ?? { x: c.x, y: c.y };
             const inMountRange =
               mountRing &&
               c.kind === "mecha" &&
@@ -1165,6 +1259,7 @@ export default function CombatMap({
                 isActive={c.id === activeCombatantId}
                 isActing={c.id === actingCombatantId}
                 draggable={!dragLocked && Boolean(isDraggable?.(c))}
+                isDragging={Boolean(followsDrag)}
                 onMouseDown={handleTokenMouseDown}
                 dimmed={Boolean(c.statusEffects?.invisible)}
                 mountTarget={Boolean(inMountRange)}

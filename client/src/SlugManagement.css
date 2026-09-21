@@ -210,6 +210,44 @@
   color: var(--danger);
 }
 
+/* DM-only per-slug Mega Morph permission toggle (player roster cards). */
+.slug-management-mega-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--charcoal-600);
+  background: transparent;
+  color: var(--ink-dim);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+
+.slug-management-mega-toggle svg {
+  width: 13px;
+  height: 13px;
+}
+
+.slug-management-mega-toggle:hover {
+  border-color: #a78bfa;
+  color: #ddd6fe;
+}
+
+.slug-management-mega-toggle--on {
+  border-color: transparent;
+  color: #1a1024;
+  background: linear-gradient(90deg, #c4b5fd, #f9a8d4, #fde68a);
+}
+
+.slug-management-mega-toggle--on:hover {
+  color: #1a1024;
+  filter: brightness(1.08);
+}
+
 .slug-modal-backdrop {
   position: fixed;
   inset: 0;

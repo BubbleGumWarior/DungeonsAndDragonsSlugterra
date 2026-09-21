@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { PlusIcon, TrashIcon, UserPlusIcon, DownloadSimpleIcon, CaretDownIcon } from "@phosphor-icons/react";
+import { PlusIcon, TrashIcon, UserPlusIcon, DownloadSimpleIcon, CaretDownIcon, SparkleIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import SlugCard from "./SlugCard.jsx";
 import SlugForm from "./SlugForm.jsx";
@@ -102,6 +102,17 @@ export default function SlugManagement() {
     if (!res.ok) throw new Error(data.error || "Could not update template.");
     setModal(null);
     loadTemplates();
+  }
+
+  async function toggleMegaMorph(slug) {
+    const res = await fetch(`/api/slugs/${slug.id}/mega-morph`, {
+      method: "PATCH",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ allowed: !slug.megaMorphAllowed }),
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    setSlugs((prev) => prev.map((s) => (s.id === data.slug.id ? data.slug : s)));
   }
 
   async function deleteTemplate(id) {
@@ -309,6 +320,22 @@ export default function SlugManagement() {
                         key={slug.id}
                         slug={slug}
                         onClick={() => setModal({ type: "edit-instance", slug })}
+                        actions={
+                          <button
+                            type="button"
+                            className={`slug-management-mega-toggle ${slug.megaMorphAllowed ? "slug-management-mega-toggle--on" : ""}`}
+                            aria-pressed={Boolean(slug.megaMorphAllowed)}
+                            onClick={() => toggleMegaMorph(slug)}
+                            title={
+                              slug.megaMorphAllowed
+                                ? "This slug can Mega Morph in combat -- click to revoke"
+                                : "Allow this slug to Mega Morph in combat"
+                            }
+                          >
+                            <SparkleIcon weight={slug.megaMorphAllowed ? "fill" : "bold"} />
+                            {slug.megaMorphAllowed ? "Can Mega Morph" : "Allow Mega Morph"}
+                          </button>
+                        }
                       />
                     ))}
                   </div>

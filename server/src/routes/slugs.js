@@ -75,6 +75,7 @@ export function toClientSlug(row) {
     magazineSlot: row.magazine_slot,
     cooldownTurnsLeft: row.cooldown_turns_left,
     loaded: row.loaded,
+    megaMorphAllowed: Boolean(row.mega_morph_allowed),
     createdAt: row.created_at,
   };
 }
@@ -479,6 +480,51 @@ router.patch("/:id/energy", requireDungeonMaster, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not update energy pips." });
+  }
+});
+
+// The slug's transformed (velocity) art as a real image response, so a combat
+// client can fetch and cache it ahead of time -- the counter-clash prompt
+// shows it to whoever is being shot at. Any signed-in user may fetch it (they
+// see the bolt's slug in the counter window anyway); stats stay private. Not
+// part of toClientSlug, which would drag every slug's base64 art into every
+// list response.
+router.get("/:id/velocity-image", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "Invalid slug id." });
+
+  try {
+    const { rows } = await pool.query("SELECT velocity_image FROM slugs WHERE id = $1", [id]);
+    const src = rows[0]?.velocity_image;
+    if (!src) return res.status(404).json({ error: "No image." });
+
+    const match = /^data:([^;,]+)(;base64)?,(.*)$/s.exec(src);
+    if (!match) return res.redirect(src); // a plain URL rather than an embedded data URI
+    const body = match[2] ? Buffer.from(match[3], "base64") : Buffer.from(decodeURIComponent(match[3]));
+    res.set({ "Content-Type": match[1], "Cache-Control": "private, max-age=3600" }).send(body);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not load slug image." });
+  }
+});
+
+router.patch("/:id/mega-morph", requireDungeonMaster, async (req, res) => {
+  const id = Number(req.params.id);
+  const { allowed } = req.body || {};
+  if (typeof allowed !== "boolean") {
+    return res.status(400).json({ error: "allowed must be true or false." });
+  }
+
+  try {
+    const { rows } = await pool.query("UPDATE slugs SET mega_morph_allowed = $1 WHERE id = $2 RETURNING *", [allowed, id]);
+    if (!rows[0]) return res.status(404).json({ error: "Slug not found." });
+
+    const slug = toClientSlug(rows[0]);
+    broadcastAll({ type: "slug-updated", userId: slug.userId, slug });
+    res.json({ slug });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not update mega morph permission." });
   }
 });
 

@@ -928,6 +928,13 @@ export async function initSchema() {
     ALTER TABLE slugs ADD COLUMN IF NOT EXISTS loaded BOOLEAN NOT NULL DEFAULT true;
   `);
 
+  // DM-granted per slug instance: this slug may fire a Mega Morph shot (see
+  // MEGA_MORPH_* in combatRules.js). Not a template flag -- it's earned by
+  // the individual slug, so it never rides along when a template is cloned.
+  await pool.query(`
+    ALTER TABLE slugs ADD COLUMN IF NOT EXISTS mega_morph_allowed BOOLEAN NOT NULL DEFAULT false;
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS mod_templates (
       id SERIAL PRIMARY KEY,

@@ -70,7 +70,10 @@ import {
   HAZARD_DAMAGE_FRACTION,
   CHAIN_RADIUS,
   RICOCHET_MAX_BOUNCES,
-  ULTRA_FAST_WINDOW_FACTOR,
+  slugWindowFactor,
+  MEGA_MORPH_MIN_RANGE,
+  MEGA_MORPH_PIP_COST,
+  applyMegaMorphToSlug,
   INVISIBLE_DURATION_TURNS,
   FEAR_FLEE_AP_EQUIVALENT,
   CONFUSION_DURATION_TURNS,
@@ -830,6 +833,14 @@ async function equipNpcCombatant(
       await pool.query("UPDATE combatants SET mounted_on = $1 WHERE id = $2", [mechaResult.rows[0].id, combatant.id]);
     }
   }
+
+  // The per-row blaster-updated/slug-updated broadcasts above arrive at the
+  // client as a rapid burst, and its single-slot live state only keeps the
+  // last of each -- so an NPC with several slugs/blasters would show up in the
+  // DM's slug panel with most of its gear missing. One authoritative "it
+  // happened" signal, sent once everything has committed, lets the client
+  // refetch the lot instead of trusting the burst.
+  broadcastAll({ type: "combat-gear-changed", at: Date.now() });
 }
 
 // Weighted random pick of one item; `weightFn` returns a non-negative number.
@@ -1597,15 +1608,24 @@ async function ejectSlug(slugId) {
 // return-to-hand cooldown (see SLUG_RETURN_TURNS) and knocks it out of the
 // weapon: once the cooldown expires the slug is back in hand but `loaded`
 // false, needing a Reload action to chamber it again (see /actions/reload).
-async function spendEnergyPip(slugId) {
+// `count` is how many pips this use burns -- 1 normally, MEGA_MORPH_PIP_COST
+// for a Mega Morph shot. Still a single fire, so the cooldown/reload state
+// below is set once regardless.
+async function spendEnergyPip(slugId, count = 1) {
   if (!slugId) return;
   const { rows } = await pool.query("SELECT * FROM slugs WHERE id = $1", [slugId]);
   const slug = rows[0];
   if (!slug) return;
   const pips = slug.energy_pips || [];
-  const idx = pips.findIndex((p) => p);
-  if (idx === -1) return;
-  const next = pips.map((p, i) => (i === idx ? false : p));
+  if (!pips.some(Boolean)) return;
+  let remaining = count;
+  const next = pips.map((p) => {
+    if (p && remaining > 0) {
+      remaining -= 1;
+      return false;
+    }
+    return p;
+  });
   // Lentus: self-chambers the instant it's back in hand -- never actually
   // goes to `loaded: false` in the first place once its loyalty tier is
   // Friendly or higher, so there's nothing to Reload and no "needs reload"
@@ -2902,6 +2922,9 @@ function broadcastShotFx(fx) {
       // (Zeus's thunderclap) -- the type alone ("Electricity") isn't unique
       // to it.
       slugName: fx.slug.name || null,
+      // Lets every client start fetching the slug's art (a second chance to
+      // warm the cache if the earlier slug-armed signal was missed).
+      slugId: fx.slug.id ?? null,
       windowMs: fx.windowMs,
       countered: Boolean(fx.countered),
       counterSlugType: fx.counterSlugType || null,
@@ -2910,6 +2933,8 @@ function broadcastShotFx(fx) {
       // normal small one -- an AOE slug always explodes at full size,
       // hit or miss (see the miss branch of resolveNormalHit below).
       aoe: Boolean(fx.slug.aoe_blast),
+      // A Mega Morph shot's bolt is drawn as a teardrop, not the usual circle.
+      mega: Boolean(fx.slug.mega_morphed),
     },
   });
 }
@@ -3120,6 +3145,14 @@ async function launchAndOfferCounter(offer) {
         attackerName: offer.attackerName,
         slugName: offer.slug.name,
         slugType: offer.slug.type,
+        // The incoming slug's id -- the prompt shows its transformed art,
+        // already cached client-side from the slug-armed/shot-fx signals.
+        slugId: offer.slug.id ?? null,
+        // How much of the shot's fixed windup is still left -- the slug can't
+        // be identified until it's out of the barrel and transformed, so the
+        // prompt holds back until then (the window itself, windowMs, still
+        // runs from launch and isn't extended).
+        revealAfterMs: Math.max(0, SHOT_SLOW_PHASE_MS - (Date.now() - offer.firedAt)),
         // Who's being shot at -- the DM may be fielding counters for several
         // NPCs at once, so the prompt names the defender.
         defenderName: offer.targetName,
@@ -3175,9 +3208,7 @@ async function fireSecondaryShot({ encounterId, attackerId, attackerName, origin
   // Perplexus's slowedReaction/enhancedReaction modify the *target's* own
   // window regardless of the shooter's own ultra_fast -- see
   // reactionWindowFactor.
-  const windowMs = Math.round(
-    (slug.ultra_fast ? rawWindowMs * ULTRA_FAST_WINDOW_FACTOR : rawWindowMs) * reactionWindowFactor(target.status_effects)
-  );
+  const windowMs = Math.round(rawWindowMs * slugWindowFactor(slug) * reactionWindowFactor(target.status_effects));
   const fxId = `ricochet-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const firedAt = Date.now();
 
@@ -3866,9 +3897,42 @@ async function resolveEnvironmentShot({ actionType, attacker, slug, blaster, tb,
   return { pending: false, encounter };
 }
 
+// A shooter picked a slug but hasn't chosen a target yet. Purely a heads-up
+// so every connected client can fetch and cache that slug's art now, and have
+// it ready the instant a counter window opens -- nothing here changes combat
+// state. Best-effort by design: a lost or overwritten signal just means the
+// image is fetched a moment later (see the shot-fx and counter-offered
+// fallbacks), never a wrong result.
+router.post("/actions/arm-slug", async (req, res) => {
+  const { attackerId, slugId } = req.body || {};
+  if (!Number.isInteger(slugId)) return res.status(400).json({ error: "Choose a slug." });
+  try {
+    const attacker = await getCombatant(attackerId);
+    if (!attacker) return res.status(404).json({ error: "Combatant not found." });
+    const encounterRow = (await pool.query("SELECT * FROM encounters WHERE id = $1", [attacker.encounter_id])).rows[0];
+    if (!encounterRow || !isActingCombatantAuthorized(req, attacker, encounterRow)) {
+      return res.status(403).json({ error: "That isn't your combatant." });
+    }
+    const slug = (await pool.query("SELECT id, user_id, owner_combatant_id FROM slugs WHERE id = $1", [slugId])).rows[0];
+    const ownsSlug =
+      slug &&
+      ((attacker.kind === "character" && slug.user_id === attacker.ref_user_id) ||
+        (attacker.kind === "npc" && slug.owner_combatant_id === attacker.id));
+    if (!ownsSlug) return res.status(400).json({ error: "That slug isn't yours." });
+    broadcastAll({ type: "combat-slug-armed", slugId: slug.id, at: Date.now() });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not arm slug." });
+  }
+});
+
 router.post("/actions/shoot", async (req, res) => {
   const { attackerId, targetId, targetPoint, slugId, npcSlug, npcBlaster, actionType: rawActionType, effectChoice } = req.body || {};
   const actionType = ["break-wall", "make-wall", "build-bridge"].includes(rawActionType) ? rawActionType : "attack";
+  // A Mega Morph is a variant of Attack (it targets a slinger), so it rides
+  // along as a flag on an "attack" instead of being its own action type.
+  const megaMorph = actionType === "attack" && req.body?.megaMorph === true;
   try {
     const attacker = await getCombatant(attackerId);
     if (!attacker) return res.status(404).json({ error: "Combatant not found." });
@@ -3899,10 +3963,24 @@ router.post("/actions/shoot", async (req, res) => {
     const resolved = await resolveShooterSlugAndBlaster(attacker, req, { slugId, npcSlug, npcBlaster });
     if (resolved.error) return res.status(400).json({ error: resolved.error });
     const { blaster } = resolved;
+    if (megaMorph) {
+      if (!resolved.slug.mega_morph_allowed) {
+        return res.status(400).json({ error: "That slug isn't able to Mega Morph." });
+      }
+      if ((blaster.range ?? 0) < MEGA_MORPH_MIN_RANGE) {
+        return res.status(400).json({ error: `A Mega Morph needs a weapon with a range of at least ${MEGA_MORPH_MIN_RANGE}.` });
+      }
+      const livePips = Array.isArray(resolved.slug.energy_pips) ? resolved.slug.energy_pips.filter(Boolean).length : 0;
+      if (livePips < MEGA_MORPH_PIP_COST) {
+        return res.status(400).json({ error: `A Mega Morph burns ${MEGA_MORPH_PIP_COST} energy pips -- this slug only has ${livePips}.` });
+      }
+    }
     // Cannon lends +3 clash power to whatever it fires (see
     // applyBlasterTypeToSlug) -- a cloned slug, so the DB row is untouched and
     // the boost rides through both the clash comparison and the hit's damage.
-    const slug = applyBlasterTypeToSlug(blaster, resolved.slug);
+    // A Mega Morph then doubles that effective number.
+    const boostedSlug = applyBlasterTypeToSlug(blaster, resolved.slug);
+    const slug = megaMorph ? applyMegaMorphToSlug(boostedSlug) : boostedSlug;
     // Gatling fires everything for 2 less AP (floored at 1). Every AP check
     // and spend below this point uses shotApCost, not the slug's raw ap_cost.
     const shotApCost = gatlingShotApCost(blaster, slug.ap_cost);
@@ -3923,7 +4001,10 @@ router.post("/actions/shoot", async (req, res) => {
     const tb = typeBallistics(slug.type);
 
     await updateCombatant(attacker.id, { current_ap: attacker.current_ap - shotApCost });
-    if (slug.id != null) await spendEnergyPip(slug.id);
+    if (slug.id != null) await spendEnergyPip(slug.id, megaMorph ? MEGA_MORPH_PIP_COST : 1);
+    if (megaMorph) {
+      await pushCombatLog(attacker.encounter_id, `${attacker.name}'s ${slug.name} MEGA MORPHS!`);
+    }
 
     // Ties together this shot's launch broadcast, its later resolve
     // broadcast, and (if a counter is offered) the pending-counter entry --
@@ -3984,6 +4065,12 @@ router.post("/actions/shoot", async (req, res) => {
     // raw stored value (see itemRules.js) rather than migrated.
     const combinedRange = Math.max(blaster.range, tb.range);
     const dist = distance(attackerPos, targetPos);
+    // A self-buff has zero distance to cross -- there's no aim, no travel,
+    // and (per resolveNormalHit's isSelfShot check) it always connects, so
+    // it must never be gated on how long the flight would otherwise take.
+    // Without this, every self-target shot has dist === 0, which always
+    // trips shotTooClose below and fails outright, no matter the weapon.
+    const isSelfShot = target.id === attacker.id;
 
     // Point-blank failure: at this weapon's own default speed (see
     // shotFlightMs), the target is close enough that the shot would have to
@@ -3991,7 +4078,7 @@ router.post("/actions/shoot", async (req, res) => {
     // barrel. That can't happen -- the windup never compresses -- so the
     // shot just fails outright instead, exactly like a jam (no launch, no
     // counter offered). Being too close is bad.
-    if (shotTooClose(dist, blaster.range)) {
+    if (!isSelfShot && shotTooClose(dist, blaster.range)) {
       broadcastShotFx({
         fxId,
         attackerCombatantId: attacker.id,
@@ -4039,9 +4126,7 @@ router.post("/actions/shoot", async (req, res) => {
     // Perplexus's slowedReaction/enhancedReaction modify the *target's* own
     // window regardless of the shooter's own ultra_fast -- see
     // reactionWindowFactor.
-    const windowMs = Math.round(
-      (slug.ultra_fast ? rawWindowMs * ULTRA_FAST_WINDOW_FACTOR : rawWindowMs) * reactionWindowFactor(target.status_effects)
-    );
+    const windowMs = Math.round(rawWindowMs * slugWindowFactor(slug) * reactionWindowFactor(target.status_effects));
 
     const offer = {
       fxId,

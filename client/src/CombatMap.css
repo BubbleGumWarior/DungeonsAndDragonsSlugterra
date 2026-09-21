@@ -395,6 +395,17 @@
 
 .combat-token {
   cursor: pointer;
+  /* A token's `transform` (its position) glides to any new value instead of
+     snapping there instantly -- covers a drag settling into its confirmed
+     spot, and every other client watching a combatant move (DM-moved NPCs,
+     other players' turns, knockback, etc). Suppressed via
+     combat-token--dragging while the token is following the local mouse, so
+     an active drag still tracks the cursor 1:1 with no lag. */
+  transition: transform 0.4s ease-out;
+}
+
+.combat-token--dragging {
+  transition: none;
 }
 
 .combat-token--draggable {
@@ -576,6 +587,13 @@
   stroke-width: 1.5;
   filter: drop-shadow(0 0 8px var(--fx-color, var(--gold)));
   pointer-events: none;
+}
+
+/* Mega Morph: the same bolt, but a teardrop (round head leading, tapered tail
+   behind -- the path itself is in CombatMap.jsx) with a fatter glow. */
+.shot-fx-bolt--mega {
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 10px var(--fx-color, var(--gold))) drop-shadow(0 0 20px var(--fx-color, var(--gold)));
 }
 
 /* Pressure Tick's pod firing -- appears instantly (no travel), holds, then

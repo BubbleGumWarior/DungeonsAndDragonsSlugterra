@@ -86,3 +86,110 @@
 .slug-mind-scramble-group-label:first-of-type {
   margin-top: 0;
 }
+
+/* Shoot Mega Morph -- deliberately unlike the four plain action tiles: a
+   full-width slab with a slowly drifting violet/magenta/gold rim, so it reads
+   as the "special" choice rather than just another option. */
+.slug-action-mega {
+  --mega-a: #8b5cf6;
+  --mega-b: #ec4899;
+  --mega-c: #f5c451;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 14px 16px;
+  text-align: left;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  color: var(--ink);
+  cursor: pointer;
+  background:
+    linear-gradient(160deg, #1d1428, #120c1a) padding-box,
+    linear-gradient(115deg, var(--mega-a), var(--mega-b), var(--mega-c), var(--mega-a)) border-box;
+  background-size: 100% 100%, 300% 100%;
+  box-shadow: 0 0 18px rgba(139, 92, 246, 0.35), 0 0 34px rgba(236, 72, 153, 0.14);
+  animation: slug-action-mega-drift 6s linear infinite;
+  transition: transform 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
+}
+
+.slug-action-mega:hover:not(.slug-action-mega--disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 0 26px rgba(139, 92, 246, 0.55), 0 0 46px rgba(236, 72, 153, 0.25);
+}
+
+.slug-action-mega-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.slug-action-mega-icon {
+  width: 22px;
+  height: 22px;
+  color: var(--mega-c);
+  filter: drop-shadow(0 0 6px rgba(245, 196, 81, 0.7));
+}
+
+.slug-action-mega-title {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: linear-gradient(90deg, #c4b5fd, #f9a8d4, #fde68a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.slug-action-mega-tag {
+  margin-left: auto;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.slug-action-mega-desc {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.slug-action-mega-desc strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.slug-action-mega-blocked {
+  font-size: 11px;
+  font-weight: 700;
+  font-style: italic;
+  color: #f9a8d4;
+}
+
+.slug-action-mega--disabled {
+  cursor: not-allowed;
+  filter: saturate(0.4);
+  opacity: 0.6;
+  animation: none;
+  box-shadow: none;
+}
+
+@keyframes slug-action-mega-drift {
+  0% {
+    background-position: 0 0, 0% 0;
+  }
+  100% {
+    background-position: 0 0, 300% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slug-action-mega {
+    animation: none;
+  }
+}

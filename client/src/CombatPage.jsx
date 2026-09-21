@@ -8,7 +8,7 @@ import CombatHotbar from "./CombatHotbar.jsx";
 import CombatSlugPanel from "./CombatSlugPanel.jsx";
 import CombatRoster from "./CombatRoster.jsx";
 import CombatLog from "./CombatLog.jsx";
-import SlugActionModal from "./SlugActionModal.jsx";
+import SlugActionModal, { MEGA_MORPH_MIN_RANGE, MEGA_MORPH_PIP_COST } from "./SlugActionModal.jsx";
 import MindScrambleModal from "./MindScrambleModal.jsx";
 import FrictionModal from "./FrictionModal.jsx";
 import HunkerConfirmModal from "./HunkerConfirmModal.jsx";
@@ -326,7 +326,7 @@ function PullGruntForm({ gruntTemplates, onPull }) {
 
 export default function CombatPage() {
   const { token, user } = useAuth();
-  const { encounter: liveEncounter, slugUpdate, blasterUpdate, shotFx, shotResolved, damageFlash, gruntTemplatesUpdate } = useLiveState();
+  const { encounter: liveEncounter, slugUpdate, blasterUpdate, shotFx, shotResolved, damageFlash, gruntTemplatesUpdate, gearChanged } = useLiveState();
   const [flashActive, setFlashActive] = useState(false);
   const [encounter, setEncounter] = useState(undefined);
   const [players, setPlayers] = useState([]);
@@ -403,7 +403,10 @@ export default function CombatPage() {
       .then((res) => res.json())
       .then((data) => setAllBlasters(data.blasters || []))
       .catch(() => {});
-  }, [isDM, token]);
+    // gearChanged: an NPC was just kitted out. Its per-row slug/blaster
+    // broadcasts arrive as a burst the live state can't hold (only the last
+    // survives), so refetch everything instead of trusting them.
+  }, [isDM, token, gearChanged]);
 
   useEffect(() => {
     if (!slugUpdate) return;
@@ -815,6 +818,7 @@ export default function CombatPage() {
             actionType: mode.actionType || "attack",
             ...(isEnvAction ? { targetPoint: { x: target.x, y: target.y } } : { targetId: target.id }),
             ...(mode.effectChoice ? { effectChoice: mode.effectChoice } : {}),
+            ...(mode.megaMorph ? { megaMorph: true } : {}),
           })
         );
       } catch (err) {
@@ -850,16 +854,27 @@ export default function CombatPage() {
     handleRosterRowClick(target);
   }
 
+  // Heads-up to every client that this slug is about to be fired, so they can
+  // fetch its art now and have it ready for a counter window (see
+  // slugImageCache.js). Fire-and-forget: it changes nothing in combat.
+  function announceArmedSlug(slug) {
+    if (!actingCombatant || !Number.isInteger(slug?.id)) return;
+    postJson(token, "/api/combat/actions/arm-slug", { attackerId: actingCombatant.id, slugId: slug.id }).catch(() => {});
+  }
+
   function handlePickSlug(slug) {
     if (!slug) {
       setMode(null);
       return;
     }
+    announceArmedSlug(slug);
     // A slug that can also break/make a wall or build a bridge gets a
     // picker for which of those (plus the always-available Attack) it's
     // firing for this shot -- a plain slug skips straight to Attack, same
     // as before.
-    if (slug.breaksWalls || slug.wallMaker || slug.bridgeMaker) {
+    // A DM-approved Mega Morph slug gets the same picker, for its extra
+    // "Shoot Mega Morph" choice.
+    if (slug.breaksWalls || slug.wallMaker || slug.bridgeMaker || slug.megaMorphAllowed) {
       setActionPicker(slug);
       return;
     }
@@ -883,7 +898,28 @@ export default function CombatPage() {
 
   function handlePickSlugAction(slug, actionType) {
     setActionPicker(null);
+    // A Mega Morph is an Attack on a slinger with a flag on it -- see the
+    // server's /actions/shoot.
+    if (actionType === "mega-morph") {
+      setMode({ type: "shoot", slugId: slug.id, slugName: slug.name, actionType: "attack", megaMorph: true });
+      return;
+    }
     setMode({ type: "shoot", slugId: slug.id, slugName: slug.name, actionType });
+  }
+
+  // Why the picked slug can't Mega Morph right now, or null if it can. Mirrors
+  // the server's checks (range of the weapon it's loaded in, pips remaining).
+  function megaBlockedReasonFor(slug) {
+    if (!slug?.megaMorphAllowed) return null;
+    const blaster = allBlasters.find((b) => b.id === slug.equippedBlasterId);
+    if ((blaster?.range ?? 0) < MEGA_MORPH_MIN_RANGE) {
+      return `Needs a weapon with a range of ${MEGA_MORPH_MIN_RANGE}+ (this one has ${blaster?.range ?? 0}).`;
+    }
+    const pips = Array.isArray(slug.energyPips) ? slug.energyPips.filter(Boolean).length : 0;
+    if (pips < MEGA_MORPH_PIP_COST) {
+      return `Needs ${MEGA_MORPH_PIP_COST} energy pips (this slug has ${pips}).`;
+    }
+    return null;
   }
 
   function handlePickMindScrambleEffect(slug, effectChoice) {
@@ -1076,7 +1112,12 @@ export default function CombatPage() {
       </div>
 
       {actionPicker && (
-        <SlugActionModal slug={actionPicker} onPick={handlePickSlugAction} onClose={() => setActionPicker(null)} />
+        <SlugActionModal
+          slug={actionPicker}
+          megaBlockedReason={megaBlockedReasonFor(actionPicker)}
+          onPick={handlePickSlugAction}
+          onClose={() => setActionPicker(null)}
+        />
       )}
       {mindScramblePicker && (
         <MindScrambleModal

@@ -111,6 +111,30 @@ export function applyLoyaltyToSlug(slug) {
   return { ...slug, clash_power: slug.clash_power + mod, clash_defense: slug.clash_defense + mod };
 }
 
+// ---- Mega Morph -------------------------------------------------------------
+
+// A slug the DM has flagged mega_morph_allowed can fire a Mega Morph shot in
+// place of a normal Attack: it needs a weapon with at least
+// MEGA_MORPH_MIN_RANGE reach (the blaster's own range, not the type-vs-weapon
+// combinedRange), burns MEGA_MORPH_PIP_COST energy pips instead of one,
+// doubles clash power (stacking multiplicatively with Emberblade's/Meduslug's
+// triple, which apply separately at clash/damage time), and after the usual
+// windup flies twice as fast -- which halves the reaction window, on top of
+// Zeus's ultra_fast halving if it has that too.
+export const MEGA_MORPH_MIN_RANGE = 150;
+export const MEGA_MORPH_PIP_COST = 3;
+export const MEGA_MORPH_CLASH_MULTIPLIER = 2;
+export const MEGA_MORPH_WINDOW_FACTOR = 0.5;
+
+// Clones the slug with doubled clash_power and a `mega_morphed` marker that
+// rides along on offer.slug, so the window maths (slugWindowFactor) and any
+// ricochet leg can see it. Applied after loyalty/Cannon so it doubles the
+// effective number.
+export function applyMegaMorphToSlug(slug) {
+  if (!slug) return slug;
+  return { ...slug, clash_power: slug.clash_power * MEGA_MORPH_CLASH_MULTIPLIER, mega_morphed: true };
+}
+
 // ---- Slug cooldown --------------------------------------------------------
 
 // A fired slug (shot or used as a counter) is away in flight/recovering --
@@ -863,6 +887,13 @@ export const RICOCHET_MAX_BOUNCES = 4; // Speedstinger: caroms this many times a
 // otherwise produce. "Near impossible", not literally impossible -- a
 // lightning-fast reaction can still land inside it.
 export const ULTRA_FAST_WINDOW_FACTOR = 0.5;
+
+// How much a shooter's own slug shrinks the reaction window (and bolt flight
+// time): Zeus's ultra_fast and a Mega Morph shot each halve it, and stack --
+// an ultra_fast slug fired as a Mega Morph gets a quarter of the base window.
+export function slugWindowFactor(slug) {
+  return (slug?.ultra_fast ? ULTRA_FAST_WINDOW_FACTOR : 1) * (slug?.mega_morphed ? MEGA_MORPH_WINDOW_FACTOR : 1);
+}
 
 // -- Thugglet: self-targeted invisibility, 1 turn. Ticks down like
 // snare/poison (see tickStatusEffects); cleared early the instant the

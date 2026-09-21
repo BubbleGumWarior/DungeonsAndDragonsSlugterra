@@ -1,7 +1,9 @@
 import { useRef, useState } from "react";
+import { SparkleIcon } from "@phosphor-icons/react";
 import {
   LOYALTY_TIER_LABELS,
   LOYALTY_TIERS,
+  LOYALTY_TIER_MAX,
   typeColor,
   typeBallistics,
   loyaltyClashModifier,
@@ -61,14 +63,29 @@ export default function SlugCard({
     setBenefitLeft(rect.right + PANEL_SPACE > window.innerWidth);
   }
 
+  // A max-loyalty (Bonded) slug gets a heavier element-coloured frame plus a
+  // slow shimmer and glow pulse. Redacted Slugpedia entries have no real tier.
+  const isBonded = !redacted && slug.loyaltyTier === LOYALTY_TIER_MAX;
+  // A DM-approved Mega Morph slug gets its own iridescent frame and badge --
+  // deliberately unlike the element-coloured Bonded look (and it wins over it
+  // when a slug is both).
+  const isMega = !redacted && Boolean(slug.megaMorphAllowed);
+
   return (
     <div
       className={`slug-card slug-card--${size} ${onClick ? "slug-card--clickable" : ""} ${
         redacted ? "slug-card--redacted" : ""
-      }`}
+      } ${isBonded ? "slug-card--bonded" : ""} ${isMega ? "slug-card--mega" : ""}`}
       style={{ "--type-color": typeColor(slug.type) }}
       onClick={onClick}
     >
+      {isBonded && <span className="slug-card-bonded-fx" aria-hidden="true" />}
+      {isMega && (
+        <span className="slug-card-mega-badge" title="This slug can Mega Morph in combat">
+          <SparkleIcon weight="fill" />
+          Mega Morph
+        </span>
+      )}
       <div className="slug-card-top">
         <SlugImage
           protoformImage={slug.protoformImage}

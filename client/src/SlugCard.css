@@ -54,6 +54,194 @@
   border-color: color-mix(in srgb, var(--type-color) 50%, var(--charcoal-600));
 }
 
+/* Max loyalty (Bonded): same element colour, but a full solid outer border,
+   thicker and longer accent bars, a stronger inner frame, an outer glow that
+   slowly pulses, and a light sweep across the face (.slug-card-bonded-fx). */
+.slug-card--bonded {
+  border: 2px solid color-mix(in srgb, var(--type-color) 80%, var(--charcoal-600));
+  padding: 15px; /* the border grew by 1px per side; keep the layout size */
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--type-color) 30%, transparent),
+    0 0 22px color-mix(in srgb, var(--type-color) 35%, transparent),
+    0 16px 36px rgba(0, 0, 0, 0.55),
+    0 0 26px color-mix(in srgb, var(--type-color) 14%, transparent) inset,
+    0 2px 0 rgba(255, 255, 255, 0.03) inset;
+  animation: slug-card-bonded-pulse 3.2s ease-in-out infinite;
+}
+
+.slug-card--bonded:hover {
+  border-color: var(--type-color);
+}
+
+.slug-card--bonded::before {
+  left: 6px;
+  right: 6px;
+  border-top-width: 4px;
+  border-bottom-width: 4px;
+  border-radius: 2px;
+  filter: drop-shadow(0 0 5px var(--type-color));
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+}
+
+.slug-card--bonded::after {
+  inset: 7px;
+  border: 2px solid color-mix(in srgb, var(--type-color) 45%, transparent);
+  border-radius: 8px;
+}
+
+.slug-card-bonded-fx {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.slug-card-bonded-fx::before {
+  content: "";
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: 0;
+  width: 45%;
+  background: linear-gradient(
+    100deg,
+    transparent,
+    color-mix(in srgb, var(--type-color) 30%, transparent) 45%,
+    rgba(255, 255, 255, 0.16) 50%,
+    color-mix(in srgb, var(--type-color) 30%, transparent) 55%,
+    transparent
+  );
+  transform: translateX(-130%) skewX(-18deg);
+  animation: slug-card-bonded-sweep 5s ease-in-out infinite;
+}
+
+@keyframes slug-card-bonded-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--type-color) 30%, transparent),
+      0 0 16px color-mix(in srgb, var(--type-color) 26%, transparent),
+      0 16px 36px rgba(0, 0, 0, 0.55),
+      0 0 26px color-mix(in srgb, var(--type-color) 14%, transparent) inset,
+      0 2px 0 rgba(255, 255, 255, 0.03) inset;
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--type-color) 45%, transparent),
+      0 0 30px color-mix(in srgb, var(--type-color) 48%, transparent),
+      0 16px 36px rgba(0, 0, 0, 0.55),
+      0 0 32px color-mix(in srgb, var(--type-color) 22%, transparent) inset,
+      0 2px 0 rgba(255, 255, 255, 0.03) inset;
+  }
+}
+
+@keyframes slug-card-bonded-sweep {
+  0%,
+  55% {
+    transform: translateX(-130%) skewX(-18deg);
+  }
+  100% {
+    transform: translateX(330%) skewX(-18deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slug-card--bonded,
+  .slug-card-bonded-fx::before {
+    animation: none;
+  }
+  .slug-card-bonded-fx {
+    display: none;
+  }
+}
+
+/* Mega Morph: a slug the DM has allowed to Mega Morph. Violet/magenta/gold
+   instead of the element colour, a slowly drifting gradient rim, a violet
+   glow, and a corner badge -- placed after .slug-card--bonded so it wins
+   when a slug is both. */
+.slug-card--mega {
+  --mega-a: #8b5cf6;
+  --mega-b: #ec4899;
+  --mega-c: #f5c451;
+  border: 2px solid transparent;
+  padding: 15px; /* the border grew by 1px per side; keep the layout size */
+  background:
+    radial-gradient(120% 55% at 50% 0%, rgba(139, 92, 246, 0.22), transparent 70%),
+    radial-gradient(120% 55% at 50% 100%, rgba(236, 72, 153, 0.18), transparent 70%),
+    linear-gradient(168deg, #201a2c, #0f0d14 82%) padding-box,
+    linear-gradient(115deg, var(--mega-a), var(--mega-b), var(--mega-c), var(--mega-a)) border-box;
+  background-size: 100% 100%, 100% 100%, 100% 100%, 300% 100%;
+  box-shadow:
+    0 0 22px rgba(139, 92, 246, 0.4),
+    0 0 40px rgba(236, 72, 153, 0.16),
+    0 16px 36px rgba(0, 0, 0, 0.55),
+    0 0 26px rgba(139, 92, 246, 0.14) inset;
+  animation: slug-card-mega-drift 7s linear infinite;
+}
+
+.slug-card--mega:hover {
+  border-color: transparent;
+}
+
+.slug-card--mega::before {
+  left: 6px;
+  right: 6px;
+  border-top: 3px solid var(--mega-b);
+  border-bottom: 3px solid var(--mega-a);
+  filter: drop-shadow(0 0 5px var(--mega-b));
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+}
+
+.slug-card--mega::after {
+  inset: 7px;
+  border: 1px solid rgba(196, 181, 253, 0.28);
+  border-radius: 8px;
+}
+
+.slug-card-mega-badge {
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 12px 3px 9px;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #1a1024;
+  background: linear-gradient(90deg, #c4b5fd, #f9a8d4, #fde68a);
+  box-shadow: 0 0 12px rgba(236, 72, 153, 0.55), 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.slug-card-mega-badge svg {
+  width: 12px;
+  height: 12px;
+}
+
+@keyframes slug-card-mega-drift {
+  0% {
+    background-position: 0 0, 0 0, 0 0, 0% 0;
+  }
+  100% {
+    background-position: 0 0, 0 0, 0 0, 300% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slug-card--mega {
+    animation: none;
+  }
+}
+
 .slug-card--clickable {
   cursor: pointer;
 }
