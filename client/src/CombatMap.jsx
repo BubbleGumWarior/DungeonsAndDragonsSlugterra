@@ -589,6 +589,7 @@ function statusEffectBadges(statusEffects) {
   }
   if (statusEffects.keenVision) badges.push({ key: "keen-vision", label: "Keen vision -- next attack has advantage" });
   if (statusEffects.marked) badges.push({ key: "marked", label: "Marked -- takes splash damage from Arcling's static arcs" });
+  if (statusEffects.powerSurge) badges.push({ key: "power-surge", label: "Power surge -- every other shot this turn has its power doubled" });
   return badges;
 }
 

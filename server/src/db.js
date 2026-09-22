@@ -866,6 +866,8 @@ export async function initSchema() {
     "uncounterable", // Meduslug -- never offers the target a counter at all, the shot always resolves as a plain accuracy roll
     "damage_tripled", // Meduslug -- unconditional x3 damage (unlike Emberblade's clash-only clash_tripled)
     "static_mark", // Arcling -- tags whoever it hits as `marked`, and splashes 25% of any hit this slug lands onto every other marked combatant, global
+    "tempo_aura", // Fandango -- while loaded, all its owner's slugs cool down in 2 turns instead of 3 and carry 50% more max energy pips (cap 16)
+    "power_surge", // Fandango -- once shot, every other shot its owner fires that turn has its power doubled, after all other modifiers
   ];
   for (const col of bespokeFlags) {
     await pool.query(`ALTER TABLE slug_templates ADD COLUMN IF NOT EXISTS ${col} BOOLEAN NOT NULL DEFAULT false;`);

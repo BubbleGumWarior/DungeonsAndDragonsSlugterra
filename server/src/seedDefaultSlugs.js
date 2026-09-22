@@ -13,6 +13,7 @@ import { readFileSync, existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { pool } from "./db.js";
+import { syncTempoAura } from "./slugAura.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_PATH = path.join(__dirname, "data", "defaultSlugTemplates.json");
@@ -49,8 +50,8 @@ export async function seedDefaultSlugTemplates() {
            pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion, trail_wall, clash_tripled,
            cone_blast, spawns_pods, mirage_decoy, star_wall, anchor_zone, voids_fire_clash, clears_fire_terrain,
            causes_disarm, disarm_zone, mind_scramble, swaps_position, friction_shift, crosswind_zone, skips_reload,
-           emotion_surge, uncounterable, damage_tripled, static_mark, rarity)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49)`,
+           emotion_surge, uncounterable, damage_tripled, static_mark, tempo_aura, power_surge, rarity)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51)`,
         [
           t.name,
           t.type,
@@ -100,6 +101,8 @@ export async function seedDefaultSlugTemplates() {
           Boolean(t.uncounterable),
           Boolean(t.damageTripled),
           Boolean(t.staticMark),
+          Boolean(t.tempoAura),
+          Boolean(t.powerSurge),
           t.rarity ?? null,
         ]
       );
@@ -175,4 +178,53 @@ export async function backfillSpeedstingerRicochet() {
     console.log(`Backfilled ricochets on ${templateIds.length} Speedstinger template(s) and ${instanceCount} slug(s).`);
   }
   return { templates: templateIds.length, instances: instanceCount };
+}
+
+// Fandango was reworked from a plain confusion slug into a Tempo Aura
+// (passive) + Power Surge (velocity) slug -- see TEMPO_* / POWER_SURGE_* in
+// combatRules.js and slugAura.js. The default JSON/CSV carry the new flags and
+// text, but seedDefaultSlugTemplates() only ever INSERTs names it hasn't seen,
+// so every already-seeded Fandango template (and every slug minted from one)
+// still has the old text and neither flag. This upgrades those rows -- each
+// half keyed off that half's *old default text* still being there, so a DM
+// who has since edited the text or toggled the flags by hand is never
+// overridden, and it's a no-op once every row has been upgraded. Any owner
+// who just gained the aura gets their slugs' pips resized to match.
+const OLD_FANDANGO_PROTOFORM =
+  "Has an aura of energy that allows other slugs to recover quicker and last longer in duels before misfiring";
+const OLD_FANDANGO_VELOCITY =
+  "Morphs into a glowing chronomancer that rattles whoever it hits -- for the next 3 of their own turns, that target's own shots have a real chance of firing a complete 180 off target, not just a small miss.";
+
+export async function backfillFandangoTempo() {
+  if (!existsSync(DATA_PATH)) return { updated: 0 };
+  let fandango;
+  try {
+    fandango = JSON.parse(readFileSync(DATA_PATH, "utf8")).find((t) => t.name === "Fandango");
+  } catch {
+    return { updated: 0 };
+  }
+  if (!fandango?.protoformUtility || !fandango?.velocityAbility) return { updated: 0 };
+
+  let updated = 0;
+  const owners = new Map();
+  for (const table of ["slug_templates", "slugs"]) {
+    const returning = table === "slugs" ? "RETURNING user_id, owner_combatant_id" : "RETURNING id";
+    const aura = await pool.query(
+      `UPDATE ${table} SET tempo_aura = true, protoform_utility = $1 WHERE name = 'Fandango' AND protoform_utility = $2 ${returning}`,
+      [fandango.protoformUtility, OLD_FANDANGO_PROTOFORM]
+    );
+    const surge = await pool.query(
+      `UPDATE ${table} SET power_surge = true, velocity_ability = $1 WHERE name = 'Fandango' AND velocity_ability = $2 ${returning}`,
+      [fandango.velocityAbility, OLD_FANDANGO_VELOCITY]
+    );
+    updated += aura.rowCount + surge.rowCount;
+    if (table === "slugs") {
+      for (const row of [...aura.rows, ...surge.rows]) {
+        owners.set(`${row.user_id}:${row.owner_combatant_id}`, { userId: row.user_id, ownerCombatantId: row.owner_combatant_id });
+      }
+    }
+  }
+  for (const owner of owners.values()) await syncTempoAura(owner);
+  if (updated > 0) console.log(`Upgraded Fandango on ${updated} template/slug row(s).`);
+  return { updated };
 }

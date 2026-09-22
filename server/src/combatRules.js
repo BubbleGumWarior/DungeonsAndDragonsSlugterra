@@ -6,6 +6,7 @@
 
 import { statModifier } from "./characterRules.js";
 import { GATLING_AP_DISCOUNT, CANNON_CLASH_BONUS } from "./itemRules.js";
+import { ENERGY_PIPS_MAX } from "./slugRules.js";
 
 export { statModifier };
 export { GATLING_AP_DISCOUNT, CANNON_CLASH_BONUS };
@@ -143,6 +144,40 @@ export function applyMegaMorphToSlug(slug) {
 // in routes/combat.js), independent of energy pips (which model ammo, not
 // "is the slug physically here to load").
 export const SLUG_RETURN_TURNS = 3;
+
+// ---- Tempo aura (Fandango's passive) ------------------------------------------
+
+// While a slug with `tempo_aura` is loaded in one of its owner's equipped
+// weapons, *every* slug that owner has loaded (the aura slug included) comes
+// back from a shot in TEMPO_RETURN_TURNS instead of SLUG_RETURN_TURNS, and
+// carries TEMPO_STAMINA_MULTIPLIER x its normal max energy pips, rounded up
+// and capped at the same ENERGY_PIPS_MAX every slug is bound by. See
+// slugAura.js, which keeps the stored pip arrays in step with that.
+export const TEMPO_RETURN_TURNS = 2;
+export const TEMPO_STAMINA_MULTIPLIER = 1.5;
+
+export function tempoMaxPips(maxEnergyPips) {
+  return Math.min(ENERGY_PIPS_MAX, Math.ceil(maxEnergyPips * TEMPO_STAMINA_MULTIPLIER));
+}
+
+// ---- Power surge (Fandango's velocity ability) --------------------------------
+
+// Once a `power_surge` slug has been shot, every *other* shot its owner fires
+// for the rest of that same turn has its power doubled -- applied as the very
+// last step (after loyalty, Cannon, Mega Morph and a dual shot's fusing, and
+// again at damage time for the type's own power modifier), so it doubles the
+// finished number rather than any one ingredient. Rides on the shooter as a
+// `powerSurge` status that advanceTurn clears when their turn ends.
+export const POWER_SURGE_MULTIPLIER = 2;
+
+// Clones the slug with doubled clash_power and a `power_doubled` marker that
+// dealHit reads so the type's own powerMod is doubled too (2 x (power + mod),
+// not 2 x power + mod). Everything else that reads clash_power -- the clash
+// comparison, burn, cone, hazard, Healing -- just sees the doubled number.
+export function applyPowerSurgeToSlug(slug) {
+  if (!slug) return slug;
+  return { ...slug, clash_power: slug.clash_power * POWER_SURGE_MULTIPLIER, power_doubled: true };
+}
 
 // ---- Hunker Down ------------------------------------------------------
 

@@ -167,6 +167,8 @@ export const SLUG_TRAITS = [
   { key: "uncounterable", label: "Uncounterable", description: "Never offers the target a counter -- always a plain accuracy roll." },
   { key: "damageTripled", label: "Damage Tripled", description: "Unconditional x3 damage on every hit, not just while clashing." },
   { key: "staticMark", label: "Static Mark", description: "Tags whoever it hits; 25% of any hit this slug lands also splashes every other marked target." },
+  { key: "tempoAura", label: "Tempo Aura", description: "While loaded, all your slugs return from a shot in 2 turns instead of 3 and hold 50% more energy pips (max 16)." },
+  { key: "powerSurge", label: "Power Surge", description: "Once shot, every other shot you fire that turn has its power doubled, after all other modifiers." },
 ];
 
 export function defaultSlugFields() {
@@ -220,5 +222,7 @@ export function defaultSlugFields() {
     uncounterable: false,
     damageTripled: false,
     staticMark: false,
+    tempoAura: false,
+    powerSurge: false,
   };
 }

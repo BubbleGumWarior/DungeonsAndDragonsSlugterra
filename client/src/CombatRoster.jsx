@@ -96,6 +96,9 @@ function Row({ combatant, isActive, isActing, isDM, onSelect, onRevive, onRemove
             {combatant.statusEffects.marked && (
               <span className="combat-roster-effect combat-roster-effect--shock">Marked</span>
             )}
+            {combatant.statusEffects.powerSurge && (
+              <span className="combat-roster-effect combat-roster-effect--stun">Power Surge</span>
+            )}
           </div>
         )}
       </div>

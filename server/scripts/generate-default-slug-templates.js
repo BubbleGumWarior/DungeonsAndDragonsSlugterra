@@ -166,6 +166,8 @@ async function main() {
       uncounterable: toBool(r[col("Uncounterable")]),
       damageTripled: toBool(r[col("Damage Tripled")]),
       staticMark: toBool(r[col("Static Mark")]),
+      tempoAura: toBool(r[col("Tempo Aura")]),
+      powerSurge: toBool(r[col("Power Surge")]),
       protoformImage,
       velocityImage,
     });

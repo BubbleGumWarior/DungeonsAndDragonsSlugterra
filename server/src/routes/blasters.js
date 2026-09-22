@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { validateBlasterFields } from "../itemRules.js";
 import { broadcastAll } from "../ws.js";
 import { toClientSlug } from "./slugs.js";
+import { syncTempoAura } from "../slugAura.js";
 
 const router = Router();
 
@@ -189,6 +190,9 @@ router.patch("/:id/equip", async (req, res) => {
 
     broadcastAll({ type: "blaster-updated", userId: updated.userId, blaster: updated });
     for (const payload of broadcasts) broadcastAll(payload);
+    // Bumping another weapon out of the slot unloads its slugs -- which may
+    // have included a Tempo Aura carrier (see slugAura.js).
+    if (occupant) await syncTempoAura({ userId: updated.userId });
 
     res.json({ blaster: updated });
   } catch (err) {
@@ -227,6 +231,8 @@ router.patch("/:id/unequip", async (req, res) => {
       const slug = toClientSlug(slugRow);
       broadcastAll({ type: "slug-updated", userId: slug.userId, slug });
     }
+    // Unloading the whole magazine may have dropped a Tempo Aura carrier (see slugAura.js).
+    await syncTempoAura({ userId: updated.userId });
     res.json({ blaster: updated });
   } catch (err) {
     await client.query("ROLLBACK");
@@ -245,6 +251,8 @@ router.delete("/:id", requireDungeonMaster, async (req, res) => {
       return res.status(404).json({ error: "Blaster not found." });
     }
     broadcastAll({ type: "blaster-updated", userId: rows[0].user_id, blaster: null, blasterId: id });
+    // Deleting the weapon unloads every slug in it (see slugAura.js).
+    await syncTempoAura({ userId: rows[0].user_id });
     res.json({ ok: true });
   } catch (err) {
     console.error(err);

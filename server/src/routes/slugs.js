@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { validateSlugFields, validateEnergyPips } from "../slugRules.js";
 import { broadcastAll } from "../ws.js";
 import { recordSlugpediaEntry } from "../slugpediaStore.js";
+import { syncTempoAura } from "../slugAura.js";
 
 const router = Router();
 
@@ -15,6 +16,14 @@ function requireDungeonMaster(req, res, next) {
 }
 
 router.use(requireAuth);
+
+// Re-fits its owner's slugs to whatever Tempo Aura they now have (see
+// slugAura.js) and returns the freshest copy of `row` -- the sync may have
+// resized its pips, and the route is about to send the row back to the client.
+async function syncedRow(row, owner, options) {
+  const changed = await syncTempoAura(owner, options);
+  return changed.find((r) => r.id === row.id) ?? row;
+}
 
 export function toClientSlug(row) {
   return {
@@ -70,6 +79,8 @@ export function toClientSlug(row) {
     uncounterable: row.uncounterable,
     damageTripled: row.damage_tripled,
     staticMark: row.static_mark,
+    tempoAura: row.tempo_aura,
+    powerSurge: row.power_surge,
     ownerCombatantId: row.owner_combatant_id,
     equippedBlasterId: row.equipped_blaster_id,
     magazineSlot: row.magazine_slot,
@@ -155,6 +166,8 @@ router.post("/", requireDungeonMaster, async (req, res) => {
     uncounterable,
     damageTripled,
     staticMark,
+    tempoAura,
+    powerSurge,
   } = req.body || {};
 
   const validation = validateSlugFields({
@@ -207,8 +220,8 @@ router.post("/", requireDungeonMaster, async (req, res) => {
          pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion, trail_wall, clash_tripled,
          cone_blast, spawns_pods, mirage_decoy, star_wall, anchor_zone,
          voids_fire_clash, clears_fire_terrain, causes_disarm, disarm_zone, mind_scramble, swaps_position,
-         friction_shift, crosswind_zone, skips_reload, emotion_surge, uncounterable, damage_tripled, static_mark)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51)
+         friction_shift, crosswind_zone, skips_reload, emotion_surge, uncounterable, damage_tripled, static_mark, tempo_aura, power_surge)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53)
        RETURNING *`,
       [
         Number.isInteger(templateId) ? templateId : null,
@@ -262,10 +275,15 @@ router.post("/", requireDungeonMaster, async (req, res) => {
         Boolean(uncounterable),
         Boolean(damageTripled),
         Boolean(staticMark),
+        Boolean(tempoAura),
+        Boolean(powerSurge),
       ]
     );
 
-    const slug = toClientSlug(rows[0]);
+    // A new slug arrives full -- including any Tempo Aura stamina its owner
+    // already has (see slugAura.js).
+    const created = await syncedRow(rows[0], { userId }, { fill: true });
+    const slug = toClientSlug(created);
     broadcastAll({ type: "slug-updated", userId, slug });
     recordSlugpediaEntry(rows[0]);
     res.status(201).json({ slug });
@@ -326,6 +344,8 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
     uncounterable,
     damageTripled,
     staticMark,
+    tempoAura,
+    powerSurge,
   } = req.body || {};
 
   const validation = validateSlugFields({
@@ -387,8 +407,8 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
         cone_blast = $32, spawns_pods = $33, mirage_decoy = $34, star_wall = $35, anchor_zone = $36,
         voids_fire_clash = $37, clears_fire_terrain = $38, causes_disarm = $39, disarm_zone = $40,
         mind_scramble = $41, swaps_position = $42, friction_shift = $43, crosswind_zone = $44, skips_reload = $45,
-        emotion_surge = $46, uncounterable = $47, damage_tripled = $48, static_mark = $49
-       WHERE id = $50
+        emotion_surge = $46, uncounterable = $47, damage_tripled = $48, static_mark = $49, tempo_aura = $50, power_surge = $51
+       WHERE id = $52
        RETURNING *`,
       [
         name.trim(),
@@ -440,11 +460,17 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
         Boolean(uncounterable),
         Boolean(damageTripled),
         Boolean(staticMark),
+        Boolean(tempoAura),
+        Boolean(powerSurge),
         id,
       ]
     );
 
-    const slug = toClientSlug(rows[0]);
+    // A changed max_energy_pips resets the pips to that many (above), and a
+    // toggled tempo_aura can switch the owner's aura on or off -- either way
+    // re-fit the owner's slugs (see slugAura.js).
+    const edited = await syncedRow(rows[0], { userId: rows[0].user_id, ownerCombatantId: rows[0].owner_combatant_id }, { fill: true });
+    const slug = toClientSlug(edited);
     broadcastAll({ type: "slug-updated", userId: slug.userId, slug });
     recordSlugpediaEntry(rows[0]);
     res.json({ slug });
@@ -459,12 +485,19 @@ router.patch("/:id/energy", requireDungeonMaster, async (req, res) => {
   const { energyPips } = req.body || {};
 
   try {
-    const existing = await pool.query("SELECT max_energy_pips FROM slugs WHERE id = $1", [id]);
+    const existing = await pool.query("SELECT max_energy_pips, energy_pips FROM slugs WHERE id = $1", [id]);
     if (!existing.rows[0]) {
       return res.status(404).json({ error: "Slug not found." });
     }
 
-    const validation = validateEnergyPips(energyPips, existing.rows[0].max_energy_pips);
+    // The stored array can be longer than max_energy_pips while its owner has
+    // a Tempo Aura up (see slugAura.js), so it's the array's own current
+    // length that a toggled copy has to keep.
+    const currentPips = existing.rows[0].energy_pips;
+    const validation = validateEnergyPips(
+      energyPips,
+      Array.isArray(currentPips) ? currentPips.length : existing.rows[0].max_energy_pips
+    );
     if (!validation.valid) {
       return res.status(400).json({ error: validation.error });
     }
@@ -573,7 +606,7 @@ router.patch("/:id/load", async (req, res) => {
       "UPDATE slugs SET equipped_blaster_id = $1, magazine_slot = $2 WHERE id = $3 RETURNING *",
       [blasterId, slot, id]
     );
-    const updated = toClientSlug(rows[0]);
+    const updated = toClientSlug(await syncedRow(rows[0], { userId: rows[0].user_id }));
     broadcastAll({ type: "slug-updated", userId: updated.userId, slug: updated });
     res.json({ slug: updated });
   } catch (err) {
@@ -599,7 +632,7 @@ router.patch("/:id/unload", async (req, res) => {
       "UPDATE slugs SET equipped_blaster_id = NULL, magazine_slot = NULL WHERE id = $1 RETURNING *",
       [id]
     );
-    const updated = toClientSlug(rows[0]);
+    const updated = toClientSlug(await syncedRow(rows[0], { userId: rows[0].user_id }));
     broadcastAll({ type: "slug-updated", userId: updated.userId, slug: updated });
     res.json({ slug: updated });
   } catch (err) {
@@ -616,6 +649,8 @@ router.delete("/:id", requireDungeonMaster, async (req, res) => {
       return res.status(404).json({ error: "Slug not found." });
     }
     broadcastAll({ type: "slug-updated", userId: rows[0].user_id, slug: null, slugId: id });
+    // If it was carrying a Tempo Aura, its owner's other slugs lose the bonus.
+    await syncTempoAura({ userId: rows[0].user_id });
     res.json({ ok: true });
   } catch (err) {
     console.error(err);

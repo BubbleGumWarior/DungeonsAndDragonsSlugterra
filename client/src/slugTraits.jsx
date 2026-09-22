@@ -36,6 +36,8 @@ import {
   ShieldSlashIcon,
   AsteriskIcon,
   BroadcastIcon,
+  GaugeIcon,
+  ArrowFatLinesUpIcon,
 } from "@phosphor-icons/react";
 import { SLUG_TRAITS } from "./slugData.js";
 
@@ -83,6 +85,8 @@ const TRAIT_ICONS = {
   uncounterable: ShieldSlashIcon,
   damageTripled: AsteriskIcon,
   staticMark: BroadcastIcon,
+  tempoAura: GaugeIcon,
+  powerSurge: ArrowFatLinesUpIcon,
 };
 
 // Ordered authoring buckets. Every trait key appears in exactly one group;
@@ -138,13 +142,13 @@ const GROUP_DEFS = [
     key: "multiplier",
     label: "Power Multipliers",
     blurb: "Scales this slug's own damage or clash.",
-    keys: ["clashTripled", "damageTripled"],
+    keys: ["clashTripled", "damageTripled", "powerSurge"],
   },
   {
     key: "support",
     label: "Evasion & Support",
     blurb: "Self- and ally-facing utility.",
-    keys: ["causesInvisible", "mirageDecoy", "swapsPosition", "skipsReload", "emotionSurge", "voidsFireClash"],
+    keys: ["causesInvisible", "mirageDecoy", "swapsPosition", "skipsReload", "emotionSurge", "voidsFireClash", "tempoAura"],
   },
 ];
 

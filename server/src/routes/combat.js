@@ -9,6 +9,7 @@ import { LOYALTY_TIER_MIN, LOYALTY_TIER_MAX, RARITY_MAX } from "../slugRules.js"
 import { toClientSlug } from "./slugs.js";
 import { toClientBlaster } from "./blasters.js";
 import { recordSlugpediaEntry } from "../slugpediaStore.js";
+import { slugReturnTurns, syncTempoAura } from "../slugAura.js";
 import {
   MOVE_SPEED_PER_AP,
   MECHA_SPEED_PER_AP,
@@ -23,7 +24,6 @@ import {
   SWITCH_WEAPON_AP_COST,
   PRIMARY_WEAPON_SLOT,
   SECONDARY_WEAPON_SLOT,
-  SLUG_RETURN_TURNS,
   hunkerHeal,
   rollD20,
   distance,
@@ -130,6 +130,8 @@ import {
   blasterTypeAccuracyBonus,
   gatlingShotApCost,
   applyBlasterTypeToSlug,
+  applyPowerSurgeToSlug,
+  POWER_SURGE_MULTIPLIER,
 } from "../combatRules.js";
 
 const router = Router();
@@ -749,8 +751,8 @@ async function equipNpcCombatant(
          voids_fire_clash, clears_fire_terrain, causes_disarm, disarm_zone, mind_scramble, swaps_position,
          friction_shift, crosswind_zone, skips_reload,
          emotion_surge, uncounterable, damage_tripled, static_mark,
-         equipped_blaster_id, magazine_slot)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53)
+         equipped_blaster_id, magazine_slot, tempo_aura, power_surge)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55)
        RETURNING *`,
       [
         st.id,
@@ -806,6 +808,8 @@ async function equipNpcCombatant(
         st.static_mark,
         equippedBlasterId,
         magazineSlot,
+        st.tempo_aura,
+        st.power_surge,
       ]
     );
     broadcastAll({ type: "slug-updated", userId: null, slug: toClientSlug(slugRows[0]) });
@@ -815,6 +819,9 @@ async function equipNpcCombatant(
     // (see slugpediaStore.js).
     recordSlugpediaEntry(slugRows[0], { discovered: false });
   }
+  // If one of the slugs it just spawned with carries a Tempo Aura, the whole
+  // set joins the fight at the boosted stamina (see slugAura.js).
+  await syncTempoAura({ ownerCombatantId: combatant.id }, { fill: true });
 
   // Optionally spawn a mecha companion, auto-mounted by this NPC.
   if (mechaTemplateId) {
@@ -1075,6 +1082,13 @@ async function advanceTurn(encounterId) {
   if (!encounter) return null;
   const turnOrder = encounter.turn_order;
   if (turnOrder.length === 0) return await loadFullEncounter(encounterId);
+
+  // A power surge (Fandango) only lasts through the turn it was set up on.
+  const endingCombatant = turnOrder[encounter.active_turn_index] != null ? await getCombatant(turnOrder[encounter.active_turn_index]) : null;
+  if (endingCombatant?.status_effects?.powerSurge) {
+    const { powerSurge, ...rest } = endingCombatant.status_effects;
+    await updateCombatant(endingCombatant.id, { status_effects: JSON.stringify(rest) });
+  }
 
   let nextIndex = encounter.active_turn_index;
   let round = encounter.round;
@@ -1594,18 +1608,21 @@ function cleanupExpiredKnockouts() {
 
 // A clash flings the slug out of the barrel, but -- exactly like an ordinary
 // fired slug (see spendEnergyPip) -- it stays in its magazine slot and
-// returns to hand after SLUG_RETURN_TURNS, then waits on a Reload. It is NOT
+// returns to hand after its return time, then waits on a Reload. It is NOT
 // stripped out of the weapon: doing that made a countered slug vanish from
 // the combat slug panel mid-fight with no in-combat way to get it back.
 // spendEnergyPip has already run for both clash participants by the time we
 // get here (it sets `loaded` per the slug's own self-load rule), so this only
 // needs to (re)assert the full return-to-hand cooldown -- the slug was just
-// flung out in a clash and owes the same SLUG_RETURN_TURNS as a fired one.
+// flung out in a clash and owes the same return time as a fired one (see
+// slugReturnTurns -- shorter for a slinger with a Tempo Aura up).
 async function ejectSlug(slugId) {
   if (!slugId) return;
+  const { rows: current } = await pool.query("SELECT * FROM slugs WHERE id = $1", [slugId]);
+  if (!current[0]) return;
   const { rows } = await pool.query(
     "UPDATE slugs SET cooldown_turns_left = $1 WHERE id = $2 RETURNING *",
-    [SLUG_RETURN_TURNS, slugId]
+    [await slugReturnTurns(current[0]), slugId]
   );
   if (rows[0]) broadcastAll({ type: "slug-updated", userId: rows[0].user_id, slug: toClientSlug(rows[0]) });
 }
@@ -1636,13 +1653,13 @@ async function spendEnergyPip(slugId, count = 1) {
   // Lentus: self-chambers the instant it's back in hand -- never actually
   // goes to `loaded: false` in the first place once its loyalty tier is
   // Friendly or higher, so there's nothing to Reload and no "needs reload"
-  // UI state to show either. Cooldown itself (SLUG_RETURN_TURNS) is
-  // unaffected -- only the separate reload step is skipped.
+  // UI state to show either. The cooldown itself is unaffected -- only the
+  // separate reload step is skipped.
   const selfLoads = Boolean(slug.skips_reload) && (slug.loyalty_tier || 0) >= LOYALTY_FRIENDLY_TIER;
   // A normal slug comes back from cooldown un-chambered (`loaded` false) and
   // waits on a Reload action; only a self-loading slug (Lentus) stays loaded.
   await pool.query("UPDATE slugs SET cooldown_turns_left = $1, loaded = $2 WHERE id = $3", [
-    SLUG_RETURN_TURNS,
+    await slugReturnTurns(slug),
     selfLoads,
     slugId,
   ]);
@@ -1656,7 +1673,8 @@ async function spendEnergyPip(slugId, count = 1) {
 // Ticks down the return-to-hand cooldown (see spendEnergyPip) by one for
 // every slug this combatant owns -- called once, right as their own turn
 // starts (see advanceTurn), so a slug fired on turn N is unusable for their
-// next SLUG_RETURN_TURNS turns and free again on the one after that.
+// next SLUG_RETURN_TURNS turns (fewer with a Tempo Aura up, see slugReturnTurns)
+// and free again on the one after that.
 async function tickSlugCooldowns(combatant) {
   const { rows } = await pool.query(
     combatant.kind === "npc"
@@ -2503,7 +2521,9 @@ async function dealHit(
   // amount above, and every burn/cone/hazard/pod calc below that reads
   // slug.clash_power all get the effective number for free, with no extra
   // loyalty lookup needed at each of those sites.
-  let amount = Math.max(0, slug.clash_power + tb.powerMod);
+  // A surged shot (see applyPowerSurgeToSlug) has its power doubled after every
+  // other modifier, so the type's own powerMod is doubled along with it.
+  let amount = Math.max(0, slug.clash_power + tb.powerMod * (slug.power_doubled ? POWER_SURGE_MULTIPLIER : 1));
   // Meduslug: damage_tripled is unconditional (any hit, not just while
   // clashing like Emberblade's clash_tripled) -- reuses the same multiplier
   // constant since it's the same "x3" the design already established.
@@ -3769,6 +3789,7 @@ async function resolveShooterSlugAndBlaster(attacker, req, { slugId, npcSlug, np
       uncounterable: Boolean(npcSlug?.uncounterable),
       damage_tripled: Boolean(npcSlug?.damageTripled),
       static_mark: Boolean(npcSlug?.staticMark),
+      power_surge: Boolean(npcSlug?.powerSurge),
       energy_pips: [true],
       user_id: null,
     };
@@ -4055,7 +4076,15 @@ router.post("/actions/shoot", async (req, res) => {
     // the boost rides through both the clash comparison and the hit's damage.
     // A Mega Morph then doubles that effective number.
     const boostedSlug = applyBlasterTypeToSlug(blaster, shotSlug);
-    const slug = megaMorph ? applyMegaMorphToSlug(boostedSlug) : boostedSlug;
+    const megaSlug = megaMorph ? applyMegaMorphToSlug(boostedSlug) : boostedSlug;
+    // Fandango's power surge: if a power_surge slug already flew earlier this
+    // turn, this shot's power is doubled as the very last step -- after
+    // loyalty, Cannon, Mega Morph and a dual shot's fusing -- so it doubles
+    // the finished number. The surge is set up further down, only once the
+    // shot that grants it has actually launched, so that shot never doubles
+    // itself.
+    const surged = Boolean(attacker.status_effects?.powerSurge);
+    const slug = surged ? applyPowerSurgeToSlug(megaSlug) : megaSlug;
     // Gatling fires everything for 2 less AP (floored at 1). Every AP check
     // and spend below this point uses shotApCost, not the slug's raw ap_cost.
     const shotApCost = gatlingShotApCost(blaster, slug.ap_cost);
@@ -4136,6 +4165,22 @@ router.post("/actions/shoot", async (req, res) => {
       );
       const encounter = await broadcastEncounter(attacker.encounter_id);
       return res.json({ pending: false, encounter });
+    }
+
+    // The shot left the barrel: a power_surge slug (Fandango, alone or as half
+    // of a dual shot) now doubles every other shot this slinger fires for the
+    // rest of the turn -- cleared again in advanceTurn.
+    if (slug.power_surge) {
+      await updateCombatant(attacker.id, {
+        status_effects: JSON.stringify({ ...(attacker.status_effects || {}), powerSurge: true }),
+      });
+      await pushCombatLog(
+        attacker.encounter_id,
+        `${attacker.name}'s ${slug.name} surges with power -- every other shot they fire this turn has its power doubled!`
+      );
+    }
+    if (surged) {
+      await pushCombatLog(attacker.encounter_id, `${attacker.name}'s ${slug.name} is surging -- its power is doubled!`);
     }
 
     if (actionType !== "attack") {

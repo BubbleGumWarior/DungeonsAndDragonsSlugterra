@@ -10,6 +10,7 @@ import {
 import { broadcastAll } from "../ws.js";
 import { toClientSlug } from "./slugs.js";
 import { getActiveEncounterRow, broadcastEncounter } from "./combat.js";
+import { syncTempoAura } from "../slugAura.js";
 
 const router = Router();
 
@@ -209,6 +210,12 @@ router.post("/heal-all", requireDungeonMaster, async (req, res) => {
       ]);
       if (updatedSlug[0]) broadcastAll({ type: "slug-updated", userId: s.user_id, slug: toClientSlug(updatedSlug[0]) });
     }
+
+    // The reset above refills every slug to its plain max_energy_pips; a
+    // player with a Tempo Aura up (see slugAura.js) rests back up to the
+    // boosted size, extra pips full.
+    const ownerIds = [...new Set(slugs.map((s) => s.user_id))];
+    for (const userId of ownerIds) await syncTempoAura({ userId }, { fill: true });
 
     // A rest also refreshes everyone's once-per-rest Slug Hunt attempt.
     await pool.query("DELETE FROM slug_hunt_locks");
