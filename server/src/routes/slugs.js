@@ -86,6 +86,7 @@ export function toClientSlug(row) {
     magazineSlot: row.magazine_slot,
     cooldownTurnsLeft: row.cooldown_turns_left,
     loaded: row.loaded,
+    podBroken: Boolean(row.pod_broken),
     megaMorphAllowed: Boolean(row.mega_morph_allowed),
     createdAt: row.created_at,
   };

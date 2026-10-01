@@ -1,18 +1,18 @@
 import { useState } from "react";
 import { MinusIcon, PlusIcon, WrenchIcon } from "@phosphor-icons/react";
-import { STAT_MIN, STAT_MAX, defaultModFields } from "./itemData.js";
+import { STAT_MIN, STAT_MAX, SPEED_BONUS_MIN, SPEED_BONUS_MAX, defaultModFields } from "./itemData.js";
 import "./SlugForm.css";
 
-function Stepper({ label, value, min, max, onChange }) {
+function Stepper({ label, value, min, max, step = 1, onChange }) {
   return (
     <div className="slug-form-stepper">
       <label>{label}</label>
       <div className="slug-form-stepper-control">
-        <button type="button" onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min}>
+        <button type="button" onClick={() => onChange(Math.max(min, value - step))} disabled={value <= min}>
           <MinusIcon weight="bold" />
         </button>
         <span>{value}</span>
-        <button type="button" onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max}>
+        <button type="button" onClick={() => onChange(Math.min(max, value + step))} disabled={value >= max}>
           <PlusIcon weight="bold" />
         </button>
       </div>
@@ -70,6 +70,14 @@ export default function ModForm({ mode, initialValues, players, onSubmit, onCanc
       <div className="slug-form-steppers">
         <Stepper label="Accuracy Bonus" value={fields.accuracyBonus} min={STAT_MIN} max={STAT_MAX} onChange={(v) => update("accuracyBonus", v)} />
         <Stepper label="Reload AP Bonus" value={fields.reloadApBonus} min={STAT_MIN} max={STAT_MAX} onChange={(v) => update("reloadApBonus", v)} />
+        <Stepper
+          label="Speed Bonus"
+          value={fields.speedBonus}
+          min={SPEED_BONUS_MIN}
+          max={SPEED_BONUS_MAX}
+          step={4}
+          onChange={(v) => update("speedBonus", v)}
+        />
       </div>
 
       <div className="slug-form-field">
@@ -91,6 +99,17 @@ export default function ModForm({ mode, initialValues, players, onSubmit, onCanc
         />
         <span>
           <strong>Allows Dual Shot</strong> -- the blaster this is equipped on can fire two fully bonded slugs as one fused bolt.
+        </span>
+      </label>
+
+      <label className="mod-form-check">
+        <input
+          type="checkbox"
+          checked={Boolean(fields.grantsRangeFinder)}
+          onChange={(e) => update("grantsRangeFinder", e.target.checked)}
+        />
+        <span>
+          <strong>Range Finder</strong> -- shows the range ring on the map while aiming with the blaster this is equipped on.
         </span>
       </label>
 

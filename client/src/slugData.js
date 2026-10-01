@@ -99,22 +99,22 @@ export function typeColor(type) {
 //   reaction    -- how long the defender's counter-clash window stays open
 //   hitEffect   -- one-line summary of the type's guaranteed on-hit effect
 export const TYPE_BALLISTICS = {
-  Air: { range: 800, band: "Long", accuracyMod: 2, powerMod: 0, reaction: "Fast", hitEffect: "None -- pure range and accuracy" },
-  Dark: { range: 500, band: "Medium", accuracyMod: -1, powerMod: 0, reaction: "Medium", hitEffect: "Phases through walls (ignores cover)" },
-  Earth: { range: 400, band: "Short", accuracyMod: -2, powerMod: 1, reaction: "Slow", hitEffect: "Large knockback" },
-  Electricity: { range: 550, band: "Medium", accuracyMod: 1, powerMod: 0, reaction: "Fast", hitEffect: "Chains a half-power hit to a nearby enemy. Double damage to mechas." },
-  Energy: { range: 500, band: "Medium", accuracyMod: 1, powerMod: 0, reaction: "Fast", hitEffect: "Refunds 1 energy pip on another loaded slug" },
-  Fire: { range: 450, band: "Short", accuracyMod: 2, powerMod: 0, reaction: "Fast", hitEffect: "Burn -- damage each turn for 3 turns" },
-  Healing: { range: 450, band: "Short", accuracyMod: 1, powerMod: 0, reaction: "Medium", hitEffect: "Heals the target instead of damaging" },
-  Ice: { range: 500, band: "Medium", accuracyMod: 0, powerMod: 0, reaction: "Medium", hitEffect: "Leaves an icy slip patch on the ground" },
-  Light: { range: 700, band: "Long", accuracyMod: 3, powerMod: -2, reaction: "Very fast", hitEffect: "Blind -- target's next attack has disadvantage" },
-  Metal: { range: 450, band: "Medium", accuracyMod: 0, powerMod: 1, reaction: "Slow", hitEffect: "Short knockback" },
-  None: { range: 250, band: "Short", accuracyMod: -5, powerMod: -10, reaction: "Slow", hitEffect: "Dud -- always misses" },
-  Plant: { range: 450, band: "Short", accuracyMod: -1, powerMod: 0, reaction: "Slow", hitEffect: "Snare -- target can't Move for 2 turns" },
-  Psychic: { range: 450, band: "Short", accuracyMod: 0, powerMod: -2, reaction: "Medium", hitEffect: "-1 AP on the target's next turn" },
-  Toxic: { range: 500, band: "Medium", accuracyMod: 1, powerMod: -1, reaction: "Medium", hitEffect: "Poison -- stacking damage for 3 turns" },
-  Unique: { range: 500, band: "Medium", accuracyMod: 0, powerMod: 0, reaction: "Medium", hitEffect: "Custom -- set by the slug's own ability" },
-  Water: { range: 600, band: "Medium", accuracyMod: 1, powerMod: 0, reaction: "Medium", hitEffect: "Douses an active burn on the target" },
+  Air: { range: 400, band: "Long", accuracyMod: 2, powerMod: 0, reaction: "Fast", hitEffect: "None -- pure range and accuracy" },
+  Dark: { range: 250, band: "Medium", accuracyMod: -1, powerMod: 0, reaction: "Medium", hitEffect: "Phases through walls (ignores cover)" },
+  Earth: { range: 200, band: "Short", accuracyMod: -2, powerMod: 1, reaction: "Slow", hitEffect: "Large knockback" },
+  Electricity: { range: 275, band: "Medium", accuracyMod: 1, powerMod: 0, reaction: "Fast", hitEffect: "Chains a half-power hit to a nearby enemy. Double damage to mechas." },
+  Energy: { range: 250, band: "Medium", accuracyMod: 1, powerMod: 0, reaction: "Fast", hitEffect: "Refunds 1 energy pip on another loaded slug" },
+  Fire: { range: 225, band: "Short", accuracyMod: 2, powerMod: 0, reaction: "Fast", hitEffect: "Burn -- damage each turn for 3 turns" },
+  Healing: { range: 225, band: "Short", accuracyMod: 1, powerMod: 0, reaction: "Medium", hitEffect: "Heals the target instead of damaging" },
+  Ice: { range: 250, band: "Medium", accuracyMod: 0, powerMod: 0, reaction: "Medium", hitEffect: "Leaves an icy slip patch on the ground" },
+  Light: { range: 350, band: "Long", accuracyMod: 3, powerMod: -2, reaction: "Very fast", hitEffect: "Blind -- target's next attack has disadvantage" },
+  Metal: { range: 225, band: "Medium", accuracyMod: 0, powerMod: 1, reaction: "Slow", hitEffect: "Short knockback" },
+  None: { range: 125, band: "Short", accuracyMod: -5, powerMod: -10, reaction: "Slow", hitEffect: "Dud -- always misses" },
+  Plant: { range: 225, band: "Short", accuracyMod: -1, powerMod: 0, reaction: "Slow", hitEffect: "Snare -- target can't Move for 2 turns" },
+  Psychic: { range: 225, band: "Short", accuracyMod: 0, powerMod: -2, reaction: "Medium", hitEffect: "-1 AP on the target's next turn" },
+  Toxic: { range: 250, band: "Medium", accuracyMod: 1, powerMod: -1, reaction: "Medium", hitEffect: "Poison -- stacking damage for 3 turns" },
+  Unique: { range: 250, band: "Medium", accuracyMod: 0, powerMod: 0, reaction: "Medium", hitEffect: "Custom -- set by the slug's own ability" },
+  Water: { range: 300, band: "Medium", accuracyMod: 1, powerMod: 0, reaction: "Medium", hitEffect: "Douses an active burn on the target" },
 };
 
 export function typeBallistics(type) {

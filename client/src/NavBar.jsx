@@ -10,6 +10,7 @@ import {
   EyeSlashIcon,
   BackpackIcon,
   CircleDashedIcon,
+  StorefrontIcon,
   PawPrintIcon,
   PlanetIcon,
   RocketIcon,
@@ -92,6 +93,7 @@ export default function NavBar() {
   const loadoutItems = [
     { to: "/slugs", label: slugterraRevealed ? "Slugs" : "Creatures", icon: <CircleDashedIcon weight="bold" /> },
     { to: "/inventory", label: "Inventory", icon: <BackpackIcon weight="bold" /> },
+    { to: "/market", label: "Market", icon: <StorefrontIcon weight="bold" /> },
   ];
   const starChartItems = [
     { to: "/galaxy", label: "Galaxy Map", icon: <PlanetIcon weight="bold" /> },

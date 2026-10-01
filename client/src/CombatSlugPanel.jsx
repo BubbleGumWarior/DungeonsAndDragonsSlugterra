@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { ArrowsCounterClockwiseIcon, LightningIcon, LightningSlashIcon, TargetIcon } from "@phosphor-icons/react";
+import { ArrowsCounterClockwiseIcon, LightningIcon, LightningSlashIcon, PackageIcon, TargetIcon } from "@phosphor-icons/react";
 import { typeColor, loyaltyClashModifier } from "./slugData.js";
 import EnergyPips from "./EnergyPips.jsx";
 import "./Panel.css";
@@ -34,6 +34,9 @@ export default function CombatSlugPanel({
   armedSlugId,
   onPickSlug,
   hotkeysActive = false,
+  // Spare slug pods the player carries; null = infinite (NPCs/grunts), which
+  // never shows pod UI.
+  pods = null,
 }) {
   // 1-9 arms the slug in that magazine slot, but only on your own turn (a
   // counter-clash on someone else's turn has its own prompt + handler) and
@@ -75,12 +78,29 @@ export default function CombatSlugPanel({
           <h2>{actingCombatant.name}'s Slugs</h2>
           <p>Pick one, then click a target</p>
         </div>
+        {pods != null && (
+          <span
+            className={`combat-slug-panel-pods${pods === 0 ? " combat-slug-panel-pods--empty" : ""}`}
+            title="Spare slug pods -- a reload spends one for each slug whose pod was shattered by a misfire"
+          >
+            <PackageIcon weight="fill" />
+            {pods}
+          </span>
+        )}
       </div>
       <div className="panel-body combat-slug-panel-body">
         {slugs.length === 0 ? (
           <p className="combat-slug-panel-empty">No slugs loaded into this weapon.</p>
         ) : (
           slugs.map((s) => {
+            // Slugs waiting on a spare pod are served in magazine order (as
+            // the server does), so with N pods the first N need no more than
+            // a reload and the rest are stuck.
+            const waitingBroken =
+              pods == null
+                ? []
+                : slugs.filter((x) => x.podBroken && x.loaded === false && (x.cooldownTurnsLeft || 0) === 0);
+            const podRank = waitingBroken.findIndex((x) => x.id === s.id);
             const cooldown = s.cooldownTurnsLeft || 0;
             const onCooldown = cooldown > 0;
             const charged = Array.isArray(s.energyPips) && s.energyPips.some(Boolean);
@@ -93,9 +113,10 @@ export default function CombatSlugPanel({
             // chambers it (see /actions/reload) -- its own state, marked in
             // vertigo, and it takes priority over "exhausted" since you
             // can't even reload without it being here first.
-            const notLoaded = !onCooldown && s.loaded === false;
-            const exhausted = !onCooldown && !notLoaded && !charged;
-            const unusable = onCooldown || exhausted || notLoaded;
+            const noPods = !onCooldown && s.loaded === false && podRank >= 0 && podRank >= pods;
+            const notLoaded = !onCooldown && !noPods && s.loaded === false;
+            const exhausted = !onCooldown && !notLoaded && !noPods && !charged;
+            const unusable = onCooldown || exhausted || notLoaded || noPods;
             // How much of the wait is left, 1 (just fired) -> 0 (back in
             // hand) -- drives the ring's stroke-dashoffset below, so the
             // circle traces down to nothing as the turns tick off.
@@ -118,8 +139,12 @@ export default function CombatSlugPanel({
                 title={
                   onCooldown
                     ? `Returns to hand in ${cooldown} more turn${cooldown === 1 ? "" : "s"}`
-                    : notLoaded
-                      ? "Back in hand but not loaded -- spend a Reload action to chamber it"
+                    : noPods
+                      ? "Its pod was shattered and there are no spare pods left to reload it"
+                      : notLoaded
+                      ? s.podBroken
+                        ? "Pod shattered -- a Reload will put it in a spare pod"
+                        : "Back in hand but not loaded -- spend a Reload action to chamber it"
                       : exhausted
                         ? "Out of energy -- needs to recharge"
                         : undefined
@@ -177,6 +202,12 @@ export default function CombatSlugPanel({
                   <div className="combat-slug-cooldown-glass combat-slug-cooldown-glass--not-loaded">
                     <ArrowsCounterClockwiseIcon weight="bold" className="combat-slug-not-loaded-icon" />
                     <span className="combat-slug-not-loaded-label">Not Loaded</span>
+                  </div>
+                )}
+                {noPods && (
+                  <div className="combat-slug-cooldown-glass combat-slug-cooldown-glass--no-pods">
+                    <PackageIcon weight="bold" className="combat-slug-no-pods-icon" />
+                    <span className="combat-slug-no-pods-label">No Pods</span>
                   </div>
                 )}
                 {exhausted && (

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { TargetIcon, XIcon } from "@phosphor-icons/react";
+import { PackageIcon, TargetIcon, WarningIcon, XIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import BlasterCard from "./BlasterCard.jsx";
@@ -13,9 +13,10 @@ const SLOT_HINTS = ["The weapon you start combat with.", "Drawn when you switch 
 
 export default function PlayerInventory() {
   const { token, user } = useAuth();
-  const { blasterUpdate, modUpdate } = useLiveState();
+  const { blasterUpdate, modUpdate, podsUpdate, marketChanged, tradeCompleted } = useLiveState();
   const [blasters, setBlasters] = useState([]);
   const [mods, setMods] = useState([]);
+  const [pods, setPods] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [dragOverSlot, setDragOverSlot] = useState(null);
   useDragScrollRestore();
@@ -24,14 +25,22 @@ export default function PlayerInventory() {
     Promise.all([
       fetch("/api/blasters/me", { headers: { Authorization: `Bearer ${token}` } }).then((res) => res.json()),
       fetch("/api/mods/me", { headers: { Authorization: `Bearer ${token}` } }).then((res) => res.json()),
+      fetch("/api/characters/me", { headers: { Authorization: `Bearer ${token}` } }).then((res) => res.json()),
     ])
-      .then(([blasterData, modData]) => {
+      .then(([blasterData, modData, charData]) => {
         setBlasters(blasterData.blasters || []);
         setMods(modData.mods || []);
+        if (Number.isInteger(charData.character?.pods)) setPods(charData.character.pods);
         setLoaded(true);
       })
       .catch(() => setLoaded(true));
-  }, [token]);
+    // A completed trade (or a purchase) moves items in bulk, so refetch
+    // everything rather than patching from individual socket updates.
+  }, [token, tradeCompleted, marketChanged]);
+
+  useEffect(() => {
+    if (podsUpdate && podsUpdate.userId === user?.id) setPods(podsUpdate.pods);
+  }, [podsUpdate, user]);
 
   useEffect(() => {
     if (!blasterUpdate || blasterUpdate.userId !== user?.id) return;
@@ -137,12 +146,40 @@ export default function PlayerInventory() {
 
   const unequippedMods = mods.filter((m) => !m.equippedBlasterId);
 
+  // One pod holds one slug, so you want at least a full magazine's worth for
+  // your biggest equipped weapon (spares cover pods a misfire shatters).
+  const neededPods = blasters.filter((b) => b.equipped).reduce((max, b) => Math.max(max, b.magazineSize || 0), 0);
+  const podsRow =
+    pods != null ? (
+      <div className={`player-inventory-pods${neededPods > pods ? " player-inventory-pods--low" : ""}`}>
+        <PackageIcon weight="fill" />
+        <span>
+          Slug Pods <strong>×{pods}</strong>
+        </span>
+        <span className="player-inventory-pods-hint">
+          {neededPods > pods ? (
+            <>
+              <WarningIcon weight="fill" /> Below your equipped magazine size ({neededPods}) -- buy more at the Market.
+            </>
+          ) : (
+            "A misfire shatters a pod; a reload spends a spare."
+          )}
+        </span>
+      </div>
+    ) : null;
+
   if (blasters.length === 0 && mods.length === 0) {
-    return <p className="player-slugs-empty">No blasters or mods yet. Your Dungeon Master hasn't given you any.</p>;
+    return (
+      <div className="player-inventory">
+        {podsRow}
+        <p className="player-slugs-empty">No blasters or mods yet. Your Dungeon Master hasn't given you any.</p>
+      </div>
+    );
   }
 
   return (
     <div className="player-inventory">
+      {podsRow}
       {blasters.length > 0 && (
         <div className="weapon-loadout">
           <h2 className="weapon-loadout-title">Equipped Weapons</h2>

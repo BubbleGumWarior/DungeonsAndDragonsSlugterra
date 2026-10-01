@@ -1,0 +1,310 @@
+.dmm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dmm-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 20px;
+  padding: 10px 14px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+  border-radius: 12px;
+}
+
+.dmm-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.dmm-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink-dim);
+}
+
+.dmm-note {
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.dmm-stepper {
+  display: inline-flex;
+  align-items: center;
+  background: var(--charcoal-800);
+  border: 1px solid var(--charcoal-600);
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.dmm-stepper button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 32px;
+  color: var(--ink-dim);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background 0.12s var(--ease-out), color 0.12s var(--ease-out);
+}
+
+.dmm-stepper button:hover {
+  color: var(--ink);
+  background: var(--charcoal-700);
+}
+
+.dmm-stepper input {
+  width: 44px;
+  padding: 0;
+  text-align: right;
+  font: inherit;
+  font-weight: 700;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  outline: 0;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.dmm-stepper input::-webkit-outer-spin-button,
+.dmm-stepper input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.dmm-unit {
+  padding-right: 2px;
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+.dmm-save {
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--charcoal-950);
+  background: var(--gold);
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.dmm-save:hover {
+  background: var(--gold-soft);
+}
+
+.dmm-toggles {
+  display: flex;
+  gap: 8px;
+}
+
+.dmm-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-dim);
+  background: transparent;
+  border: 1px solid var(--charcoal-600);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: color 0.12s var(--ease-out), border-color 0.12s var(--ease-out), background 0.12s var(--ease-out);
+}
+
+.dmm-toggle:hover {
+  color: var(--ink);
+  border-color: var(--gold-dim);
+}
+
+.dmm-toggle--on {
+  color: var(--gold-soft);
+  border-color: var(--gold-dim);
+  background: var(--charcoal-800);
+}
+
+.dmm-panel {
+  padding: 14px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+  border-radius: 12px;
+  animation: dmm-open 0.2s var(--ease-out);
+}
+
+@keyframes dmm-open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.dmm-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.dmm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.dmm-field > span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.dmm-field--grow {
+  flex: 1 1 200px;
+}
+
+.dmm-field--num {
+  width: 88px;
+}
+
+.dmm-panel input,
+.dmm-panel select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--charcoal-800);
+  border: 1px solid var(--charcoal-600);
+  border-radius: 8px;
+}
+
+.dmm-panel input:focus,
+.dmm-panel select:focus {
+  outline: none;
+  border-color: var(--gold-dim);
+}
+
+.dmm-submit {
+  height: 36px;
+}
+
+/* purses: a compact table, not a stack of boxes */
+.dmm-purses {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 14px 10px;
+}
+
+.dmm-purses-head,
+.dmm-purses-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 1.2fr) minmax(160px, 1fr) minmax(160px, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.dmm-purses-head {
+  padding: 8px 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  border-bottom: 1px solid var(--charcoal-700);
+}
+
+.dmm-purses-row {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--charcoal-800);
+}
+
+.dmm-purses-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.dmm-purses-name {
+  overflow: hidden;
+  font-weight: 700;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dmm-purses-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dmm-purses-value {
+  min-width: 44px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gold-soft);
+}
+
+.dmm-purses-cell input {
+  width: 72px;
+  padding: 6px 8px;
+}
+
+.dmm-purses-set {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  color: var(--charcoal-950);
+  background: var(--gold);
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.dmm-purses-set:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.dmm-empty {
+  margin: 8px 0 0;
+  color: var(--ink-dim);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .dmm-purses-head {
+    display: none;
+  }
+  .dmm-purses-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmm-panel {
+    animation: none;
+  }
+}

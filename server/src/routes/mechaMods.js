@@ -11,7 +11,7 @@ const router = Router();
 // are equipped on it right now. Recompute and persist them whenever that set
 // changes (equip, unequip, a mod's mode edited, a mod deleted), and push the
 // refreshed mecha out so every open sheet updates live.
-async function syncMechaModeFlags(mechaId) {
+export async function syncMechaModeFlags(mechaId) {
   if (!Number.isInteger(mechaId)) return;
   const { rows } = await pool.query(
     "SELECT unlocks_mode FROM mecha_mods WHERE equipped_mecha_id = $1",
@@ -36,7 +36,7 @@ function requireDungeonMaster(req, res, next) {
 
 router.use(requireAuth);
 
-function toClientMod(row) {
+export function toClientMod(row) {
   return {
     id: row.id,
     templateId: row.template_id,

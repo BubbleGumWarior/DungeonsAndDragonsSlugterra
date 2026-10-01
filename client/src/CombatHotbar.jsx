@@ -104,7 +104,7 @@ export default function CombatHotbar({
         {!isMecha && reloadInfo && (
           <HotbarButton
             icon={<ArrowsCounterClockwiseIcon weight="bold" />}
-            label={reloadInfo.pending > 0 ? `Reload (${reloadInfo.pending})` : "Reload"}
+            label={reloadInfo.pending > 0 ? `Reload (${reloadInfo.pending})` : reloadInfo.noPods > 0 ? "Reload (no pods)" : "Reload"}
             apCost={reloadInfo.apCost}
             disabled={reloadInfo.pending === 0 || ap < reloadInfo.apCost}
             onClick={() => onAction("reload")}

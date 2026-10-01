@@ -1,0 +1,42 @@
+.market-page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
+  max-width: 1040px;
+}
+
+.market-page-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  align-self: flex-start;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-600);
+  border-radius: 12px;
+}
+
+.market-page-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: color 0.15s var(--ease-out), background 0.15s var(--ease-out);
+}
+
+.market-page-tab:hover {
+  color: var(--ink);
+}
+
+.market-page-tab--active {
+  color: var(--gold-soft);
+  background: var(--charcoal-700);
+}

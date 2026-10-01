@@ -13,7 +13,7 @@ const ACTIONS = [
 ];
 
 // Mirrors server/src/combatRules.js's MEGA_MORPH_* -- keep the numbers in sync.
-export const MEGA_MORPH_MIN_RANGE = 150;
+export const MEGA_MORPH_MIN_SPEED = 100;
 export const MEGA_MORPH_PIP_COST = 3;
 
 const livePips = (s) => (Array.isArray(s.energyPips) ? s.energyPips.filter(Boolean).length : 0);
@@ -209,8 +209,8 @@ export default function SlugActionModal({ slug, megaBlockedReason = null, dual =
               The slug unleashes its full power. After its wind-up it flies at <strong>double speed</strong>, halving the
               target's reaction window (stacking with Zeus-style ultra-fast slugs). Its <strong>clash power is doubled</strong>,
               on top of any tripling from abilities like Emberblade or Meduslug. It burns{" "}
-              <strong>{MEGA_MORPH_PIP_COST} energy pips</strong> instead of one, and needs a weapon with a range of{" "}
-              <strong>{MEGA_MORPH_MIN_RANGE}+</strong>.
+              <strong>{MEGA_MORPH_PIP_COST} energy pips</strong> instead of one, and needs a weapon with a speed of{" "}
+              <strong>{MEGA_MORPH_MIN_SPEED}+</strong>.
             </span>
             {megaBlockedReason && <span className="slug-action-mega-blocked">{megaBlockedReason}</span>}
           </button>

@@ -8,7 +8,7 @@ import CombatHotbar from "./CombatHotbar.jsx";
 import CombatSlugPanel from "./CombatSlugPanel.jsx";
 import CombatRoster from "./CombatRoster.jsx";
 import CombatLog from "./CombatLog.jsx";
-import SlugActionModal, { MEGA_MORPH_MIN_RANGE, MEGA_MORPH_PIP_COST } from "./SlugActionModal.jsx";
+import SlugActionModal, { MEGA_MORPH_MIN_SPEED, MEGA_MORPH_PIP_COST } from "./SlugActionModal.jsx";
 import { DUAL_SHOT_BASE_TYPE, canJoinDualShot } from "./dualShot.js";
 import MindScrambleModal from "./MindScrambleModal.jsx";
 import FrictionModal from "./FrictionModal.jsx";
@@ -327,7 +327,7 @@ function PullGruntForm({ gruntTemplates, onPull }) {
 
 export default function CombatPage() {
   const { token, user } = useAuth();
-  const { encounter: liveEncounter, slugUpdate, blasterUpdate, shotFx, shotResolved, damageFlash, gruntTemplatesUpdate, gearChanged } = useLiveState();
+  const { encounter: liveEncounter, slugUpdate, blasterUpdate, shotFx, shotResolved, damageFlash, gruntTemplatesUpdate, gearChanged, podsUpdate, marketChanged, tradeCompleted } = useLiveState();
   const [flashActive, setFlashActive] = useState(false);
   const [encounter, setEncounter] = useState(undefined);
   const [players, setPlayers] = useState([]);
@@ -461,6 +461,32 @@ export default function CombatPage() {
 
   const actingCombatant = encounter?.combatants.find((c) => c.id === actingId) || null;
 
+  // Spare slug pods for the character being played (null for NPCs/grunts --
+  // they have infinite pods and never see the pod UI). A reload that finds a
+  // slug whose pod was shattered by a misfire spends one of these.
+  const podUserId = actingCombatant?.kind === "character" ? actingCombatant.refUserId : null;
+  const [pods, setPods] = useState(null);
+  useEffect(() => {
+    if (podUserId == null) {
+      setPods(null);
+      return undefined;
+    }
+    let cancelled = false;
+    const url = isDM ? `/api/characters/${podUserId}` : "/api/characters/me";
+    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((b) => {
+        if (!cancelled && Number.isInteger(b.character?.pods)) setPods(b.character.pods);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [podUserId, isDM, token, marketChanged, tradeCompleted]);
+  useEffect(() => {
+    if (podsUpdate && podsUpdate.userId === podUserId) setPods(podsUpdate.pods);
+  }, [podsUpdate, podUserId]);
+
   // Every slug loaded into the active weapon, regardless of whether it's
   // actually ready to fire right now -- one still counting down its
   // return-to-hand cooldown, or one that's simply out of charge, is still
@@ -531,20 +557,31 @@ export default function CombatPage() {
       return actingCombatant.kind === "character" ? b.equipSlot === activeSlot : true;
     });
     if (!activeBlaster) return null;
-    const pending = allSlugs.filter(
+    const waiting = allSlugs.filter(
       (s) => s.equippedBlasterId === activeBlaster.id && s.loaded === false && (s.cooldownTurnsLeft || 0) === 0
-    ).length;
-    return { apCost: Math.max(1, activeBlaster.reloadApCost ?? 1), pending };
-  }, [actingCombatant, allBlasters, allSlugs]);
+    );
+    // A slug whose pod was destroyed needs a spare pod to go back in (players
+    // only); how many can be covered is capped by the pods on hand.
+    const needsPod = pods == null ? 0 : waiting.filter((s) => s.podBroken).length;
+    const podless = Math.max(0, needsPod - (pods ?? 0));
+    return { apCost: Math.max(1, activeBlaster.reloadApCost ?? 1), pending: waiting.length - podless, noPods: podless };
+  }, [actingCombatant, allBlasters, allSlugs, pods]);
 
   const rangeRing = useMemo(() => {
     if (!actingCombatant || mode?.type !== "shoot") return null;
     const slug = allSlugs.find((s) => s.id === mode.slugId);
     if (!slug) return null;
     const blaster = allBlasters.find((b) => b.id === slug.equippedBlasterId);
-    // Mirrors the server's combinedRange = max(blaster.range, type's range).
-    return { x: actingCombatant.x, y: actingCombatant.y, r: Math.max(blaster?.range || 0, typeRange(slug.type)) };
-  }, [actingCombatant, mode, allSlugs, allBlasters]);
+    if (!blaster) return null;
+    // Only shown if the firing weapon has a Range Finder mod equipped --
+    // same "does this blaster carry a mod with this flag" check dualInfoFor
+    // uses for grantsDualShot above.
+    const hasRangeFinder = allMods.some((m) => m.equippedBlasterId === blaster.id && m.grantsRangeFinder);
+    if (!hasRangeFinder) return null;
+    // Mirrors the server's combinedRange = blaster.range + type's range --
+    // the two stack.
+    return { x: actingCombatant.x, y: actingCombatant.y, r: blaster.range + typeRange(slug.type) };
+  }, [actingCombatant, mode, allSlugs, allBlasters, allMods]);
 
   // While "Mount" is armed, show how close you have to be -- a ring at
   // MOUNT_RANGE around the character, with every in-range mecha highlighted
@@ -929,6 +966,17 @@ export default function CombatPage() {
     setMode({ type: "shoot", slugId: slug.id, slugName: slug.name, actionType });
   }
 
+  // Base speed plus any equipped mods' speedBonus -- mirrors the server's
+  // blasterEffectiveSpeed (routes/combat.js), so a Mega Morph eligibility
+  // preview here never disagrees with what the server will actually enforce.
+  function effectiveSpeed(blaster) {
+    if (!blaster) return 0;
+    const bonus = allMods
+      .filter((m) => m.equippedBlasterId === blaster.id)
+      .reduce((sum, m) => sum + (m.speedBonus || 0), 0);
+    return Math.max(1, blaster.speed + bonus);
+  }
+
   // Dual-shot options for a slug, or null if it can't offer any: its weapon
   // must be a Twin Slinger or carry a dual-shot mod, the slug itself must be
   // bonded enough, and at least one other slug must share the weapon.
@@ -943,20 +991,19 @@ export default function CombatPage() {
     if (!capable) return null;
     const partners = eligibleSlugs.filter((s) => s.id !== slug.id && s.equippedBlasterId === slug.equippedBlasterId);
     if (partners.length === 0) return null;
-    const rangeReason =
-      (blaster.range ?? 0) < MEGA_MORPH_MIN_RANGE
-        ? `Needs a weapon with a range of ${MEGA_MORPH_MIN_RANGE}+ (this one has ${blaster.range ?? 0}).`
-        : null;
+    const speed = effectiveSpeed(blaster);
+    const rangeReason = speed < MEGA_MORPH_MIN_SPEED ? `Needs a weapon with a speed of ${MEGA_MORPH_MIN_SPEED}+ (this one has ${speed}).` : null;
     return { partners, rangeReason };
   }
 
   // Why the picked slug can't Mega Morph right now, or null if it can. Mirrors
-  // the server's checks (range of the weapon it's loaded in, pips remaining).
+  // the server's checks (speed of the weapon it's loaded in, pips remaining).
   function megaBlockedReasonFor(slug) {
     if (!slug?.megaMorphAllowed) return null;
     const blaster = allBlasters.find((b) => b.id === slug.equippedBlasterId);
-    if ((blaster?.range ?? 0) < MEGA_MORPH_MIN_RANGE) {
-      return `Needs a weapon with a range of ${MEGA_MORPH_MIN_RANGE}+ (this one has ${blaster?.range ?? 0}).`;
+    const speed = effectiveSpeed(blaster);
+    if (speed < MEGA_MORPH_MIN_SPEED) {
+      return `Needs a weapon with a speed of ${MEGA_MORPH_MIN_SPEED}+ (this one has ${speed}).`;
     }
     const pips = Array.isArray(slug.energyPips) ? slug.energyPips.filter(Boolean).length : 0;
     if (pips < MEGA_MORPH_PIP_COST) {
@@ -1096,6 +1143,7 @@ export default function CombatPage() {
         <CombatSlugPanel
           actingCombatant={actingCombatant}
           slugs={eligibleSlugs}
+          pods={pods}
           activeBlasterBaseType={activeBlasterBaseType}
           armedSlugId={mode?.type === "shoot" ? mode.slugId : null}
           onPickSlug={handlePickSlug}

@@ -399,6 +399,7 @@ const DEFAULT_BLASTER_MOD_TEMPLATES = [
       "A longer bored barrel that keeps the slug spinning and building speed for longer before it leaves the muzzle, flattening its arc and shrinking the group at distance. The extra length and forward weight make the weapon slower to bring back down and back on line for a fresh load.",
     accuracyBonus: 2,
     reloadApBonus: 1,
+    speedBonus: 12,
   },
   {
     name: "Speed-Loader Clip",
@@ -518,6 +519,7 @@ const DEFAULT_BLASTER_MOD_TEMPLATES = [
       "A short heavy barrel and a cut-down grip built purely for speed of handling in a close scrum -- fast to swing onto a target and fast to feed. Past a few paces, though, the stubby bore throws slugs wide and the sight radius is too short to correct it.",
     accuracyBonus: -1,
     reloadApBonus: -2,
+    speedBonus: -8,
   },
   {
     name: "Folding Bipod",
@@ -534,6 +536,14 @@ const DEFAULT_BLASTER_MOD_TEMPLATES = [
     reloadApBonus: 1,
     grantsDualShot: true,
   },
+  {
+    name: "Range Finder",
+    effect:
+      "A laser rangefinder clipped to the rail that reads the distance to whatever the barrel's pointed at and projects it straight into the shooter's eyeline, so they always know exactly how far this weapon (and whatever's chambered in it) can actually reach before they commit to the shot.",
+    accuracyBonus: 0,
+    reloadApBonus: 0,
+    grantsRangeFinder: true,
+  },
 ];
 
 // Idempotent per name -- seeds the full blaster mod catalog on a fresh
@@ -542,10 +552,10 @@ const DEFAULT_BLASTER_MOD_TEMPLATES = [
 async function seedDefaultBlasterModTemplates() {
   for (const m of DEFAULT_BLASTER_MOD_TEMPLATES) {
     await pool.query(
-      `INSERT INTO mod_templates (name, effect, accuracy_bonus, reload_ap_bonus, grants_dual_shot)
-       SELECT $1, $2, $3, $4, $5
+      `INSERT INTO mod_templates (name, effect, accuracy_bonus, reload_ap_bonus, grants_dual_shot, grants_range_finder, speed_bonus)
+       SELECT $1, $2, $3, $4, $5, $6, $7
        WHERE NOT EXISTS (SELECT 1 FROM mod_templates WHERE name = $1)`,
-      [m.name, m.effect, m.accuracyBonus, m.reloadApBonus, Boolean(m.grantsDualShot)]
+      [m.name, m.effect, m.accuracyBonus, m.reloadApBonus, Boolean(m.grantsDualShot), Boolean(m.grantsRangeFinder), m.speedBonus || 0]
     );
   }
 }
@@ -690,6 +700,18 @@ export async function initSchema() {
     ALTER TABLE characters ADD COLUMN IF NOT EXISTS current_grit INTEGER;
   `);
   await backfillCurrentGrit();
+
+  // Fame/Heat: campaign-long reputation, never reset by a rest (see
+  // heal-all in routes/characters.js, which deliberately leaves both alone).
+  // Fame is earned automatically from combat (routes/combat.js's grantFame)
+  // or adjusted by the DM; Heat mirrors every Fame increase 1:1 and can only
+  // be lowered by a separate, explicit DM action.
+  await pool.query(`
+    ALTER TABLE characters ADD COLUMN IF NOT EXISTS fame INTEGER NOT NULL DEFAULT 0;
+  `);
+  await pool.query(`
+    ALTER TABLE characters ADD COLUMN IF NOT EXISTS heat INTEGER NOT NULL DEFAULT 0;
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS slug_templates (
@@ -883,6 +905,7 @@ export async function initSchema() {
       accuracy INTEGER NOT NULL,
       reload_ap_cost INTEGER NOT NULL,
       range INTEGER NOT NULL,
+      speed INTEGER NOT NULL DEFAULT 56,
       mod_slots INTEGER NOT NULL,
       magazine_size INTEGER NOT NULL,
       quality INTEGER NOT NULL DEFAULT 0,
@@ -901,6 +924,7 @@ export async function initSchema() {
       accuracy INTEGER NOT NULL,
       reload_ap_cost INTEGER NOT NULL,
       range INTEGER NOT NULL,
+      speed INTEGER NOT NULL DEFAULT 56,
       mod_slots INTEGER NOT NULL,
       magazine_size INTEGER NOT NULL,
       quality INTEGER NOT NULL DEFAULT 0,
@@ -914,6 +938,34 @@ export async function initSchema() {
   await pool.query(`
     ALTER TABLE blasters ADD COLUMN IF NOT EXISTS equip_slot SMALLINT;
   `);
+  // Projectile speed (map units/second) used to be derived from a weapon's
+  // own range (see combatRules.js's shotEffectiveSpeed) -- now it's its own
+  // explicit, DM-editable stat. Added nullable first so this backfill (keyed
+  // on base_type, matching BASE_TYPES in itemRules.js) can tell an
+  // unmigrated row from a DM's later real edit -- it only ever touches NULL
+  // rows, so it's a no-op after the first run and never clobbers a
+  // since-changed value.
+  await pool.query(`ALTER TABLE blaster_templates ADD COLUMN IF NOT EXISTS speed INTEGER;`);
+  await pool.query(`ALTER TABLE blasters ADD COLUMN IF NOT EXISTS speed INTEGER;`);
+  const BASE_TYPE_SPEED_BACKFILL = `
+    CASE base_type
+      WHEN 'Pistol' THEN 56
+      WHEN 'Revolver' THEN 72
+      WHEN 'Repeater' THEN 88
+      WHEN 'Bow' THEN 104
+      WHEN 'Gatling' THEN 56
+      WHEN 'Cannon' THEN 40
+      WHEN 'Twin Slinger' THEN 40
+      WHEN 'Sniper Rig' THEN 144
+      ELSE 56
+    END
+  `;
+  await pool.query(`UPDATE blaster_templates SET speed = ${BASE_TYPE_SPEED_BACKFILL} WHERE speed IS NULL;`);
+  await pool.query(`UPDATE blasters SET speed = ${BASE_TYPE_SPEED_BACKFILL} WHERE speed IS NULL;`);
+  await pool.query(`ALTER TABLE blaster_templates ALTER COLUMN speed SET NOT NULL;`);
+  await pool.query(`ALTER TABLE blaster_templates ALTER COLUMN speed SET DEFAULT 56;`);
+  await pool.query(`ALTER TABLE blasters ALTER COLUMN speed SET NOT NULL;`);
+  await pool.query(`ALTER TABLE blasters ALTER COLUMN speed SET DEFAULT 56;`);
 
   await pool.query(`
     ALTER TABLE slugs ADD COLUMN IF NOT EXISTS equipped_blaster_id INTEGER REFERENCES blasters(id) ON DELETE SET NULL;
@@ -976,6 +1028,34 @@ export async function initSchema() {
   // slugs as one fused bolt) -- Twin Slingers can always, see blasterCanDualShot.
   await pool.query(`ALTER TABLE mod_templates ADD COLUMN IF NOT EXISTS grants_dual_shot BOOLEAN NOT NULL DEFAULT false;`);
   await pool.query(`ALTER TABLE mods ADD COLUMN IF NOT EXISTS grants_dual_shot BOOLEAN NOT NULL DEFAULT false;`);
+
+  // A mod with this set shows the range ring (see CombatPage.jsx's rangeRing)
+  // while aiming with the blaster it's equipped on -- otherwise a shooter
+  // has no on-map indicator of how far their shot can actually reach.
+  await pool.query(`ALTER TABLE mod_templates ADD COLUMN IF NOT EXISTS grants_range_finder BOOLEAN NOT NULL DEFAULT false;`);
+  await pool.query(`ALTER TABLE mods ADD COLUMN IF NOT EXISTS grants_range_finder BOOLEAN NOT NULL DEFAULT false;`);
+
+  // Adds straight onto the equipped blaster's own speed stat (see
+  // blasterEffectiveSpeed in routes/combat.js) -- a real, applied bonus, not
+  // just a cosmetic display number. Nullable first, same reasoning as
+  // blasters.speed above: the backfill (keyed by name, matching the
+  // DEFAULT_BLASTER_MOD_TEMPLATES entries that got a speedBonus) only ever
+  // touches NULL rows, so a DM's own later edit is never clobbered.
+  await pool.query(`ALTER TABLE mod_templates ADD COLUMN IF NOT EXISTS speed_bonus INTEGER;`);
+  await pool.query(`ALTER TABLE mods ADD COLUMN IF NOT EXISTS speed_bonus INTEGER;`);
+  const NAMED_SPEED_BONUS_BACKFILL = `
+    CASE name
+      WHEN 'Extended Barrel' THEN 12
+      WHEN 'Snub Handling Package' THEN -8
+      ELSE 0
+    END
+  `;
+  await pool.query(`UPDATE mod_templates SET speed_bonus = ${NAMED_SPEED_BONUS_BACKFILL} WHERE speed_bonus IS NULL;`);
+  await pool.query(`UPDATE mods SET speed_bonus = ${NAMED_SPEED_BONUS_BACKFILL} WHERE speed_bonus IS NULL;`);
+  await pool.query(`ALTER TABLE mod_templates ALTER COLUMN speed_bonus SET NOT NULL;`);
+  await pool.query(`ALTER TABLE mod_templates ALTER COLUMN speed_bonus SET DEFAULT 0;`);
+  await pool.query(`ALTER TABLE mods ALTER COLUMN speed_bonus SET NOT NULL;`);
+  await pool.query(`ALTER TABLE mods ALTER COLUMN speed_bonus SET DEFAULT 0;`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS mecha_templates (
@@ -1060,6 +1140,97 @@ export async function initSchema() {
   // Bike Conversion Kit is the only seeded mod that sets it (to 2).
   await pool.query(`ALTER TABLE mecha_mod_templates ADD COLUMN IF NOT EXISTS speed_multiplier REAL NOT NULL DEFAULT 1;`);
   await pool.query(`ALTER TABLE mecha_mods ADD COLUMN IF NOT EXISTS speed_multiplier REAL NOT NULL DEFAULT 1;`);
+
+  // ---- Market, pods and trading ------------------------------------------
+  // Per-character purse of Credits.
+  await pool.query(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS credits INTEGER NOT NULL DEFAULT 0;`);
+
+  // Slug Pods: the spare pods a character carries (one pod holds one slug in
+  // a blaster's magazine). Nullable first so the backfill below can tell an
+  // unmigrated row from a real count -- existing characters start with enough
+  // to fill their largest blaster, same as the default for a new one.
+  await pool.query(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS pods INTEGER;`);
+  await pool.query(`
+    UPDATE characters c SET pods = GREATEST(6, COALESCE((SELECT MAX(b.magazine_size) FROM blasters b WHERE b.user_id = c.user_id), 0))
+    WHERE c.pods IS NULL;
+  `);
+  await pool.query(`ALTER TABLE characters ALTER COLUMN pods SET NOT NULL;`);
+  await pool.query(`ALTER TABLE characters ALTER COLUMN pods SET DEFAULT 6;`);
+  // A misfire destroys the pod the fired slug was sitting in; the slug stays
+  // unloaded until a Reload spends a spare pod on it (routes/combat.js).
+  await pool.query(`ALTER TABLE slugs ADD COLUMN IF NOT EXISTS pod_broken BOOLEAN NOT NULL DEFAULT false;`);
+
+  // Optional DM-set price per template; null = derived default (marketRules.js).
+  for (const table of ["blaster_templates", "mod_templates", "mecha_templates", "mecha_mod_templates", "slug_templates"]) {
+    await pool.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS base_price INTEGER;`);
+  }
+
+  // Per-planet price modifier (%) and the planet-wide markup a poor barter
+  // roll leaves behind (0..20). planet_index is the same flat index as
+  // campaign_settings.slug_hunt_area.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS planet_markets (
+      planet_index INTEGER PRIMARY KEY,
+      price_pct INTEGER NOT NULL DEFAULT 100,
+      barter_pct INTEGER NOT NULL DEFAULT 0
+    );
+  `);
+
+  // One barter attempt per player per planet per rest (cleared on Heal All).
+  // discount_pct is that player's own discount (0..20); the roll is kept so
+  // the market can show what they rolled.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS market_barters (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      planet_index INTEGER NOT NULL,
+      discount_pct INTEGER NOT NULL DEFAULT 0,
+      roll JSONB,
+      PRIMARY KEY (user_id, planet_index)
+    );
+  `);
+
+  // DM-posted listings, sold only while the party is docked at planet_index.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS market_listings (
+      id SERIAL PRIMARY KEY,
+      kind TEXT NOT NULL,
+      template_id INTEGER NOT NULL,
+      planet_index INTEGER NOT NULL,
+      base_price INTEGER NOT NULL,
+      quantity INTEGER,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
+  // Standing stock the DM has pulled from a planet's shelves (item_key like
+  // 'pods', 'mod:12', 'mecha_mod:3').
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS market_hidden (
+      planet_index INTEGER NOT NULL,
+      item_key TEXT NOT NULL,
+      PRIMARY KEY (planet_index, item_key)
+    );
+  `);
+
+  // Player-to-player trades. `give`/`ask` are [{kind, id}] item refs;
+  // counter_of links a counter-offer to the trade it answers.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS trades (
+      id SERIAL PRIMARY KEY,
+      from_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      to_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      give JSONB NOT NULL DEFAULT '[]',
+      ask JSONB NOT NULL DEFAULT '[]',
+      give_credits INTEGER NOT NULL DEFAULT 0,
+      ask_credits INTEGER NOT NULL DEFAULT 0,
+      give_pods INTEGER NOT NULL DEFAULT 0,
+      ask_pods INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'pending',
+      counter_of INTEGER REFERENCES trades(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      resolved_at TIMESTAMPTZ
+    );
+  `);
 
   await seedDefaultMechaTemplates();
   await seedDefaultMechaModTemplates();

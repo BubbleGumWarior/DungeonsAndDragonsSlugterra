@@ -2,16 +2,31 @@
 // combatRules.js (see RANGE_SCALE there) -- kept as defaults for newly
 // created blaster templates so new gear lands on the same scale as slug
 // type ranges, which is what actually decides a shot's effective reach in
-// combat (combinedRange = max(blaster.range, slug type's range)).
+// combat (combinedRange = blaster.range + slug type's range -- the two
+// stack).
+//
+// Rescaled 1.8x from the original spread (Sniper Rig was 10 * 25 = 250) so
+// the Sniper Rig -- the longest-reaching base type -- now tops out at
+// 450, with every other base type scaled up by the same factor and rounded
+// to the nearest 25 (so Cannon/Twin Slinger, the shortest, go from 75 to
+// 125).
+//
+// `speed` (map units/second) is the bolt's own actual travel speed --
+// separate from `range`, which only ever decides how far a shot can reach.
+// Editable per-instance same as range (see BlasterForm.jsx). Defaults here
+// are picked so a shot at exactly the base type's own default range takes
+// ~3.33s to arrive (the flight time every weapon's own max-range shot used
+// to take back when speed was still derived from range) -- 8 units/sec per
+// unit of range, i.e. speed = (range / 25) * 8.
 export const BASE_TYPES = {
-  Pistol: { accuracy: 1, reloadApCost: 1, range: 4 * 25, modSlots: 2, magazineSize: 6 },
-  Revolver: { accuracy: 3, reloadApCost: 2, range: 5 * 25, modSlots: 2, magazineSize: 6 },
-  Repeater: { accuracy: 1, reloadApCost: 3, range: 6 * 25, modSlots: 3, magazineSize: 10 },
-  Bow: { accuracy: 2, reloadApCost: 1, range: 7 * 25, modSlots: 4, magazineSize: 1 },
-  Gatling: { accuracy: -2, reloadApCost: 5, range: 4 * 25, modSlots: 4, magazineSize: 20 },
-  Cannon: { accuracy: -2, reloadApCost: 3, range: 3 * 25, modSlots: 3, magazineSize: 1 },
-  "Twin Slinger": { accuracy: 0, reloadApCost: 2, range: 3 * 25, modSlots: 4, magazineSize: 12 },
-  "Sniper Rig": { accuracy: 4, reloadApCost: 2, range: 10 * 25, modSlots: 4, magazineSize: 4 },
+  Pistol: { accuracy: 1, reloadApCost: 1, range: 7 * 25, speed: 7 * 8, modSlots: 2, magazineSize: 6 },
+  Revolver: { accuracy: 3, reloadApCost: 2, range: 9 * 25, speed: 9 * 8, modSlots: 2, magazineSize: 6 },
+  Repeater: { accuracy: 1, reloadApCost: 3, range: 11 * 25, speed: 11 * 8, modSlots: 3, magazineSize: 10 },
+  Bow: { accuracy: 2, reloadApCost: 1, range: 13 * 25, speed: 13 * 8, modSlots: 4, magazineSize: 1 },
+  Gatling: { accuracy: -2, reloadApCost: 5, range: 7 * 25, speed: 7 * 8, modSlots: 4, magazineSize: 20 },
+  Cannon: { accuracy: -2, reloadApCost: 3, range: 5 * 25, speed: 5 * 8, modSlots: 3, magazineSize: 1 },
+  "Twin Slinger": { accuracy: 0, reloadApCost: 2, range: 5 * 25, speed: 5 * 8, modSlots: 4, magazineSize: 12 },
+  "Sniper Rig": { accuracy: 4, reloadApCost: 2, range: 18 * 25, speed: 18 * 8, modSlots: 4, magazineSize: 4 },
 };
 
 export const BASE_TYPE_KEYS = Object.keys(BASE_TYPES);
@@ -46,6 +61,10 @@ const STAT_MAX = 20;
 // combatRules.js) -- it isn't a small stat like accuracy or mod slots.
 const RANGE_MIN = 0;
 const RANGE_MAX = 3000;
+// Speed (map units/second) -- must be positive, a zero/negative speed would
+// make a shot's flight time infinite or undefined (see shotFlightMs).
+const SPEED_MIN = 1;
+const SPEED_MAX = 2000;
 
 function validateImage(image, label) {
   if (image === undefined || image === null) return null;
@@ -80,7 +99,14 @@ function validateRange(value, label) {
   return null;
 }
 
-export function validateBlasterFields({ name, baseType, image, accuracy, reloadApCost, range, modSlots, magazineSize, quality }) {
+function validateSpeed(value, label) {
+  if (!Number.isInteger(value) || value < SPEED_MIN || value > SPEED_MAX) {
+    return `${label} must be an integer between ${SPEED_MIN} and ${SPEED_MAX}.`;
+  }
+  return null;
+}
+
+export function validateBlasterFields({ name, baseType, image, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality }) {
   if (typeof name !== "string" || !name.trim() || name.trim().length > 40) {
     return { valid: false, error: "Name must be a non-empty string of 40 characters or fewer." };
   }
@@ -92,6 +118,9 @@ export function validateBlasterFields({ name, baseType, image, accuracy, reloadA
 
   const rangeError = validateRange(range, "Range");
   if (rangeError) return { valid: false, error: rangeError };
+
+  const speedError = validateSpeed(speed, "Speed");
+  if (speedError) return { valid: false, error: speedError };
 
   for (const [value, label] of [
     [accuracy, "Accuracy"],
@@ -112,7 +141,20 @@ export function validateBlasterFields({ name, baseType, image, accuracy, reloadA
   return { valid: true };
 }
 
-export function validateModFields({ name, effect, accuracyBonus, reloadApBonus }) {
+// Speed bonus lives on the same rough scale as blaster.speed itself (tens,
+// not the small -10..20 range accuracy/reload bonuses use) -- a Range
+// Finder-scale mod should be able to meaningfully move the needle.
+const SPEED_BONUS_MIN = -100;
+const SPEED_BONUS_MAX = 100;
+
+function validateSpeedBonus(value, label) {
+  if (!Number.isInteger(value) || value < SPEED_BONUS_MIN || value > SPEED_BONUS_MAX) {
+    return `${label} must be an integer between ${SPEED_BONUS_MIN} and ${SPEED_BONUS_MAX}.`;
+  }
+  return null;
+}
+
+export function validateModFields({ name, effect, accuracyBonus, reloadApBonus, speedBonus }) {
   if (typeof name !== "string" || !name.trim() || name.trim().length > 40) {
     return { valid: false, error: "Name must be a non-empty string of 40 characters or fewer." };
   }
@@ -124,6 +166,8 @@ export function validateModFields({ name, effect, accuracyBonus, reloadApBonus }
   if (accErr) return { valid: false, error: accErr };
   const reloadErr = validateStat(reloadApBonus, "Reload AP Bonus");
   if (reloadErr) return { valid: false, error: reloadErr };
+  const speedErr = validateSpeedBonus(speedBonus, "Speed Bonus");
+  if (speedErr) return { valid: false, error: speedErr };
 
   return { valid: true };
 }

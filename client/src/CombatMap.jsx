@@ -118,13 +118,24 @@ const TRANSFORM_LEAD_MS = 1000;
 const SLOW_PHASE_MS = SOUND_DURATION_MS - TRANSFORM_LEAD_MS; // 830ms
 const FAST_PHASE_MS = 2500; // +1000ms over the original 1500 -- mirrors server/src/combatRules.js's SHOT_FAST_PHASE_MS
 const SHOT_FLIGHT_MS = SLOW_PHASE_MS + FAST_PHASE_MS; // 3330ms -- fallback total flight time if fx.windowMs is ever missing
+// Fallback windup share (see phasedFraction) for fx with no real
+// weapon/distance behind them -- the chain arc, a pod blast -- which don't
+// carry their own fx.windupFraction from the server. A real shot's actual
+// share (server: shotWindupFraction) varies per shot, since the windup
+// covers a *fixed* distance (a weapon stat) that's a bigger slice of a
+// close shot's total trip than a far one's -- see combatRules.js's
+// shotWindupDistance for why that, and not a flat fraction of every shot's
+// own distance, is what keeps the bolt's cruise speed constant regardless
+// of range.
 const SLOW_PHASE_DISTANCE_FRACTION = 0.2;
-// A pure linear ramp starts at zero velocity, so for the first several
-// frames the bolt barely clears the attacker's own token -- reads as "the
-// sound is playing but nothing is flying yet." Instead it pops this far out
-// the instant the leg starts, then eases through the rest of the slow phase,
-// so the launch is visibly simultaneous with the sound.
-const LAUNCH_KICK_FRACTION = 0.08;
+// Share of the windup's OWN distance (not the whole trip) covered by the
+// instant launch kick below -- mirrors server/src/combatRules.js's
+// SHOT_LAUNCH_KICK_RATIO. A pure linear ramp starts at zero velocity, so
+// for the first several frames the bolt barely clears the attacker's own
+// token -- reads as "the sound is playing but nothing is flying yet."
+// Instead it pops out this share of the windup instantly, then eases
+// through the rest, so the launch is visibly simultaneous with the sound.
+const LAUNCH_KICK_RATIO = 0.4;
 
 // Explosion burst sizing -- three clearly distinct tiers so a glance at the
 // map tells you what kind of hit just landed. An AOE Blast slug's burst is
@@ -173,18 +184,19 @@ function burstGrowScale(elapsedMs, triggerAt) {
 // across the whole leg instead of snapping to the end -- always continuous,
 // never a jump. (In practice only the main flight leg uses this now; the
 // post-clash reflect-back leg is already up to speed and ramps linearly.)
-function phasedFraction(elapsedMs, legMs) {
+function phasedFraction(elapsedMs, legMs, windupFraction = SLOW_PHASE_DISTANCE_FRACTION) {
   if (elapsedMs <= 0) return 0;
   if (elapsedMs >= legMs) return 1;
   const slowMs = Math.min(SLOW_PHASE_MS, legMs);
   const fastMs = legMs - slowMs;
+  const kickFraction = windupFraction * LAUNCH_KICK_RATIO;
   if (fastMs <= 0) return elapsedMs / legMs;
   if (elapsedMs <= slowMs) {
     const t = elapsedMs / slowMs;
-    return LAUNCH_KICK_FRACTION + t * (SLOW_PHASE_DISTANCE_FRACTION - LAUNCH_KICK_FRACTION);
+    return kickFraction + t * (windupFraction - kickFraction);
   }
   const fastElapsed = elapsedMs - slowMs;
-  return SLOW_PHASE_DISTANCE_FRACTION + (1 - SLOW_PHASE_DISTANCE_FRACTION) * (fastElapsed / fastMs);
+  return windupFraction + (1 - windupFraction) * (fastElapsed / fastMs);
 }
 
 function ShotEffect({ fx, onDone }) {
@@ -372,7 +384,11 @@ function ShotEffect({ fx, onDone }) {
       // isn't known until the resolve update arrives, and bursting on this
       // stale point is exactly what used to show an explosion at the target
       // on a shot that really missed. See stillWaiting below.
-      boltPos = lerp(fx.attackerPos, fx.impactPoint, Math.min(PENDING_MAX_FRACTION, phasedFraction(elapsed, totalMs)));
+      boltPos = lerp(
+        fx.attackerPos,
+        fx.impactPoint,
+        Math.min(PENDING_MAX_FRACTION, phasedFraction(elapsed, totalMs, fx.windupFraction))
+      );
     } else if (skidMode && elapsed < burstAt) {
       // The outcome arrived too late for the bolt to reach the real impact
       // point on its normal curve -- skid it there from wherever it had
@@ -385,11 +401,11 @@ function ShotEffect({ fx, onDone }) {
       // but bend its aim from the target toward the wide point over the rest
       // of the flight -- a smooth veer, not the sideways snap onto the new
       // deflected line that read as the bolt teleporting.
-      const f = phasedFraction(elapsed, totalMs);
+      const f = phasedFraction(elapsed, totalMs, fx.windupFraction);
       const bend = Math.min(1, (elapsed - revealElapsed) / Math.max(1, burstAt - revealElapsed));
       boltPos = lerp(lerp(fx.attackerPos, fx.targetPos, f), lerp(fx.attackerPos, fx.impactPoint, f), bend);
     } else if (elapsed < burstAt) {
-      boltPos = lerp(fx.attackerPos, fx.impactPoint, phasedFraction(elapsed, totalMs));
+      boltPos = lerp(fx.attackerPos, fx.impactPoint, phasedFraction(elapsed, totalMs, fx.windupFraction));
     } else {
       bursts.push({ pos: fx.impactPoint, color, kind: fx.outcome, opacity: fadeAfter(burstAt), aoe: fx.aoe, growAt: burstAt });
     }
@@ -408,11 +424,11 @@ function ShotEffect({ fx, onDone }) {
     const counterColor = typeColor(fx.counterSlugType);
     const counterAtMs = Math.max(0, Math.min(clashAt, fx.counterAtMs ?? clashAt / 2));
     const mid = fx.clashPoint ?? lerp(fx.attackerPos, fx.impactPoint, 0.5);
-    const shotPosAtCounter = lerp(fx.attackerPos, fx.impactPoint, phasedFraction(counterAtMs, totalMs));
+    const shotPosAtCounter = lerp(fx.attackerPos, fx.impactPoint, phasedFraction(counterAtMs, totalMs, fx.windupFraction));
     if (elapsed < clashAt) {
       if (elapsed < counterAtMs) {
         bolts.push({
-          pos: lerp(fx.attackerPos, fx.impactPoint, phasedFraction(elapsed, totalMs)),
+          pos: lerp(fx.attackerPos, fx.impactPoint, phasedFraction(elapsed, totalMs, fx.windupFraction)),
           color,
           color2,
           mega: fx.mega,

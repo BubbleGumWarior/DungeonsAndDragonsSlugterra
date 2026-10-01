@@ -51,6 +51,27 @@ export default function DMCharacterViewer({ userId, onDeselect }) {
     setMode("view");
   }
 
+  // Quick Fame/Heat edits straight from the "view" screen, no need to open
+  // the full character editor -- same optimistic-update-then-PATCH pattern
+  // DMCharacterEditor's own changeFame/changeHeat already use.
+  function changeFame(nextFame) {
+    setCharacter((prev) => ({ ...prev, fame: nextFame }));
+    fetch(`/api/characters/${userId}/fame`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ fame: nextFame }),
+    }).catch(() => {});
+  }
+
+  function changeHeat(nextHeat) {
+    setCharacter((prev) => ({ ...prev, heat: nextHeat }));
+    fetch(`/api/characters/${userId}/heat`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ heat: nextHeat }),
+    }).catch(() => {});
+  }
+
   return (
     <div className="dm-viewer">
       <div className="dm-viewer-toolbar">
@@ -76,7 +97,7 @@ export default function DMCharacterViewer({ userId, onDeselect }) {
       {mode === "edit" ? (
         <DMCharacterEditor userId={userId} onSaved={handleSaved} />
       ) : character === undefined ? null : character ? (
-        <CharacterSheetView character={character} />
+        <CharacterSheetView character={character} onChangeFame={changeFame} onChangeHeat={changeHeat} />
       ) : (
         <div className="dm-viewer-empty">This player hasn't created a character yet.</div>
       )}

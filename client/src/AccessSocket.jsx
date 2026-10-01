@@ -22,6 +22,13 @@ export default function AccessSocket({ children }) {
   const [characterUpdate, setCharacterUpdate] = useState(null);
   const [characterCreated, setCharacterCreated] = useState(null);
   const [partyHealed, setPartyHealed] = useState(null);
+  // Single "it happened" signals for the market and trading: consumers
+  // refetch from the server instead of trusting a payload (see the
+  // single-slot note on voiceSignalQueueRef below).
+  const [marketChanged, setMarketChanged] = useState(null);
+  const [tradeChanged, setTradeChanged] = useState(null);
+  const [tradeCompleted, setTradeCompleted] = useState(null);
+  const [podsUpdate, setPodsUpdate] = useState(null);
   const [slugUpdate, setSlugUpdate] = useState(null);
   const [blasterUpdate, setBlasterUpdate] = useState(null);
   const [modUpdate, setModUpdate] = useState(null);
@@ -223,6 +230,22 @@ export default function AccessSocket({ children }) {
         return;
       }
 
+      if (data.type === "market-changed") {
+        setMarketChanged(data.at ?? Date.now());
+        return;
+      }
+      if (data.type === "trade-changed") {
+        setTradeChanged({ event: data.event, tradeId: data.tradeId, at: data.at });
+        return;
+      }
+      if (data.type === "trade-completed") {
+        setTradeCompleted({ userIds: data.userIds, at: data.at });
+        return;
+      }
+      if (data.type === "pods-updated") {
+        setPodsUpdate({ userId: data.userId, pods: data.pods, at: Date.now() });
+        return;
+      }
       if (data.type === "party-healed") {
         setPartyHealed({ at: Date.now() });
         return;
@@ -413,6 +436,10 @@ export default function AccessSocket({ children }) {
         characterUpdate,
         characterCreated,
         partyHealed,
+        marketChanged,
+        tradeChanged,
+        tradeCompleted,
+        podsUpdate,
         slugUpdate,
         blasterUpdate,
         modUpdate,

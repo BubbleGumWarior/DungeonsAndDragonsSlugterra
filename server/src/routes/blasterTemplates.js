@@ -23,6 +23,7 @@ function toClientTemplate(row) {
     accuracy: row.accuracy,
     reloadApCost: row.reload_ap_cost,
     range: row.range,
+    speed: row.speed,
     modSlots: row.mod_slots,
     magazineSize: row.magazine_size,
     quality: row.quality,
@@ -41,9 +42,9 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const { name, baseType, image, accuracy, reloadApCost, range, modSlots, magazineSize, quality } = req.body || {};
+  const { name, baseType, image, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality } = req.body || {};
 
-  const validation = validateBlasterFields({ name, baseType, image, accuracy, reloadApCost, range, modSlots, magazineSize, quality });
+  const validation = validateBlasterFields({ name, baseType, image, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality });
   if (!validation.valid) {
     return res.status(400).json({ error: validation.error });
   }
@@ -51,10 +52,10 @@ router.post("/", async (req, res) => {
   try {
     const { rows } = await pool.query(
       `INSERT INTO blaster_templates
-        (name, base_type, image, accuracy, reload_ap_cost, range, mod_slots, magazine_size, quality)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        (name, base_type, image, accuracy, reload_ap_cost, range, speed, mod_slots, magazine_size, quality)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
-      [name.trim(), baseType, image ?? null, accuracy, reloadApCost, range, modSlots, magazineSize, quality]
+      [name.trim(), baseType, image ?? null, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality]
     );
     res.status(201).json({ template: toClientTemplate(rows[0]) });
   } catch (err) {
@@ -65,9 +66,9 @@ router.post("/", async (req, res) => {
 
 router.patch("/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const { name, baseType, image, accuracy, reloadApCost, range, modSlots, magazineSize, quality } = req.body || {};
+  const { name, baseType, image, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality } = req.body || {};
 
-  const validation = validateBlasterFields({ name, baseType, image, accuracy, reloadApCost, range, modSlots, magazineSize, quality });
+  const validation = validateBlasterFields({ name, baseType, image, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality });
   if (!validation.valid) {
     return res.status(400).json({ error: validation.error });
   }
@@ -76,10 +77,10 @@ router.patch("/:id", async (req, res) => {
     const { rows } = await pool.query(
       `UPDATE blaster_templates SET
         name = $1, base_type = $2, image = $3, accuracy = $4, reload_ap_cost = $5,
-        range = $6, mod_slots = $7, magazine_size = $8, quality = $9
-       WHERE id = $10
+        range = $6, speed = $7, mod_slots = $8, magazine_size = $9, quality = $10
+       WHERE id = $11
        RETURNING *`,
-      [name.trim(), baseType, image ?? null, accuracy, reloadApCost, range, modSlots, magazineSize, quality, id]
+      [name.trim(), baseType, image ?? null, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality, id]
     );
     if (!rows[0]) {
       return res.status(404).json({ error: "Template not found." });

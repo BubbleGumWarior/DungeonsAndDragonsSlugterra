@@ -60,6 +60,43 @@ export function scoreLabel(score) {
   return SCORE_BANDS.find((band) => score <= band.max)?.label ?? "Godlike";
 }
 
+// How known a character has become across the galaxy, purely a display
+// concern -- the server only ever stores/validates the raw Fame integer
+// (see characters.js), nothing server-side branches on the tier itself.
+// Thresholds/titles are placeholders, same spirit as SCORE_BANDS above --
+// easy to retune once real Fame numbers are seen in play.
+const FAME_TIERS = [
+  { max: 9, label: "Unknown" },
+  { max: 24, label: "Local Face" },
+  { max: 49, label: "Barfly Legend" },
+  { max: 89, label: "Known Troublemaker" },
+  { max: 149, label: "Wanted Rebel" },
+  { max: 229, label: "Freedom Fighter" },
+  { max: 329, label: "Sector Celebrity" },
+  { max: 449, label: "Sector Legend" },
+  { max: 599, label: "Galactic Icon" },
+  { max: Infinity, label: "Living Legend" },
+];
+
+export function fameTierLabel(fame) {
+  return FAME_TIERS.find((band) => fame <= band.max)?.label ?? "Living Legend";
+}
+
+// Heat's color is a literal temperature gauge -- always this exact
+// blue-to-red gradient, deliberately fixed rather than pulled from the
+// table's --maroon-* accent theme (see index.css's per-theme overrides),
+// since "how much danger you're in" shouldn't repaint just because the DM
+// picked teal in Settings.
+const HEAT_COOL_RGB = [56, 132, 244]; // a clean, icy blue
+const HEAT_HOT_RGB = [156, 32, 51]; // the burgundy red the table already knows as "danger"
+export const HEAT_MAX = 5000;
+
+export function heatColor(heat) {
+  const t = Math.max(0, Math.min(1, (heat ?? 0) / HEAT_MAX));
+  const rgb = HEAT_COOL_RGB.map((cool, i) => Math.round(cool + (HEAT_HOT_RGB[i] - cool) * t));
+  return `rgb(${rgb.join(", ")})`;
+}
+
 export const TOTAL_STAT_POINTS = 27;
 export const MIN_STAT = 8;
 export const MAX_STAT = 15;

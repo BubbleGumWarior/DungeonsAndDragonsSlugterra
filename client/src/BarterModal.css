@@ -1,0 +1,222 @@
+.barter-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(5, 5, 7, 0.72);
+  backdrop-filter: blur(3px);
+  animation: barter-fade 0.2s var(--ease-out);
+}
+
+@keyframes barter-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.barter-card {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  padding: 22px;
+  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 75%);
+  border: 1px solid var(--gold-dim);
+  border-radius: 16px;
+  box-shadow:
+    0 30px 70px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(201, 162, 75, 0.12);
+  animation: barter-rise 0.3s var(--ease-out);
+}
+
+@keyframes barter-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.barter-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--ink-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.barter-close:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--charcoal-700);
+}
+
+.barter-close:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.barter-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.barter-head-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  font-size: 22px;
+  color: var(--gold);
+  border-radius: 10px;
+  border: 1px solid rgba(201, 162, 75, 0.3);
+  background: radial-gradient(circle, rgba(201, 162, 75, 0.16), transparent 70%);
+}
+
+.barter-kicker {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.barter-title {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--gold-soft);
+}
+
+.barter-rules {
+  margin: 0 0 18px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+}
+
+.barter-rules strong {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.barter-roll,
+.barter-done {
+  width: 100%;
+  justify-content: center;
+}
+
+.barter-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.barter-equation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 92px;
+}
+
+.barter-term {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.barter-term-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.barter-op {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--ink-dim);
+}
+
+.barter-total {
+  font-family: var(--font-display);
+  font-size: 44px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink);
+  animation: barter-pop 0.4s var(--ease-out);
+}
+
+.barter-total--good {
+  color: var(--success);
+}
+
+.barter-total--bad {
+  color: var(--danger);
+}
+
+@keyframes barter-pop {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.barter-outcome {
+  margin: 0;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.barter-outcome--good {
+  color: var(--success);
+}
+
+.barter-outcome--bad {
+  color: var(--danger);
+}
+
+.barter-math {
+  margin: -6px 0 0;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barter-backdrop,
+  .barter-card,
+  .barter-total {
+    animation: none;
+  }
+}

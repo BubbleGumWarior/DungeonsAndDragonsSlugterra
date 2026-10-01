@@ -9,7 +9,7 @@ import "./PlayerInventory.css";
 
 export default function PlayerMechas() {
   const { token, user } = useAuth();
-  const { mechaUpdate, mechaModUpdate } = useLiveState();
+  const { mechaUpdate, mechaModUpdate, tradeCompleted, marketChanged } = useLiveState();
   const [mechas, setMechas] = useState([]);
   const [mods, setMods] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -26,7 +26,8 @@ export default function PlayerMechas() {
         setLoaded(true);
       })
       .catch(() => setLoaded(true));
-  }, [token]);
+    // Trades/purchases move items in bulk -- refetch rather than patch.
+  }, [token, tradeCompleted, marketChanged]);
 
   useEffect(() => {
     if (!mechaUpdate || mechaUpdate.userId !== user?.id) return;

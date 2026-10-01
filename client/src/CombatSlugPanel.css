@@ -144,6 +144,51 @@
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
 
+/* No spare pods: the slug's pod shattered in a misfire and the player has
+   nothing left to put it in. Frosted amber pane, same family as the others. */
+.combat-slug-cooldown-glass--no-pods {
+  flex-direction: column;
+  gap: 4px;
+  background: linear-gradient(160deg, rgba(224, 161, 60, 0.2), rgba(255, 255, 255, 0.03) 60%);
+  border-color: rgba(224, 161, 60, 0.45);
+}
+
+.combat-slug-no-pods-icon {
+  width: 26px;
+  height: 26px;
+  color: #e0a13c;
+  filter: drop-shadow(0 0 5px rgba(224, 161, 60, 0.6));
+}
+
+.combat-slug-no-pods-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #e0a13c;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+/* Spare-pod count chip in the panel header. */
+.combat-slug-panel-pods {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--gold-soft);
+  background: var(--charcoal-800);
+  border: 1px solid var(--charcoal-600);
+  border-radius: 999px;
+}
+
+.combat-slug-panel-pods--empty {
+  color: var(--danger);
+  border-color: rgba(255, 122, 107, 0.4);
+}
+
 @keyframes combat-slug-cooldown-pulse {
   0%,
   100% {

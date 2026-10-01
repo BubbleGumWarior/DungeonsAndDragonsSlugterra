@@ -4,6 +4,7 @@ import {
   BASE_TYPE_EFFECT_NOTES,
   effectiveAccuracy,
   effectiveReloadApCost,
+  effectiveSpeed,
   formatSigned,
   qualityColor,
   qualityInfo,
@@ -30,6 +31,7 @@ export default function BlasterCard({
   const quality = qualityInfo(blaster.quality);
   const accuracy = effectiveAccuracy(blaster, equippedMods);
   const reloadApCost = effectiveReloadApCost(blaster, equippedMods);
+  const speed = effectiveSpeed(blaster, equippedMods);
   const openSlots = Math.max(0, blaster.modSlots - equippedMods.length);
   const equipSlotLabel = blaster.equipSlot != null ? EQUIP_SLOT_LABELS[blaster.equipSlot] : null;
   const canDropMods = editableSlots && Boolean(onDropMod);
@@ -85,6 +87,10 @@ export default function BlasterCard({
         <div className="blaster-card-stat">
           <span className="blaster-card-stat-value">{blaster.range}</span>
           <span className="blaster-card-stat-label">Range</span>
+        </div>
+        <div className="blaster-card-stat">
+          <span className="blaster-card-stat-value">{speed}</span>
+          <span className="blaster-card-stat-label">Speed</span>
         </div>
         <div className="blaster-card-stat">
           <span className="blaster-card-stat-value">{blaster.magazineSize}</span>

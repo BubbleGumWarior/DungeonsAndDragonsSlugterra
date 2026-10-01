@@ -165,3 +165,10 @@
   border-color: transparent;
   font-weight: 800;
 }
+
+.mod-card-bonus--range {
+  color: #062226;
+  background: linear-gradient(90deg, #67e8f9, #5eead4);
+  border-color: transparent;
+  font-weight: 800;
+}

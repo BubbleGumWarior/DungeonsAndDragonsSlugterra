@@ -12,6 +12,8 @@ import {
   MOD_SLOTS_MAX,
   RANGE_MIN,
   RANGE_MAX,
+  SPEED_MIN,
+  SPEED_MAX,
   defaultBlasterFields,
 } from "./itemData.js";
 import "./SlugForm.css";
@@ -44,7 +46,15 @@ export default function BlasterForm({ mode, initialValues, players, onSubmit, on
       const next = { ...prev, [key]: value };
       if (key === "baseType" && mode !== "instance") {
         const base = BASE_TYPES[value];
-        return { ...next, accuracy: base.accuracy, reloadApCost: base.reloadApCost, range: base.range, modSlots: base.modSlots, magazineSize: base.magazineSize };
+        return {
+          ...next,
+          accuracy: base.accuracy,
+          reloadApCost: base.reloadApCost,
+          range: base.range,
+          speed: base.speed,
+          modSlots: base.modSlots,
+          magazineSize: base.magazineSize,
+        };
       }
       return next;
     });
@@ -117,6 +127,14 @@ export default function BlasterForm({ mode, initialValues, players, onSubmit, on
         <Stepper label="Accuracy" value={fields.accuracy} min={STAT_MIN} max={STAT_MAX} onChange={(v) => update("accuracy", v)} />
         <Stepper label="Reload AP Cost" value={fields.reloadApCost} min={1} max={STAT_MAX} onChange={(v) => update("reloadApCost", v)} />
         <Stepper label="Range" value={fields.range} min={Math.max(1, RANGE_MIN)} max={RANGE_MAX} step={10} onChange={(v) => update("range", v)} />
+        <Stepper
+          label="Speed"
+          value={fields.speed}
+          min={Math.max(1, SPEED_MIN)}
+          max={SPEED_MAX}
+          step={4}
+          onChange={(v) => update("speed", v)}
+        />
         <Stepper label="Magazine Size" value={fields.magazineSize} min={1} max={STAT_MAX} onChange={(v) => update("magazineSize", v)} />
         <Stepper label="Mod Slots" value={fields.modSlots} min={MOD_SLOTS_MIN} max={MOD_SLOTS_MAX} onChange={(v) => update("modSlots", v)} />
       </div>

@@ -1,14 +1,18 @@
 // Range values are on the same 25x scale as TYPE_BALLISTICS in
-// server/src/combatRules.js -- see RANGE_SCALE there.
+// server/src/combatRules.js -- see RANGE_SCALE there. Mirrors
+// server/src/itemRules.js's BASE_TYPES -- keep the two in sync.
+// `speed` (map units/second) is the bolt's own actual travel speed --
+// separate from `range`, which only decides how far a shot can reach.
+// Editable per-instance same as range (see BlasterForm.jsx).
 export const BASE_TYPES = {
-  Pistol: { accuracy: 1, reloadApCost: 1, range: 4 * 25, modSlots: 2, magazineSize: 6 },
-  Revolver: { accuracy: 3, reloadApCost: 2, range: 5 * 25, modSlots: 2, magazineSize: 6 },
-  Repeater: { accuracy: 1, reloadApCost: 3, range: 6 * 25, modSlots: 3, magazineSize: 10 },
-  Bow: { accuracy: 2, reloadApCost: 1, range: 7 * 25, modSlots: 4, magazineSize: 1 },
-  Gatling: { accuracy: -2, reloadApCost: 5, range: 4 * 25, modSlots: 4, magazineSize: 20 },
-  Cannon: { accuracy: -2, reloadApCost: 3, range: 3 * 25, modSlots: 3, magazineSize: 1 },
-  "Twin Slinger": { accuracy: 0, reloadApCost: 2, range: 3 * 25, modSlots: 4, magazineSize: 12 },
-  "Sniper Rig": { accuracy: 4, reloadApCost: 2, range: 10 * 25, modSlots: 4, magazineSize: 4 },
+  Pistol: { accuracy: 1, reloadApCost: 1, range: 7 * 25, speed: 7 * 8, modSlots: 2, magazineSize: 6 },
+  Revolver: { accuracy: 3, reloadApCost: 2, range: 9 * 25, speed: 9 * 8, modSlots: 2, magazineSize: 6 },
+  Repeater: { accuracy: 1, reloadApCost: 3, range: 11 * 25, speed: 11 * 8, modSlots: 3, magazineSize: 10 },
+  Bow: { accuracy: 2, reloadApCost: 1, range: 13 * 25, speed: 13 * 8, modSlots: 4, magazineSize: 1 },
+  Gatling: { accuracy: -2, reloadApCost: 5, range: 7 * 25, speed: 7 * 8, modSlots: 4, magazineSize: 20 },
+  Cannon: { accuracy: -2, reloadApCost: 3, range: 5 * 25, speed: 5 * 8, modSlots: 3, magazineSize: 1 },
+  "Twin Slinger": { accuracy: 0, reloadApCost: 2, range: 5 * 25, speed: 5 * 8, modSlots: 4, magazineSize: 12 },
+  "Sniper Rig": { accuracy: 4, reloadApCost: 2, range: 18 * 25, speed: 18 * 8, modSlots: 4, magazineSize: 4 },
 };
 
 // A few base types carry a combat effect beyond their raw stats (resolved
@@ -47,6 +51,15 @@ export const MOD_SLOTS_MAX = 10;
 // accuracy or mod slots. Mirrors RANGE_MIN/RANGE_MAX in server/itemRules.js.
 export const RANGE_MIN = 0;
 export const RANGE_MAX = 3000;
+// Speed (map units/second) -- must be positive. Mirrors SPEED_MIN/SPEED_MAX
+// in server/itemRules.js.
+export const SPEED_MIN = 1;
+export const SPEED_MAX = 2000;
+// A mod's speed bonus lives on the same rough scale as blaster.speed itself
+// (tens, not the small -10..20 accuracy/reload bonus range). Mirrors
+// SPEED_BONUS_MIN/SPEED_BONUS_MAX in server/itemRules.js.
+export const SPEED_BONUS_MIN = -100;
+export const SPEED_BONUS_MAX = 100;
 
 export function qualityInfo(tier) {
   return QUALITY_TIERS[tier] ?? QUALITY_TIERS[0];
@@ -67,6 +80,13 @@ export function effectiveReloadApCost(blaster, equippedMods) {
   return Math.max(1, blaster.reloadApCost + modBonus);
 }
 
+// Mirrors the server's blasterEffectiveSpeed (routes/combat.js) -- a real,
+// applied bonus (drives actual shot timing), not just a cosmetic number.
+export function effectiveSpeed(blaster, equippedMods) {
+  const modBonus = equippedMods.reduce((sum, m) => sum + (m.speedBonus || 0), 0);
+  return Math.max(1, blaster.speed + modBonus);
+}
+
 export function defaultBlasterFields(baseType = BASE_TYPE_KEYS[0]) {
   const base = BASE_TYPES[baseType];
   return {
@@ -76,6 +96,7 @@ export function defaultBlasterFields(baseType = BASE_TYPE_KEYS[0]) {
     accuracy: base.accuracy,
     reloadApCost: base.reloadApCost,
     range: base.range,
+    speed: base.speed,
     modSlots: base.modSlots,
     magazineSize: base.magazineSize,
     quality: 0,
@@ -88,6 +109,8 @@ export function defaultModFields() {
     effect: "",
     accuracyBonus: 0,
     reloadApBonus: 0,
+    speedBonus: 0,
     grantsDualShot: false,
+    grantsRangeFinder: false,
   };
 }

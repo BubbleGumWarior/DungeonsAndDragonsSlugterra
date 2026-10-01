@@ -12,7 +12,7 @@ const SLOT_LABELS = ["Primary", "Secondary"];
 
 export default function PlayerSlugs() {
   const { token, user } = useAuth();
-  const { slugUpdate, blasterUpdate, partyHealed } = useLiveState();
+  const { slugUpdate, blasterUpdate, partyHealed, tradeCompleted, marketChanged } = useLiveState();
   const [slugs, setSlugs] = useState([]);
   const [blasters, setBlasters] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -36,7 +36,8 @@ export default function PlayerSlugs() {
         setLoaded(true);
       })
       .catch(() => setLoaded(true));
-  }, [token]);
+    // Trades/purchases move items in bulk -- refetch rather than patch.
+  }, [token, tradeCompleted, marketChanged]);
 
   useEffect(() => {
     if (!slugUpdate || slugUpdate.userId !== user?.id) return;

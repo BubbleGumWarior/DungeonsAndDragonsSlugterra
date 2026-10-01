@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { HeartStraightIcon, UserCircleIcon, UsersThreeIcon } from "@phosphor-icons/react";
+import { FireIcon, HeartStraightIcon, UserCircleIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
-import { maxGrit } from "./characterData.js";
+import { heatColor, maxGrit } from "./characterData.js";
 import KnockoutPips from "./KnockoutPips.jsx";
 import GritRing from "./GritRing.jsx";
 import "./Panel.css";
@@ -50,6 +50,8 @@ export default function Roster({ selectable = false, selectedUserId, onSelect, h
               knockoutPips: characterUpdate.character.knockoutPips,
               currentGrit: characterUpdate.character.currentGrit,
               maxGrit: maxGrit(characterUpdate.character.stats),
+              fame: characterUpdate.character.fame,
+              heat: characterUpdate.character.heat,
             }
           : c
       )
@@ -139,6 +141,12 @@ export default function Roster({ selectable = false, selectedUserId, onSelect, h
                 />
               </span>
               <span className="roster-name">{character.name}</span>
+              {character.heat > 0 && (
+                <span className="roster-heat" title="Heat" style={{ color: heatColor(character.heat) }}>
+                  <FireIcon weight="fill" />
+                  {character.heat}
+                </span>
+              )}
             </div>
           );
         })}

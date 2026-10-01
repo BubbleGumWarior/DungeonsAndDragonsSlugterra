@@ -9,7 +9,7 @@ import {
 } from "../characterRules.js";
 import { broadcastAll } from "../ws.js";
 import { toClientSlug } from "./slugs.js";
-import { getActiveEncounterRow, broadcastEncounter } from "./combat.js";
+import { getActiveEncounterRow, broadcastEncounter, grantFame } from "./combat.js";
 import { syncTempoAura } from "../slugAura.js";
 
 const router = Router();
@@ -33,6 +33,10 @@ function toClientCharacter(row) {
     proficiencies: row.proficiencies,
     knockoutPips: row.knockout_pips,
     currentGrit: row.current_grit,
+    fame: row.fame,
+    heat: row.heat,
+    credits: row.credits,
+    pods: row.pods,
     createdAt: row.created_at,
   };
 }
@@ -40,7 +44,7 @@ function toClientCharacter(row) {
 router.get("/", async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT id, user_id, name, portrait, knockout_pips, stats, current_grit FROM characters ORDER BY created_at ASC"
+      "SELECT id, user_id, name, portrait, knockout_pips, stats, current_grit, fame, heat FROM characters ORDER BY created_at ASC"
     );
     res.json({
       characters: rows.map((row) => ({
@@ -51,6 +55,8 @@ router.get("/", async (req, res) => {
         knockoutPips: row.knockout_pips,
         currentGrit: row.current_grit,
         maxGrit: computeMaxGrit(row.stats),
+        fame: row.fame,
+        heat: row.heat,
       })),
     });
   } catch (err) {
@@ -219,6 +225,11 @@ router.post("/heal-all", requireDungeonMaster, async (req, res) => {
 
     // A rest also refreshes everyone's once-per-rest Slug Hunt attempt.
     await pool.query("DELETE FROM slug_hunt_locks");
+    // ...and settles the markets: everyone may haggle again, and any planet-wide
+    // markup from a poor barter roll wears off.
+    await pool.query("DELETE FROM market_barters");
+    await pool.query("UPDATE planet_markets SET barter_pct = 0");
+    broadcastAll({ type: "market-changed", at: Date.now() });
     broadcastAll({ type: "slug-hunt-lock", all: true, locked: false });
 
     const activeEncounter = await getActiveEncounterRow();
@@ -272,6 +283,66 @@ router.patch("/:userId/grit", requireDungeonMaster, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not update current Grit." });
+  }
+});
+
+// DM manual Fame override, on top of the automatic combat hook (see
+// grantFame in combat.js). Takes the absolute next value (same convention as
+// /grit above) and routes the positive/negative delta through grantFame so
+// an increase mirrors into Heat exactly the same way an automatic combat
+// award would -- there's only ever one place Heat's mirroring happens.
+router.patch("/:userId/fame", requireDungeonMaster, async (req, res) => {
+  const userId = Number(req.params.userId);
+  const { fame } = req.body || {};
+
+  if (!Number.isInteger(fame) || fame < 0) {
+    return res.status(400).json({ error: "Fame must be a non-negative integer." });
+  }
+
+  try {
+    const existing = await pool.query("SELECT * FROM characters WHERE user_id = $1", [userId]);
+    if (!existing.rows[0]) {
+      return res.status(404).json({ error: "Character not found." });
+    }
+
+    const delta = fame - existing.rows[0].fame;
+    if (delta === 0) {
+      return res.json({ character: toClientCharacter(existing.rows[0]) });
+    }
+
+    const updated = await grantFame(userId, delta);
+    if (!updated) {
+      return res.status(404).json({ error: "Character not found." });
+    }
+    res.json({ character: toClientCharacter(updated) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not update Fame." });
+  }
+});
+
+// DM manual Heat override -- a free +/- on top of Heat's automatic
+// mirroring of Fame gains (see grantFame in combat.js). Never touches Fame
+// in either direction; this is purely the DM's own dial.
+router.patch("/:userId/heat", requireDungeonMaster, async (req, res) => {
+  const userId = Number(req.params.userId);
+  const { heat } = req.body || {};
+
+  if (!Number.isInteger(heat) || heat < 0) {
+    return res.status(400).json({ error: "Heat must be a non-negative integer." });
+  }
+
+  try {
+    const { rows } = await pool.query("UPDATE characters SET heat = $1 WHERE user_id = $2 RETURNING *", [heat, userId]);
+    if (!rows[0]) {
+      return res.status(404).json({ error: "Character not found." });
+    }
+    const character = toClientCharacter(rows[0]);
+    broadcastAll({ type: "character-updated", userId, character });
+    res.json({ character });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not update Heat." });
   }
 });
 

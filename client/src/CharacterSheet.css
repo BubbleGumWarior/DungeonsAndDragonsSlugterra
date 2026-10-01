@@ -177,6 +177,71 @@
   white-space: nowrap;
 }
 
+.sheet-fame {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 26px;
+}
+
+/* The DM's quick-edit rows (see FameHeatStepper) in place of the two
+   read-only tiles above -- same outer card treatment, stacked instead of
+   side-by-side since each row now carries its own +/- and edit controls. */
+.sheet-fame--editable {
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 14px;
+  border-radius: 10px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+}
+
+.sheet-fame--editable .fame-heat-row {
+  margin-top: 0;
+  padding: 8px 0;
+}
+
+.sheet-fame--editable .fame-heat-row + .fame-heat-row {
+  border-top: 1px solid var(--charcoal-700);
+}
+
+.sheet-fame-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+}
+
+.sheet-fame-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--gold-soft);
+}
+
+/* Color set inline per character (see heatColor in characterData.js) -- a
+   fixed blue-to-red temperature gauge, not the table's --maroon-* theme. */
+.sheet-fame-value--heat svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.sheet-fame-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--ink-dim);
+  text-align: center;
+}
+
 .sheet-columns {
   display: flex;
   flex-direction: column;

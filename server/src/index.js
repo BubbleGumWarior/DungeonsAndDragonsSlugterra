@@ -29,6 +29,8 @@ import slugpediaRouter from "./routes/slugpedia.js";
 import slugHuntRouter from "./routes/slugHunt.js";
 import shipsRouter from "./routes/ships.js";
 import voiceRouter from "./routes/voice.js";
+import marketRouter from "./routes/market.js";
+import tradesRouter from "./routes/trades.js";
 import imagesRouter from "./routes/images.js";
 import { imageMiddleware } from "./imageStore.js";
 import { requireAuth } from "./middleware/auth.js";
@@ -69,6 +71,8 @@ app.use("/api/slugpedia", slugpediaRouter);
 app.use("/api/slug-hunt", slugHuntRouter);
 app.use("/api/ships", shipsRouter);
 app.use("/api/voice", voiceRouter);
+app.use("/api/market", marketRouter);
+app.use("/api/trades", tradesRouter);
 
 app.get("/api/presence/online", requireAuth, (req, res) => {
   res.json({ onlineUserIds: getOnlineUserIds() });

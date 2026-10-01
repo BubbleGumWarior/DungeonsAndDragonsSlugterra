@@ -65,10 +65,12 @@
   border-radius: 20px;
 }
 
+/* contain, not cover: show the whole picture at its own aspect ratio and let
+   the face's dark background fill the leftover space as a letterbox. */
 .slug-image-face img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .slug-image-face svg {

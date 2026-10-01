@@ -21,7 +21,9 @@ function toClientTemplate(row) {
     effect: row.effect,
     accuracyBonus: row.accuracy_bonus,
     reloadApBonus: row.reload_ap_bonus,
+    speedBonus: row.speed_bonus,
     grantsDualShot: Boolean(row.grants_dual_shot),
+    grantsRangeFinder: Boolean(row.grants_range_finder),
     createdAt: row.created_at,
   };
 }
@@ -37,19 +39,19 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const { name, effect, accuracyBonus, reloadApBonus, grantsDualShot } = req.body || {};
+  const { name, effect, accuracyBonus, reloadApBonus, speedBonus, grantsDualShot, grantsRangeFinder } = req.body || {};
 
-  const validation = validateModFields({ name, effect, accuracyBonus, reloadApBonus });
+  const validation = validateModFields({ name, effect, accuracyBonus, reloadApBonus, speedBonus });
   if (!validation.valid) {
     return res.status(400).json({ error: validation.error });
   }
 
   try {
     const { rows } = await pool.query(
-      `INSERT INTO mod_templates (name, effect, accuracy_bonus, reload_ap_bonus, grants_dual_shot)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO mod_templates (name, effect, accuracy_bonus, reload_ap_bonus, speed_bonus, grants_dual_shot, grants_range_finder)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [name.trim(), effect ?? null, accuracyBonus, reloadApBonus, Boolean(grantsDualShot)]
+      [name.trim(), effect ?? null, accuracyBonus, reloadApBonus, speedBonus, Boolean(grantsDualShot), Boolean(grantsRangeFinder)]
     );
     res.status(201).json({ template: toClientTemplate(rows[0]) });
   } catch (err) {
@@ -60,19 +62,20 @@ router.post("/", async (req, res) => {
 
 router.patch("/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const { name, effect, accuracyBonus, reloadApBonus, grantsDualShot } = req.body || {};
+  const { name, effect, accuracyBonus, reloadApBonus, speedBonus, grantsDualShot, grantsRangeFinder } = req.body || {};
 
-  const validation = validateModFields({ name, effect, accuracyBonus, reloadApBonus });
+  const validation = validateModFields({ name, effect, accuracyBonus, reloadApBonus, speedBonus });
   if (!validation.valid) {
     return res.status(400).json({ error: validation.error });
   }
 
   try {
     const { rows } = await pool.query(
-      `UPDATE mod_templates SET name = $1, effect = $2, accuracy_bonus = $3, reload_ap_bonus = $4, grants_dual_shot = $5
-       WHERE id = $6
+      `UPDATE mod_templates SET name = $1, effect = $2, accuracy_bonus = $3, reload_ap_bonus = $4,
+        speed_bonus = $5, grants_dual_shot = $6, grants_range_finder = $7
+       WHERE id = $8
        RETURNING *`,
-      [name.trim(), effect ?? null, accuracyBonus, reloadApBonus, Boolean(grantsDualShot), id]
+      [name.trim(), effect ?? null, accuracyBonus, reloadApBonus, speedBonus, Boolean(grantsDualShot), Boolean(grantsRangeFinder), id]
     );
     if (!rows[0]) {
       return res.status(404).json({ error: "Template not found." });

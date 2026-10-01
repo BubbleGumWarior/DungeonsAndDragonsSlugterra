@@ -15,7 +15,7 @@ function requireDungeonMaster(req, res, next) {
 
 router.use(requireAuth);
 
-function toClientMod(row) {
+export function toClientMod(row) {
   return {
     id: row.id,
     templateId: row.template_id,
@@ -24,7 +24,9 @@ function toClientMod(row) {
     effect: row.effect,
     accuracyBonus: row.accuracy_bonus,
     reloadApBonus: row.reload_ap_bonus,
+    speedBonus: row.speed_bonus,
     grantsDualShot: Boolean(row.grants_dual_shot),
+    grantsRangeFinder: Boolean(row.grants_range_finder),
     equippedBlasterId: row.equipped_blaster_id,
     createdAt: row.created_at,
   };
@@ -51,9 +53,10 @@ router.get("/", requireDungeonMaster, async (req, res) => {
 });
 
 router.post("/", requireDungeonMaster, async (req, res) => {
-  const { userId, templateId, name, effect, accuracyBonus, reloadApBonus, grantsDualShot } = req.body || {};
+  const { userId, templateId, name, effect, accuracyBonus, reloadApBonus, speedBonus, grantsDualShot, grantsRangeFinder } =
+    req.body || {};
 
-  const validation = validateModFields({ name, effect, accuracyBonus, reloadApBonus });
+  const validation = validateModFields({ name, effect, accuracyBonus, reloadApBonus, speedBonus });
   if (!validation.valid) {
     return res.status(400).json({ error: validation.error });
   }
@@ -63,10 +66,20 @@ router.post("/", requireDungeonMaster, async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      `INSERT INTO mods (template_id, user_id, name, effect, accuracy_bonus, reload_ap_bonus, grants_dual_shot)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO mods (template_id, user_id, name, effect, accuracy_bonus, reload_ap_bonus, speed_bonus, grants_dual_shot, grants_range_finder)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-      [Number.isInteger(templateId) ? templateId : null, userId, name.trim(), effect ?? null, accuracyBonus, reloadApBonus, Boolean(grantsDualShot)]
+      [
+        Number.isInteger(templateId) ? templateId : null,
+        userId,
+        name.trim(),
+        effect ?? null,
+        accuracyBonus,
+        reloadApBonus,
+        speedBonus,
+        Boolean(grantsDualShot),
+        Boolean(grantsRangeFinder),
+      ]
     );
 
     const mod = toClientMod(rows[0]);
@@ -80,19 +93,20 @@ router.post("/", requireDungeonMaster, async (req, res) => {
 
 router.patch("/:id", requireDungeonMaster, async (req, res) => {
   const id = Number(req.params.id);
-  const { name, effect, accuracyBonus, reloadApBonus, grantsDualShot } = req.body || {};
+  const { name, effect, accuracyBonus, reloadApBonus, speedBonus, grantsDualShot, grantsRangeFinder } = req.body || {};
 
-  const validation = validateModFields({ name, effect, accuracyBonus, reloadApBonus });
+  const validation = validateModFields({ name, effect, accuracyBonus, reloadApBonus, speedBonus });
   if (!validation.valid) {
     return res.status(400).json({ error: validation.error });
   }
 
   try {
     const { rows } = await pool.query(
-      `UPDATE mods SET name = $1, effect = $2, accuracy_bonus = $3, reload_ap_bonus = $4, grants_dual_shot = $5
-       WHERE id = $6
+      `UPDATE mods SET name = $1, effect = $2, accuracy_bonus = $3, reload_ap_bonus = $4,
+        speed_bonus = $5, grants_dual_shot = $6, grants_range_finder = $7
+       WHERE id = $8
        RETURNING *`,
-      [name.trim(), effect ?? null, accuracyBonus, reloadApBonus, Boolean(grantsDualShot), id]
+      [name.trim(), effect ?? null, accuracyBonus, reloadApBonus, speedBonus, Boolean(grantsDualShot), Boolean(grantsRangeFinder), id]
     );
 
     if (!rows[0]) {

@@ -484,7 +484,17 @@ export default function VoiceChatProvider({ children }) {
     }
 
     function handleKeyDown(e) {
-      if (e.code !== "Space" || e.repeat || isTypingTarget(e.target) || !inCallRef.current) return;
+      // Dodge's own hotkey is Space too (see CounterClashPrompt.jsx) -- back
+      // off push-to-talk while that reaction prompt is open, or a player
+      // dodging would also key up their mic.
+      if (
+        e.code !== "Space" ||
+        e.repeat ||
+        isTypingTarget(e.target) ||
+        !inCallRef.current ||
+        document.body.dataset.counterPromptOpen === "true"
+      )
+        return;
       e.preventDefault();
       setPttHeld(true);
     }

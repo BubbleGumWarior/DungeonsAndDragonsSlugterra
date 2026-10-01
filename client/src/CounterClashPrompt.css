@@ -171,6 +171,16 @@
   width: 100%;
 }
 
+/* No slug type to derive --type-color from -- a distinct gold accent marks
+   it as the other kind of reaction, not just another slug in the list. */
+.counter-prompt-dodge {
+  border-color: var(--gold);
+}
+
+.counter-prompt-dodge .counter-prompt-slug-name {
+  color: var(--gold-soft);
+}
+
 /* The incoming slug's transformed art, so a defender can learn to recognise
    what is coming and how to counter it. Element-coloured frame. */
 .counter-prompt-portrait {

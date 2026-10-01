@@ -359,11 +359,22 @@
 }
 
 .combat-map-range-ring {
-  fill: rgba(201, 162, 75, 0.05);
-  stroke: var(--gold-dim);
-  stroke-width: 1.5;
-  stroke-dasharray: 4 5;
+  fill: rgba(201, 162, 75, 0.1);
+  stroke: var(--gold);
+  stroke-width: 3;
+  stroke-dasharray: 10 6;
   pointer-events: none;
+  animation: combat-range-ring-pulse 2s ease-in-out infinite;
+}
+
+@keyframes combat-range-ring-pulse {
+  0%,
+  100% {
+    stroke-opacity: 1;
+  }
+  50% {
+    stroke-opacity: 0.45;
+  }
 }
 
 /* "Mount" is armed -- how close you must be to board a mecha. */
@@ -621,7 +632,8 @@
 }
 
 .shot-fx-burst--miss,
-.shot-fx-burst--out-of-range {
+.shot-fx-burst--out-of-range,
+.shot-fx-burst--dodged {
   fill: none;
   stroke: var(--fx-color, var(--gold));
   stroke-width: 2;

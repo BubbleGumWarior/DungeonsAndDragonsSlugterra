@@ -32,6 +32,11 @@ export const HUNKER_MIN_AP = 1;
 export const MOUNT_AP_COST = 1;
 export const RAM_AP_COST = 2; // spent from the mecha's AP pool, on the rider's turn
 export const SWITCH_WEAPON_AP_COST = 1;
+// Dodge: a third counter-window reaction alongside firing a counter slug --
+// no slug or energy pip spent, just a flat AP cost out of the defender's
+// leftover AP, spent whether or not the dodge actually succeeds (same rule
+// a slug counter already follows). See resolveDodgeAttempt in combat.js.
+export const DODGE_AP_COST = 1;
 
 // ---- Weapons ------------------------------------------------------------
 
@@ -116,13 +121,14 @@ export function applyLoyaltyToSlug(slug) {
 
 // A slug the DM has flagged mega_morph_allowed can fire a Mega Morph shot in
 // place of a normal Attack: it needs a weapon with at least
-// MEGA_MORPH_MIN_RANGE reach (the blaster's own range, not the type-vs-weapon
-// combinedRange), burns MEGA_MORPH_PIP_COST energy pips instead of one,
-// doubles clash power (stacking multiplicatively with Emberblade's/Meduslug's
-// triple, which apply separately at clash/damage time), and after the usual
-// windup flies twice as fast -- which halves the reaction window, on top of
-// Zeus's ultra_fast halving if it has that too.
-export const MEGA_MORPH_MIN_RANGE = 150;
+// MEGA_MORPH_MIN_SPEED (the blaster's own speed stat, not its range -- a
+// Mega Morph is about how fast the bolt flies, not how far it reaches),
+// burns MEGA_MORPH_PIP_COST energy pips instead of one, doubles clash power
+// (stacking multiplicatively with Emberblade's/Meduslug's triple, which
+// apply separately at clash/damage time), and after the usual windup flies
+// twice as fast -- which halves the reaction window, on top of Zeus's
+// ultra_fast halving if it has that too.
+export const MEGA_MORPH_MIN_SPEED = 100;
 export const MEGA_MORPH_PIP_COST = 3;
 export const MEGA_MORPH_CLASH_MULTIPLIER = 2;
 export const MEGA_MORPH_WINDOW_FACTOR = 0.5;
@@ -214,10 +220,26 @@ export const KNOCKBACK_DISTANCE = 16; // map units a knockback shove covers -- a
 export const KNOCKBACK_SHORT_DISTANCE = KNOCKBACK_DISTANCE; // 16
 export const KNOCKBACK_LARGE_DISTANCE = KNOCKBACK_DISTANCE * 2; // 32
 
+// A successful Dodge sidesteps the defender this far, perpendicular to the
+// attacker->defender line, instead of a knockback's straight shove away from
+// the shooter. Comfortably under AOE_RADIUS (120, below) -- dodging the
+// direct hit deliberately doesn't reliably get you out of a blast too.
+export const DODGE_SIDESTEP_DISTANCE = 40;
+
 // A knockback hit that lands on a mounted rider has this chance of jarring
 // them clean out of the saddle -- the shove throws the rider, the mecha stays
 // put (see the dismount roll in dealHit's knockback block).
 export const KNOCKBACK_DISMOUNT_CHANCE = 0.6;
+
+// ---- Fame -----------------------------------------------------------------
+
+// A successful Dodge is the flashier of the two counter-window reactions --
+// its flat Fame award is deliberately larger than a *typical* won
+// counter-clash's margin bonus (see resolveCounterOffer's clashMargin in
+// combat.js, which has no fixed constant of its own -- it's just the raw
+// power-over-defense gap of whichever side won). Placeholder, tune once real
+// clash margins are seen in play.
+export const DODGE_FAME_BONUS = 8;
 
 export function slugKnockbackDistance(type, causesKnockback) {
   if (type === "Metal") return causesKnockback ? KNOCKBACK_SHORT_DISTANCE * 2 : KNOCKBACK_SHORT_DISTANCE;
@@ -545,23 +567,33 @@ export function pointInBridge(point, bridge) {
 // Slug type ballistics table -- see docs/combat-system-design.md §4.
 // Kept in sync with the DM's planned roster (docs/Slugs - OG Slugs.csv):
 // exactly these 16 types, no more, no less.
+//
+// Ranges halved from their original tuning (Air was 32, Earth 16, etc.) --
+// a type's own reach used to be able to override a much shorter-ranged
+// weapon's reach entirely (combinedRange took the max of the two), which
+// let a slow, short-range Pistol fire a long-reach type clear across the
+// map at a snail's pace. combinedRange (routes/combat.js) now takes the
+// *lower* of the two instead, so a type's range only ever matters as a
+// hard ceiling under its own weapon's reach -- halving these keeps that
+// ceiling meaningfully tighter than a Sniper Rig's own 450-unit range (see
+// BASE_TYPES in itemRules.js) rather than trivially always losing to it.
 export const TYPE_BALLISTICS = {
-  Air: { range: 32 * RANGE_SCALE, accuracyMod: 2, powerMod: 0, reactionSpeed: "Fast", trait: null },
-  Dark: { range: 20 * RANGE_SCALE, accuracyMod: -1, powerMod: 0, reactionSpeed: "Medium", trait: "phase" },
-  Earth: { range: 16 * RANGE_SCALE, accuracyMod: -2, powerMod: 1, reactionSpeed: "Slow", trait: "knockback-large" },
-  Electricity: { range: 22 * RANGE_SCALE, accuracyMod: 1, powerMod: 0, reactionSpeed: "Fast", trait: "chain" },
-  Energy: { range: 20 * RANGE_SCALE, accuracyMod: 1, powerMod: 0, reactionSpeed: "Fast", trait: "recharge" },
-  Fire: { range: 18 * RANGE_SCALE, accuracyMod: 2, powerMod: 0, reactionSpeed: "Fast", trait: "burn" },
-  Healing: { range: 18 * RANGE_SCALE, accuracyMod: 1, powerMod: 0, reactionSpeed: "Medium", trait: "heal" },
-  Ice: { range: 20 * RANGE_SCALE, accuracyMod: 0, powerMod: 0, reactionSpeed: "Medium", trait: "ice" },
-  Light: { range: 28 * RANGE_SCALE, accuracyMod: 3, powerMod: -2, reactionSpeed: "Very fast", trait: "blind" },
-  Metal: { range: 18 * RANGE_SCALE, accuracyMod: 0, powerMod: 1, reactionSpeed: "Slow", trait: "knockback-short" },
-  None: { range: 10 * RANGE_SCALE, accuracyMod: -5, powerMod: -10, reactionSpeed: "Slow", trait: "dud" },
-  Plant: { range: 18 * RANGE_SCALE, accuracyMod: -1, powerMod: 0, reactionSpeed: "Slow", trait: "snare" },
-  Psychic: { range: 18 * RANGE_SCALE, accuracyMod: 0, powerMod: -2, reactionSpeed: "Medium", trait: "stun" },
-  Toxic: { range: 20 * RANGE_SCALE, accuracyMod: 1, powerMod: -1, reactionSpeed: "Medium", trait: "poison" },
-  Unique: { range: 20 * RANGE_SCALE, accuracyMod: 0, powerMod: 0, reactionSpeed: "Medium", trait: null },
-  Water: { range: 24 * RANGE_SCALE, accuracyMod: 1, powerMod: 0, reactionSpeed: "Medium", trait: "douse" },
+  Air: { range: 16 * RANGE_SCALE, accuracyMod: 2, powerMod: 0, reactionSpeed: "Fast", trait: null },
+  Dark: { range: 10 * RANGE_SCALE, accuracyMod: -1, powerMod: 0, reactionSpeed: "Medium", trait: "phase" },
+  Earth: { range: 8 * RANGE_SCALE, accuracyMod: -2, powerMod: 1, reactionSpeed: "Slow", trait: "knockback-large" },
+  Electricity: { range: 11 * RANGE_SCALE, accuracyMod: 1, powerMod: 0, reactionSpeed: "Fast", trait: "chain" },
+  Energy: { range: 10 * RANGE_SCALE, accuracyMod: 1, powerMod: 0, reactionSpeed: "Fast", trait: "recharge" },
+  Fire: { range: 9 * RANGE_SCALE, accuracyMod: 2, powerMod: 0, reactionSpeed: "Fast", trait: "burn" },
+  Healing: { range: 9 * RANGE_SCALE, accuracyMod: 1, powerMod: 0, reactionSpeed: "Medium", trait: "heal" },
+  Ice: { range: 10 * RANGE_SCALE, accuracyMod: 0, powerMod: 0, reactionSpeed: "Medium", trait: "ice" },
+  Light: { range: 14 * RANGE_SCALE, accuracyMod: 3, powerMod: -2, reactionSpeed: "Very fast", trait: "blind" },
+  Metal: { range: 9 * RANGE_SCALE, accuracyMod: 0, powerMod: 1, reactionSpeed: "Slow", trait: "knockback-short" },
+  None: { range: 5 * RANGE_SCALE, accuracyMod: -5, powerMod: -10, reactionSpeed: "Slow", trait: "dud" },
+  Plant: { range: 9 * RANGE_SCALE, accuracyMod: -1, powerMod: 0, reactionSpeed: "Slow", trait: "snare" },
+  Psychic: { range: 9 * RANGE_SCALE, accuracyMod: 0, powerMod: -2, reactionSpeed: "Medium", trait: "stun" },
+  Toxic: { range: 10 * RANGE_SCALE, accuracyMod: 1, powerMod: -1, reactionSpeed: "Medium", trait: "poison" },
+  Unique: { range: 10 * RANGE_SCALE, accuracyMod: 0, powerMod: 0, reactionSpeed: "Medium", trait: null },
+  Water: { range: 12 * RANGE_SCALE, accuracyMod: 1, powerMod: 0, reactionSpeed: "Medium", trait: "douse" },
 };
 
 export function typeBallistics(type) {
@@ -777,56 +809,72 @@ export function rangePenalty(dist, weaponRange) {
 
 // ---- Counter-clash --------------------------------------------------------
 
-// A shot's flight is a fixed two-phase animation, the same for every shot
-// (no more type/quality/dex-driven variability): it crawls out slowly, then
-// "transforms" and covers the rest of the distance in a flat
-// SHOT_FAST_PHASE_MS burst -- while the launch sound (public/slugterra-
-// velocity.mp3, ~1.83s, SHOT_SOUND_MS) is still playing for its last
-// SHOT_TRANSFORM_LEAD_MS, not waiting for the sound to finish first. Mirrors
-// client/src/CombatMap.jsx -- keep the numbers in sync.
+// A shot's flight has a fixed windup beat, the same for every shot (no more
+// type/quality/dex-driven variability): it crawls out slowly, then
+// "transforms" and blazes the rest of the way -- while the launch sound
+// (public/slugterra-velocity.mp3, ~1.83s, SHOT_SOUND_MS) is still playing
+// for its last SHOT_TRANSFORM_LEAD_MS, not waiting for the sound to finish
+// first. Mirrors client/src/CombatMap.jsx -- keep the numbers in sync.
 export const SHOT_SOUND_MS = 1830;
 export const SHOT_TRANSFORM_LEAD_MS = 1000;
 export const SHOT_SLOW_PHASE_MS = SHOT_SOUND_MS - SHOT_TRANSFORM_LEAD_MS; // 830ms
-export const SHOT_FAST_PHASE_MS = 2500; // +1000ms over the original 1500 -- gives the reaction window (below) another second too
-// Total time a shot's bolt takes to reach its target, start to impact.
-export const SHOT_FLIGHT_MS = SHOT_SLOW_PHASE_MS + SHOT_FAST_PHASE_MS; // 3330ms
 
-// The defender's reaction window always runs the entire flight -- a
-// defender can wait right up until the shot would actually land, and never
-// past it, since there's nothing left to react to once it's already hit.
-export const COUNTER_WINDOW_MS = SHOT_FLIGHT_MS; // 3330ms
-
-// A shot's *actual* flight time (and so its reaction window, which always
-// matches it) is driven by the equipped weapon's own default speed: a shot
-// at exactly the weapon's max range takes the full COUNTER_WINDOW_MS (the
-// old fixed duration every shot used to take, no matter its distance) --
-// so that duration *is* "how long it takes to cross this weapon's max
-// range" now, and anything closer arrives faster. A long-reach weapon (e.g.
-// a Sniper Rig) is therefore a strictly faster weapon than a short-reach one
-// at the same absolute distance, not just a farther-reaching one. Scales on
-// the weapon's own range, not the type-vs-weapon combinedRange used for
-// reach -- that's what actually ties *speed* specifically to the equipped
-// weapon. Never exceeds the full COUNTER_WINDOW_MS (a shot can't outrange
-// its own weapon here); there's no floor at the close end any more -- see
-// shotTooClose below for what replaces it.
-export function shotFlightMs(dist, weaponRange) {
-  const fraction = Math.min(1, dist / Math.max(1, weaponRange));
-  return Math.round(COUNTER_WINDOW_MS * fraction);
+// A weapon's projectile speed is its own explicit, DM-set stat now
+// (blaster.speed, map units/second -- see BASE_TYPES in itemRules.js for
+// defaults, editable per-instance just like range), not something derived
+// from the weapon's range. Range only ever decides how FAR a shot can reach
+// (combinedRange in routes/combat.js); speed is entirely separate, so a DM
+// can build e.g. a long-ranged but slow siege weapon, or a short-ranged but
+// blistering-fast one. `slug` lets a genuine speed trait -- Zeus's
+// ultra_fast, a Mega Morph -- speed the bolt up further still (the same
+// factor slugWindowFactor already applied to the old whole-window shrink).
+export function shotEffectiveSpeed(blasterSpeed, slug) {
+  const perMs = Math.max(0.001, blasterSpeed) / 1000;
+  return perMs / slugWindowFactor(slug);
 }
 
-// The slug's windup -- the slow crawl out of the blaster, SHOT_SLOW_PHASE_MS
-// -- is a fixed animation beat, never compressed to fit a shorter flight.
-// That means there's a hard floor on how close a target can be and still
-// get a normal shot: if the weapon's default speed would cross the distance
-// in less time than the windup alone takes, the slug would have to land
-// before it even finishes leaving the barrel. Rather than compress the
-// windup (breaking the "always constant" rule) or let the shot land
-// instantly, that shot just fails outright -- too close, full stop. Checked
-// against the raw distance-based flight time, not the target's own
-// reaction-window modifiers (ultra_fast/reactionWindowFactor) -- those
-// change how hard the shot is to react to, not the physical travel time.
-export function shotTooClose(dist, weaponRange) {
-  return shotFlightMs(dist, weaponRange) < SHOT_SLOW_PHASE_MS;
+// The bolt moves at that one constant (effective) speed for its *entire*
+// flight -- no separate "slow" vs "fast" speed any more -- so the windup
+// simply covers whatever ground SHOT_SLOW_PHASE_MS's worth of that speed
+// crosses. This is a fixed distance for a given weapon+slug pairing, not a
+// fraction of range or of this particular shot's distance.
+export function shotWindupDistance(blasterSpeed, slug) {
+  return shotEffectiveSpeed(blasterSpeed, slug) * SHOT_SLOW_PHASE_MS;
+}
+
+// Point-blank failure: if the target is within the ground the weapon's own
+// windup alone would cross, the slug would have to land before it's even
+// done leaving the barrel. The windup never compresses to make room -- that
+// shot just fails outright instead, too close, full stop. Checked against
+// the raw distance, not the target's own reaction-window modifiers
+// (reactionWindowFactor) -- those change how hard the shot is to react to,
+// not the physical travel time.
+export function shotTooClose(dist, blasterSpeed, slug) {
+  return dist <= shotWindupDistance(blasterSpeed, slug);
+}
+
+// A shot's actual flight time: since the bolt moves at one constant speed
+// for the whole trip, this is simply dist / speed -- there's no
+// windup-vs-cruise split to reason about for *timing* any more (that split
+// is purely a client-side rendering/flavor detail now, see
+// shotDistanceFraction). Two shots from the same weapon+slug, one close and
+// one far -- even one that reaches past the weapon's own range on a slug
+// type's added reach, see combinedRange -- always cross ground at the same
+// rate; the close one just has less of it to cross, hence a shorter flight
+// and a shorter reaction window, without the bolt itself ever moving any
+// differently.
+export function shotFlightMs(dist, blasterSpeed, slug) {
+  return Math.round(dist / shotEffectiveSpeed(blasterSpeed, slug));
+}
+
+// Fraction of a shot's own total distance covered during its windup --
+// used to place the bolt correctly mid-flight (shotDistanceFraction below,
+// and its client mirror in CombatMap.jsx). A far shot's windup is a small
+// sliver of its whole trip; a shot near the weapon's minimum range is
+// almost all windup.
+export function shotWindupFraction(dist, blasterSpeed, slug) {
+  if (!(dist > 0)) return 0;
+  return Math.min(1, shotWindupDistance(blasterSpeed, slug) / dist);
 }
 
 // The client's ShotEffect animation always plays for windowMs *
@@ -844,26 +892,31 @@ export const SHOT_FLIGHT_MULTIPLIER = 1;
 // attacker->target distance covered after `elapsedMs` of a flight that
 // takes `flightMs` end to end: a slow crawl out capped at SHOT_SLOW_PHASE_MS
 // (with a small instant kick so it visibly leaves the barrel), then a fast
-// linear burst for the rest. Mirrors client/src/CombatMap.jsx's
+// linear burst for the rest. `windupFraction` is THIS shot's own
+// shotWindupFraction (dist-dependent, since the windup covers a fixed
+// distance but that's a varying share of different shots' total distance);
+// callers with no real weapon/distance behind them (the chain arc, a pod
+// blast) fall back to a flat 0.2 share. Mirrors client/src/CombatMap.jsx's
 // phasedFraction exactly -- keep the two in sync. Used server-side to work
 // out where an incoming shot actually was when a counter launched, so the
 // clash lands where the two bolts really meet rather than always at the
 // geometric midpoint.
-export const SHOT_LAUNCH_KICK_FRACTION = 0.08;
-export const SHOT_SLOW_PHASE_DISTANCE_FRACTION = 0.2;
+export const SHOT_LAUNCH_KICK_RATIO = 0.4; // share of the windup's OWN distance covered by the instant launch kick
+export const DEFAULT_WINDUP_FRACTION = 0.2; // fallback for fx with no real weapon/distance behind them
 
-export function shotDistanceFraction(elapsedMs, flightMs) {
+export function shotDistanceFraction(elapsedMs, flightMs, windupFraction = DEFAULT_WINDUP_FRACTION) {
   if (elapsedMs <= 0) return 0;
   if (elapsedMs >= flightMs) return 1;
   const slowMs = Math.min(SHOT_SLOW_PHASE_MS, flightMs);
   const fastMs = flightMs - slowMs;
+  const kickFraction = windupFraction * SHOT_LAUNCH_KICK_RATIO;
   if (fastMs <= 0) return elapsedMs / flightMs;
   if (elapsedMs <= slowMs) {
     const t = elapsedMs / slowMs;
-    return SHOT_LAUNCH_KICK_FRACTION + t * (SHOT_SLOW_PHASE_DISTANCE_FRACTION - SHOT_LAUNCH_KICK_FRACTION);
+    return kickFraction + t * (windupFraction - kickFraction);
   }
   const fastElapsed = elapsedMs - slowMs;
-  return SHOT_SLOW_PHASE_DISTANCE_FRACTION + (1 - SHOT_SLOW_PHASE_DISTANCE_FRACTION) * (fastElapsed / fastMs);
+  return windupFraction + (1 - windupFraction) * (fastElapsed / fastMs);
 }
 
 // Straight-line interpolation between two map points, t in 0..1.
@@ -1058,6 +1111,34 @@ export function knockbackTarget(shooter, target, walls, distanceUnits = KNOCKBAC
     point: { x: target.x + (dest.x - target.x) * t, y: target.y + (dest.y - target.y) * t },
     hitWall: true,
   };
+}
+
+// Moves `targetPos` sideways by `distanceUnits`, perpendicular to the
+// attacker->target line -- a successful Dodge's sidestep, instead of
+// knockbackTarget's straight shove away from the shooter. Picks one of the
+// two perpendicular directions at random and wall-clamps it exactly like
+// knockbackTarget; if that side is blocked essentially at point-blank range
+// (t <= 0.15, nowhere real to go), retries the other side once before
+// giving up and leaving the target in place.
+export function sidestepTarget(attackerPos, targetPos, walls, distanceUnits = DODGE_SIDESTEP_DISTANCE) {
+  const seg = perpendicularSegment(attackerPos, targetPos, distanceUnits * 2);
+  const sides =
+    Math.random() < 0.5
+      ? [{ x: seg.x1, y: seg.y1 }, { x: seg.x2, y: seg.y2 }]
+      : [{ x: seg.x2, y: seg.y2 }, { x: seg.x1, y: seg.y1 }];
+  for (const dest of sides) {
+    const blocked = firstWallHit(targetPos, dest, walls);
+    if (!blocked) return { point: dest, hitWall: false };
+    if (blocked.hit.t > 0.15) {
+      const t = Math.max(0, blocked.hit.t - 0.05);
+      return {
+        point: { x: targetPos.x + (dest.x - targetPos.x) * t, y: targetPos.y + (dest.y - targetPos.y) * t },
+        hitWall: true,
+      };
+    }
+    // blocked almost immediately on this side -- try the other before giving up
+  }
+  return { point: targetPos, hitWall: true };
 }
 
 // Clamps a point into the map's own bounds -- used alongside a wall-clamped

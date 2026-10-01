@@ -80,24 +80,30 @@ actual code multiplies every one by `RANGE_SCALE` (currently 25, in `combatRules
 so the *average* combined range lands at ~25 AP worth of walking distance. Relative
 spread between types (Air long, Rock/Earth short, etc.) is unchanged by that scale-up.
 
+Ranges below are halved from their original tuning (Air was 32, Earth was 16, etc.)
+-- a deliberate rebalance against the blaster base-type ranges in `itemRules.js`
+(also rescaled up, Sniper Rig now topping out at 450), since a type's own range and
+the equipped weapon's own range now *stack* into the shot's actual reach (§5's
+`combinedRange = blaster.range + type.range`) rather than either alone deciding it.
+
 | Type | Range | Accuracy mod | Power mod | Reaction-speed | Trait |
 |---|---|---|---|---|---|
-| Air | Long (32) | +2 | +0 | Fast | — (flies true, long-ranged, accurate) |
-| Dark | Medium (20) | −1 | +0 | Medium | Phases through walls: ignores line-of-sight blocking (a ghost-shot), doesn't damage the wall |
-| Earth | Short (16) | −2 | +1 | Slow | Large knockback, always (doubled if the slug's `causesKnockback` is also set) — see §5 |
-| Electricity | Medium (22) | +1 | +0 | Fast | Chains: 50% power hit to one enemy within 8 units of target. **Also fries mechas** — every point of damage that lands on a mecha's Structure (a direct hit, or the 75% a mounted rider's mecha soaks) is doubled (`ELECTRIC_MECHA_DAMAGE_MULTIPLIER`); the rider's own share of a split hit is *not* doubled |
-| Energy | Medium (20) | +1 | +0 | Fast | Recharge: on a hit, regain 1 spent energy pip on another of your loaded slugs |
-| Fire | Short (18) | +2 | +0 | Fast | Burns: 50% of the slug's own clashPower (min 1) grit dmg/turn, for 3 turns (DoT; doesn't stack — a fresh hit refreshes duration + damage) |
-| Healing* | Short (18) | +1 | n/a | Medium | Heals instead of harms |
-| Ice | Medium (20) | 0 | +0 | Medium | Leaves an icy hazard patch on the ground at the shot's impact point — see §5 |
-| Light | Long (28) | +3 | −2 | Very fast | Blinds: the target's very next attack roll is made with disadvantage (roll twice, take the lower), then the effect is consumed |
-| Metal | Medium (18) | 0 | +1 | Slow | Short knockback, always (doubled if the slug's `causesKnockback` is also set) — see §5 |
-| None† | Short (10) | −5 | −10 | Slow | Dud — no combat effect |
-| Plant | Short (18) | −1 | +0 | Slow | Snares: target can't take the Move action for `SNARE_DURATION_TURNS` (2) of their own turns |
-| Psychic | Medium (18) | 0 | −2 | Medium | Stuns: target loses 1 AP on their next turn |
-| Toxic | Medium (20) | +1 | −1 | Medium | Poison: +1 grit dmg/turn per stack, for 3 turns; stacks (each poisoning hit adds a stack **and** resets the shared duration back to 3 turns) |
+| Air | Long (16) | +2 | +0 | Fast | — (flies true, long-ranged, accurate) |
+| Dark | Medium (10) | −1 | +0 | Medium | Phases through walls: ignores line-of-sight blocking (a ghost-shot), doesn't damage the wall |
+| Earth | Short (8) | −2 | +1 | Slow | Large knockback, always (doubled if the slug's `causesKnockback` is also set) — see §5 |
+| Electricity | Medium (11) | +1 | +0 | Fast | Chains: 50% power hit to one enemy within 8 units of target. **Also fries mechas** — every point of damage that lands on a mecha's Structure (a direct hit, or the 75% a mounted rider's mecha soaks) is doubled (`ELECTRIC_MECHA_DAMAGE_MULTIPLIER`); the rider's own share of a split hit is *not* doubled |
+| Energy | Medium (10) | +1 | +0 | Fast | Recharge: on a hit, regain 1 spent energy pip on another of your loaded slugs |
+| Fire | Short (9) | +2 | +0 | Fast | Burns: 50% of the slug's own clashPower (min 1) grit dmg/turn, for 3 turns (DoT; doesn't stack — a fresh hit refreshes duration + damage) |
+| Healing* | Short (9) | +1 | n/a | Medium | Heals instead of harms |
+| Ice | Medium (10) | 0 | +0 | Medium | Leaves an icy hazard patch on the ground at the shot's impact point — see §5 |
+| Light | Long (14) | +3 | −2 | Very fast | Blinds: the target's very next attack roll is made with disadvantage (roll twice, take the lower), then the effect is consumed |
+| Metal | Medium (9) | 0 | +1 | Slow | Short knockback, always (doubled if the slug's `causesKnockback` is also set) — see §5 |
+| None† | Short (5) | −5 | −10 | Slow | Dud — no combat effect |
+| Plant | Short (9) | −1 | +0 | Slow | Snares: target can't take the Move action for `SNARE_DURATION_TURNS` (2) of their own turns |
+| Psychic | Medium (9) | 0 | −2 | Medium | Stuns: target loses 1 AP on their next turn |
+| Toxic | Medium (10) | +1 | −1 | Medium | Poison: +1 grit dmg/turn per stack, for 3 turns; stacks (each poisoning hit adds a stack **and** resets the shared duration back to 3 turns) |
 | Unique‡ | — | — | — | — | No default modifiers — fully custom per template |
-| Water | Medium (24) | +1 | +0 | Medium | Douses Fire DoT on hit |
+| Water | Medium (12) | +1 | +0 | Medium | Douses Fire DoT on hit |
 
 Reaction-speed feeds the counter-clash timer in §6 (Fast = short window for the
 *defender* to react, Slow = long window; Very fast shrinks it further still).
@@ -301,9 +307,10 @@ the encounter re-loads everything along with clearing cooldowns.
 
 ## 5. Shooting resolution
 
-1. Range/LoS check: target must be within `blaster.range + type.range` combined
-   (simplify: use the **larger** of the two, since the blaster is what actually
-   launches the slug) and not blocked by a wall the slug can't break or phase
+1. Range/LoS check: target must be within `combinedRange = blaster.range +
+   type.range` — the weapon's own range and the slug type's own range stack,
+   so a long-reach type (Air) in a long-range Sniper Rig reaches further than
+   either alone — and not blocked by a wall the slug can't break or phase
    through (Dark).
 2. Attack roll: `d20 + blaster.accuracy + quality.accuracyBonus + type.accuracyMod +
    loyaltyAccuracyModifier(slug.loyaltyTier) + blasterTypeAccuracyBonus(blaster, shooter)`
@@ -312,10 +319,12 @@ the encounter re-loads everything along with clearing cooldowns.
    tier modifiers" below for the loyalty term, and "Base-type combat effects" below
    for the last term. Roll the quality tier's `failRate` first (jam chance) — a jam
    wastes the shot and the AP but the magazine slot needs a Reload to clear.
-3. If the target has an available (energy-charged) loaded slug and hasn't already
-   used their counter this round, open the counter-clash window (§6) **before**
-   rolling the attack — a successful counter can win outright regardless of the
-   attack roll.
+3. If the target has an available (energy-charged) loaded slug, **or** can afford
+   the flat Dodge AP cost (see §6a), open the counter-clash window (§6) **before**
+   rolling the attack — a successful counter or dodge can avoid the hit outright
+   regardless of the attack roll. Gated purely on affordability, not on whether a
+   reaction has already been used this round — both counter-clash and Dodge are
+   usable as many times per round as the defender's AP allows.
 4. On a hit with no counter: grit damage = `slug.clashPower + type.powerMod`, where
    `slug.clashPower` already has `loyaltyClashModifier(slug.loyaltyTier)` folded in
    (see "Loyalty tier modifiers" below) — applied to target's current Grit. Trait effects (burn/poison/snare/chain/blind/
@@ -471,26 +480,50 @@ to finish first. The reaction window always runs the shot's *entire* flight,
 by construction — a defender can wait right up until the shot would
 actually land, and never past it.
 
-**Speed now depends on range** (`shotFlightMs(dist, weaponRange)` in
-`combatRules.js`): a shot at exactly the equipped weapon's own max range
-takes the full `COUNTER_WINDOW_MS` above — the old fixed duration every shot
-used to take, regardless of distance — and anything closer arrives
-proportionally faster (`windowMs = COUNTER_WINDOW_MS * dist / weaponRange`).
-A longer-range weapon (a Sniper Rig) is therefore a strictly *faster* weapon
-than a short-range one at the same absolute distance, not just a
-farther-reaching one, and its reaction window shrinks to match (harder to
-counter up close).
+**The bolt's speed is constant per weapon, never per shot** (`shotFlightMs(dist,
+weaponRange, slug)` in `combatRules.js`) — range changes how much *reaction
+time* a shot gives, never how fast the bolt itself moves. Concretely:
 
-The windup (`SHOT_SLOW_PHASE_MS`, the slow crawl below) is a fixed animation
-beat that never compresses to fit a shorter flight. That puts a hard floor
-on how close a target can be: if the weapon's default speed would cross the
-distance in less time than the windup alone takes, the slug would have to
-land before it even finishes leaving the barrel. Rather than compress the
-windup or let the shot land instantly, `shotTooClose(dist, weaponRange)`
-catches this and the shot fails outright instead — no launch, no counter
-offered, resolved exactly like a jam (`combat-shot-fx` with
-`outcome: "too-close"`, checked in the Attack flow in `routes/combat.js`
-right after distance is known). **Being too close is bad.**
+```
+shotWindupDistance(weaponRange) = weaponRange * SHOT_WINDUP_DISTANCE_FRACTION (0.2)
+shotCruiseSpeed(weaponRange, slug) = (weaponRange - shotWindupDistance(weaponRange))
+                                      / SHOT_FAST_PHASE_MS  [/ slugWindowFactor(slug)]
+shotFlightMs(dist, weaponRange, slug) = SHOT_SLOW_PHASE_MS
+                                       + max(0, dist - shotWindupDistance(weaponRange))
+                                         / shotCruiseSpeed(weaponRange, slug)
+```
+
+The windup covers a *fixed slice of the weapon's own range* (not of this
+particular shot's distance) during the fixed `SHOT_SLOW_PHASE_MS` — so two
+shots from the same weapon, one close and one far, cover identical ground
+during their windup and then cruise at the identical speed afterward. A shot
+at exactly the weapon's own max range still takes the full
+`COUNTER_WINDOW_MS` (830ms windup + 2500ms cruise = 3330ms) — the same fixed
+ceiling every weapon's own max-range shot has always taken — but a shot
+*closer* than that just has less ground left to cross at that same speed, so
+it arrives (and gives up its reaction window) sooner without ever moving any
+faster. A longer-range weapon (a Sniper Rig) is still a strictly *faster*
+weapon than a short-range one at the same absolute distance, since its
+cruise speed (tied to its own, larger range) is itself higher — Zeus's
+`ultra_fast` and a Mega Morph shot speed up the cruise the same way, never
+the windup, which stays exactly `SHOT_SLOW_PHASE_MS` for every slug and every
+blaster alike.
+
+The windup is a fixed animation beat that never compresses to fit a shorter
+flight. That puts a hard floor on how close a target can be:
+`shotTooClose(dist, weaponRange)` is true whenever `dist <=
+shotWindupDistance(weaponRange)` — the target is close enough that the slug
+would have to land before it's even done leaving the barrel. Rather than
+compress the windup or let the shot land instantly, that shot fails outright
+instead — no launch, no counter offered, resolved exactly like a jam
+(`combat-shot-fx` with `outcome: "too-close"`, checked in the Attack flow in
+`routes/combat.js` right after distance is known). **Being too close is
+bad.** (Note `combinedRange` in §5 is `blaster.range + type.range` — the two
+stack, so `dist` routinely exceeds `blaster.range` on its own.
+`shotCruiseSpeed` is still purely a function of `blaster.range`, so ground
+covered past the weapon's own range crosses at that same speed, just taking
+proportionally longer — there's no ceiling on `shotFlightMs` beyond the
+too-close floor.)
 
 On the client, a shot's flight animation always plays for
 `windowMs * SHOT_FLIGHT_MULTIPLIER` (currently 1, since the window now *is*
@@ -590,6 +623,39 @@ conversation. See §9's `combat-log-entry` note.
 
 A shot that actually leaves the blaster (any outcome except a jam/misfire)
 also plays a launch sound (`slugterra-velocity.mp3`) on every client.
+
+### 6a. Dodge
+
+A third option in the same reaction window as a counter-clash, hotkeyed to
+Spacebar on the client: instead of firing a slug back, the defender rolls
+`d20 + DEX modifier`, opposed **directly** against the attacker's own attack
+roll (not the target's static DC). No slug or energy pip is spent — just a
+flat `DODGE_AP_COST` (1) out of the defender's leftover AP, spent whether or
+not the dodge actually succeeds (same rule a slug counter already follows).
+Gated on unconscious/disabled, **not** `disarmed` — disarm is about firing a
+blaster, and Dodge never fires one.
+
+- **Success**: the shot resolves as a miss for damage/status purposes, and
+  the defender's token sidesteps `DODGE_SIDESTEP_DISTANCE` (40 units)
+  perpendicular to the attacker→defender line, wall- and map-clamped exactly
+  like a knockback shove (`sidestepTarget` in `combatRules.js`). An **AOE
+  Blast** slug still detonates at its real impact point — the defender's new,
+  sidestepped position is checked against `AOE_RADIUS` (120) exactly like any
+  other combatant, so dodging the direct hit doesn't reliably get you clear
+  of a blast (`DODGE_SIDESTEP_DISTANCE` is deliberately well under
+  `AOE_RADIUS`).
+- **Failure**: falls through to *exactly* the same hit-or-miss determination
+  an unanswered shot would get — the attacker's own accuracy roll might still
+  miss on its own, independent of the failed dodge. Dodging isn't a second
+  chance to avoid a shot that was going to miss anyway; only a genuine dodge
+  success skips damage, moves the token, and grants Fame.
+- A tie on the opposed roll favors the attacker.
+- Dodge and counter-clash are both offered whenever the defender can afford
+  either — a defender with no usable counter slug but enough AP for just the
+  flat Dodge cost still gets a reaction window, showing only the Dodge
+  option.
+
+See `resolveDodgeAttempt` in `routes/combat.js`.
 
 ## 7. Grit, knockout, unconsciousness
 
@@ -717,7 +783,56 @@ Reuses the app's existing patterns exactly, nothing new to invent:
   history on mount, new entries arrive live over the socket. Rendered by
   `CombatLog.jsx`, placed directly below the Turn Order roster.
 
-## 11. Build phases
+## 11. Fame and Heat
+
+Two new per-character integers on the `characters` table (`fame`/`heat`,
+both `INTEGER NOT NULL DEFAULT 0`), tracking a rebel's growing (and
+dangerous) reputation across the galaxy over the course of the campaign —
+entirely separate from anything reset by a rest.
+
+**Fame** is generated automatically, from combat only (see `grantFame` in
+`routes/combat.js`), from four sources:
+
+- **Raw power landed**: any hit funnels through `dealHit`, which grants Fame
+  equal to the slug's own `clash_power` (the raw base stat, not the type/
+  triple/dual-modified damage `amount`) — a bigger slug earns more on its
+  own, with no need to separately model "restraint."
+- **Overkill**: damage beyond what the target had left (Grit or Structure),
+  added on top of the raw-power term above.
+- **Clash margin**: winning a counter-clash outright (`attacker-wins` or
+  `defender-wins`) grants the winner the margin by which their power beat
+  the loser's defense, on top of the raw-power/overkill Fame the resulting
+  hit/reflect already earns via `dealHit`. A forced win (the counter never
+  wound up in time) or a result with no winner (`bounce`/`double-break`)
+  grants no margin bonus.
+- **Dodge**: a successful Dodge (§6a) grants a flat `DODGE_FAME_BONUS` — set
+  higher than a *typical* clash-margin bonus, since dodging is the flashier
+  of the two reactions.
+
+A DM can also manually adjust Fame (`PATCH /:userId/fame`), either direction.
+
+**Heat** mirrors every Fame *increase*, from either source, by the same
+amount, automatically, in the same query (`grantFame` updates both columns
+at once, `GREATEST(0, ...)`-floored). A manual Fame change (either
+direction) never touches Heat. On top of that automatic mirror, the DM has
+its own free +/- manual override (`PATCH /:userId/heat`), entirely separate
+from Fame's — used both to raise Heat narratively (a bounty gets posted) and
+to lower it (a mission burns that bounty in the character's name). Heat is
+visible to both the DM and the player (sheet and Roster) but purely
+informational — nothing auto-triggers off it; the DM narrates the
+consequences of a high Heat by hand.
+
+**Fame tiers**: the client maps a raw Fame integer to one of ten titled
+tiers by threshold (`fameTierLabel` in `client/src/characterData.js`, same
+`{max, label}`-array `.find()` pattern already used for stat score bands) —
+display-only, nothing server-side branches on tier.
+
+**Known scope limit**: cone splash, steam pods, hazard tiles, and star-wall
+touch damage resolve through `applyEnvironmentalDamage` rather than
+`dealHit`, which carries no shooter/attacker reference — these don't
+currently generate Fame.
+
+## 12. Build phases
 
 1. **Rules + schema** — `combatRules.js`, new tables/columns, no UI.
 2. **Encounter shell** — DM creates/starts an encounter, map canvas renders walls
@@ -744,3 +859,9 @@ your house-rule instinct:
   it be snappier/more forgiving?
 - Knockout DC escalation (`10 + pips used`) and Hunker Down heal (`max(1, CON) per AP`) — both
   arbitrary, said so you can veto.
+- Fame's per-hit weights (raw `clash_power` + overkill, both currently 1:1 with no
+  scaling constant) and `DODGE_FAME_BONUS = 8` — all placeholders until real numbers
+  from actual play show whether Fame climbs too fast, too slow, or unevenly across
+  playstyles.
+- `DODGE_SIDESTEP_DISTANCE = 40` vs `AOE_RADIUS = 120` — tuned so a dodge usually but
+  not always ducks a blast too; worth revisiting once you've seen it land in practice.

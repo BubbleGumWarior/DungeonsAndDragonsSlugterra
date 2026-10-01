@@ -45,14 +45,14 @@ function CounterCard({ offer, onDone }) {
     return () => clearInterval(interval);
   }, [offer, onDone]);
 
-  async function respond(slugId) {
+  async function respond(slugId, { dodge = false } = {}) {
     if (resolving) return;
     setResolving(true);
     try {
       await fetch(`/api/combat/counters/${offer.id}/resolve`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ slugId }),
+        body: JSON.stringify(dodge ? { dodge: true } : { slugId }),
       });
     } catch {
       // server auto-resolves on timeout regardless
@@ -70,9 +70,17 @@ function CounterCard({ offer, onDone }) {
   respondRef.current = respond;
   useEffect(() => {
     if (!revealed) return undefined; // no responding to a prompt nobody can see yet
+    // Flags the prompt as open on the body so VoiceChatContext's push-to-talk
+    // spacebar handler can back off -- Dodge's own hotkey is Space too.
+    document.body.dataset.counterPromptOpen = "true";
     function onKeyDown(e) {
       if (e.key === "Escape") {
         respondRef.current(null);
+        return;
+      }
+      if (e.key === " ") {
+        e.preventDefault();
+        if (offer.canDodge) respondRef.current(null, { dodge: true });
         return;
       }
       const num = Number(e.key);
@@ -82,7 +90,10 @@ function CounterCard({ offer, onDone }) {
       respondRef.current(slug.id);
     }
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      delete document.body.dataset.counterPromptOpen;
+    };
   }, [offer, revealed]);
 
   const percent = Math.max(0, Math.min(100, (remaining / offer.windowMs) * 100));
@@ -130,7 +141,11 @@ function CounterCard({ offer, onDone }) {
           {isDual && !offer.comboName && offer.comboSummary && <p className="counter-prompt-combo">{offer.comboSummary}</p>}
           {offer.mega && <p className="counter-prompt-mega">MEGA MORPH -- double power, double speed</p>}
           <h3 className="counter-prompt-title">
-            {offer.forNpc ? `Counter for ${offer.defenderName || "the NPC"}?` : "Counter with a slug?"}
+            {offer.forNpc
+              ? `Counter for ${offer.defenderName || "the NPC"}?`
+              : offer.eligibleSlugs.length > 0
+                ? "Counter with a slug?"
+                : "Dodge?"}
           </h3>
           {offer.availableAp != null && (
             <p className="counter-prompt-ap">{offer.availableAp} AP left to spend on a counter</p>
@@ -146,6 +161,18 @@ function CounterCard({ offer, onDone }) {
       </div>
 
       <div className="counter-prompt-slugs">
+        {offer.canDodge && (
+          <button
+            type="button"
+            className="counter-prompt-slug counter-prompt-dodge"
+            disabled={resolving}
+            onClick={() => respond(null, { dodge: true })}
+          >
+            <span className="counter-prompt-slug-key">Spc</span>
+            <span className="counter-prompt-slug-name">Dodge</span>
+            <span className="counter-prompt-slug-stats">{offer.dodgeApCost} AP</span>
+          </button>
+        )}
         {offer.eligibleSlugs.map((s, i) => {
           const hotkey = hotkeyFor(s, i);
           return (

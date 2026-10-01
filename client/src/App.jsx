@@ -17,6 +17,9 @@ import Admin from "./Admin.jsx";
 import CharacterCreate from "./CharacterCreate.jsx";
 import CharacterSheet from "./CharacterSheet.jsx";
 import Inventory from "./Inventory.jsx";
+import Market from "./Market.jsx";
+import { ToastProvider } from "./Toast.jsx";
+import TradeToasts from "./TradeToasts.jsx";
 import Slugs from "./Slugs.jsx";
 import Mechas from "./Mechas.jsx";
 import GalaxyPage from "./GalaxyPage.jsx";
@@ -71,6 +74,8 @@ function App() {
   return (
     <AuthProvider>
       <AccessSocket>
+       <ToastProvider>
+        <TradeToasts />
         <ChallengeResultOverlay />
         <DiceRollPrompt />
         <SlugHuntPrompt />
@@ -104,6 +109,7 @@ function App() {
             <Route path="/character" element={<CharacterSheet />} />
             <Route element={<SlugterraGate />}>
               <Route path="/inventory" element={<Inventory />} />
+              <Route path="/market" element={<Market />} />
               <Route path="/slugs" element={<Slugs />} />
               <Route path="/mechas" element={<Mechas />} />
               <Route path="/galaxy" element={<GalaxyPage />} />
@@ -118,6 +124,7 @@ function App() {
 
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
+       </ToastProvider>
       </AccessSocket>
     </AuthProvider>
   );

@@ -1,14 +1,21 @@
-import { UserCircleIcon } from "@phosphor-icons/react";
-import { STATS, formatModifier, maxGrit, scoreLabel, statModifier } from "./characterData.js";
+import { FireIcon, UserCircleIcon } from "@phosphor-icons/react";
+import { STATS, fameTierLabel, formatModifier, heatColor, maxGrit, scoreLabel, statModifier } from "./characterData.js";
 import { useLiveState } from "./AccessSocket.jsx";
 import CharacterVitals from "./CharacterVitals.jsx";
+import FameHeatStepper from "./FameHeatStepper.jsx";
 import SkillList from "./SkillList.jsx";
 import KnockoutPips from "./KnockoutPips.jsx";
 import GritRing from "./GritRing.jsx";
 import "./CharacterSheet.css";
 
-export default function CharacterSheetView({ character }) {
+// onChangeFame/onChangeHeat are only ever passed by the DM's viewer
+// (DMCharacterViewer.jsx's default "view" mode) -- a quick way to nudge or
+// directly type a new Fame/Heat value without switching into the full
+// character editor. A player's own sheet (CharacterSheet.jsx) never passes
+// these, so it stays the plain read-only tiles below.
+export default function CharacterSheetView({ character, onChangeFame, onChangeHeat }) {
   const { slugterraRevealed } = useLiveState();
+  const editableByDm = Boolean(onChangeFame || onChangeHeat);
   return (
     <div className="sheet-card">
       <div className="sheet-columns">
@@ -30,6 +37,37 @@ export default function CharacterSheetView({ character }) {
           </div>
 
           <CharacterVitals stats={character.stats} currentGrit={character.currentGrit} />
+
+          {editableByDm ? (
+            <div className="sheet-fame sheet-fame--editable">
+              <FameHeatStepper
+                label={`Fame — ${fameTierLabel(character.fame ?? 0)}`}
+                value={character.fame}
+                onChange={onChangeFame}
+              />
+              <FameHeatStepper
+                label="Heat"
+                value={character.heat}
+                onChange={onChangeHeat}
+                icon={<FireIcon weight="fill" />}
+                valueColor={heatColor(character.heat)}
+              />
+            </div>
+          ) : (
+            <div className="sheet-fame">
+              <div className="sheet-fame-stat">
+                <span className="sheet-fame-value">{character.fame ?? 0}</span>
+                <span className="sheet-fame-label">Fame — {fameTierLabel(character.fame ?? 0)}</span>
+              </div>
+              <div className="sheet-fame-stat">
+                <span className="sheet-fame-value sheet-fame-value--heat" style={{ color: heatColor(character.heat) }}>
+                  <FireIcon weight="fill" />
+                  {character.heat ?? 0}
+                </span>
+                <span className="sheet-fame-label">Heat</span>
+              </div>
+            </div>
+          )}
 
           <div className="sheet-section">
             <h2>Stats</h2>

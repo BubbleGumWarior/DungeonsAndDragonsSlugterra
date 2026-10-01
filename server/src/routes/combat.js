@@ -36,9 +36,9 @@ import {
   knockoutDC,
   countKnockoutPipsUsed,
   typeBallistics,
-  COUNTER_WINDOW_MS,
   shotFlightMs,
   shotTooClose,
+  shotWindupFraction,
   SHOT_SLOW_PHASE_MS,
   shotDistanceFraction,
   lerpPoint,
@@ -77,8 +77,7 @@ import {
   HAZARD_DAMAGE_FRACTION,
   CHAIN_RADIUS,
   RICOCHET_MAX_BOUNCES,
-  slugWindowFactor,
-  MEGA_MORPH_MIN_RANGE,
+  MEGA_MORPH_MIN_SPEED,
   MEGA_MORPH_PIP_COST,
   applyMegaMorphToSlug,
   INVISIBLE_DURATION_TURNS,
@@ -132,6 +131,10 @@ import {
   applyBlasterTypeToSlug,
   applyPowerSurgeToSlug,
   POWER_SURGE_MULTIPLIER,
+  DODGE_AP_COST,
+  DODGE_SIDESTEP_DISTANCE,
+  DODGE_FAME_BONUS,
+  sidestepTarget,
 } from "../combatRules.js";
 
 const router = Router();
@@ -304,11 +307,58 @@ async function syncCharacterFromCombatant(combatant) {
         proficiencies: rows[0].proficiencies,
         knockoutPips: rows[0].knockout_pips,
         currentGrit: rows[0].current_grit,
+        // fame/heat aren't touched by this UPDATE, but this broadcast is a
+        // full-object replace on the client (CharacterSheet.jsx etc.) --
+        // leaving them out would blank the player's displayed Fame/Heat on
+        // every single combat grit sync.
+        fame: rows[0].fame,
+        heat: rows[0].heat,
         createdAt: rows[0].created_at,
       },
     });
   } catch (err) {
     console.error("Could not sync character from combatant:", err);
+  }
+}
+
+// Fame only ever moves up automatically (see the callers below); a DM's
+// manual override (routes/characters.js's PATCH /:userId/fame) can move it
+// either way. Heat mirrors Fame one-directionally: whatever positive amount
+// Fame just gained, from EITHER source, Heat gains the same amount,
+// atomically, in the same query -- a negative delta lowers Fame but never
+// touches Heat. Heat's only decrease path is the separate, explicit DM
+// action in PATCH /:userId/heat, which never calls this function. Floors
+// both stats at 0.
+async function grantFame(userId, delta) {
+  if (!userId || !delta) return null;
+  const heatDelta = Math.max(0, delta);
+  try {
+    const { rows } = await pool.query(
+      `UPDATE characters SET fame = GREATEST(0, fame + $1), heat = GREATEST(0, heat + $2) WHERE user_id = $3 RETURNING *`,
+      [delta, heatDelta, userId]
+    );
+    if (!rows[0]) return null;
+    broadcastAll({
+      type: "character-updated",
+      userId,
+      character: {
+        id: rows[0].id,
+        name: rows[0].name,
+        age: rows[0].age,
+        portrait: rows[0].portrait,
+        stats: rows[0].stats,
+        proficiencies: rows[0].proficiencies,
+        knockoutPips: rows[0].knockout_pips,
+        currentGrit: rows[0].current_grit,
+        fame: rows[0].fame,
+        heat: rows[0].heat,
+        createdAt: rows[0].created_at,
+      },
+    });
+    return rows[0];
+  } catch (err) {
+    console.error("Could not grant Fame:", err);
+    return null;
   }
 }
 
@@ -374,14 +424,40 @@ router.post("/encounters/:id/end", requireDungeonMaster, async (req, res) => {
     // the encounter is over there are no more turns for it to count down
     // against, so every slug that belonged to a combatant here comes back
     // fresh for next time instead of carrying a stale cooldown into it.
+    // Slugs sitting in a destroyed pod (see breakPods) only come back if their
+    // owner has a spare pod to put them in -- the end-of-fight reset spends one
+    // each, oldest first; whatever the owner can't cover stays unloaded.
+    const { rows: brokenSlugs } = await pool.query(
+      `SELECT s.id, s.user_id FROM slugs s JOIN combatants c ON c.encounter_id = $1 AND s.user_id = c.ref_user_id
+       WHERE s.pod_broken ORDER BY s.id`,
+      [id]
+    );
+    const podBudget = new Map();
+    const keepBroken = [];
+    for (const s of brokenSlugs) {
+      if (!podBudget.has(s.user_id)) {
+        const { rows: pr } = await pool.query("SELECT pods FROM characters WHERE user_id = $1", [s.user_id]);
+        podBudget.set(s.user_id, pr[0]?.pods ?? 0);
+      }
+      const left = podBudget.get(s.user_id);
+      if (left > 0) podBudget.set(s.user_id, left - 1);
+      else keepBroken.push(s.id);
+    }
+    for (const [userId, left] of podBudget) {
+      const { rows: pr } = await pool.query("UPDATE characters SET pods = $1 WHERE user_id = $2 RETURNING pods", [left, userId]);
+      broadcastAll({ type: "pods-updated", userId, pods: pr[0]?.pods ?? left });
+    }
+
     const { rows: clearedSlugs } = await pool.query(
-      `UPDATE slugs s SET cooldown_turns_left = 0, loaded = true
+      `UPDATE slugs s SET cooldown_turns_left = 0,
+         loaded = (s.id <> ALL($2::int[])),
+         pod_broken = (s.id = ANY($2::int[]))
        FROM combatants c
        WHERE c.encounter_id = $1
          AND (s.user_id = c.ref_user_id OR s.owner_combatant_id = c.id)
-         AND (s.cooldown_turns_left > 0 OR s.loaded = false)
+         AND (s.cooldown_turns_left > 0 OR s.loaded = false OR s.pod_broken)
        RETURNING s.*`,
-      [id]
+      [id, keepBroken]
     );
     for (const slugRow of clearedSlugs) {
       broadcastAll({ type: "slug-updated", userId: slugRow.user_id, slug: toClientSlug(slugRow) });
@@ -1556,11 +1632,39 @@ router.post("/actions/reload", async (req, res) => {
 
     const { rows: toReload } = await pool.query(
       `SELECT * FROM slugs
-       WHERE equipped_blaster_id = $1 AND loaded = false AND cooldown_turns_left = 0`,
+       WHERE equipped_blaster_id = $1 AND loaded = false AND cooldown_turns_left = 0
+       ORDER BY pod_broken ASC, magazine_slot ASC NULLS LAST, id ASC`,
       [blaster.id]
     );
     if (toReload.length === 0) {
       return res.status(400).json({ error: "No returned slugs waiting to be reloaded." });
+    }
+
+    // A player's slug whose pod was destroyed by a misfire needs a spare pod
+    // to go back in; NPCs/grunts have infinite pods and never get here.
+    const isPlayer = combatant.kind === "character";
+    let sparePods = Infinity;
+    if (isPlayer) {
+      const { rows: podRows } = await pool.query("SELECT pods FROM characters WHERE user_id = $1", [combatant.ref_user_id]);
+      sparePods = podRows[0]?.pods ?? 0;
+    }
+    const reloadIds = [];
+    let podsUsed = 0;
+    let stalled = 0;
+    for (const s of toReload) {
+      if (isPlayer && s.pod_broken) {
+        if (sparePods - podsUsed > 0) {
+          podsUsed += 1;
+          reloadIds.push(s.id);
+        } else {
+          stalled += 1;
+        }
+      } else {
+        reloadIds.push(s.id);
+      }
+    }
+    if (reloadIds.length === 0) {
+      return res.status(400).json({ error: "No spare pods left -- those slugs can't be reloaded." });
     }
 
     const apCost = Math.max(1, blaster.reload_ap_cost || 1);
@@ -1570,11 +1674,16 @@ router.post("/actions/reload", async (req, res) => {
 
     await updateCombatant(combatant.id, { current_ap: combatant.current_ap - apCost });
     const { rows: reloaded } = await pool.query(
-      `UPDATE slugs SET loaded = true
-       WHERE equipped_blaster_id = $1 AND loaded = false AND cooldown_turns_left = 0
-       RETURNING *`,
-      [blaster.id]
+      `UPDATE slugs SET loaded = true, pod_broken = false WHERE id = ANY($1::int[]) RETURNING *`,
+      [reloadIds]
     );
+    if (podsUsed > 0) {
+      const { rows: podRows } = await pool.query(
+        "UPDATE characters SET pods = GREATEST(0, pods - $1) WHERE user_id = $2 RETURNING pods",
+        [podsUsed, combatant.ref_user_id]
+      );
+      broadcastAll({ type: "pods-updated", userId: combatant.ref_user_id, pods: podRows[0]?.pods ?? 0 });
+    }
     for (const slugRow of reloaded) {
       broadcastAll({ type: "slug-updated", userId: slugRow.user_id, slug: toClientSlug(slugRow) });
     }
@@ -1582,9 +1691,11 @@ router.post("/actions/reload", async (req, res) => {
     const encounterOut = await broadcastEncounter(combatant.encounter_id);
     await pushCombatLog(
       combatant.encounter_id,
-      `${combatant.name} reloads ${reloaded.length} slug${reloaded.length === 1 ? "" : "s"} into ${blaster.name}.`
+      `${combatant.name} reloads ${reloaded.length} slug${reloaded.length === 1 ? "" : "s"} into ${blaster.name}.` +
+        (podsUsed > 0 ? ` (${podsUsed} spare pod${podsUsed === 1 ? "" : "s"} used)` : "") +
+        (stalled > 0 ? ` ${stalled} slug${stalled === 1 ? "" : "s"} can't be reloaded -- out of pods.` : "")
     );
-    res.json({ encounter: encounterOut, reloaded: reloaded.length });
+    res.json({ encounter: encounterOut, reloaded: reloaded.length, stalled });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not reload." });
@@ -1635,6 +1746,24 @@ async function ejectSlug(slugId) {
 // `count` is how many pips this use burns -- 1 normally, MEGA_MORPH_PIP_COST
 // for a Mega Morph shot. Still a single fire, so the cooldown/reload state
 // below is set once regardless.
+// A misfire destroys the pod each fired slug was sitting in: flagged here, and
+// the slug is forced unloaded (even a self-chambering Lentus) until a Reload
+// spends a spare pod on it. Players only -- callers skip NPCs/grunts.
+async function breakPods(attacker, slugIds) {
+  const ids = (slugIds || []).filter((id) => id != null);
+  if (ids.length === 0) return;
+  const { rows } = await pool.query(
+    "UPDATE slugs SET pod_broken = true, loaded = false WHERE id = ANY($1::int[]) AND user_id = $2 RETURNING *",
+    [ids, attacker.ref_user_id]
+  );
+  for (const slugRow of rows) {
+    broadcastAll({ type: "slug-updated", userId: slugRow.user_id, slug: toClientSlug(slugRow) });
+  }
+  if (rows.length > 0) {
+    await pushCombatLog(attacker.encounter_id, rows.length > 1 ? `${attacker.name}'s slug pods shatter in the misfire!` : `${attacker.name}'s slug pod shatters in the misfire!`);
+  }
+}
+
 async function spendEnergyPip(slugId, count = 1) {
   if (!slugId) return;
   const { rows } = await pool.query("SELECT * FROM slugs WHERE id = $1", [slugId]);
@@ -2542,6 +2671,14 @@ async function dealHit(
     const dmg = Math.max(0, amount - armor) * electricMult;
     const newStructure = Math.max(0, (target.current_structure ?? 0) - dmg);
     await updateCombatant(target.id, { current_structure: newStructure });
+    // Fame: the raw clash_power of whatever landed (not the armor/electric-
+    // modified `dmg`), plus overkill -- damage beyond the Structure the
+    // mecha had left. See the matching character-branch comment below.
+    if (shooter.id !== target.id && shooter.kind === "character" && shooter.ref_user_id) {
+      const mechaOverkill = Math.max(0, dmg - (target.current_structure ?? 0));
+      const mechaFameGain = slug.clash_power + mechaOverkill;
+      if (mechaFameGain > 0) await grantFame(shooter.ref_user_id, mechaFameGain);
+    }
     log = `${target.name} takes ${dmg} Structure damage${electricMult > 1 ? " (Electricity -- doubled)" : ""}.`;
     if (newStructure === 0) {
       await disableMecha(target.id);
@@ -2735,6 +2872,16 @@ async function dealHit(
       ...(stealsMount ? { mounted_on: null } : {}),
     });
     await syncCharacterFromCombatant(updated);
+    // Fame: the raw clash_power of whatever slug landed (not the type/
+    // triple/dual-modified `amount`, and not the post-mecha-soak
+    // `gritDamage` for the power term) -- a bigger slug earns more on its
+    // own, no need to model "restraint" separately -- plus overkill, damage
+    // beyond what the target had left. No Fame for a self-buff.
+    if (!isSelfTarget && shooter.kind === "character" && shooter.ref_user_id) {
+      const overkill = Math.max(0, gritDamage - (target.current_grit ?? 0));
+      const fameGain = slug.clash_power + overkill;
+      if (fameGain > 0) await grantFame(shooter.ref_user_id, fameGain);
+    }
     log = isSelfTarget
       ? `${shooter.name} braces behind ${slug.name}.${mirageLog}`
       : `${target.name} takes ${gritDamage} Grit damage${newGrit === 0 ? " and is at 0 Grit!" : ""}.${riderAbsorbNote}${mirageLog}`;
@@ -2970,6 +3117,10 @@ function broadcastShotFx(fx) {
       // warm the cache if the earlier slug-armed signal was missed).
       slugId: fx.slug.id ?? null,
       windowMs: fx.windowMs,
+      // This shot's own windup share (see shotWindupFraction) -- undefined
+      // for synthetic effects with no real weapon/distance behind them (the
+      // chain arc, a pod blast), which fall back to the client's default.
+      windupFraction: fx.windupFraction,
       countered: Boolean(fx.countered),
       counterSlugType: fx.counterSlugType || null,
       outcome: fx.outcome,
@@ -3166,11 +3317,16 @@ async function launchAndOfferCounter(offer) {
   // they can even react, so the shot always resolves as a plain accuracy
   // roll (resolveNormalHit), never a clash.
   const isSelfShot = offer.attackerCombatantId === offer.targetCombatantId;
-  const eligible =
-    target && !isSupportiveSlug(offer.slug) && !isSelfShot && !offer.slug.uncounterable
-      ? await findEligibleCounterSlugs(target)
-      : [];
-  if (target && eligible.length > 0) {
+  // None of these gates make sense for Dodge either -- you don't dodge a
+  // heal, your own buff, or Meduslug's gaze-lock.
+  const reactionEligible = target && !isSupportiveSlug(offer.slug) && !isSelfShot && !offer.slug.uncounterable;
+  const eligible = reactionEligible ? await findEligibleCounterSlugs(target) : [];
+  // A Dodge-only defender (no usable counter slug, but enough AP for the
+  // flat Dodge cost) still gets a reaction window -- just without any slug
+  // option in it. Re-validated for real in resolveDodgeAttempt; this copy is
+  // only for whether to open the window and what to tell the client.
+  const canDodge = reactionEligible && !target.unconscious && !target.disabled && DODGE_AP_COST <= (target.current_ap || 0);
+  if (target && (eligible.length > 0 || canDodge)) {
     // A player-controlled target answers their own counter; an NPC's (no
     // ref_user_id) is handed to the DM to answer on its behalf.
     const dmControlled = !target.ref_user_id;
@@ -3229,6 +3385,8 @@ async function launchAndOfferCounter(offer) {
         // The defender's leftover AP right now -- lets the prompt show what
         // a counter will cost against what they have.
         availableAp: target.current_ap || 0,
+        canDodge,
+        dodgeApCost: DODGE_AP_COST,
       },
     };
     for (const recipientId of recipients) notifyUser(recipientId, counterPayload);
@@ -3251,6 +3409,20 @@ async function launchAndOfferCounter(offer) {
 // for ricochet legs, so unlike the main Attack flow it ignores weapon/type
 // max range entirely -- a caroming bounce always reaches its chosen target
 // unless a wall physically stops it.
+// Sums every equipped mod's speed_bonus for this blaster and adds it to the
+// weapon's own base speed stat (floored at 1 -- shotEffectiveSpeed divides
+// by it, so it can never hit zero). A real, applied bonus, not just a
+// cosmetic display number. A DM-puppeted NPC's synthetic blaster (see
+// resolveShooterSlugAndBlaster) has no real id/mods to look up, so it's
+// just returned as-is.
+async function blasterEffectiveSpeed(blaster) {
+  if (!Number.isInteger(blaster.id)) return blaster.speed;
+  const { rows } = await pool.query("SELECT COALESCE(SUM(speed_bonus), 0) AS bonus FROM mods WHERE equipped_blaster_id = $1", [
+    blaster.id,
+  ]);
+  return Math.max(1, blaster.speed + Number(rows[0].bonus));
+}
+
 async function fireSecondaryShot({ encounterId, attackerId, attackerName, originPos, target, slug, blaster, walls, ricochetCount = 1 }) {
   const targetPos = { x: target.x, y: target.y };
   const dist = distance(originPos, targetPos);
@@ -3260,11 +3432,13 @@ async function fireSecondaryShot({ encounterId, attackerId, attackerName, origin
   const stopDist = wallDist;
   const reaches = dist <= stopDist;
   const impactPoint = reaches ? targetPos : pointAtDistance(originPos, targetPos, stopDist);
-  const rawWindowMs = shotFlightMs(dist, blaster.range);
-  // Perplexus's slowedReaction/enhancedReaction modify the *target's* own
-  // window regardless of the shooter's own ultra_fast -- see
-  // reactionWindowFactor.
-  const windowMs = Math.round(rawWindowMs * slugWindowFactor(slug) * reactionWindowFactor(target.status_effects));
+  // shotFlightMs already bakes the shooter's own speed traits (ultra_fast,
+  // Mega Morph) into the bolt's effective speed -- see slugWindowFactor
+  // inside shotEffectiveSpeed. reactionWindowFactor is the *target's* own
+  // slowedReaction/enhancedReaction, applied on top regardless.
+  const speed = await blasterEffectiveSpeed(blaster);
+  const rawWindowMs = shotFlightMs(dist, speed, slug);
+  const windowMs = Math.round(rawWindowMs * reactionWindowFactor(target.status_effects));
   const fxId = `ricochet-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const firedAt = Date.now();
 
@@ -3282,6 +3456,7 @@ async function fireSecondaryShot({ encounterId, attackerId, attackerName, origin
     targetPos,
     impactPoint,
     windowMs,
+    windupFraction: shotWindupFraction(dist, speed, slug),
     // Flags this as a bounce (suppresses terrain marks + the chain arc on
     // its own hit -- see applyShotTerrain / dealHit); ricochetCount tracks
     // how deep the chain is so maybeRicochet can cap it.
@@ -3367,22 +3542,13 @@ async function maybeRicochet(
 // AOE miss's splash) is handed to scheduleAfterFlight, so nothing actually
 // changes on anyone's screen until the shot's flight/explosion animation
 // would actually have finished playing.
-async function resolveNormalHit(offer) {
-  const attacker = await getCombatant(offer.attackerCombatantId);
-  const target = await getCombatant(offer.targetCombatantId);
-  // Fetched once, up front, for missDeflection's own wall check -- the
-  // deflected ray isn't guaranteed clear just because the true path was.
-  const wallsRow = (await pool.query("SELECT walls FROM encounters WHERE id = $1", [offer.encounterId])).rows[0];
-  const walls = wallsRow?.walls || [];
-
-  if (!attacker || !target) {
-    broadcastShotResolved(offer, {
-      outcome: "miss",
-      impactPoint: missDeflection(offer.attackerPos, offer.impactPoint, walls),
-    });
-    return;
-  }
-
+// The attack roll itself -- shared by an uncontested shot (resolveNormalHit)
+// and a Dodge attempt (resolveDodgeAttempt), which opposes its own roll
+// against this same attackTotal instead of the target's static dc. Extracted
+// rather than duplicated because it has a real side effect (consuming
+// blinded/keenVision via updateCombatant) that must only ever fire once per
+// shot.
+async function resolveAttackRoll(offer, attacker, target) {
   const quality = QUALITY_TIERS[offer.blaster.quality] || QUALITY_TIERS[0];
   const tb = slugBallistics(offer.slug);
   // Uses offer.attackerPos (the shot's real visual origin), not a fresh
@@ -3426,8 +3592,101 @@ async function resolveNormalHit(offer) {
     // Bow folds in the shooter's own DEX modifier; every other base type adds 0.
     blasterTypeAccuracyBonus(offer.blaster, attacker);
   const dc = 10 + targetDexMod;
+  return { attackTotal, dc };
+}
+
+// The hit branch's consequences -- shared by resolveNormalHit and a failed
+// Dodge that still lands as an ordinary hit. Returns dealHit's own log string.
+async function applyHitEffects(offer, attacker, target) {
+  const hitLog = await dealHit(offer.encounterId, attacker.id, target.id, offer.slug, {
+    windowMs: offer.windowMs,
+    firedAt: offer.firedAt,
+    // Where this specific leg's bolt actually flew from -- the real
+    // shooter's position for a normal shot, but the *previous* target's
+    // position for a ricocheted leg (see fireSecondaryShot). Knockback
+    // needs to shove away from this, not from attacker.id's real
+    // current position, which for a ricochet leg is somewhere else
+    // entirely.
+    originPos: offer.attackerPos,
+    isRicochetLeg: offer.isRicochetLeg,
+    mindScrambleEffect: offer.effectChoice,
+    frictionEffect: offer.effectChoice,
+  });
+  // B's counter didn't actually stop the shot (it still connected) --
+  // Speedstinger's ricochet continues on to a second target exactly like
+  // an uncontested hit would.
+  await maybeRicochet(offer, target.id);
+  return hitLog;
+}
+
+// The miss branch's consequences -- shared by resolveNormalHit's real miss
+// and a failed Dodge whose underlying shot missed anyway. `missPoint` is
+// wherever the bolt actually came to rest (the deflected wide point for a
+// real miss). Returns an array of extra log fragments (possibly empty).
+async function applyGlancingEffects(offer, attacker, target, missPoint) {
+  const fragments = [];
+  // A miss still fries the target's blaster -- causes_jam triggers on hit or
+  // miss alike (the shot got close enough to matter), just not on the
+  // attacker's own misfire (which returns before this point ever runs), an
+  // out-of-range shot (handled earlier, never reaches here), or a
+  // self-targeted shot (Thugglet shooting yourself for invisibility
+  // shouldn't also jam your own gun).
+  if (offer.slug.causes_jam && target.kind !== "mecha" && target.id !== attacker.id) {
+    await updateCombatant(target.id, {
+      status_effects: JSON.stringify({ ...(target.status_effects || {}), jammed: true }),
+    });
+    fragments.push(`${target.name}'s blaster is fried -- their next shot misfires.`);
+  }
+  // Cynosure's disarm follows the exact same "still fries on a miss" rule as
+  // causes_jam above.
+  if (offer.slug.causes_disarm && target.kind !== "mecha" && target.id !== attacker.id) {
+    await updateCombatant(target.id, {
+      status_effects: JSON.stringify({ ...(target.status_effects || {}), disarmed: { turnsLeft: DISARM_DURATION_TURNS } }),
+    });
+    fragments.push(`${target.name}'s blaster is disabled -- they can't Shoot Slug on their next turn.`);
+  }
+  // An AOE slug still detonates on a miss -- it just goes off wherever the
+  // deflected shot actually landed instead of on the target. Whoever's
+  // within AOE_RADIUS of that point (which can include the original target,
+  // if the miss didn't carry it far) takes the blast anyway.
+  if (offer.slug.aoe_blast) {
+    const caught = await findAoeTargets(offer.encounterId, missPoint, [attacker.id]);
+    if (caught.length > 0) {
+      let aoeFragment = "It still detonates!";
+      for (const other of caught) {
+        const splashLog = await dealHit(offer.encounterId, attacker.id, other.id, offer.slug, { isSplash: true });
+        aoeFragment += ` The blast catches ${other.name}: ${splashLog}`;
+      }
+      fragments.push(aoeFragment);
+    } else {
+      fragments.push("It detonates harmlessly, catching no one.");
+    }
+  }
+  // The bolt still glances off a missed target -- Speedstinger's carom
+  // continues from here regardless of whether this leg connected.
+  await maybeRicochet(offer, target.id);
+  return fragments;
+}
+
+async function resolveNormalHit(offer) {
+  const attacker = await getCombatant(offer.attackerCombatantId);
+  const target = await getCombatant(offer.targetCombatantId);
+  // Fetched once, up front, for missDeflection's own wall check -- the
+  // deflected ray isn't guaranteed clear just because the true path was.
+  const wallsRow = (await pool.query("SELECT walls FROM encounters WHERE id = $1", [offer.encounterId])).rows[0];
+  const walls = wallsRow?.walls || [];
+
+  if (!attacker || !target) {
+    broadcastShotResolved(offer, {
+      outcome: "miss",
+      impactPoint: missDeflection(offer.attackerPos, offer.impactPoint, walls),
+    });
+    return;
+  }
+
   // You never fumble a slug fired at yourself -- a self-buff always lands.
   const isSelfShot = attacker.id === target.id;
+  const { attackTotal, dc } = await resolveAttackRoll(offer, attacker, target);
   const hit = isSelfShot || attackTotal >= dc;
   // Went wide instead of stopping dead-on the target -- see missDeflection.
   // Only computed for a miss; a hit's reveal doesn't need it.
@@ -3438,66 +3697,13 @@ async function resolveNormalHit(offer) {
   scheduleAfterFlight(offer.firedAt, offer.windowMs, async () => {
     let log;
     if (hit) {
-      const hitLog = await dealHit(offer.encounterId, attacker.id, target.id, offer.slug, {
-        windowMs: offer.windowMs,
-        firedAt: offer.firedAt,
-        // Where this specific leg's bolt actually flew from -- the real
-        // shooter's position for a normal shot, but the *previous* target's
-        // position for a ricocheted leg (see fireSecondaryShot). Knockback
-        // needs to shove away from this, not from attacker.id's real
-        // current position, which for a ricochet leg is somewhere else
-        // entirely.
-        originPos: offer.attackerPos,
-        isRicochetLeg: offer.isRicochetLeg,
-        mindScrambleEffect: offer.effectChoice,
-        frictionEffect: offer.effectChoice,
-      });
+      const hitLog = await applyHitEffects(offer, attacker, target);
       log = isSelfShot
         ? `${attacker.name} fires ${offer.slug.name} at themselves. ${hitLog}`
         : `${attacker.name}'s ${offer.slug.name} hits ${target.name} (${attackTotal} vs DC ${dc})! ${hitLog}`;
-      await maybeRicochet(offer, target.id);
     } else {
-      log = `${attacker.name}'s ${offer.slug.name} misses ${target.name} (${attackTotal} vs DC ${dc}).`;
-      // A miss still fries the target's blaster -- causes_jam triggers on
-      // hit or miss alike (the shot got close enough to matter), just not
-      // on the attacker's own misfire (which returns before this point ever
-      // runs), an out-of-range shot (handled earlier, never reaches here),
-      // or a self-targeted shot (Thugglet shooting yourself for
-      // invisibility shouldn't also jam your own gun).
-      if (offer.slug.causes_jam && target.kind !== "mecha" && target.id !== attacker.id) {
-        await updateCombatant(target.id, {
-          status_effects: JSON.stringify({ ...(target.status_effects || {}), jammed: true }),
-        });
-        log += ` ${target.name}'s blaster is fried -- their next shot misfires.`;
-      }
-      // Cynosure's disarm follows the exact same "still fries on a miss"
-      // rule as causes_jam above.
-      if (offer.slug.causes_disarm && target.kind !== "mecha" && target.id !== attacker.id) {
-        await updateCombatant(target.id, {
-          status_effects: JSON.stringify({ ...(target.status_effects || {}), disarmed: { turnsLeft: DISARM_DURATION_TURNS } }),
-        });
-        log += ` ${target.name}'s blaster is disabled -- they can't Shoot Slug on their next turn.`;
-      }
-      // An AOE slug still detonates on a miss -- it just goes off wherever
-      // the deflected shot actually landed instead of on the target.
-      // Whoever's within AOE_RADIUS of that point (which can include the
-      // original target, if the miss didn't carry it far) takes the blast
-      // anyway.
-      if (offer.slug.aoe_blast) {
-        const caught = await findAoeTargets(offer.encounterId, deflected, [attacker.id]);
-        if (caught.length > 0) {
-          log += " It still detonates!";
-          for (const other of caught) {
-            const splashLog = await dealHit(offer.encounterId, attacker.id, other.id, offer.slug, { isSplash: true });
-            log += ` The blast catches ${other.name}: ${splashLog}`;
-          }
-        } else {
-          log += " It detonates harmlessly, catching no one.";
-        }
-      }
-      // The bolt still glances off a missed target -- Speedstinger's carom
-      // continues from here regardless of whether this leg connected.
-      await maybeRicochet(offer, target.id);
+      const fragments = await applyGlancingEffects(offer, attacker, target, deflected);
+      log = [`${attacker.name}'s ${offer.slug.name} misses ${target.name} (${attackTotal} vs DC ${dc}).`, ...fragments].join(" ");
     }
     // Any terrain this slug leaves (ice/damage patch, fire trail, star wall,
     // pods, zones) lands where the bolt actually came to rest: dead on the
@@ -3508,6 +3714,91 @@ async function resolveNormalHit(offer) {
     await pushCombatLog(offer.encounterId, log);
     await broadcastEncounter(offer.encounterId);
   });
+}
+
+// A third counter-window reaction alongside firing a counter slug: no slug
+// or energy pip spent, just d20 + DEX opposed directly against the
+// attacker's own attack roll. A failed dodge falls through to *exactly* the
+// same hit-or-miss determination an unanswered shot would get -- dodging
+// isn't a second chance to avoid a shot that was going to miss on its own.
+async function resolveDodgeAttempt(id) {
+  const offer = pendingCounters.get(id);
+  if (!offer) return null;
+  clearTimeout(offer.timeoutHandle);
+  pendingCounters.delete(id);
+
+  const defender = await getCombatant(offer.targetCombatantId);
+  const attacker = await getCombatant(offer.attackerCombatantId);
+  // Re-check against a fresh row -- same reasoning as resolveCounterOffer's
+  // own re-check: the offer was snapshotted when it went out, and AP may
+  // have moved since. Dodge is gated on unconscious/disabled, not disarmed
+  // (disarm is about firing a blaster; dodging never fires one).
+  const canAfford = defender && attacker && !defender.unconscious && !defender.disabled && DODGE_AP_COST <= (defender.current_ap || 0);
+  if (!canAfford) {
+    await resolveNormalHit(offer);
+    return { pending: false, countered: false, dodged: false };
+  }
+
+  // Spent regardless of outcome, broadcast immediately -- same rule a slug
+  // counter already follows (see resolveCounterOffer's matching comment).
+  await updateCombatant(defender.id, { current_ap: (defender.current_ap || 0) - DODGE_AP_COST });
+  await broadcastEncounter(offer.encounterId);
+
+  const wallsRow = (await pool.query("SELECT walls FROM encounters WHERE id = $1", [offer.encounterId])).rows[0];
+  const walls = wallsRow?.walls || [];
+  const { attackTotal, dc } = await resolveAttackRoll(offer, attacker, defender);
+  const dodgeTotal = rollD20() + (defender.data?.dexMod ?? 0);
+  // Opposed roll -- a tie favors the attacker, same convention as
+  // resolveNormalHit's own attackTotal >= dc (ties favor the active roller
+  // against a static target).
+  const dodged = dodgeTotal > attackTotal;
+  // The dodge failed -- fall through to the SAME outcome an unanswered shot
+  // would get. The attacker's own accuracy roll might still miss on its own,
+  // independent of the dodge attempt.
+  const hit = !dodged && attackTotal >= dc;
+  const deflected = !dodged && !hit ? missDeflection(offer.attackerPos, offer.impactPoint, walls) : null;
+
+  broadcastShotResolved(
+    offer,
+    dodged ? { outcome: "dodged" } : hit ? { outcome: "hit" } : { outcome: "miss", impactPoint: deflected }
+  );
+
+  scheduleAfterFlight(offer.firedAt, offer.windowMs, async () => {
+    let log;
+    if (dodged) {
+      const encRow = (
+        await pool.query("SELECT walls, map_width, map_height FROM encounters WHERE id = $1", [offer.encounterId])
+      ).rows[0];
+      const step = sidestepTarget(offer.attackerPos, { x: defender.x, y: defender.y }, encRow?.walls || []);
+      const dest = clampToMapBounds(step.point, encRow?.map_width ?? 1600, encRow?.map_height ?? 900);
+      // Position updates BEFORE the AOE check below (findAoeTargets
+      // re-queries live x/y) -- this is what lets a blast still catch a
+      // dodger who's still within AOE_RADIUS of the real impact point.
+      await updateCombatant(defender.id, { x: dest.x, y: dest.y });
+      const fragments = await applyGlancingEffects(offer, attacker, defender, offer.impactPoint);
+      log = [`${defender.name} dives clear (${dodgeTotal} dodge vs ${attackTotal} attack)!`, ...fragments].join(" ");
+      if (defender.kind === "character" && defender.ref_user_id) {
+        await grantFame(defender.ref_user_id, DODGE_FAME_BONUS);
+      }
+    } else if (hit) {
+      const hitLog = await applyHitEffects(offer, attacker, defender);
+      log = `${defender.name} tries to dodge but isn't fast enough (${dodgeTotal} vs ${attackTotal})! ${offer.attackerName}'s ${offer.slug.name} connects! ${hitLog}`;
+    } else {
+      // The dodge failed, but the shot missed on its own anyway -- ordinary
+      // miss handling, no Fame, no movement (nothing to reward or dodge).
+      const fragments = await applyGlancingEffects(offer, attacker, defender, deflected);
+      log = [`${offer.attackerName}'s ${offer.slug.name} misses ${defender.name} anyway (${attackTotal} vs DC ${dc}).`, ...fragments].join(
+        " "
+      );
+    }
+    // The bolt itself flew true either way in the dodged/hit cases (only the
+    // defender moved); a genuine miss leaves terrain at the deflected point.
+    await applyShotTerrain(offer, dodged || hit ? offer.impactPoint : deflected);
+    await pushCombatLog(offer.encounterId, log);
+    await broadcastEncounter(offer.encounterId);
+  });
+
+  return { pending: false, dodged };
 }
 
 async function resolveCounterOffer(id, chosenSlugId) {
@@ -3533,6 +3824,11 @@ async function resolveCounterOffer(id, chosenSlugId) {
     await resolveNormalHit(offer);
     return { pending: false, countered: false };
   }
+
+  // Fetched for Fame's clash-margin bonus below (the attacker isn't
+  // otherwise loaded in this function -- only offer.attackerCombatantId/
+  // offer.attackerName).
+  const attacker = await getCombatant(offer.attackerCombatantId);
 
   // Countering costs the slug's own apCost out of the defender's leftover
   // AP, plus one of its energy pips -- both are the price of the *choice* to
@@ -3569,7 +3865,11 @@ async function resolveCounterOffer(id, chosenSlugId) {
   // colliding at the geometric midpoint. Drives both where the clash
   // renders (client) and where a losing pod-spawner drops its pods.
   const counterAtMs = Math.max(0, Math.min(offer.windowMs, Date.now() - offer.firedAt));
-  const shotPosAtCounter = lerpPoint(offer.attackerPos, offer.impactPoint, shotDistanceFraction(counterAtMs, offer.windowMs));
+  const shotPosAtCounter = lerpPoint(
+    offer.attackerPos,
+    offer.impactPoint,
+    shotDistanceFraction(counterAtMs, offer.windowMs, offer.windupFraction)
+  );
   const clashPoint = lerpPoint(shotPosAtCounter, offer.impactPoint, 0.5);
 
   // The counter slug has the same fixed windup as any other shot (see
@@ -3584,16 +3884,33 @@ async function resolveCounterOffer(id, chosenSlugId) {
   const counterFlightMs = offer.windowMs - counterAtMs;
   const counterNeverWoundUp = counterFlightMs < SHOT_SLOW_PHASE_MS;
 
+  const attackerPowerVal = offer.slug.clash_power * attackerClashMultiplier;
+  const attackerDefenseVal = offer.slug.clash_defense * attackerClashMultiplier;
+  const defenderPowerVal = counterSlugRow.clash_power * defenderClashMultiplier;
+  const defenderDefenseVal = counterSlugRow.clash_defense * defenderClashMultiplier;
+
   const outcome = counterNeverWoundUp
     ? "attacker-wins"
     : firesVoided
       ? "bounce"
       : resolveClash({
-          attackerPower: offer.slug.clash_power * attackerClashMultiplier,
-          attackerDefense: offer.slug.clash_defense * attackerClashMultiplier,
-          defenderPower: counterSlugRow.clash_power * defenderClashMultiplier,
-          defenderDefense: counterSlugRow.clash_defense * defenderClashMultiplier,
+          attackerPower: attackerPowerVal,
+          attackerDefense: attackerDefenseVal,
+          defenderPower: defenderPowerVal,
+          defenderDefense: defenderDefenseVal,
         });
+
+  // Fame's clash-margin bonus only applies to a genuinely contested clash --
+  // counterNeverWoundUp is a forced win with no real clash (the counter slug
+  // never got up to speed), and bounce/double-break has no winner.
+  const clashWasContested = !counterNeverWoundUp && !firesVoided;
+  const clashMargin = !clashWasContested
+    ? 0
+    : outcome === "attacker-wins"
+      ? attackerPowerVal - defenderDefenseVal
+      : outcome === "defender-wins"
+        ? defenderPowerVal - attackerDefenseVal
+        : 0;
 
   // The clash math (who wins) is "the direction" -- fine to know and reveal
   // right away. What it actually *does* (ejects, damage) is held back for
@@ -3620,6 +3937,12 @@ async function resolveCounterOffer(id, chosenSlugId) {
         : `${offer.attackerName}'s ${offer.slug.name} and ${offer.targetName}'s ${counterSlugRow.name} clash and deflect harmlessly.`;
     } else if (outcome === "attacker-wins") {
       await ejectSlug(counterSlugRow.id);
+      // Fame: the margin by which the winning clash actually beat the
+      // loser's defense -- on top of dealHit's own raw-power/overkill hook
+      // below, which credits the same attacker again for the hit itself.
+      if (clashMargin > 0 && attacker?.kind === "character" && attacker.ref_user_id) {
+        await grantFame(attacker.ref_user_id, clashMargin);
+      }
       // Tripled power carries through to the actual damage too, not just the
       // clash comparison -- a cloned slug object so the real DB row's own
       // clash_power is never touched.
@@ -3641,6 +3964,12 @@ async function resolveCounterOffer(id, chosenSlugId) {
       // an uncontested hit would.
       await maybeRicochet(offer, offer.targetCombatantId);
     } else {
+      // Fame: same margin bonus as the attacker-wins branch above, mirrored
+      // for the defender -- dealHit's own hook (below) credits them again
+      // for the reflected hit itself.
+      if (clashMargin > 0 && defender.kind === "character" && defender.ref_user_id) {
+        await grantFame(defender.ref_user_id, clashMargin);
+      }
       // Both halves of a dual shot go flying when it loses the clash.
       for (const id of shotSlugIds(offer.slug)) await ejectSlug(id);
       const reflectingSlug =
@@ -3799,6 +4128,7 @@ async function resolveShooterSlugAndBlaster(attacker, req, { slugId, npcSlug, np
       base_type: BASE_TYPE_KEYS.includes(npcBlaster?.baseType) ? npcBlaster.baseType : null,
       accuracy: Number.isInteger(npcBlaster?.accuracy) ? npcBlaster.accuracy : 0,
       range: Number.isInteger(npcBlaster?.range) ? npcBlaster.range : 20,
+      speed: Number.isInteger(npcBlaster?.speed) ? npcBlaster.speed : 56,
       quality: Number.isInteger(npcBlaster?.quality) ? npcBlaster.quality : 0,
     };
     return { slug, blaster };
@@ -3904,7 +4234,11 @@ async function applyEnvironmentEffect({ actionType, attacker, slug, tb, attacker
 
 async function resolveEnvironmentShot({ actionType, attacker, slug, blaster, tb, targetPoint, encounterRow, fxId, firedAt }) {
   const attackerPos = { x: attacker.x, y: attacker.y };
-  const combinedRange = Math.max(blaster.range, tb.range);
+  // The weapon's own range and the slug type's own range stack -- a
+  // long-ranged type in a long-ranged weapon reaches further than either
+  // alone. See the identical comment on the main Attack flow's own
+  // combinedRange below.
+  const combinedRange = blaster.range + tb.range;
   const rawDist = distance(attackerPos, targetPoint);
   const dist = Math.min(rawDist, combinedRange);
   const intendedPoint = rawDist <= combinedRange ? targetPoint : pointAtDistance(attackerPos, targetPoint, combinedRange);
@@ -3913,7 +4247,7 @@ async function resolveEnvironmentShot({ actionType, attacker, slug, blaster, tb,
   // ENV_ACTION_DC instead of a defender's DEX -- there's no combatant here
   // to compute a real DC from.
   const quality = QUALITY_TIERS[blaster.quality] || QUALITY_TIERS[0];
-  const penalty = rangePenalty(dist, Math.max(blaster.range, tb.range));
+  const penalty = rangePenalty(dist, combinedRange);
   const attackTotal =
     rollD20() +
     blaster.accuracy +
@@ -3928,7 +4262,8 @@ async function resolveEnvironmentShot({ actionType, attacker, slug, blaster, tb,
   // the shot finds nothing at all. See missDeflection.
   const finalPoint = hit ? intendedPoint : missDeflection(attackerPos, intendedPoint, encounterRow.walls);
 
-  const windowMs = shotFlightMs(dist, blaster.range);
+  const speed = await blasterEffectiveSpeed(blaster);
+  const windowMs = shotFlightMs(dist, speed, slug);
 
   broadcastShotFx({
     fxId,
@@ -3939,6 +4274,7 @@ async function resolveEnvironmentShot({ actionType, attacker, slug, blaster, tb,
     impactPoint: finalPoint,
     slug,
     windowMs,
+    windupFraction: shotWindupFraction(dist, speed, slug),
     countered: false,
     outcome: null,
   });
@@ -4067,8 +4403,11 @@ router.post("/actions/shoot", async (req, res) => {
           return res.status(400).json({ error: `A Mega Morph burns ${MEGA_MORPH_PIP_COST} energy pips -- ${s.name} only has ${livePips}.` });
         }
       }
-      if ((blaster.range ?? 0) < MEGA_MORPH_MIN_RANGE) {
-        return res.status(400).json({ error: `A Mega Morph needs a weapon with a range of at least ${MEGA_MORPH_MIN_RANGE}.` });
+      // Effective speed (base + any equipped mods' speed_bonus) -- a
+      // Range-Finder-tier mod boosting a borderline weapon's speed can push
+      // it over the threshold same as it would for a normal shot's flight.
+      if ((await blasterEffectiveSpeed(blaster)) < MEGA_MORPH_MIN_SPEED) {
+        return res.status(400).json({ error: `A Mega Morph needs a weapon with a speed of at least ${MEGA_MORPH_MIN_SPEED}.` });
       }
     }
     // Cannon lends +3 clash power to whatever it fires (see
@@ -4163,6 +4502,10 @@ router.post("/actions/shoot", async (req, res) => {
           ? `${attacker.name}'s ${slug.name} is still fried from that last hit -- the shot misfires!`
           : `${attacker.name}'s ${slug.name} misfires! The shot is wasted.`
       );
+      // A player's misfire shatters the pod the slug was riding in; it stays
+      // out of the weapon until a Reload spends a spare. NPCs/grunts have
+      // infinite pods, so they skip this entirely.
+      if (attacker.kind === "character") await breakPods(attacker, shotSlugIds(slug));
       const encounter = await broadcastEncounter(attacker.encounter_id);
       return res.json({ pending: false, encounter });
     }
@@ -4193,9 +4536,21 @@ router.post("/actions/shoot", async (req, res) => {
     const targetPos = { x: target.x, y: target.y };
     // tb.range already has RANGE_SCALE baked in (combatRules.js) -- don't
     // scale it again here, and blaster.range is intentionally left at its
-    // raw stored value (see itemRules.js) rather than migrated.
-    const combinedRange = Math.max(blaster.range, tb.range);
+    // raw stored value (see itemRules.js) rather than migrated. The
+    // weapon's own range and the slug type's own range stack -- a
+    // long-reach type (e.g. Air) fired from a long-range Sniper Rig reaches
+    // further than either alone. dist can therefore exceed blaster.range on
+    // its own (whenever the type contributes real reach past it) -- that's
+    // fine now that the bolt's speed (see shotFlightMs) is its own explicit
+    // stat rather than derived from range, so ground covered past the
+    // weapon's own range still crosses at that same fixed speed, just
+    // taking proportionally longer.
+    const combinedRange = blaster.range + tb.range;
     const dist = distance(attackerPos, targetPos);
+    // Sums any equipped mods' speed_bonus onto the weapon's own base speed
+    // (see blasterEffectiveSpeed) -- computed once and reused for every
+    // speed-driven check below so they all agree on the same number.
+    const speed = await blasterEffectiveSpeed(blaster);
     // A self-buff has zero distance to cross -- there's no aim, no travel,
     // and (per resolveNormalHit's isSelfShot check) it always connects, so
     // it must never be gated on how long the flight would otherwise take.
@@ -4203,13 +4558,13 @@ router.post("/actions/shoot", async (req, res) => {
     // trips shotTooClose below and fails outright, no matter the weapon.
     const isSelfShot = target.id === attacker.id;
 
-    // Point-blank failure: at this weapon's own default speed (see
+    // Point-blank failure: at this weapon's own effective speed (see
     // shotFlightMs), the target is close enough that the shot would have to
     // land before the slug even finishes its fixed windup out of the
     // barrel. That can't happen -- the windup never compresses -- so the
     // shot just fails outright instead, exactly like a jam (no launch, no
     // counter offered). Being too close is bad.
-    if (!isSelfShot && shotTooClose(dist, blaster.range)) {
+    if (!isSelfShot && shotTooClose(dist, speed, slug)) {
       broadcastShotFx({
         fxId,
         attackerCombatantId: attacker.id,
@@ -4248,17 +4603,16 @@ router.post("/actions/shoot", async (req, res) => {
     const reaches = dist <= stopDist;
     const impactPoint = reaches ? targetPos : pointAtDistance(attackerPos, targetPos, stopDist);
 
-    // Scales with the equipped weapon's own range vs. the actual distance --
-    // see shotFlightMs's comment. Always <= COUNTER_WINDOW_MS, so the
-    // reaction window (which mirrors it) never runs longer than the fixed
-    // maximum either. Zeus shrinks this further still -- "near impossible to
-    // counter" -- which for free also speeds up the client's own bolt
-    // animation, since that's driven directly off this same number.
-    const rawWindowMs = shotFlightMs(dist, blaster.range);
+    // Driven by the equipped weapon's own explicit speed stat (Zeus's
+    // ultra_fast and a Mega Morph bump that speed further still) and how
+    // much ground there is to cross -- see shotFlightMs's comment. Never
+    // the other way around: dist never changes the bolt's *speed*, only how
+    // much of the fixed reaction window is left to react in.
+    const rawWindowMs = shotFlightMs(dist, speed, slug);
     // Perplexus's slowedReaction/enhancedReaction modify the *target's* own
     // window regardless of the shooter's own ultra_fast -- see
     // reactionWindowFactor.
-    const windowMs = Math.round(rawWindowMs * slugWindowFactor(slug) * reactionWindowFactor(target.status_effects));
+    const windowMs = Math.round(rawWindowMs * reactionWindowFactor(target.status_effects));
 
     const offer = {
       fxId,
@@ -4274,6 +4628,7 @@ router.post("/actions/shoot", async (req, res) => {
       targetPos,
       impactPoint,
       windowMs,
+      windupFraction: shotWindupFraction(dist, speed, slug),
       // Perplexus/Psi: the client's pre-fire effect picker, already narrowed
       // to whichever pool this shot's targeting actually allows -- see
       // dealHit's mind_scramble/friction_shift blocks, which each
@@ -4447,13 +4802,15 @@ router.post("/actions/shoot", async (req, res) => {
 
 router.post("/counters/:id/resolve", async (req, res) => {
   const { id } = req.params;
-  const { slugId } = req.body || {};
+  const { slugId, dodge } = req.body || {};
   const offer = pendingCounters.get(id);
   if (!offer) return res.status(404).json({ error: "This counter window has already closed." });
   const authorized = offer.dmControlled ? req.user.role === "Dungeon Master" : offer.userId === req.user.sub;
   if (!authorized) return res.status(403).json({ error: "This counter isn't yours to make." });
   try {
-    const result = await resolveCounterOffer(id, Number.isInteger(slugId) ? slugId : null);
+    const result = dodge
+      ? await resolveDodgeAttempt(id)
+      : await resolveCounterOffer(id, Number.isInteger(slugId) ? slugId : null);
     res.json(result || { pending: false });
   } catch (err) {
     console.error(err);
@@ -4699,5 +5056,6 @@ export {
   updateCombatant,
   syncCharacterFromCombatant,
   advanceTurn,
+  grantFame,
 };
 export default router;
