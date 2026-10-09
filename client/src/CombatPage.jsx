@@ -327,7 +327,7 @@ function PullGruntForm({ gruntTemplates, onPull }) {
 
 export default function CombatPage() {
   const { token, user } = useAuth();
-  const { encounter: liveEncounter, slugUpdate, blasterUpdate, shotFx, shotResolved, damageFlash, gruntTemplatesUpdate, gearChanged, podsUpdate, marketChanged, tradeCompleted } = useLiveState();
+  const { encounter: liveEncounter, slugUpdate, blasterUpdate, modUpdate, shotFx, shotResolved, damageFlash, gruntTemplatesUpdate, gearChanged, podsUpdate, marketChanged, tradeCompleted } = useLiveState();
   const [flashActive, setFlashActive] = useState(false);
   const [encounter, setEncounter] = useState(undefined);
   const [players, setPlayers] = useState([]);
@@ -434,6 +434,18 @@ export default function CombatPage() {
       return exists ? prev.map((b) => (b.id === blasterUpdate.blaster.id ? blasterUpdate.blaster : b)) : [...prev, blasterUpdate.blaster];
     });
   }, [blasterUpdate, isDM, user]);
+
+  // Keeps the Range Finder / dual-shot / speed-bonus mod checks live when a
+  // mod is equipped or removed mid-battle, instead of only on page load.
+  useEffect(() => {
+    if (!modUpdate) return;
+    if (!isDM && modUpdate.userId !== user?.id) return;
+    setAllMods((prev) => {
+      if (!modUpdate.mod) return prev.filter((m) => m.id !== modUpdate.modId);
+      const exists = prev.some((m) => m.id === modUpdate.mod.id);
+      return exists ? prev.map((m) => (m.id === modUpdate.mod.id ? modUpdate.mod : m)) : [...prev, modUpdate.mod];
+    });
+  }, [modUpdate, isDM, user]);
 
   const myCombatant = useMemo(
     () => encounter?.combatants.find((c) => c.kind === "character" && c.refUserId === user?.id) || null,
@@ -573,15 +585,15 @@ export default function CombatPage() {
     if (!slug) return null;
     const blaster = allBlasters.find((b) => b.id === slug.equippedBlasterId);
     if (!blaster) return null;
-    // Only shown if the firing weapon has a Range Finder mod equipped --
-    // same "does this blaster carry a mod with this flag" check dualInfoFor
-    // uses for grantsDualShot above.
+    // Players only see it if the firing weapon has a Range Finder mod
+    // equipped (same check dualInfoFor uses for grantsDualShot). The DM
+    // always sees it, for characters and NPCs alike.
     const hasRangeFinder = allMods.some((m) => m.equippedBlasterId === blaster.id && m.grantsRangeFinder);
-    if (!hasRangeFinder) return null;
+    if (!isDM && !hasRangeFinder) return null;
     // Mirrors the server's combinedRange = blaster.range + type's range --
     // the two stack.
     return { x: actingCombatant.x, y: actingCombatant.y, r: blaster.range + typeRange(slug.type) };
-  }, [actingCombatant, mode, allSlugs, allBlasters, allMods]);
+  }, [actingCombatant, mode, allSlugs, allBlasters, allMods, isDM]);
 
   // While "Mount" is armed, show how close you have to be -- a ring at
   // MOUNT_RANGE around the character, with every in-range mecha highlighted

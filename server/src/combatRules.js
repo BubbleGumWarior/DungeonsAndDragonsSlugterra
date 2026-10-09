@@ -833,11 +833,14 @@ export function shotEffectiveSpeed(blasterSpeed, slug) {
   return perMs / slugWindowFactor(slug);
 }
 
-// The bolt moves at that one constant (effective) speed for its *entire*
-// flight -- no separate "slow" vs "fast" speed any more -- so the windup
-// simply covers whatever ground SHOT_SLOW_PHASE_MS's worth of that speed
-// crosses. This is a fixed distance for a given weapon+slug pairing, not a
-// fraction of range or of this particular shot's distance.
+// After the windup, the bolt "transforms" and cruises at this multiple of the
+// windup speed. The windup itself (its duration and the ground it covers) is
+// NOT sped up -- it stays slow; only the cruise leg is.
+export const SHOT_CRUISE_SPEED_MULTIPLIER = 2;
+
+// The windup crawls at the weapon's own (effective) speed for
+// SHOT_SLOW_PHASE_MS, so it covers a fixed distance for a given weapon+slug
+// pairing -- not a fraction of range or of this particular shot's distance.
 export function shotWindupDistance(blasterSpeed, slug) {
   return shotEffectiveSpeed(blasterSpeed, slug) * SHOT_SLOW_PHASE_MS;
 }
@@ -853,18 +856,17 @@ export function shotTooClose(dist, blasterSpeed, slug) {
   return dist <= shotWindupDistance(blasterSpeed, slug);
 }
 
-// A shot's actual flight time: since the bolt moves at one constant speed
-// for the whole trip, this is simply dist / speed -- there's no
-// windup-vs-cruise split to reason about for *timing* any more (that split
-// is purely a client-side rendering/flavor detail now, see
-// shotDistanceFraction). Two shots from the same weapon+slug, one close and
-// one far -- even one that reaches past the weapon's own range on a slug
-// type's added reach, see combinedRange -- always cross ground at the same
-// rate; the close one just has less of it to cross, hence a shorter flight
-// and a shorter reaction window, without the bolt itself ever moving any
-// differently.
+// A shot's actual flight time: the windup (SHOT_SLOW_PHASE_MS, normal speed)
+// followed by the remaining ground at SHOT_CRUISE_SPEED_MULTIPLIER x that
+// speed. Shots shorter than the windup distance (ricochet legs) just crawl the
+// whole way. Matches the client's phasedFraction in CombatMap.jsx: a fixed
+// windup time covering windupFraction of the distance, then a linear cruise.
 export function shotFlightMs(dist, blasterSpeed, slug) {
-  return Math.round(dist / shotEffectiveSpeed(blasterSpeed, slug));
+  const windupSpeed = shotEffectiveSpeed(blasterSpeed, slug);
+  const windupDist = windupSpeed * SHOT_SLOW_PHASE_MS;
+  if (dist <= windupDist) return Math.round(dist / windupSpeed);
+  const cruiseMs = (dist - windupDist) / (windupSpeed * SHOT_CRUISE_SPEED_MULTIPLIER);
+  return Math.round(SHOT_SLOW_PHASE_MS + cruiseMs);
 }
 
 // Fraction of a shot's own total distance covered during its windup --
