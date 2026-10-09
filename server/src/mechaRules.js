@@ -158,3 +158,22 @@ export function validateMechaModFields({ name, effect, speedBonus, speedMultipli
 
   return { valid: true };
 }
+
+// Server mirror of client/src/mechaData.js's effectiveStats: the mecha's frame
+// stats plus its tier bonus plus every equipped mod. `mecha` is a DB row
+// (mecha or mecha_template), `mods` are mecha_mods rows (may be empty).
+// Speed sums flat bonuses first, then applies the mods' multipliers.
+export function effectiveMechaStats(mecha, mods = []) {
+  const tierBonus = (TIER_LABELS[mecha.tier] || TIER_LABELS[0]).statBonus;
+  const sum = (key) => mods.reduce((total, m) => total + (m[key] || 0), 0);
+  const speedMult = mods.reduce((product, m) => product * (m.speed_multiplier ?? 1), 1);
+  return {
+    speed: Math.round((mecha.speed + tierBonus + sum("speed_bonus")) * speedMult),
+    handling: mecha.handling + tierBonus + sum("handling_bonus"),
+    armor: mecha.armor + tierBonus + sum("armor_bonus"),
+    rammingPower: mecha.ramming_power + tierBonus + sum("ramming_bonus"),
+    // Max Structure already scales with tier on its own (see
+    // computeMaxStructure), so it only takes the mods' armor, not the tier's.
+    structureArmor: mecha.armor + sum("armor_bonus"),
+  };
+}

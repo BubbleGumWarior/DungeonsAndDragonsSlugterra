@@ -2,9 +2,9 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { broadcastAll, notifyUser } from "../ws.js";
-import { statModifier, computeMaxGrit, actionPoints, initiativeBonus, npcActionPoints, npcMaxGrit } from "../characterRules.js";
+import { statModifier, skillModifier, PROFICIENCY_KEYS, computeMaxGrit, actionPoints, initiativeBonus, npcActionPoints, npcMaxGrit } from "../characterRules.js";
 import { QUALITY_TIERS, BASE_TYPES, BASE_TYPE_KEYS } from "../itemRules.js";
-import { TIER_LABELS as MECHA_TIER_LABELS } from "../mechaRules.js";
+import { TIER_LABELS as MECHA_TIER_LABELS, effectiveMechaStats } from "../mechaRules.js";
 import { LOYALTY_TIER_MIN, LOYALTY_TIER_MAX, RARITY_MAX } from "../slugRules.js";
 import { toClientSlug } from "./slugs.js";
 import { toClientBlaster } from "./blasters.js";
@@ -86,6 +86,39 @@ import {
   CONFUSION_CHANCE,
   confusedDeflection,
   clampToMapBounds,
+  wallRunApCost,
+  planWallRun,
+  makeWaterSet,
+  isWaterAt,
+  pathApCost,
+  pathTouchesWater,
+  WATER_FOOT_COST_MULT,
+  MECHA_MODES,
+  BIKE_ACCURACY_PENALTY,
+  modeBlasterSpeedFactor,
+  modeMechaSpeedFactor,
+  modeIgnoresWater,
+  effectiveMode,
+  isBurrowed,
+  combatantSkillMod,
+  areAllies,
+  PERCEPTION_DC,
+  PERCEPTION_RANGE,
+  moveSpeedPerAp,
+  reloadApCostFor,
+  dodgeSidestepDistance,
+  HIDE_AP_COST,
+  HIDE_RANGE,
+  HIDE_DC,
+  INTIMIDATE_AP_COST,
+  INTIMIDATE_RANGE,
+  INTIMIDATE_DC,
+  INTIMIDATE_AP_PENALTY,
+  firstAidApCost,
+  FIRST_AID_RANGE,
+  NEGATIVE_STATUS_KEYS,
+  STYLE_DC,
+  STYLE_FAME_BONUS,
   CLASH_TRIPLE_MULTIPLIER,
   CONE_HALF_ANGLE_DEG,
   CONE_LENGTH,
@@ -139,6 +172,28 @@ import {
 
 const router = Router();
 router.use(requireAuth);
+
+// A burrowed unit may only Move, End Turn, or surface (mecha-mode) -- every
+// other combat action is refused. The acting combatant arrives under a few
+// different body keys depending on the route.
+const BURROW_ALLOWED_ACTIONS = new Set(["/move", "/end-turn", "/mecha-mode"]);
+router.use("/actions", async (req, res, next) => {
+  try {
+    if (req.method !== "POST" || BURROW_ALLOWED_ACTIONS.has(req.path)) {
+      return next();
+    }
+    const body = req.body || {};
+    const actorId = body.combatantId ?? body.attackerId ?? body.mechaCombatantId;
+    if (actorId == null) return next();
+    const actor = await getCombatant(actorId);
+    if (actor && isBurrowed(actor)) {
+      return res.status(400).json({ error: "Burrowed -- surface first. Only moving and surfacing are possible underground." });
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 function requireDungeonMaster(req, res, next) {
   if (req.user.role !== "Dungeon Master") {
@@ -200,6 +255,7 @@ function toClientEncounter(row, combatants) {
     mapImageOffsetX: row.map_image_offset_x,
     mapImageOffsetY: row.map_image_offset_y,
     walls: row.walls,
+    water: row.water,
     hazards: row.hazards,
     bridges: row.bridges,
     pods: row.pods,
@@ -531,6 +587,33 @@ router.patch("/encounters/:id/map", requireDungeonMaster, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Water terrain (painted by the DM during setup)
+// ---------------------------------------------------------------------------
+
+router.patch("/encounters/:id/water", requireDungeonMaster, async (req, res) => {
+  const id = Number(req.params.id);
+  const { cells, paint } = req.body || {};
+  if (!Array.isArray(cells) || !cells.every((c) => Number.isInteger(c) && c >= 0)) {
+    return res.status(400).json({ error: "cells must be a list of cell ids." });
+  }
+  try {
+    const { rows } = await pool.query("SELECT water FROM encounters WHERE id = $1", [id]);
+    if (!rows[0]) return res.status(404).json({ error: "Encounter not found." });
+    const set = makeWaterSet(rows[0].water);
+    for (const c of cells) {
+      if (paint) set.add(c);
+      else set.delete(c);
+    }
+    await pool.query("UPDATE encounters SET water = $1 WHERE id = $2", [JSON.stringify([...set]), id]);
+    const encounter = await broadcastEncounter(id);
+    res.json({ encounter });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not paint water." });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Walls
 // ---------------------------------------------------------------------------
 
@@ -628,6 +711,9 @@ router.post("/encounters/:id/combatants", requireDungeonMaster, async (req, res)
       fields.data = {
         dexMod: initiativeBonus(character.stats),
         conMod: statModifier(character.stats.constitution),
+        skills: Object.fromEntries(
+          PROFICIENCY_KEYS.map((key) => [key, skillModifier(character.stats, character.proficiencies, key)])
+        ),
         activeWeaponSlot: PRIMARY_WEAPON_SLOT,
       };
     } else if (kind === "mecha") {
@@ -635,7 +721,9 @@ router.post("/encounters/:id/combatants", requireDungeonMaster, async (req, res)
       const { rows } = await pool.query("SELECT * FROM mechas WHERE id = $1", [refMechaId]);
       const mecha = rows[0];
       if (!mecha) return res.status(400).json({ error: "Mecha not found." });
-      const maxStructure = computeMaxStructure({ armor: mecha.armor, tier: mecha.tier });
+      const { rows: mechaMods } = await pool.query("SELECT * FROM mecha_mods WHERE equipped_mecha_id = $1", [refMechaId]);
+      const stats = effectiveMechaStats(mecha, mechaMods);
+      const maxStructure = computeMaxStructure({ armor: stats.structureArmor, tier: mecha.tier });
       fields.ref_mecha_id = refMechaId;
       fields.name = (name || mecha.name).trim();
       fields.portrait = mecha.image;
@@ -645,7 +733,7 @@ router.post("/encounters/:id/combatants", requireDungeonMaster, async (req, res)
       // ownerUserId: the player who owns this mecha on the Mechas page. They
       // (and only they, besides the DM) may move it on its own turn while
       // it's unmounted -- see /actions/move and isActingCombatantAuthorized.
-      fields.data = { dexMod: 0, speed: mecha.speed, handling: mecha.handling, armor: mecha.armor, rammingPower: mecha.ramming_power, tier: mecha.tier, ownerUserId: mecha.user_id ?? null };
+      fields.data = { dexMod: 0, speed: stats.speed, handling: stats.handling, armor: stats.armor, rammingPower: stats.rammingPower, tier: mecha.tier, ownerUserId: mecha.user_id ?? null, modes: [...new Set(mechaMods.map((m) => m.unlocks_mode).filter(Boolean))], mode: null };
     } else {
       // npc: DM supplies a lightweight ad-hoc stat block. AP and Grit are
       // derived from the DEX/CON modifiers on the same curves players use --
@@ -749,10 +837,10 @@ async function equipNpcCombatant(
     const equipSlot = i < 2 ? i : null;
     const { rows } = await pool.query(
       `INSERT INTO blasters
-        (template_id, owner_combatant_id, name, base_type, image, accuracy, reload_ap_cost, range, mod_slots, magazine_size, quality, equip_slot)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        (template_id, owner_combatant_id, name, base_type, image, accuracy, reload_ap_cost, range, speed, mod_slots, magazine_size, quality, equip_slot)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        RETURNING *`,
-      [bt.id, combatant.id, bt.name, bt.base_type, bt.image, bt.accuracy, bt.reload_ap_cost, bt.range, bt.mod_slots, bt.magazine_size, bt.quality, equipSlot]
+      [bt.id, combatant.id, bt.name, bt.base_type, bt.image, bt.accuracy, bt.reload_ap_cost, bt.range, bt.speed, bt.mod_slots, bt.magazine_size, bt.quality, equipSlot]
     );
     spawnedBlasters.push(rows[0]);
     // The DM's already-fetched slug/blaster lists have no way to learn
@@ -792,10 +880,10 @@ async function equipNpcCombatant(
     const base = BASE_TYPES.Pistol;
     const { rows } = await pool.query(
       `INSERT INTO blasters
-        (template_id, owner_combatant_id, name, base_type, image, accuracy, reload_ap_cost, range, mod_slots, magazine_size, quality, equip_slot)
-       VALUES (NULL,$1,$2,$3,NULL,$4,$5,$6,$7,$8,$9,$10)
+        (template_id, owner_combatant_id, name, base_type, image, accuracy, reload_ap_cost, range, speed, mod_slots, magazine_size, quality, equip_slot)
+       VALUES (NULL,$1,$2,$3,NULL,$4,$5,$6,$7,$8,$9,$10,$11)
        RETURNING *`,
-      [combatant.id, "Standard Blaster", "Pistol", base.accuracy, base.reloadApCost, base.range, base.modSlots, base.magazineSize, 1, equippedCount]
+      [combatant.id, "Standard Blaster", "Pistol", base.accuracy, base.reloadApCost, base.range, base.speed, base.modSlots, base.magazineSize, 1, equippedCount]
     );
     spawnedBlasters.push(rows[0]);
     slotCursor.push(0);
@@ -904,7 +992,8 @@ async function equipNpcCombatant(
     const mtResult = await pool.query("SELECT * FROM mecha_templates WHERE id = $1", [mechaTemplateId]);
     const mt = mtResult.rows[0];
     if (mt) {
-      const maxStructure = computeMaxStructure({ armor: mt.armor, tier: mt.tier });
+      const mtStats = effectiveMechaStats(mt);
+      const maxStructure = computeMaxStructure({ armor: mtStats.structureArmor, tier: mt.tier });
       const mechaResult = await pool.query(
         `INSERT INTO combatants
           (encounter_id, kind, name, portrait, x, y, max_ap, current_ap, max_structure, current_structure, data)
@@ -917,7 +1006,7 @@ async function equipNpcCombatant(
           combatant.x,
           combatant.y,
           maxStructure,
-          JSON.stringify({ dexMod: 0, speed: mt.speed, handling: mt.handling, armor: mt.armor, rammingPower: mt.ramming_power, tier: mt.tier, ownerUserId: null }),
+          JSON.stringify({ dexMod: 0, speed: mtStats.speed, handling: mtStats.handling, armor: mtStats.armor, rammingPower: mtStats.rammingPower, tier: mt.tier, ownerUserId: null }),
         ]
       );
       await pool.query("UPDATE combatants SET mounted_on = $1 WHERE id = $2", [mechaResult.rows[0].id, combatant.id]);
@@ -1152,6 +1241,42 @@ router.post("/encounters/:id/start", requireDungeonMaster, async (req, res) => {
   }
 });
 
+// Perception: at the start of a character's turn they roll d20 + Perception
+// automatically; above PERCEPTION_DC they see through any hostile within
+// PERCEPTION_RANGE who is hiding -- invisible, or behind a Mirage Coil's
+// decoys (the mirage collapses). Quiet unless there was something to find.
+async function perceptionSweep(encounterId, observer) {
+  const { rows } = await pool.query(
+    "SELECT * FROM combatants WHERE encounter_id = $1 AND kind <> 'decoy' AND NOT unconscious AND NOT disabled",
+    [encounterId]
+  );
+  const hidden = rows.filter(
+    (c) =>
+      c.id !== observer.id &&
+      !areAllies(observer, c) &&
+      (c.status_effects?.invisible || c.status_effects?.mirage) &&
+      distance({ x: observer.x, y: observer.y }, { x: c.x, y: c.y }) <= PERCEPTION_RANGE
+  );
+  if (hidden.length === 0) return;
+  const total = rollD20() + combatantSkillMod(observer, "perception");
+  if (total <= PERCEPTION_DC) return;
+  for (const c of hidden) {
+    const next = { ...(c.status_effects || {}) };
+    const notes = [];
+    if (next.invisible) {
+      delete next.invisible;
+      notes.push("out of hiding");
+    }
+    if (next.mirage) {
+      await removeDecoys(encounterId, next.mirage.decoyIds);
+      delete next.mirage;
+      notes.push("through the mirage");
+    }
+    await updateCombatant(c.id, { status_effects: JSON.stringify(next) });
+    await pushCombatLog(encounterId, `${observer.name} spots ${c.name} ${notes.join(" and ")} (${total} Perception)!`);
+  }
+}
+
 async function advanceTurn(encounterId) {
   const { rows } = await pool.query("SELECT * FROM encounters WHERE id = $1", [encounterId]);
   const encounter = rows[0];
@@ -1199,11 +1324,15 @@ async function advanceTurn(encounterId) {
     // worth of Move directly away from wherever the shot that feared them
     // came from (see causes_fear in dealHit, which records that point).
     const feared = nextCombatant.status_effects?.feared;
-    const refillAp = shocked || feared ? 0 : stunned ? Math.max(0, nextCombatant.max_ap - 1) : nextCombatant.max_ap;
+    // Intimidate (see /actions/intimidate) docks AP from this one turn only.
+    const intimidatePenalty = nextCombatant.status_effects?.intimidated?.apPenalty ?? 0;
+    const baseRefillAp = shocked || feared ? 0 : stunned ? Math.max(0, nextCombatant.max_ap - 1) : nextCombatant.max_ap;
+    const refillAp = Math.max(0, baseRefillAp - intimidatePenalty);
     const statusAfterStun = { ...(nextCombatant.status_effects || {}) };
     if (stunned) delete statusAfterStun.stunned;
     if (shocked) delete statusAfterStun.shocked;
     if (feared) delete statusAfterStun.feared;
+    delete statusAfterStun.intimidated;
 
     // Burn/poison/snare/confusion/invisibility all tick down at the start of
     // the combatant's own turn -- see tickStatusEffects. Snare is a pure
@@ -1251,6 +1380,11 @@ async function advanceTurn(encounterId) {
         await updateCombatant(riddenMecha.id, { current_ap: riddenMecha.max_ap });
       }
     }
+
+    if (intimidatePenalty > 0) {
+      await pushCombatLog(encounterId, `${nextCombatant.name} is still rattled -- starts the turn ${intimidatePenalty} AP short.`);
+    }
+    if (nextCombatant.kind === "character") await perceptionSweep(encounterId, updatedCombatant);
 
     if (dotDamage > 0 && hasGrit) {
       await syncCharacterFromCombatant(updatedCombatant);
@@ -1370,9 +1504,11 @@ router.post("/actions/move", async (req, res) => {
           : null;
     if (vehicle) {
       if (vehicle.disabled) return res.status(400).json({ error: "That mecha is disabled." });
-      const speedPerAp = MECHA_SPEED_PER_AP(vehicle.data?.speed);
-      const dist = distance({ x: vehicle.x, y: vehicle.y }, { x, y });
-      const apNeeded = Math.max(1, Math.ceil(dist / speedPerAp));
+      const water = makeWaterSet(encounter.water);
+      const mode = vehicle.data?.mode ?? null;
+      const inWater = isWaterAt(water, { x: vehicle.x, y: vehicle.y });
+      const speedPerAp = MECHA_SPEED_PER_AP(vehicle.data?.speed) * modeMechaSpeedFactor(mode, inWater);
+      const apNeeded = pathApCost({ x: vehicle.x, y: vehicle.y }, { x, y }, water, speedPerAp, modeIgnoresWater(mode));
       if ((vehicle.current_ap ?? 0) < apNeeded) {
         return res.status(400).json({ error: "Not enough mecha AP to move that far." });
       }
@@ -1380,12 +1516,52 @@ router.post("/actions/move", async (req, res) => {
         return res.status(400).json({ error: "A wall blocks that path." });
       }
       await updateCombatant(vehicle.id, { x, y, current_ap: vehicle.current_ap - apNeeded });
-      for (const rider of await mechaRiders(vehicle.id)) {
+      const riders = await mechaRiders(vehicle.id);
+      for (const rider of riders) {
         await updateCombatant(rider.id, { x, y });
       }
+      const notes = [];
+
+      // Aquatic mode engages by itself on entering water and drops again once
+      // the mecha is back on dry land (it never overrides another mode).
+      let nextMode = mode;
+      if ((vehicle.data?.modes || []).includes("aquatic")) {
+        const landedInWater = isWaterAt(water, { x, y });
+        if (landedInWater && mode === null) {
+          nextMode = "aquatic";
+          notes.push(`${vehicle.name} slips into the water -- Aquatic mode engages.`);
+        } else if (!landedInWater && mode === "aquatic") {
+          nextMode = null;
+          notes.push(`${vehicle.name} climbs out of the water -- Aquatic mode disengages.`);
+        }
+      }
+      if (nextMode !== mode) {
+        for (const c of [vehicle, ...riders]) {
+          const fresh = await getCombatant(c.id);
+          await updateCombatant(c.id, { data: JSON.stringify({ ...(fresh?.data || {}), mode: nextMode }) });
+        }
+      }
+
+      // Hazards hit mechas too -- except a gliding one, which flies over them.
+      let slipped = false;
+      if (mode !== "glider") {
+        if (findHazardAt({ x, y }, encounter.hazards, "ice") && Math.random() < ICE_SLIP_CHANCE) {
+          slipped = true;
+          await updateCombatant(vehicle.id, { current_ap: 0 });
+          for (const rider of riders) await updateCombatant(rider.id, { current_ap: 0 });
+          notes.push(`${vehicle.name} skids on the ice -- the turn ends abruptly!`);
+        }
+        const dmgHazard = findHazardAt({ x, y }, encounter.hazards, "damage");
+        if (dmgHazard) {
+          const freshVehicle = await getCombatant(vehicle.id);
+          notes.push(await applyMechaHazard(dmgHazard, freshVehicle, riders[0] ? await getCombatant(riders[0].id) : null));
+        }
+      }
+
       const encounterOut = await broadcastEncounter(combatant.encounter_id);
       await pushCombatLog(combatant.encounter_id, `${vehicle.name} repositions.`);
-      return res.json({ encounter: encounterOut });
+      for (const note of notes) await pushCombatLog(combatant.encounter_id, note);
+      return res.json({ encounter: encounterOut, slipped });
     }
 
     const statusEffects = combatant.status_effects || {};
@@ -1410,9 +1586,15 @@ router.post("/actions/move", async (req, res) => {
 
     // Only characters/NPCs on foot reach here -- a mecha or a mounted rider
     // returned from the vehicle branch above.
-    const speedPerAp = MOVE_SPEED_PER_AP;
-    const dist = distance({ x: combatant.x, y: combatant.y }, { x, y });
-    const apNeeded = Math.max(1, Math.ceil(dist / speedPerAp));
+    const speedPerAp = moveSpeedPerAp(combatantSkillMod(combatant, "athletics"));
+    const apNeeded = pathApCost(
+      { x: combatant.x, y: combatant.y },
+      { x, y },
+      makeWaterSet(encounter.water),
+      speedPerAp,
+      false,
+      WATER_FOOT_COST_MULT
+    );
 
     if (combatant.current_ap < apNeeded) {
       return res.status(400).json({ error: "Not enough AP to move that far." });
@@ -1445,11 +1627,20 @@ router.post("/actions/move", async (req, res) => {
       }
     }
 
+    // Wading into water puts out the flames.
+    const dousedStatus = { ...(combatant.status_effects || {}) };
+    const doused =
+      Boolean(dousedStatus.burning) &&
+      pathTouchesWater({ x: combatant.x, y: combatant.y }, { x, y }, makeWaterSet(encounter.water));
+    if (doused) delete dousedStatus.burning;
+
     await updateCombatant(combatant.id, {
       x,
       y,
       current_ap: slipped ? 0 : combatant.current_ap - apNeeded,
+      ...(doused ? { status_effects: JSON.stringify(dousedStatus) } : {}),
     });
+    if (doused) await pushCombatLog(combatant.encounter_id, `${combatant.name} splashes into the water and the flames go out.`);
 
     // Mirage Coil's decoys mimic the owner's position on every Move, each
     // holding the random offset it was spawned with -- see spawnMirageDecoys.
@@ -1479,6 +1670,276 @@ router.post("/actions/move", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not move." });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Wall Run
+// ---------------------------------------------------------------------------
+
+router.post("/actions/wall-run", async (req, res) => {
+  const { combatantId } = req.body || {};
+  try {
+    const combatant = await getCombatant(combatantId);
+    if (!combatant) return res.status(404).json({ error: "Combatant not found." });
+    const encounterRow = await pool.query("SELECT * FROM encounters WHERE id = $1", [combatant.encounter_id]);
+    const encounter = encounterRow.rows[0];
+    if (!encounter) return res.status(404).json({ error: "Encounter not found." });
+    if (!isActingCombatantAuthorized(req, combatant, encounter)) {
+      return res.status(403).json({ error: "That isn't your combatant." });
+    }
+    if (req.user.role !== "Dungeon Master" && !requireOwnTurn(encounter, combatant)) {
+      return res.status(400).json({ error: "It isn't your turn." });
+    }
+    if (combatant.unconscious || combatant.disabled) {
+      return res.status(400).json({ error: "This combatant can't act." });
+    }
+    if (combatant.kind === "mecha" || combatant.mounted_on != null) {
+      return res.status(400).json({ error: "Only a combatant on foot can run a wall." });
+    }
+    if (combatant.status_effects?.snared?.turnsLeft > 0) {
+      return res.status(400).json({ error: "This combatant is snared and can't move." });
+    }
+
+    // Characters carry their Acrobatics modifier from when they joined; NPCs
+    // (and grunts) have no skills, so their DEX modifier stands in.
+    const acrobaticsMod = combatantSkillMod(combatant, "acrobatics");
+    if (acrobaticsMod <= 0) {
+      return res.status(400).json({ error: "You need a positive Acrobatics modifier to Wall Run." });
+    }
+    const apCost = wallRunApCost(acrobaticsMod);
+    if (combatant.current_ap < apCost) {
+      return res.status(400).json({ error: `Not enough AP -- Wall Run costs ${apCost}.` });
+    }
+
+    const plan = planWallRun({ x: combatant.x, y: combatant.y }, encounter.walls, encounter.map_width, encounter.map_height);
+    if (!plan) return res.status(400).json({ error: "You need to be close to a wall to Wall Run." });
+    // Whatever else is in the way (other than the wall being run) still blocks.
+    if (firstWallHit({ x: combatant.x, y: combatant.y }, plan.landing, encounter.walls, [plan.wall.id])) {
+      return res.status(400).json({ error: "Another wall blocks the landing." });
+    }
+
+    const { x, y } = plan.landing;
+    await updateCombatant(combatant.id, { x, y, current_ap: combatant.current_ap - apCost });
+    for (const decoyId of combatant.status_effects?.mirage?.decoyIds || []) {
+      const decoy = await getCombatant(decoyId);
+      const offset = decoy?.data?.offset || { dx: 0, dy: 0 };
+      await updateCombatant(decoyId, { x: x + offset.dx, y: y + offset.dy });
+    }
+    const encounterOut = await broadcastEncounter(combatant.encounter_id);
+    await pushCombatLog(combatant.encounter_id, `${combatant.name} runs along the wall and lands on the other side (${apCost} AP).`);
+    res.json({ encounter: encounterOut, wallRun: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not Wall Run." });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Skill actions: Hide (Stealth), Intimidate, First Aid (Medicine)
+// ---------------------------------------------------------------------------
+
+// Shared gatekeeping for the skill actions below: the combatant must be one
+// the caller controls, acting on their own turn, conscious, on foot. Sends the
+// error response itself and returns null when any check fails.
+async function loadSkillActor(req, res, combatantId) {
+  const combatant = await getCombatant(combatantId);
+  if (!combatant) {
+    res.status(404).json({ error: "Combatant not found." });
+    return null;
+  }
+  const encounterRow = await pool.query("SELECT * FROM encounters WHERE id = $1", [combatant.encounter_id]);
+  const encounter = encounterRow.rows[0];
+  if (!encounter) {
+    res.status(404).json({ error: "Encounter not found." });
+    return null;
+  }
+  if (!isActingCombatantAuthorized(req, combatant, encounter)) {
+    res.status(403).json({ error: "That isn't your combatant." });
+    return null;
+  }
+  if (req.user.role !== "Dungeon Master" && !requireOwnTurn(encounter, combatant)) {
+    res.status(400).json({ error: "It isn't your turn." });
+    return null;
+  }
+  if (combatant.unconscious || combatant.disabled) {
+    res.status(400).json({ error: "This combatant can't act." });
+    return null;
+  }
+  if (combatant.kind === "mecha" || combatant.mounted_on != null) {
+    res.status(400).json({ error: "Only a combatant on foot can do that." });
+    return null;
+  }
+  return { combatant, encounter };
+}
+
+router.post("/actions/hide", async (req, res) => {
+  try {
+    const actor = await loadSkillActor(req, res, (req.body || {}).combatantId);
+    if (!actor) return;
+    const { combatant } = actor;
+    const stealthMod = combatantSkillMod(combatant, "stealth");
+    if (stealthMod <= 0) return res.status(400).json({ error: "You need a positive Stealth modifier to Hide." });
+    if (combatant.current_ap < HIDE_AP_COST) return res.status(400).json({ error: "Not enough AP to Hide." });
+
+    const { rows } = await pool.query(
+      "SELECT * FROM combatants WHERE encounter_id = $1 AND id <> $2 AND kind <> 'decoy' AND NOT unconscious AND NOT disabled",
+      [combatant.encounter_id, combatant.id]
+    );
+    const watcher = rows.find(
+      (c) => !areAllies(combatant, c) && distance({ x: combatant.x, y: combatant.y }, { x: c.x, y: c.y }) <= HIDE_RANGE
+    );
+    if (watcher) {
+      return res.status(400).json({ error: `${watcher.name} is too close -- nobody hostile can be within ${HIDE_RANGE} units.` });
+    }
+
+    const total = rollD20() + stealthMod;
+    const hidden = total > HIDE_DC;
+    const status = { ...(combatant.status_effects || {}) };
+    if (hidden) status.invisible = { turnsLeft: INVISIBLE_DURATION_TURNS };
+    await updateCombatant(combatant.id, {
+      current_ap: combatant.current_ap - HIDE_AP_COST,
+      status_effects: JSON.stringify(status),
+    });
+    const encounterOut = await broadcastEncounter(combatant.encounter_id);
+    await pushCombatLog(
+      combatant.encounter_id,
+      hidden
+        ? `${combatant.name} slips out of sight (${total} Stealth)!`
+        : `${combatant.name} tries to hide but is still in view (${total} Stealth).`
+    );
+    res.json({ encounter: encounterOut, hidden, total });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not Hide." });
+  }
+});
+
+router.post("/actions/intimidate", async (req, res) => {
+  try {
+    const { combatantId, targetId } = req.body || {};
+    const actor = await loadSkillActor(req, res, combatantId);
+    if (!actor) return;
+    const { combatant } = actor;
+    const mod = combatantSkillMod(combatant, "intimidation");
+    if (mod <= 0) return res.status(400).json({ error: "You need a positive Intimidation modifier to Intimidate." });
+    if (combatant.current_ap < INTIMIDATE_AP_COST) return res.status(400).json({ error: "Not enough AP to Intimidate." });
+
+    const target = await getCombatant(targetId);
+    if (!target || isBurrowed(target) || target.encounter_id !== combatant.encounter_id) return res.status(404).json({ error: "Target not found." });
+    if (target.kind === "mecha" || target.kind === "decoy") return res.status(400).json({ error: "That can't be intimidated." });
+    if (target.unconscious || target.disabled) return res.status(400).json({ error: "That target is already down." });
+    if (areAllies(combatant, target)) return res.status(400).json({ error: "You can only intimidate an enemy." });
+    if (distance({ x: combatant.x, y: combatant.y }, { x: target.x, y: target.y }) > INTIMIDATE_RANGE) {
+      return res.status(400).json({ error: `Too far away -- within ${INTIMIDATE_RANGE} units only.` });
+    }
+
+    const total = rollD20() + mod;
+    const worked = total > INTIMIDATE_DC;
+    await updateCombatant(combatant.id, { current_ap: combatant.current_ap - INTIMIDATE_AP_COST });
+    if (worked) {
+      await updateCombatant(target.id, {
+        status_effects: JSON.stringify({ ...(target.status_effects || {}), intimidated: { apPenalty: INTIMIDATE_AP_PENALTY } }),
+      });
+    }
+    const encounterOut = await broadcastEncounter(combatant.encounter_id);
+    await pushCombatLog(
+      combatant.encounter_id,
+      worked
+        ? `${combatant.name} stares ${target.name} down (${total} Intimidation) -- they'll start their next turn ${INTIMIDATE_AP_PENALTY} AP short!`
+        : `${combatant.name} tries to intimidate ${target.name} but they hold firm (${total} Intimidation).`
+    );
+    res.json({ encounter: encounterOut, worked, total });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not Intimidate." });
+  }
+});
+
+router.post("/actions/first-aid", async (req, res) => {
+  try {
+    const { combatantId, targetId } = req.body || {};
+    const actor = await loadSkillActor(req, res, combatantId);
+    if (!actor) return;
+    const { combatant } = actor;
+    const apCost = firstAidApCost(combatantSkillMod(combatant, "medicine"));
+    if (combatant.current_ap < apCost) return res.status(400).json({ error: `Not enough AP -- First Aid costs ${apCost}.` });
+
+    const target = await getCombatant(targetId);
+    if (!target || isBurrowed(target) || target.encounter_id !== combatant.encounter_id) return res.status(404).json({ error: "Target not found." });
+    if (target.kind === "mecha" || target.kind === "decoy") return res.status(400).json({ error: "First Aid only works on people." });
+    if (!areAllies(combatant, target)) return res.status(400).json({ error: "First Aid only works on allies." });
+    if (distance({ x: combatant.x, y: combatant.y }, { x: target.x, y: target.y }) > FIRST_AID_RANGE) {
+      return res.status(400).json({ error: "Too far away -- get closer to your patient." });
+    }
+
+    const status = { ...(target.status_effects || {}) };
+    const cured = NEGATIVE_STATUS_KEYS.filter((key) => status[key]);
+    if (cured.length === 0) return res.status(400).json({ error: `${target.name} has nothing to treat.` });
+    for (const key of cured) delete status[key];
+
+    await updateCombatant(combatant.id, { current_ap: combatant.current_ap - apCost });
+    await updateCombatant(target.id, { status_effects: JSON.stringify(status) });
+    const encounterOut = await broadcastEncounter(combatant.encounter_id);
+    const who = target.id === combatant.id ? "themselves" : target.name;
+    await pushCombatLog(
+      combatant.encounter_id,
+      `${combatant.name} patches up ${who}, clearing ${cured.length} negative effect${cured.length === 1 ? "" : "s"} (${apCost} AP).`
+    );
+    res.json({ encounter: encounterOut, cured });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not give First Aid." });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Mecha modes (Bike / Glider / Aquatic / Burrow)
+// ---------------------------------------------------------------------------
+
+// A mounted rider flips their mecha between normal and one of its mod-granted
+// modes. Free, but only on your own turn. The mode lives on both the mecha and
+// its rider so either row can answer "what mode am I in?". `mode: null` returns
+// to normal (for Burrow that's "get out of burrow").
+router.post("/actions/mecha-mode", async (req, res) => {
+  const { combatantId, mode } = req.body || {};
+  try {
+    if (mode !== null && !MECHA_MODES.includes(mode)) return res.status(400).json({ error: "Unknown mode." });
+    if (mode === "aquatic") return res.status(400).json({ error: "Aquatic mode engages by itself in water." });
+    const rider = await getCombatant(combatantId);
+    if (!rider) return res.status(404).json({ error: "Combatant not found." });
+    const encounterRow = await pool.query("SELECT * FROM encounters WHERE id = $1", [rider.encounter_id]);
+    const encounter = encounterRow.rows[0];
+    if (!isActingCombatantAuthorized(req, rider, encounter)) return res.status(403).json({ error: "That isn't your combatant." });
+    if (req.user.role !== "Dungeon Master" && !requireOwnTurn(encounter, rider)) {
+      return res.status(400).json({ error: "It isn't your turn." });
+    }
+    if (rider.kind === "mecha" || rider.mounted_on == null) return res.status(400).json({ error: "You need to be mounted on a mecha." });
+    const vehicle = await getCombatant(rider.mounted_on);
+    if (!vehicle || vehicle.disabled) return res.status(400).json({ error: "That mecha is disabled." });
+    if (mode !== null && !(vehicle.data?.modes || []).includes(mode)) {
+      return res.status(400).json({ error: "This mecha doesn't have that mode installed." });
+    }
+    const previous = vehicle.data?.mode ?? null;
+    for (const c of [rider, vehicle]) {
+      await updateCombatant(c.id, { data: JSON.stringify({ ...(c.data || {}), mode }) });
+    }
+    const encounterOut = await broadcastEncounter(rider.encounter_id);
+    const label = { bike: "Bike", glider: "Glider", aquatic: "Aquatic", burrow: "Burrow" };
+    await pushCombatLog(
+      rider.encounter_id,
+      mode === null
+        ? previous === "burrow"
+          ? `${vehicle.name} surfaces from the ground.`
+          : `${vehicle.name} returns to normal mode.`
+        : mode === "burrow"
+          ? `${vehicle.name} burrows underground and vanishes from sight!`
+          : `${vehicle.name} switches to ${label[mode]} mode.`
+    );
+    res.json({ encounter: encounterOut });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not change mode." });
   }
 });
 
@@ -1667,7 +2128,10 @@ router.post("/actions/reload", async (req, res) => {
       return res.status(400).json({ error: "No spare pods left -- those slugs can't be reloaded." });
     }
 
-    const apCost = Math.max(1, blaster.reload_ap_cost || 1);
+    // Mods shift the weapon's own cost first (floored at 1), then Sleight of
+    // Hand shaves its modifier off that.
+    const modifiedCost = Math.max(1, (blaster.reload_ap_cost || 1) + (await blasterModTotal(blaster, "reload_ap_bonus")));
+    const apCost = reloadApCostFor(modifiedCost, combatantSkillMod(combatant, "sleightOfHand"));
     if (combatant.current_ap < apCost) {
       return res.status(400).json({ error: "Not enough AP to reload." });
     }
@@ -1919,7 +2383,7 @@ async function findChainTarget(encounterId, fromCombatantId, excludeCombatantId,
   for (const c of rows) {
     // A decoy only ever pops from being directly targeted (see dealHit) --
     // it's not a legitimate incidental chain/splash target.
-    if (c.kind === "decoy") continue;
+    if (c.kind === "decoy" || isBurrowed(c)) continue;
     if (c.current_grit === null && c.current_structure === null) continue;
     const d = distance({ x: from.x, y: from.y }, { x: c.x, y: c.y });
     if (d > maxRadius) continue;
@@ -1951,6 +2415,7 @@ async function findAoeTargets(encounterId, origin, excludeIds) {
   return rows.filter((c) => {
     if (excludeIds.includes(c.id)) return false;
     if (c.kind === "decoy") return false; // only pops from a direct hit, see dealHit
+    if (isBurrowed(c)) return false;
     if (c.current_grit === null && c.current_structure === null) return false;
     return distance(origin, { x: c.x, y: c.y }) <= AOE_RADIUS;
   });
@@ -2259,6 +2724,36 @@ async function applyHazardEffect(hazard, combatant) {
   return applyEnvironmentalDamage(combatant, amount, hazard.slugType);
 }
 
+// A mecha rolling onto a damaging hazard takes it as Structure damage (armor
+// still helps, like against a shot); the type's Burn/Poison DoT lands on its
+// rider, if any. Returns a short log fragment.
+async function applyMechaHazard(hazard, mecha, rider) {
+  const amount = Math.max(1, Math.floor(hazard.clashPower * HAZARD_DAMAGE_FRACTION));
+  const dmg = Math.max(0, amount - (mecha.data?.armor ?? 0));
+  const newStructure = Math.max(0, (mecha.current_structure ?? 0) - dmg);
+  await updateCombatant(mecha.id, { current_structure: newStructure });
+  let note = `${mecha.name} takes ${dmg} Structure damage from the hazard`;
+  const tb = typeBallistics(hazard.slugType);
+  if (rider && (tb.trait === "burn" || tb.trait === "poison")) {
+    const status = { ...(rider.status_effects || {}) };
+    if (tb.trait === "burn") {
+      status.burning = { turnsLeft: BURN_DURATION_TURNS, damage: computeBurnDamage(amount) };
+      note += `, and ${rider.name} catches fire`;
+    } else {
+      status.poison = { stacks: (status.poison?.stacks || 0) + 1, turnsLeft: POISON_DURATION_TURNS };
+      note += `, and ${rider.name} is poisoned`;
+    }
+    await updateCombatant(rider.id, { status_effects: JSON.stringify(status) });
+  }
+  if (newStructure === 0 && !mecha.disabled) {
+    await disableMecha(mecha.id);
+    note += " -- it is wrecked!";
+  } else {
+    note += ".";
+  }
+  return note;
+}
+
 // Pressure Tick's steam pods -- 3 scattered near the impact point, each with
 // a fixed random direction and an independently rolled 3-10 counter. See
 // POD_* in combatRules.js and tickPods below (where they actually fire).
@@ -2381,7 +2876,7 @@ async function formStarWall(encounterId, point, slug) {
       [encounterId]
     );
     for (const c of combatantRows) {
-      if (c.kind === "mecha" || c.kind === "decoy") continue;
+      if (c.kind === "mecha" || c.kind === "decoy" || isBurrowed(c)) continue;
       if (c.current_grit === null) continue;
       // seg is {x1,y1,x2,y2} (starSegments' own shape) -- distanceToSegment
       // wants two {x,y} points, not the segment object itself.
@@ -2559,7 +3054,7 @@ async function applyMarkedSplash(encounterId, shooterId, primaryTargetId, amount
   const notes = [];
   for (const c of rows) {
     if (c.id === primaryTargetId || c.id === shooterId) continue;
-    if (c.kind === "mecha" || c.kind === "decoy") continue;
+    if (c.kind === "mecha" || c.kind === "decoy" || isBurrowed(c)) continue;
     if (!c.status_effects?.marked) continue;
     if (c.current_grit === null) continue;
     const { riderDamage, note: absorbNote } = await absorbRiderDamage(c, splashAmount, { electric });
@@ -3067,7 +3562,7 @@ async function dealHit(
     );
     const coneAmount = Math.max(1, Math.round(slug.clash_power * CONE_DAMAGE_FRACTION));
     for (const c of coneCandidates) {
-      if (c.kind === "decoy") continue; // only pops from a direct hit, see dealHit
+      if (c.kind === "decoy" || isBurrowed(c)) continue; // decoys only pop from a direct hit, see dealHit
       if (c.current_grit === null && c.current_structure === null) continue;
       if (!pointInCone(apex, knockbackOrigin, { x: c.x, y: c.y }, CONE_HALF_ANGLE_DEG, CONE_LENGTH)) continue;
       const hit = await applyEnvironmentalDamage(c, coneAmount, slug.type);
@@ -3225,11 +3720,11 @@ function broadcastRamFailFx({ fromPos, toPos }) {
 // having delayed that animation's start.
 function broadcastShotResolved(
   offer,
-  { outcome, countered = false, counterSlugType = null, counterSlugName = null, impactPoint = null, clashPoint = null, counterAtMs = null }
+  { outcome, countered = false, counterSlugType = null, counterSlugName = null, impactPoint = null, clashPoint = null, counterAtMs = null, style = false }
 ) {
   broadcastAll({
     type: "combat-shot-resolved",
-    resolved: { id: offer.fxId, outcome, countered, counterSlugType, counterSlugName, impactPoint, clashPoint, counterAtMs },
+    resolved: { id: offer.fxId, outcome, countered, counterSlugType, counterSlugName, impactPoint, clashPoint, counterAtMs, style },
   });
 }
 
@@ -3325,8 +3820,17 @@ async function launchAndOfferCounter(offer) {
   // flat Dodge cost) still gets a reaction window -- just without any slug
   // option in it. Re-validated for real in resolveDodgeAttempt; this copy is
   // only for whether to open the window and what to tell the client.
-  const canDodge = reactionEligible && !target.unconscious && !target.disabled && DODGE_AP_COST <= (target.current_ap || 0);
+  const canDodge =
+    reactionEligible &&
+    !target.unconscious &&
+    !target.disabled &&
+    DODGE_AP_COST <= (target.current_ap || 0) &&
+    combatantSkillMod(target, "acrobatics") > 0;
   if (target && (eligible.length > 0 || canDodge)) {
+    // Perception: d20 + mod above PERCEPTION_DC and the target clocks the shot
+    // the moment it's fired, so the prompt doesn't wait out the windup.
+    const perceptionTotal = rollD20() + combatantSkillMod(target, "perception");
+    const spottedEarly = perceptionTotal > PERCEPTION_DC;
     // A player-controlled target answers their own counter; an NPC's (no
     // ref_user_id) is handed to the DM to answer on its behalf.
     const dmControlled = !target.ref_user_id;
@@ -3365,7 +3869,7 @@ async function launchAndOfferCounter(offer) {
         // be identified until it's out of the barrel and transformed, so the
         // prompt holds back until then (the window itself, windowMs, still
         // runs from launch and isn't extended).
-        revealAfterMs: Math.max(0, SHOT_SLOW_PHASE_MS - (Date.now() - offer.firedAt)),
+        revealAfterMs: spottedEarly ? 0 : Math.max(0, SHOT_SLOW_PHASE_MS - (Date.now() - offer.firedAt)),
         // Who's being shot at -- the DM may be fielding counters for several
         // NPCs at once, so the prompt names the defender.
         defenderName: offer.targetName,
@@ -3393,6 +3897,9 @@ async function launchAndOfferCounter(offer) {
 
     await broadcastEncounter(offer.encounterId);
     await pushCombatLog(offer.encounterId, `${offer.attackerName} fires ${offer.slug.name} at ${offer.targetName}...`);
+    if (spottedEarly) {
+      await pushCombatLog(offer.encounterId, `${target.name} spots it the instant it's fired (${perceptionTotal} Perception)!`);
+    }
     return { pending: true };
   }
   await resolveNormalHit(offer);
@@ -3409,13 +3916,33 @@ async function launchAndOfferCounter(offer) {
 // for ricochet legs, so unlike the main Attack flow it ignores weapon/type
 // max range entirely -- a caroming bounce always reaches its chosen target
 // unless a wall physically stops it.
+// Sum of one numeric column (accuracy_bonus / reload_ap_bonus) across every
+// mod equipped to this blaster. A DM-puppeted NPC's synthetic blaster has no
+// real id (and no mods), so it contributes nothing.
+async function blasterModTotal(blaster, column) {
+  if (!Number.isInteger(blaster?.id)) return 0;
+  const { rows } = await pool.query(`SELECT COALESCE(SUM(${column}), 0) AS total FROM mods WHERE equipped_blaster_id = $1`, [
+    blaster.id,
+  ]);
+  return Number(rows[0].total);
+}
+
 // Sums every equipped mod's speed_bonus for this blaster and adds it to the
 // weapon's own base speed stat (floored at 1 -- shotEffectiveSpeed divides
 // by it, so it can never hit zero). A real, applied bonus, not just a
 // cosmetic display number. A DM-puppeted NPC's synthetic blaster (see
 // resolveShooterSlugAndBlaster) has no real id/mods to look up, so it's
 // just returned as-is.
-async function blasterEffectiveSpeed(blaster) {
+async function blasterEffectiveSpeed(blaster, shooter = null) {
+  const base = await blasterBaseEffectiveSpeed(blaster);
+  const mode = effectiveMode(shooter);
+  if (!mode) return base;
+  const { rows } = await pool.query("SELECT water FROM encounters WHERE id = $1", [shooter.encounter_id]);
+  const inWater = isWaterAt(makeWaterSet(rows[0]?.water), { x: shooter.x, y: shooter.y });
+  return Math.max(1, Math.round(base * modeBlasterSpeedFactor(mode, inWater)));
+}
+
+async function blasterBaseEffectiveSpeed(blaster) {
   if (!Number.isInteger(blaster.id)) return blaster.speed;
   const { rows } = await pool.query("SELECT COALESCE(SUM(speed_bonus), 0) AS bonus FROM mods WHERE equipped_blaster_id = $1", [
     blaster.id,
@@ -3436,7 +3963,7 @@ async function fireSecondaryShot({ encounterId, attackerId, attackerName, origin
   // Mega Morph) into the bolt's effective speed -- see slugWindowFactor
   // inside shotEffectiveSpeed. reactionWindowFactor is the *target's* own
   // slowedReaction/enhancedReaction, applied on top regardless.
-  const speed = await blasterEffectiveSpeed(blaster);
+  const speed = await blasterEffectiveSpeed(blaster, await getCombatant(attackerId));
   const rawWindowMs = shotFlightMs(dist, speed, slug);
   const windowMs = Math.round(rawWindowMs * reactionWindowFactor(target.status_effects));
   const fxId = `ricochet-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -3585,12 +4112,15 @@ async function resolveAttackRoll(offer, attacker, target) {
   const attackTotal =
     roll +
     offer.blaster.accuracy +
+    (await blasterModTotal(offer.blaster, "accuracy_bonus")) +
     quality.accuracyBonus +
     tb.accuracyMod +
     penalty +
     loyaltyAccuracyModifier(offer.slug.loyalty_tier) +
     // Bow folds in the shooter's own DEX modifier; every other base type adds 0.
-    blasterTypeAccuracyBonus(offer.blaster, attacker);
+    blasterTypeAccuracyBonus(offer.blaster, attacker) -
+    // Bike mode trades aim for speed.
+    (effectiveMode(attacker) === "bike" ? BIKE_ACCURACY_PENALTY : 0);
   const dc = 10 + targetDexMod;
   return { attackTotal, dc };
 }
@@ -3668,6 +4198,25 @@ async function applyGlancingEffects(offer, attacker, target, missPoint) {
   return fragments;
 }
 
+// Performance: a shot that connects rolls d20 + the shooter's Performance
+// modifier; above STYLE_DC it's a style shot (extra Fame, curved flight on
+// everyone's map). Characters only -- NPCs don't showboat. Returns null for no
+// style, else the roll total.
+function rollStyleShot(offer, attacker, target) {
+  if (!attacker || attacker.kind !== "character" || !attacker.ref_user_id) return null;
+  if (offer.isRicochetLeg || attacker.id === target.id) return null;
+  const total = rollD20() + combatantSkillMod(attacker, "performance");
+  return total > STYLE_DC ? total : null;
+}
+
+async function applyStyleBonus(attacker, styleTotal) {
+  await grantFame(attacker.ref_user_id, STYLE_FAME_BONUS);
+  await pushCombatLog(
+    attacker.encounter_id,
+    `${attacker.name} pulls off a STYLE SHOT (${styleTotal} Performance)! +${STYLE_FAME_BONUS} Fame!`
+  );
+}
+
 async function resolveNormalHit(offer) {
   const attacker = await getCombatant(offer.attackerCombatantId);
   const target = await getCombatant(offer.targetCombatantId);
@@ -3692,11 +4241,13 @@ async function resolveNormalHit(offer) {
   // Only computed for a miss; a hit's reveal doesn't need it.
   const deflected = hit ? null : missDeflection(offer.attackerPos, offer.impactPoint, walls);
 
-  broadcastShotResolved(offer, hit ? { outcome: "hit" } : { outcome: "miss", impactPoint: deflected });
+  const styleTotal = hit ? rollStyleShot(offer, attacker, target) : null;
+  broadcastShotResolved(offer, hit ? { outcome: "hit", style: styleTotal != null } : { outcome: "miss", impactPoint: deflected });
 
   scheduleAfterFlight(offer.firedAt, offer.windowMs, async () => {
     let log;
     if (hit) {
+      if (styleTotal != null) await applyStyleBonus(attacker, styleTotal);
       const hitLog = await applyHitEffects(offer, attacker, target);
       log = isSelfShot
         ? `${attacker.name} fires ${offer.slug.name} at themselves. ${hitLog}`
@@ -3733,7 +4284,13 @@ async function resolveDodgeAttempt(id) {
   // own re-check: the offer was snapshotted when it went out, and AP may
   // have moved since. Dodge is gated on unconscious/disabled, not disarmed
   // (disarm is about firing a blaster; dodging never fires one).
-  const canAfford = defender && attacker && !defender.unconscious && !defender.disabled && DODGE_AP_COST <= (defender.current_ap || 0);
+  const canAfford =
+    defender &&
+    attacker &&
+    !defender.unconscious &&
+    !defender.disabled &&
+    DODGE_AP_COST <= (defender.current_ap || 0) &&
+    combatantSkillMod(defender, "acrobatics") > 0;
   if (!canAfford) {
     await resolveNormalHit(offer);
     return { pending: false, countered: false, dodged: false };
@@ -3747,7 +4304,8 @@ async function resolveDodgeAttempt(id) {
   const wallsRow = (await pool.query("SELECT walls FROM encounters WHERE id = $1", [offer.encounterId])).rows[0];
   const walls = wallsRow?.walls || [];
   const { attackTotal, dc } = await resolveAttackRoll(offer, attacker, defender);
-  const dodgeTotal = rollD20() + (defender.data?.dexMod ?? 0);
+  const acrobaticsMod = combatantSkillMod(defender, "acrobatics");
+  const dodgeTotal = rollD20() + acrobaticsMod;
   // Opposed roll -- a tie favors the attacker, same convention as
   // resolveNormalHit's own attackTotal >= dc (ties favor the active roller
   // against a static target).
@@ -3758,9 +4316,10 @@ async function resolveDodgeAttempt(id) {
   const hit = !dodged && attackTotal >= dc;
   const deflected = !dodged && !hit ? missDeflection(offer.attackerPos, offer.impactPoint, walls) : null;
 
+  const styleTotal = hit ? rollStyleShot(offer, attacker, defender) : null;
   broadcastShotResolved(
     offer,
-    dodged ? { outcome: "dodged" } : hit ? { outcome: "hit" } : { outcome: "miss", impactPoint: deflected }
+    dodged ? { outcome: "dodged" } : hit ? { outcome: "hit", style: styleTotal != null } : { outcome: "miss", impactPoint: deflected }
   );
 
   scheduleAfterFlight(offer.firedAt, offer.windowMs, async () => {
@@ -3769,7 +4328,12 @@ async function resolveDodgeAttempt(id) {
       const encRow = (
         await pool.query("SELECT walls, map_width, map_height FROM encounters WHERE id = $1", [offer.encounterId])
       ).rows[0];
-      const step = sidestepTarget(offer.attackerPos, { x: defender.x, y: defender.y }, encRow?.walls || []);
+      const step = sidestepTarget(
+        offer.attackerPos,
+        { x: defender.x, y: defender.y },
+        encRow?.walls || [],
+        dodgeSidestepDistance(acrobaticsMod)
+      );
       const dest = clampToMapBounds(step.point, encRow?.map_width ?? 1600, encRow?.map_height ?? 900);
       // Position updates BEFORE the AOE check below (findAoeTargets
       // re-queries live x/y) -- this is what lets a blast still catch a
@@ -3781,6 +4345,7 @@ async function resolveDodgeAttempt(id) {
         await grantFame(defender.ref_user_id, DODGE_FAME_BONUS);
       }
     } else if (hit) {
+      if (styleTotal != null) await applyStyleBonus(attacker, styleTotal);
       const hitLog = await applyHitEffects(offer, attacker, defender);
       log = `${defender.name} tries to dodge but isn't fast enough (${dodgeTotal} vs ${attackTotal})! ${offer.attackerName}'s ${offer.slug.name} connects! ${hitLog}`;
     } else {
@@ -4128,7 +4693,7 @@ async function resolveShooterSlugAndBlaster(attacker, req, { slugId, npcSlug, np
       base_type: BASE_TYPE_KEYS.includes(npcBlaster?.baseType) ? npcBlaster.baseType : null,
       accuracy: Number.isInteger(npcBlaster?.accuracy) ? npcBlaster.accuracy : 0,
       range: Number.isInteger(npcBlaster?.range) ? npcBlaster.range : 20,
-      speed: Number.isInteger(npcBlaster?.speed) ? npcBlaster.speed : 56,
+      speed: Number.isInteger(npcBlaster?.speed) ? npcBlaster.speed : 88,
       quality: Number.isInteger(npcBlaster?.quality) ? npcBlaster.quality : 0,
     };
     return { slug, blaster };
@@ -4251,18 +4816,20 @@ async function resolveEnvironmentShot({ actionType, attacker, slug, blaster, tb,
   const attackTotal =
     rollD20() +
     blaster.accuracy +
+    (await blasterModTotal(blaster, "accuracy_bonus")) +
     quality.accuracyBonus +
     tb.accuracyMod +
     penalty +
     loyaltyAccuracyModifier(slug.loyalty_tier) +
-    blasterTypeAccuracyBonus(blaster, attacker); // Bow adds the shooter's DEX modifier
+    blasterTypeAccuracyBonus(blaster, attacker) - // Bow adds the shooter's DEX modifier
+    (effectiveMode(attacker) === "bike" ? BIKE_ACCURACY_PENALTY : 0);
   const hit = attackTotal >= ENV_ACTION_DC;
   // A miss runs the exact same effect logic, just a few degrees off target
   // -- a wall might land somewhere else, a different wall gets broken, or
   // the shot finds nothing at all. See missDeflection.
   const finalPoint = hit ? intendedPoint : missDeflection(attackerPos, intendedPoint, encounterRow.walls);
 
-  const speed = await blasterEffectiveSpeed(blaster);
+  const speed = await blasterEffectiveSpeed(blaster, attacker);
   const windowMs = shotFlightMs(dist, speed, slug);
 
   broadcastShotFx({
@@ -4362,7 +4929,7 @@ router.post("/actions/shoot", async (req, res) => {
     let target = null;
     if (actionType === "attack") {
       target = await getCombatant(targetId);
-      if (!target) return res.status(404).json({ error: "Target not found." });
+      if (!target || isBurrowed(target)) return res.status(404).json({ error: "Target not found." });
     } else if (!targetPoint || !Number.isFinite(targetPoint.x) || !Number.isFinite(targetPoint.y)) {
       return res.status(400).json({ error: "A target location is required." });
     }
@@ -4406,7 +4973,7 @@ router.post("/actions/shoot", async (req, res) => {
       // Effective speed (base + any equipped mods' speed_bonus) -- a
       // Range-Finder-tier mod boosting a borderline weapon's speed can push
       // it over the threshold same as it would for a normal shot's flight.
-      if ((await blasterEffectiveSpeed(blaster)) < MEGA_MORPH_MIN_SPEED) {
+      if ((await blasterEffectiveSpeed(blaster, attacker)) < MEGA_MORPH_MIN_SPEED) {
         return res.status(400).json({ error: `A Mega Morph needs a weapon with a speed of at least ${MEGA_MORPH_MIN_SPEED}.` });
       }
     }
@@ -4550,7 +5117,7 @@ router.post("/actions/shoot", async (req, res) => {
     // Sums any equipped mods' speed_bonus onto the weapon's own base speed
     // (see blasterEffectiveSpeed) -- computed once and reused for every
     // speed-driven check below so they all agree on the same number.
-    const speed = await blasterEffectiveSpeed(blaster);
+    const speed = await blasterEffectiveSpeed(blaster, attacker);
     // A self-buff has zero distance to cross -- there's no aim, no travel,
     // and (per resolveNormalHit's isSelfShot check) it always connects, so
     // it must never be gated on how long the flight would otherwise take.
@@ -4929,7 +5496,9 @@ router.post("/actions/dismount", async (req, res) => {
     }
     if (!rider.mounted_on) return res.status(400).json({ error: "Not mounted on anything." });
     if (rider.current_ap < MOUNT_AP_COST) return res.status(400).json({ error: "Not enough AP." });
-    await updateCombatant(rider.id, { mounted_on: null, current_ap: rider.current_ap - MOUNT_AP_COST });
+    await updateCombatant(rider.id, { mounted_on: null, current_ap: rider.current_ap - MOUNT_AP_COST, data: JSON.stringify({ ...(rider.data || {}), mode: null }) });
+    const vehicleToReset = await getCombatant(rider.mounted_on);
+    if (vehicleToReset) await updateCombatant(vehicleToReset.id, { data: JSON.stringify({ ...(vehicleToReset.data || {}), mode: null }) });
     const encounter = await broadcastEncounter(rider.encounter_id);
     await pushCombatLog(rider.encounter_id, `${rider.name} dismounts.`);
     res.json({ encounter });
@@ -4944,7 +5513,7 @@ router.post("/actions/ram", async (req, res) => {
   try {
     const mecha = await getCombatant(mechaCombatantId);
     const target = await getCombatant(targetCombatantId);
-    if (!mecha || mecha.kind !== "mecha" || !target) return res.status(404).json({ error: "Combatant not found." });
+    if (!mecha || mecha.kind !== "mecha" || !target || isBurrowed(target)) return res.status(404).json({ error: "Combatant not found." });
     const encounterRow = (await pool.query("SELECT * FROM encounters WHERE id = $1", [mecha.encounter_id])).rows[0];
 
     // Ram happens on the *rider's* turn now, not the mecha's -- an unmounted

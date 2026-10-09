@@ -15,18 +15,16 @@
 // separate from `range`, which only ever decides how far a shot can reach.
 // Editable per-instance same as range (see BlasterForm.jsx). Defaults here
 // are picked so a shot at exactly the base type's own default range takes
-// ~3.33s to arrive (the flight time every weapon's own max-range shot used
-// to take back when speed was still derived from range) -- 8 units/sec per
-// unit of range, i.e. speed = (range / 25) * 8.
+// ~2s to arrive -- speed = range / 2, rounded to a whole number.
 export const BASE_TYPES = {
-  Pistol: { accuracy: 1, reloadApCost: 1, range: 7 * 25, speed: 7 * 8, modSlots: 2, magazineSize: 6 },
-  Revolver: { accuracy: 3, reloadApCost: 2, range: 9 * 25, speed: 9 * 8, modSlots: 2, magazineSize: 6 },
-  Repeater: { accuracy: 1, reloadApCost: 3, range: 11 * 25, speed: 11 * 8, modSlots: 3, magazineSize: 10 },
-  Bow: { accuracy: 2, reloadApCost: 1, range: 13 * 25, speed: 13 * 8, modSlots: 4, magazineSize: 1 },
-  Gatling: { accuracy: -2, reloadApCost: 5, range: 7 * 25, speed: 7 * 8, modSlots: 4, magazineSize: 20 },
-  Cannon: { accuracy: -2, reloadApCost: 3, range: 5 * 25, speed: 5 * 8, modSlots: 3, magazineSize: 1 },
-  "Twin Slinger": { accuracy: 0, reloadApCost: 2, range: 5 * 25, speed: 5 * 8, modSlots: 4, magazineSize: 12 },
-  "Sniper Rig": { accuracy: 4, reloadApCost: 2, range: 18 * 25, speed: 18 * 8, modSlots: 4, magazineSize: 4 },
+  Pistol: { accuracy: 1, reloadApCost: 2, range: 7 * 25, speed: 88, modSlots: 2, magazineSize: 6 },
+  Revolver: { accuracy: 3, reloadApCost: 3, range: 9 * 25, speed: 113, modSlots: 2, magazineSize: 6 },
+  Repeater: { accuracy: 1, reloadApCost: 4, range: 11 * 25, speed: 138, modSlots: 3, magazineSize: 10 },
+  Bow: { accuracy: 2, reloadApCost: 2, range: 13 * 25, speed: 163, modSlots: 4, magazineSize: 1 },
+  Gatling: { accuracy: -2, reloadApCost: 6, range: 7 * 25, speed: 88, modSlots: 4, magazineSize: 20 },
+  Cannon: { accuracy: -2, reloadApCost: 4, range: 5 * 25, speed: 63, modSlots: 3, magazineSize: 1 },
+  "Twin Slinger": { accuracy: 0, reloadApCost: 3, range: 5 * 25, speed: 63, modSlots: 4, magazineSize: 12 },
+  "Sniper Rig": { accuracy: 4, reloadApCost: 3, range: 18 * 25, speed: 225, modSlots: 4, magazineSize: 4 },
 };
 
 export const BASE_TYPE_KEYS = Object.keys(BASE_TYPES);
@@ -144,8 +142,8 @@ export function validateBlasterFields({ name, baseType, image, accuracy, reloadA
 // Speed bonus lives on the same rough scale as blaster.speed itself (tens,
 // not the small -10..20 range accuracy/reload bonuses use) -- a Range
 // Finder-scale mod should be able to meaningfully move the needle.
-const SPEED_BONUS_MIN = -100;
-const SPEED_BONUS_MAX = 100;
+const SPEED_BONUS_MIN = -150;
+const SPEED_BONUS_MAX = 150;
 
 function validateSpeedBonus(value, label) {
   if (!Number.isInteger(value) || value < SPEED_BONUS_MIN || value > SPEED_BONUS_MAX) {
@@ -154,7 +152,7 @@ function validateSpeedBonus(value, label) {
   return null;
 }
 
-export function validateModFields({ name, effect, accuracyBonus, reloadApBonus, speedBonus }) {
+export function validateModFields({ name, effect, accuracyBonus, reloadApBonus, speedBonus, quality }) {
   if (typeof name !== "string" || !name.trim() || name.trim().length > 40) {
     return { valid: false, error: "Name must be a non-empty string of 40 characters or fewer." };
   }
@@ -168,6 +166,9 @@ export function validateModFields({ name, effect, accuracyBonus, reloadApBonus, 
   if (reloadErr) return { valid: false, error: reloadErr };
   const speedErr = validateSpeedBonus(speedBonus, "Speed Bonus");
   if (speedErr) return { valid: false, error: speedErr };
+  if (!Number.isInteger(quality) || quality < QUALITY_MIN || quality > QUALITY_MAX) {
+    return { valid: false, error: `Quality must be an integer between ${QUALITY_MIN} and ${QUALITY_MAX}.` };
+  }
 
   return { valid: true };
 }

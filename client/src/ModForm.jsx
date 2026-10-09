@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { MinusIcon, PlusIcon, WrenchIcon } from "@phosphor-icons/react";
-import { STAT_MIN, STAT_MAX, SPEED_BONUS_MIN, SPEED_BONUS_MAX, defaultModFields } from "./itemData.js";
+import { STAT_MIN, STAT_MAX, SPEED_BONUS_MIN, SPEED_BONUS_MAX, QUALITY_TIERS, defaultModFields } from "./itemData.js";
 import "./SlugForm.css";
 
 function Stepper({ label, value, min, max, step = 1, onChange }) {
@@ -65,6 +65,17 @@ export default function ModForm({ mode, initialValues, players, onSubmit, onCanc
           value={fields.name}
           onChange={(e) => update("name", e.target.value)}
         />
+      </div>
+
+      <div className="slug-form-field">
+        <label htmlFor="mod-form-quality">Quality</label>
+        <select id="mod-form-quality" value={fields.quality} onChange={(e) => update("quality", Number(e.target.value))}>
+          {QUALITY_TIERS.map((q) => (
+            <option key={q.tier} value={q.tier}>
+              {q.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="slug-form-steppers">

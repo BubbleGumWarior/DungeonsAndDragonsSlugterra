@@ -1,10 +1,11 @@
 import { WrenchIcon } from "@phosphor-icons/react";
-import { formatSigned } from "./itemData.js";
+import { formatSigned, qualityInfo } from "./itemData.js";
 import "./ModCard.css";
 
 export default function ModCard({ mod, blasters = [], editable = false, draggable = false, onUnequip, onClick, onDragEnd, actions }) {
   const equippedBlaster = blasters.find((b) => b.id === mod.equippedBlasterId);
   const isDraggable = draggable && !equippedBlaster;
+  const quality = qualityInfo(mod.quality);
 
   return (
     <div
@@ -27,6 +28,9 @@ export default function ModCard({ mod, blasters = [], editable = false, draggabl
         </div>
         <div className="mod-card-identity">
           <h3 className="mod-card-name">{mod.name}</h3>
+          <span className="mod-card-quality" style={{ color: quality.color }}>
+            {quality.label}
+          </span>
           <div className="mod-card-bonuses">
             {mod.accuracyBonus !== 0 && (
               <span className="mod-card-bonus">Accuracy {formatSigned(mod.accuracyBonus)}</span>

@@ -380,170 +380,63 @@ async function refreshSeededMechaMods() {
 }
 
 // Blaster mod catalog -- the twin of DEFAULT_MECHA_MOD_TEMPLATES for the
-// Inventory page. `accuracyBonus` folds straight into the attack roll (see
-// effectiveAccuracy in itemData.js); `reloadApBonus` shifts the weapon's
-// Reload cost (negative = cheaper, floored at 1 AP by effectiveReloadApCost).
-// A DM equips these onto a player's blaster in its mod slots. House catalog,
-// not curated content -- kept in sync by name on every boot.
+// Inventory page. A DM equips these onto a player's blaster in its mod slots.
+//
+// Every mod has a `quality` tier (0 Crude, 1 Standard, 2 Fine, 3 Masterwork,
+// 4 Legendary -- same labels as blasters) and its stats follow that tier's
+// budget, so a higher tier is always stronger than the one below it in its
+// own line:
+//   tier          accuracy   reload AP   speed
+//   0 Crude          +1         -1         +8
+//   1 Standard       +2         -2        +28
+//   2 Fine           +3         -3        +55
+//   3 Masterwork     +4         -3/-4     +80
+//   4 Legendary      +5         -4/-5    +105
+// (accuracy and reload are interchangeable "points" inside the Handling
+// mods; the Velocity line pays for its speed with a heavier reload.)
+// The Velocity line is deliberately set against the Mega Morph threshold
+// (MEGA_MORPH_MIN_SPEED = 165 in combatRules.js) and the default base speeds
+// in itemRules.js: the cheapest Velocity mod (+8) is all a Bow (163) needs,
+// a Repeater (138) needs Standard+, a Revolver (113) Fine+, a Pistol /
+// Gatling (88) Masterwork+, and a Cannon / Twin Slinger (63) needs a
+// Legendary one (+105). Sniper Rigs (225) always qualify.
+// `accuracyBonus` folds straight into the attack roll (see effectiveAccuracy in
+// itemData.js); `reloadApBonus` shifts the weapon's Reload cost (negative =
+// cheaper, floored at 1 AP by effectiveReloadApCost); `speedBonus` adds to the
+// weapon's projectile speed (see blasterEffectiveSpeed in routes/combat.js).
+// House catalog, not curated content.
 const DEFAULT_BLASTER_MOD_TEMPLATES = [
-  {
-    name: "Precision Sight",
-    effect:
-      "A finely machined adjustable aperture sight that locks solid once it is zeroed and holds that zero through recoil, knocks and rough handling. The shooter's eye falls onto the same sight picture every time they bring the weapon up, tightening every group without changing how the blaster loads or cycles.",
-    accuracyBonus: 2,
-    reloadApBonus: 0,
-  },
-  {
-    name: "Extended Barrel",
-    effect:
-      "A longer bored barrel that keeps the slug spinning and building speed for longer before it leaves the muzzle, flattening its arc and shrinking the group at distance. The extra length and forward weight make the weapon slower to bring back down and back on line for a fresh load.",
-    accuracyBonus: 2,
-    reloadApBonus: 1,
-    speedBonus: 12,
-  },
-  {
-    name: "Speed-Loader Clip",
-    effect:
-      "A pre-indexed feed clip that presents a full row of slugs already lined up with their chambers, so a reload is one firm push instead of seating each slug by hand. It does nothing for the shot itself, but it buys back a chunk of the time a reload normally costs.",
-    accuracyBonus: 0,
-    reloadApBonus: -1,
-  },
-  {
-    name: "Autoloader Assembly",
-    effect:
-      "A spring-fed autoloader that walks the next slugs into place the instant the breech clears, cutting the reload down to little more than releasing the catch. The mechanism is bulky and adds nothing to accuracy, but it turns the slowest weapons into something that can be topped up in the middle of a fight.",
-    accuracyBonus: 0,
-    reloadApBonus: -2,
-  },
-  {
-    name: "Recoil Compensator",
-    effect:
-      "A ported muzzle brake that vents propellant gas up and to the sides, pushing back against the barrel's climb so the weapon stays flatter through the shot and settles faster afterward. Loading and cycling are untouched.",
-    accuracyBonus: 1,
-    reloadApBonus: 0,
-  },
-  {
-    name: "Match-Grade Rifling",
-    effect:
-      "A hand-cut rifling job held to tolerances no factory line bothers with, every groove uniform and mirror-smooth. A slug leaves this barrel with almost no yaw, flying true to the sights out to the edge of its range. Painstaking work, but it costs the weapon nothing in weight or handling.",
-    accuracyBonus: 3,
-    reloadApBonus: 0,
-  },
-  {
-    name: "Reflex Optic",
-    effect:
-      "A collimated dot floated on a small canopy above the breech, always parallel to the bore no matter where the eye sits behind it. The shooter simply puts the dot on the target and fires -- fast to pick up and forgiving of a poor cheek weld, with no effect on how the weapon reloads.",
-    accuracyBonus: 2,
-    reloadApBonus: 0,
-  },
-  {
-    name: "Weighted Target Stock",
-    effect:
-      "A dense, deeply contoured stock that soaks up tremor and plants the weapon hard against the shoulder for a still, deliberate shot. The mass that makes it so steady also makes it slower to shift when swapping a spent magazine for a fresh one.",
-    accuracyBonus: 2,
-    reloadApBonus: 1,
-  },
-  {
-    name: "Vented Handguard",
-    effect:
-      "A skeletonised guard that sheds heat and grams in equal measure, keeping the fore-end cool to grip and light to control. The lighter nose comes back on target quicker after a shot and is quicker to bring around for a reload.",
-    accuracyBonus: 1,
-    reloadApBonus: -1,
-  },
-  {
-    name: "Gyro Wrist Mount",
-    effect:
-      "A small powered gimbal set between the grip and the frame that reads out fine tremor in the wrist and cancels it before it reaches the barrel. The sight sits noticeably steadier on a moving or winded shooter. It draws its own power and adds no bulk to the loading path.",
-    accuracyBonus: 2,
-    reloadApBonus: 0,
-  },
-  {
-    name: "Flared Magazine Well",
-    effect:
-      "A bevelled, oversized well that funnels a fresh magazine straight home even with cold hands or in the dark, taking the fumbling out of a reload. It changes nothing about the shot, only how quickly the weapon is fed.",
-    accuracyBonus: 0,
-    reloadApBonus: -1,
-  },
-  {
-    name: "Featherweight Housing",
-    effect:
-      "A moulded polymer receiver shell that strips a real fraction of the weapon's mass without weakening the action. Everything the shooter does with it -- holding aim, recovering from recoil, bringing it around to reload -- becomes a touch quicker and easier to hold together.",
-    accuracyBonus: 1,
-    reloadApBonus: -1,
-  },
-  {
-    name: "Twin Feed Ramp",
-    effect:
-      "A split loading ramp that chambers slugs from both sides of the magazine at once, halving the strokes a full reload takes. The gain is purely in speed of feeding; the ramp sits behind the chamber and does nothing for the slug once it is flying.",
-    accuracyBonus: 0,
-    reloadApBonus: -2,
-  },
-  {
-    name: "Fluted Heavy Barrel",
-    effect:
-      "A thick barrel with lengthwise flutes cut to keep it stiff and cool without the full dead weight of a bull profile. It holds the sights rock-steady through a string of shots, but it is still a heavy thing to lever back down and reload under pressure.",
-    accuracyBonus: 3,
-    reloadApBonus: 1,
-  },
-  {
-    name: "Adjustable Cheek Riser",
-    effect:
-      "A simple riser that raises the comb so the shooter's eye lands on the sight line naturally, the same way every time, instead of hunting for it. Small, light, and entirely separate from the loading mechanism.",
-    accuracyBonus: 1,
-    reloadApBonus: 0,
-  },
-  {
-    name: "Fibre-Optic Front Post",
-    effect:
-      "A front post threaded with a bright collector rod that gathers ambient light into a vivid aiming point, snapping the eye onto the sights in gloom or clutter where a plain blade would vanish. No effect on reload.",
-    accuracyBonus: 1,
-    reloadApBonus: 0,
-  },
-  {
-    name: "Slick Breech Coating",
-    effect:
-      "A dry-film coating bonded to every bearing surface of the action, so spent casings fall clear and fresh slugs slide into the chamber without drag or grit. It shaves time off each reload and nothing else.",
-    accuracyBonus: 0,
-    reloadApBonus: -1,
-  },
-  {
-    name: "Counterbalanced Bolt Carrier",
-    effect:
-      "A mass-tuned bolt carrier that runs flat and true instead of hammering the frame at each end of its travel. The sight settles faster after a shot, and the action returns to battery already lined up for the next slug to be loaded.",
-    accuracyBonus: 1,
-    reloadApBonus: -1,
-  },
-  {
-    name: "Snub Handling Package",
-    effect:
-      "A short heavy barrel and a cut-down grip built purely for speed of handling in a close scrum -- fast to swing onto a target and fast to feed. Past a few paces, though, the stubby bore throws slugs wide and the sight radius is too short to correct it.",
-    accuracyBonus: -1,
-    reloadApBonus: -2,
-    speedBonus: -8,
-  },
-  {
-    name: "Folding Bipod",
-    effect:
-      "Sprung legs under the fore-end that snap down to carry the weapon's weight off the arms, giving a braced, motionless platform for a careful shot. Stowing them again and clearing them for a reload costs a moment each time.",
-    accuracyBonus: 2,
-    reloadApBonus: 1,
-  },
-  {
-    name: "Twin Link Coupler",
-    effect:
-      "A paired feed rail and synchronised firing cam that lets the weapon chamber and discharge two slugs in one pull, fusing their energies into a single bolt. Both slugs must be fully bonded to the slinger, and their elements combine into something new.",
-    accuracyBonus: 0,
-    reloadApBonus: 1,
-    grantsDualShot: true,
-  },
-  {
-    name: "Range Finder",
-    effect:
-      "A laser rangefinder clipped to the rail that reads the distance to whatever the barrel's pointed at and projects it straight into the shooter's eyeline, so they always know exactly how far this weapon (and whatever's chambered in it) can actually reach before they commit to the shot.",
-    accuracyBonus: 0,
-    reloadApBonus: 0,
-    grantsRangeFinder: true,
-  },
+  // ---- Sights: accuracy ----------------------------------------------------
+  { name: "Fibre-Optic Front Post", quality: 0, accuracyBonus: 1, reloadApBonus: 0, effect: "A front post threaded with a bright collector rod that gathers ambient light into a vivid aiming point, snapping the eye onto the sights in gloom or clutter." },
+  { name: "Precision Sight", quality: 1, accuracyBonus: 2, reloadApBonus: 0, effect: "A finely machined adjustable aperture sight that locks solid once zeroed and holds that zero through recoil, knocks and rough handling." },
+  { name: "Reflex Optic", quality: 2, accuracyBonus: 3, reloadApBonus: 0, effect: "A collimated dot floated above the breech, always parallel to the bore. Put the dot on the target and fire -- fast to pick up and forgiving of a poor cheek weld." },
+  { name: "Match-Grade Rifling", quality: 3, accuracyBonus: 4, reloadApBonus: 0, effect: "A hand-cut rifling job held to tolerances no factory line bothers with. A slug leaves this barrel with almost no yaw, flying true to the edge of its range." },
+  { name: "Gyro Wrist Mount", quality: 4, accuracyBonus: 5, reloadApBonus: 0, effect: "A small powered gimbal between grip and frame that reads fine tremor in the wrist and cancels it before it reaches the barrel. The sight sits dead steady even on a moving or winded shooter." },
+
+  // ---- Feeds: reload -------------------------------------------------------
+  { name: "Flared Magazine Well", quality: 0, accuracyBonus: 0, reloadApBonus: -1, effect: "A bevelled, oversized well that funnels a fresh magazine straight home even with cold hands or in the dark." },
+  { name: "Speed-Loader Clip", quality: 1, accuracyBonus: 0, reloadApBonus: -2, effect: "A pre-indexed feed clip that presents a full row of slugs already lined up with their chambers, so a reload is one firm push." },
+  { name: "Twin Feed Ramp", quality: 2, accuracyBonus: 0, reloadApBonus: -3, effect: "A split loading ramp that chambers slugs from both sides of the magazine at once, halving the strokes a full reload takes." },
+  { name: "Autoloader Assembly", quality: 3, accuracyBonus: 1, reloadApBonus: -3, effect: "A spring-fed autoloader that walks the next slugs into place the instant the breech clears, cutting a reload down to releasing the catch." },
+  { name: "Hyperfeed Autoloader", quality: 4, accuracyBonus: 1, reloadApBonus: -4, effect: "A servo-driven feed that strips, seats and locks a whole magazine in one motion. A reload is over before the shooter has finished the thought." },
+
+  // ---- Handling: accuracy and reload together ------------------------------
+  { name: "Recoil Compensator", quality: 1, accuracyBonus: 1, reloadApBonus: -1, effect: "A ported muzzle brake that vents propellant gas to push back against barrel climb, so the weapon stays flatter and settles faster." },
+  { name: "Vented Handguard", quality: 2, accuracyBonus: 1, reloadApBonus: -2, effect: "A skeletonised guard that sheds heat and grams, keeping the nose light to control and quick to bring around for a reload." },
+  { name: "Counterbalanced Bolt Carrier", quality: 3, accuracyBonus: 2, reloadApBonus: -2, effect: "A mass-tuned bolt carrier that runs flat and true. The sight settles faster after a shot and the action returns to battery already lined up for the next slug." },
+  { name: "Featherweight Housing", quality: 4, accuracyBonus: 3, reloadApBonus: -2, effect: "A moulded polymer receiver shell that strips a real fraction of the weapon's mass without weakening the action. Holding aim, recovering from recoil and reloading all come easier." },
+
+  // ---- Velocity: projectile speed, paid for with a heavier reload ----------
+  { name: "Rifled Choke Insert", quality: 0, accuracyBonus: 0, reloadApBonus: 0, speedBonus: 8, effect: "A tightened muzzle insert that squeezes a little extra velocity out of every shot." },
+  { name: "Extended Barrel", quality: 1, accuracyBonus: 0, reloadApBonus: 1, speedBonus: 28, effect: "A longer bored barrel that keeps the slug building speed for longer before it leaves the muzzle. The extra length makes the weapon slower to bring back on line for a fresh load." },
+  { name: "Fluted Heavy Barrel", quality: 2, accuracyBonus: 0, reloadApBonus: 1, speedBonus: 55, effect: "A thick fluted barrel, stiff and cool, that launches slugs at a serious clip. Heavy to lever back down and reload under pressure." },
+  { name: "Accelerator Coil Barrel", quality: 3, accuracyBonus: 0, reloadApBonus: 1, speedBonus: 80, effect: "A barrel wrapped in charged coils that drags each slug up to a speed no powder charge could manage alone. The coils need a moment to recycle between loads." },
+  { name: "Mass-Driver Rail", quality: 4, accuracyBonus: 0, reloadApBonus: 2, speedBonus: 105, effect: "A magnetic launch rail bolted along the weapon, throwing slugs at a speed that turns even a slow siege weapon into a bolt of lightning. Powering it back up between loads is a chore." },
+
+  // ---- Utility -------------------------------------------------------------
+  { name: "Snub Handling Package", quality: 1, accuracyBonus: -1, reloadApBonus: -2, speedBonus: -8, effect: "A short heavy barrel and cut-down grip built for speed of handling in a close scrum -- fast to swing and fast to feed. Past a few paces the stubby bore throws slugs wide and slow." },
+  { name: "Range Finder", quality: 1, accuracyBonus: 0, reloadApBonus: 0, grantsRangeFinder: true, effect: "A laser rangefinder clipped to the rail that reads the distance to whatever the barrel is pointed at and projects it into the shooter's eyeline, so they always know how far this weapon can reach before committing to the shot." },
+  { name: "Twin Link Coupler", quality: 3, accuracyBonus: 0, reloadApBonus: 1, grantsDualShot: true, effect: "A paired feed rail and synchronised firing cam that lets the weapon chamber and discharge two slugs in one pull, fusing their energies into a single bolt. Both slugs must be fully bonded to the slinger, and their elements combine into something new." },
 ];
 
 // Idempotent per name -- seeds the full blaster mod catalog on a fresh
@@ -552,10 +445,10 @@ const DEFAULT_BLASTER_MOD_TEMPLATES = [
 async function seedDefaultBlasterModTemplates() {
   for (const m of DEFAULT_BLASTER_MOD_TEMPLATES) {
     await pool.query(
-      `INSERT INTO mod_templates (name, effect, accuracy_bonus, reload_ap_bonus, grants_dual_shot, grants_range_finder, speed_bonus)
-       SELECT $1, $2, $3, $4, $5, $6, $7
+      `INSERT INTO mod_templates (name, effect, accuracy_bonus, reload_ap_bonus, grants_dual_shot, grants_range_finder, speed_bonus, quality)
+       SELECT $1, $2, $3, $4, $5, $6, $7, $8
        WHERE NOT EXISTS (SELECT 1 FROM mod_templates WHERE name = $1)`,
-      [m.name, m.effect, m.accuracyBonus, m.reloadApBonus, Boolean(m.grantsDualShot), Boolean(m.grantsRangeFinder), m.speedBonus || 0]
+      [m.name, m.effect, m.accuracyBonus, m.reloadApBonus, Boolean(m.grantsDualShot), Boolean(m.grantsRangeFinder), m.speedBonus || 0, m.quality ?? 0]
     );
   }
 }
@@ -905,7 +798,7 @@ export async function initSchema() {
       accuracy INTEGER NOT NULL,
       reload_ap_cost INTEGER NOT NULL,
       range INTEGER NOT NULL,
-      speed INTEGER NOT NULL DEFAULT 56,
+      speed INTEGER NOT NULL DEFAULT 88,
       mod_slots INTEGER NOT NULL,
       magazine_size INTEGER NOT NULL,
       quality INTEGER NOT NULL DEFAULT 0,
@@ -924,7 +817,7 @@ export async function initSchema() {
       accuracy INTEGER NOT NULL,
       reload_ap_cost INTEGER NOT NULL,
       range INTEGER NOT NULL,
-      speed INTEGER NOT NULL DEFAULT 56,
+      speed INTEGER NOT NULL DEFAULT 88,
       mod_slots INTEGER NOT NULL,
       magazine_size INTEGER NOT NULL,
       quality INTEGER NOT NULL DEFAULT 0,
@@ -949,23 +842,23 @@ export async function initSchema() {
   await pool.query(`ALTER TABLE blasters ADD COLUMN IF NOT EXISTS speed INTEGER;`);
   const BASE_TYPE_SPEED_BACKFILL = `
     CASE base_type
-      WHEN 'Pistol' THEN 56
-      WHEN 'Revolver' THEN 72
-      WHEN 'Repeater' THEN 88
-      WHEN 'Bow' THEN 104
-      WHEN 'Gatling' THEN 56
-      WHEN 'Cannon' THEN 40
-      WHEN 'Twin Slinger' THEN 40
-      WHEN 'Sniper Rig' THEN 144
-      ELSE 56
+      WHEN 'Pistol' THEN 88
+      WHEN 'Revolver' THEN 113
+      WHEN 'Repeater' THEN 138
+      WHEN 'Bow' THEN 163
+      WHEN 'Gatling' THEN 88
+      WHEN 'Cannon' THEN 63
+      WHEN 'Twin Slinger' THEN 63
+      WHEN 'Sniper Rig' THEN 225
+      ELSE 88
     END
   `;
   await pool.query(`UPDATE blaster_templates SET speed = ${BASE_TYPE_SPEED_BACKFILL} WHERE speed IS NULL;`);
   await pool.query(`UPDATE blasters SET speed = ${BASE_TYPE_SPEED_BACKFILL} WHERE speed IS NULL;`);
   await pool.query(`ALTER TABLE blaster_templates ALTER COLUMN speed SET NOT NULL;`);
-  await pool.query(`ALTER TABLE blaster_templates ALTER COLUMN speed SET DEFAULT 56;`);
+  await pool.query(`ALTER TABLE blaster_templates ALTER COLUMN speed SET DEFAULT 88;`);
   await pool.query(`ALTER TABLE blasters ALTER COLUMN speed SET NOT NULL;`);
-  await pool.query(`ALTER TABLE blasters ALTER COLUMN speed SET DEFAULT 56;`);
+  await pool.query(`ALTER TABLE blasters ALTER COLUMN speed SET DEFAULT 88;`);
 
   await pool.query(`
     ALTER TABLE slugs ADD COLUMN IF NOT EXISTS equipped_blaster_id INTEGER REFERENCES blasters(id) ON DELETE SET NULL;
@@ -1056,6 +949,11 @@ export async function initSchema() {
   await pool.query(`ALTER TABLE mod_templates ALTER COLUMN speed_bonus SET DEFAULT 0;`);
   await pool.query(`ALTER TABLE mods ALTER COLUMN speed_bonus SET NOT NULL;`);
   await pool.query(`ALTER TABLE mods ALTER COLUMN speed_bonus SET DEFAULT 0;`);
+
+  // Mod quality tier (0 Crude .. 4 Legendary, same labels as blasters) -- a
+  // label/colour that sorts the catalog; the stats themselves carry the power.
+  await pool.query(`ALTER TABLE mod_templates ADD COLUMN IF NOT EXISTS quality INTEGER NOT NULL DEFAULT 0;`);
+  await pool.query(`ALTER TABLE mods ADD COLUMN IF NOT EXISTS quality INTEGER NOT NULL DEFAULT 0;`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS mecha_templates (
@@ -1373,6 +1271,8 @@ export async function initSchema() {
   // addIceHazard/findHazardAt. Same {id, ...} + counter pattern as walls/next_wall_id.
   await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS hazards JSONB NOT NULL DEFAULT '[]';`);
   await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS next_hazard_id INTEGER NOT NULL DEFAULT 1;`);
+  // Water terrain the DM paints in setup (cell ids, see waterCellId in combatRules.js).
+  await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS water JSONB NOT NULL DEFAULT '[]';`);
 
   // Player-made bridges (Bridge Maker slugs) -- rectangles {id, x, y, angle,
   // width, length, slugType}, see pointInBridge()/BRIDGE_WIDTH/BRIDGE_LENGTH

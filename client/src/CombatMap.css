@@ -419,6 +419,13 @@
   transition: none;
 }
 
+/* Wall Run: a slower, eased slide across the wall instead of the usual glide,
+   with a glow while the runner is in motion. */
+.combat-token--wallrun {
+  transition: transform 0.9s cubic-bezier(0.45, 0, 0.2, 1);
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.85));
+}
+
 .combat-token--draggable {
   cursor: grab;
 }
@@ -683,4 +690,31 @@
   color: var(--gold-soft);
   font-size: 12px;
   pointer-events: none;
+}
+
+/* Performance's style shot: golden trail along the curved flight, a brighter
+   bolt, and a double ring on impact. */
+.shot-fx-style-trail {
+  fill: none;
+  stroke: #ffd966;
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+.shot-fx-bolt--style {
+  filter: drop-shadow(0 0 8px #ffd966);
+}
+
+.shot-fx-style-burst circle {
+  fill: none;
+  stroke: #ffd966;
+  stroke-width: 3;
+  pointer-events: none;
+}
+
+/* DM-only water paint (setup view). */
+.combat-map-water rect {
+  fill: rgba(64, 140, 255, 0.45);
 }

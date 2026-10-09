@@ -5,6 +5,7 @@ import MechaCard from "./MechaCard.jsx";
 import MechaModCard from "./MechaModCard.jsx";
 import MechaForm from "./MechaForm.jsx";
 import MechaModForm from "./MechaModForm.jsx";
+import CollapseTitle from "./CollapseTitle.jsx";
 import "./SlugManagement.css";
 
 export default function MechaManagement() {
@@ -15,6 +16,9 @@ export default function MechaManagement() {
   const [mechas, setMechas] = useState([]);
   const [mods, setMods] = useState([]);
   const [modal, setModal] = useState(null);
+  // Template lists start collapsed, like the slug templates.
+  const [mechasOpen, setMechasOpen] = useState(false);
+  const [modsOpen, setModsOpen] = useState(false);
 
   function authHeaders(extra) {
     return { Authorization: `Bearer ${token}`, ...extra };
@@ -151,14 +155,14 @@ export default function MechaManagement() {
     <div className="slug-management">
       <section className="slug-management-section">
         <div className="slug-management-section-header">
-          <h2>Mecha-Beast Templates</h2>
+          <CollapseTitle title="Mecha-Beast Templates" count={mechaTemplates.length} open={mechasOpen} onToggle={() => setMechasOpen((v) => !v)} />
           <button type="button" className="slug-management-new" onClick={() => setModal({ type: "new-mecha-template" })}>
             <PlusIcon weight="bold" />
             New Mecha
           </button>
         </div>
 
-        {mechaTemplates.length === 0 ? (
+        {mechasOpen && (mechaTemplates.length === 0 ? (
           <p className="slug-management-empty">No mecha templates yet.</p>
         ) : (
           <div className="slug-management-grid">
@@ -190,19 +194,19 @@ export default function MechaManagement() {
               />
             ))}
           </div>
-        )}
+        ))}
       </section>
 
       <section className="slug-management-section">
         <div className="slug-management-section-header">
-          <h2>Mecha Mod Templates</h2>
+          <CollapseTitle title="Mecha Mod Templates" count={modTemplates.length} open={modsOpen} onToggle={() => setModsOpen((v) => !v)} />
           <button type="button" className="slug-management-new" onClick={() => setModal({ type: "new-mod-template" })}>
             <PlusIcon weight="bold" />
             New Mod
           </button>
         </div>
 
-        {modTemplates.length === 0 ? (
+        {modsOpen && (modTemplates.length === 0 ? (
           <p className="slug-management-empty">No mecha mod templates yet.</p>
         ) : (
           <div className="slug-management-grid">
@@ -241,7 +245,7 @@ export default function MechaManagement() {
               />
             ))}
           </div>
-        )}
+        ))}
       </section>
 
       <section className="slug-management-section">

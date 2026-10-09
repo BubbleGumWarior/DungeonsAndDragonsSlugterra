@@ -1,3 +1,4 @@
+import { isBurrowed } from "./combatSkills.js";
 import { ArrowClockwiseIcon, SkullIcon, TrashIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import KnockoutPips from "./KnockoutPips.jsx";
 import { combatantNameColor } from "./combatDisplay.js";
@@ -124,7 +125,7 @@ export default function CombatRoster({ encounter, isDM, viewerUserId, actingComb
     // Thugglet's invisibility: same visibility rule as the map (CombatMap.jsx)
     // -- the DM and the combatant's own player still see the row, everyone
     // else doesn't get a row for them at all.
-    .filter((c) => !c.statusEffects?.invisible || isDM || (c.kind === "character" && c.refUserId === viewerUserId))
+    .filter((c) => (!c.statusEffects?.invisible && !isBurrowed(c)) || isDM || (c.kind === "character" && c.refUserId === viewerUserId))
     .slice()
     .sort((a, b) => encounter.turnOrder.indexOf(a.id) - encounter.turnOrder.indexOf(b.id));
 

@@ -5,6 +5,7 @@ import BlasterCard from "./BlasterCard.jsx";
 import ModCard from "./ModCard.jsx";
 import BlasterForm from "./BlasterForm.jsx";
 import ModForm from "./ModForm.jsx";
+import CollapseTitle from "./CollapseTitle.jsx";
 import "./SlugManagement.css";
 
 export default function InventoryManagement() {
@@ -15,6 +16,9 @@ export default function InventoryManagement() {
   const [blasters, setBlasters] = useState([]);
   const [mods, setMods] = useState([]);
   const [modal, setModal] = useState(null);
+  // Template lists start collapsed, like the slug templates.
+  const [blastersOpen, setBlastersOpen] = useState(false);
+  const [modsOpen, setModsOpen] = useState(false);
 
   function authHeaders(extra) {
     return { Authorization: `Bearer ${token}`, ...extra };
@@ -151,14 +155,14 @@ export default function InventoryManagement() {
     <div className="slug-management">
       <section className="slug-management-section">
         <div className="slug-management-section-header">
-          <h2>Blaster Templates</h2>
+          <CollapseTitle title="Blaster Templates" count={blasterTemplates.length} open={blastersOpen} onToggle={() => setBlastersOpen((v) => !v)} />
           <button type="button" className="slug-management-new" onClick={() => setModal({ type: "new-blaster-template" })}>
             <PlusIcon weight="bold" />
             New Blaster
           </button>
         </div>
 
-        {blasterTemplates.length === 0 ? (
+        {blastersOpen && (blasterTemplates.length === 0 ? (
           <p className="slug-management-empty">No blaster templates yet.</p>
         ) : (
           <div className="slug-management-grid">
@@ -190,19 +194,19 @@ export default function InventoryManagement() {
               />
             ))}
           </div>
-        )}
+        ))}
       </section>
 
       <section className="slug-management-section">
         <div className="slug-management-section-header">
-          <h2>Mod Templates</h2>
+          <CollapseTitle title="Mod Templates" count={modTemplates.length} open={modsOpen} onToggle={() => setModsOpen((v) => !v)} />
           <button type="button" className="slug-management-new" onClick={() => setModal({ type: "new-mod-template" })}>
             <PlusIcon weight="bold" />
             New Mod
           </button>
         </div>
 
-        {modTemplates.length === 0 ? (
+        {modsOpen && (modTemplates.length === 0 ? (
           <p className="slug-management-empty">No mod templates yet.</p>
         ) : (
           <div className="slug-management-grid">
@@ -241,7 +245,7 @@ export default function InventoryManagement() {
               />
             ))}
           </div>
-        )}
+        ))}
       </section>
 
       <section className="slug-management-section">

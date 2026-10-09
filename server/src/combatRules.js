@@ -128,7 +128,7 @@ export function applyLoyaltyToSlug(slug) {
 // apply separately at clash/damage time), and after the usual windup flies
 // twice as fast -- which halves the reaction window, on top of Zeus's
 // ultra_fast halving if it has that too.
-export const MEGA_MORPH_MIN_SPEED = 100;
+export const MEGA_MORPH_MIN_SPEED = 165;
 export const MEGA_MORPH_PIP_COST = 3;
 export const MEGA_MORPH_CLASH_MULTIPLIER = 2;
 export const MEGA_MORPH_WINDOW_FACTOR = 0.5;
@@ -225,6 +225,12 @@ export const KNOCKBACK_LARGE_DISTANCE = KNOCKBACK_DISTANCE * 2; // 32
 // the shooter. Comfortably under AOE_RADIUS (120, below) -- dodging the
 // direct hit deliberately doesn't reliably get you out of a blast too.
 export const DODGE_SIDESTEP_DISTANCE = 40;
+// Acrobatics stretches the sidestep: +DODGE_SIDESTEP_PER_MOD per point of
+// modifier. 40 + 18*5 = 130 > AOE_RADIUS (120), so a +5 dodger can clear a
+// blast outright, while lower modifiers still can't.
+export const DODGE_SIDESTEP_PER_MOD = 18;
+export const dodgeSidestepDistance = (acrobaticsMod) =>
+  DODGE_SIDESTEP_DISTANCE + DODGE_SIDESTEP_PER_MOD * Math.max(0, acrobaticsMod || 0);
 
 // A knockback hit that lands on a mounted rider has this chance of jarring
 // them clean out of the saddle -- the shove throws the rider, the mecha stays
@@ -1141,6 +1147,185 @@ export function sidestepTarget(attackerPos, targetPos, walls, distanceUnits = DO
     // blocked almost immediately on this side -- try the other before giving up
   }
   return { point: targetPos, hitWall: true };
+}
+
+// ---- Water terrain + mecha modes ---------------------------------------------
+// The DM paints water onto the map during setup (hidden from the battle itself
+// -- the map art shows it). It is stored per encounter as a list of cell ids,
+// cell = floor(y / WATER_CELL) * 1000 + floor(x / WATER_CELL).
+export const WATER_CELL = 25;
+export const WATER_MOVE_COST_MULT = 2;
+export const WATER_FOOT_COST_MULT = 4; // wading on foot (unmounted) is far slower than a mecha ploughing through // swimming/wading costs double AP unless flying or aquatic
+export const waterCellId = (x, y) => Math.floor(y / WATER_CELL) * 1000 + Math.floor(x / WATER_CELL);
+export const makeWaterSet = (water) => new Set(Array.isArray(water) ? water : []);
+export const isWaterAt = (waterSet, point) => waterSet.has(waterCellId(point.x, point.y));
+
+// AP to walk `from` -> `to`: straight-line distance over speedPerAp, with any
+// stretch that crosses water counting WATER_MOVE_COST_MULT times (unless the
+// mover ignores water). Always at least 1.
+export function pathApCost(from, to, waterSet, speedPerAp, ignoresWater = false, waterMult = WATER_MOVE_COST_MULT) {
+  const len = distance(from, to);
+  let effective = len;
+  if (!ignoresWater && waterSet.size > 0 && len > 0) {
+    const steps = Math.max(1, Math.ceil(len / 10));
+    let wet = 0;
+    for (let i = 0; i < steps; i++) {
+      const t = (i + 0.5) / steps;
+      if (isWaterAt(waterSet, { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t })) wet += 1;
+    }
+    effective = len + len * (wet / steps) * (waterMult - 1);
+  }
+  return Math.max(1, Math.ceil(effective / speedPerAp));
+}
+
+// True if any stretch of the straight path from -> to is water.
+export function pathTouchesWater(from, to, waterSet) {
+  if (waterSet.size === 0) return false;
+  const len = distance(from, to);
+  const steps = Math.max(1, Math.ceil(len / 10));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    if (isWaterAt(waterSet, { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t })) return true;
+  }
+  return false;
+}
+
+// A mounted rider can flip their mecha into one of its mod-granted modes.
+// Blaster and mecha speed scale per mode; bike also costs accuracy.
+export const MECHA_MODES = ["bike", "glider", "aquatic", "burrow"];
+export const BIKE_ACCURACY_PENALTY = 4;
+export const modeBlasterSpeedFactor = (mode, inWater) =>
+  mode === "bike" ? 2 : mode === "glider" ? 0.5 : mode === "aquatic" ? (inWater ? 1.5 : 0.5) : 1;
+export const modeMechaSpeedFactor = (mode, inWater) =>
+  mode === "burrow" ? 0.75 : modeBlasterSpeedFactor(mode, inWater);
+export const modeIgnoresWater = (mode) => mode === "glider" || mode === "aquatic";
+// The mode a combatant is acting in: a mecha's own, or a mounted rider's
+// (the mode is stored on both rows; a rider who isn't mounted has none).
+export const effectiveMode = (c) => (c?.kind === "mecha" || c?.mounted_on != null ? c.data?.mode ?? null : null);
+// Burrowed units can't be targeted by anything and are hidden from view.
+export const isBurrowed = (c) => effectiveMode(c) === "burrow";
+
+// ---- Character skills in combat ----------------------------------------------
+// Characters snapshot every skill modifier onto data.skills when they join an
+// encounter (see the combatants route). NPCs and grunts have no skills, so
+// their DEX modifier stands in for all of them. Works on both DB rows and the
+// client's combatant objects (both carry `kind` and `data`).
+export function combatantSkillMod(combatant, skillKey) {
+  const data = combatant?.data || {};
+  if (combatant?.kind === "character") return data.skills?.[skillKey] ?? data.dexMod ?? 0;
+  return data.dexMod ?? 0;
+}
+
+// Which team a combatant fights for: the party (characters, their mecha, and
+// NPCs flagged Ally/Friend/Party) or everyone else. Two combatants are allies
+// when they're on the same side.
+const PARTY_RELATIONSHIPS = ["Ally", "Friend", "Party"];
+export function combatSide(combatant) {
+  if (combatant?.kind === "character" || combatant?.kind === "mecha") return "party";
+  const rel = combatant?.relationship ?? combatant?.data?.relationship ?? null;
+  return PARTY_RELATIONSHIPS.includes(rel) ? "party" : "foes";
+}
+export const areAllies = (a, b) => combatSide(a) === combatSide(b);
+
+// Perception: rolled automatically (d20 + mod) -- above the DC spots things.
+export const PERCEPTION_DC = 16;
+export const PERCEPTION_RANGE = 400;
+
+// Athletics: +10% walking distance per AP for each point of modifier (a
+// negative modifier never slows you down).
+export const ATHLETICS_MOVE_BONUS_PER_MOD = 0.1;
+export const moveSpeedPerAp = (athleticsMod) =>
+  MOVE_SPEED_PER_AP * (1 + ATHLETICS_MOVE_BONUS_PER_MOD * Math.max(0, athleticsMod || 0));
+
+// Sleight of Hand: shaves its modifier off a blaster's reload cost.
+export const reloadApCostFor = (baseCost, sleightMod) => Math.max(1, (baseCost || 1) - Math.max(0, sleightMod || 0));
+
+// Hide (Stealth): needs nobody hostile within HIDE_RANGE; d20 + Stealth above
+// HIDE_DC makes the hider invisible for INVISIBLE_DURATION_TURNS.
+export const HIDE_AP_COST = 2;
+export const HIDE_RANGE = 400;
+export const HIDE_DC = 16;
+
+// Intimidate: d20 + Intimidation above INTIMIDATE_DC saps the target's AP
+// next turn.
+export const INTIMIDATE_AP_COST = 2;
+export const INTIMIDATE_RANGE = 400;
+export const INTIMIDATE_DC = 16;
+export const INTIMIDATE_AP_PENALTY = 3;
+
+// First Aid (Medicine): 6 AP minus the Medicine modifier, on an ally nearby.
+export const FIRST_AID_BASE_AP = 6;
+export const FIRST_AID_RANGE = 120;
+export const firstAidApCost = (medicineMod) => Math.max(1, FIRST_AID_BASE_AP - (medicineMod || 0));
+export const NEGATIVE_STATUS_KEYS = [
+  "burning",
+  "poison",
+  "snared",
+  "confused",
+  "stunned",
+  "shocked",
+  "feared",
+  "blinded",
+  "jammed",
+  "disarmed",
+  "slippery",
+  "reversedDirection",
+  "slowedReaction",
+  "marked",
+  "intimidated",
+];
+
+// Performance: a hit that rolls d20 + Performance above STYLE_DC is a style
+// shot -- extra Fame and a curved flight.
+export const STYLE_DC = 18;
+export const STYLE_FAME_BONUS = 10;
+
+// ---- Wall Run ---------------------------------------------------------------
+// Hotbar action: skim along a nearby wall and drop down on its far side. Costs
+// 6 AP minus the runner's Acrobatics modifier (never less than 1). Mirrored in
+// client/src/CombatPage.jsx for the button's preview.
+export const WALL_RUN_BASE_AP = 6;
+export const WALL_RUN_RANGE = 40; // how close to a wall the runner has to be
+export const WALL_RUN_LANDING_MIN = 20; // never land closer to the wall than this
+export const wallRunApCost = (acrobaticsMod) => Math.max(1, WALL_RUN_BASE_AP - (acrobaticsMod || 0));
+
+// Finds the nearest wall within WALL_RUN_RANGE of `pos` and the spot straight
+// across it (a mirror of `pos` through the wall's line), or null if no wall is
+// close enough.
+export function planWallRun(pos, walls, mapWidth, mapHeight) {
+  let best = null;
+  for (const wall of walls || []) {
+    const dx = wall.x2 - wall.x1;
+    const dy = wall.y2 - wall.y1;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq < 1e-9) continue;
+    let t = ((pos.x - wall.x1) * dx + (pos.y - wall.y1) * dy) / lenSq;
+    t = Math.max(0, Math.min(1, t));
+    const near = { x: wall.x1 + t * dx, y: wall.y1 + t * dy };
+    const d = Math.hypot(pos.x - near.x, pos.y - near.y);
+    if (d > WALL_RUN_RANGE) continue;
+    if (!best || d < best.d) best = { wall, near, d };
+  }
+  if (!best) return null;
+  // Unit vector from the runner toward the wall; if they're standing right on
+  // it, step off perpendicular to the wall instead.
+  let nx;
+  let ny;
+  if (best.d > 1e-6) {
+    nx = (best.near.x - pos.x) / best.d;
+    ny = (best.near.y - pos.y) / best.d;
+  } else {
+    const len = Math.hypot(best.wall.x2 - best.wall.x1, best.wall.y2 - best.wall.y1);
+    nx = -(best.wall.y2 - best.wall.y1) / len;
+    ny = (best.wall.x2 - best.wall.x1) / len;
+  }
+  const through = Math.max(best.d, WALL_RUN_LANDING_MIN);
+  const landing = clampToMapBounds(
+    { x: best.near.x + nx * through, y: best.near.y + ny * through },
+    mapWidth,
+    mapHeight
+  );
+  return { wall: best.wall, landing };
 }
 
 // Clamps a point into the map's own bounds -- used alongside a wall-clamped

@@ -93,12 +93,13 @@ export default function NavBar() {
   const loadoutItems = [
     { to: "/slugs", label: slugterraRevealed ? "Slugs" : "Creatures", icon: <CircleDashedIcon weight="bold" /> },
     { to: "/inventory", label: "Inventory", icon: <BackpackIcon weight="bold" /> },
+    { to: "/mechas", label: "Mecha-Beasts", icon: <PawPrintIcon weight="bold" /> },
     { to: "/market", label: "Market", icon: <StorefrontIcon weight="bold" /> },
   ];
   const starChartItems = [
     { to: "/galaxy", label: "Galaxy Map", icon: <PlanetIcon weight="bold" /> },
     { to: "/ship", label: "Deck Plan", icon: <RocketIcon weight="bold" /> },
-    { to: "/mechas", label: "Mecha-Beasts", icon: <PawPrintIcon weight="bold" /> },
+    { to: "/chronicle", label: "Chronicle", icon: <BookOpenTextIcon weight="bold" /> },
   ];
 
   // Close the mobile dropdown / an open nav group on an outside tap/click or
@@ -231,16 +232,12 @@ export default function NavBar() {
               />
               <NavGroup
                 id="starcharts"
-                label="Star Charts"
+                label="Galaxy"
                 icon={<PlanetIcon weight="bold" />}
                 items={starChartItems}
                 openGroup={openGroup}
                 setOpenGroup={setOpenGroup}
               />
-              <NavLink className={linkClass} to="/chronicle">
-                <BookOpenTextIcon weight="bold" />
-                <span className="nav-label">Chronicle</span>
-              </NavLink>
               <NavLink className={linkClass} to="/combat">
                 <SwordIcon weight="bold" />
                 <span className="nav-label">Combat</span>

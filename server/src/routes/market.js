@@ -252,8 +252,8 @@ export async function cloneTemplateToUser(client, kind, templateId, userId) {
     }
     case "mod": {
       const { rows } = await client.query(
-        `INSERT INTO mods (template_id, user_id, name, image, effect, accuracy_bonus, reload_ap_bonus, speed_bonus, grants_dual_shot, grants_range_finder)
-         SELECT id, $2, name, image, effect, accuracy_bonus, reload_ap_bonus, speed_bonus, grants_dual_shot, grants_range_finder
+        `INSERT INTO mods (template_id, user_id, name, image, effect, accuracy_bonus, reload_ap_bonus, speed_bonus, quality, grants_dual_shot, grants_range_finder)
+         SELECT id, $2, name, image, effect, accuracy_bonus, reload_ap_bonus, speed_bonus, quality, grants_dual_shot, grants_range_finder
          FROM mod_templates WHERE id = $1 RETURNING *`,
         [templateId, userId]
       );

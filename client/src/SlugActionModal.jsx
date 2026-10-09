@@ -13,7 +13,7 @@ const ACTIONS = [
 ];
 
 // Mirrors server/src/combatRules.js's MEGA_MORPH_* -- keep the numbers in sync.
-export const MEGA_MORPH_MIN_SPEED = 100;
+export const MEGA_MORPH_MIN_SPEED = 165;
 export const MEGA_MORPH_PIP_COST = 3;
 
 const livePips = (s) => (Array.isArray(s.energyPips) ? s.energyPips.filter(Boolean).length : 0);

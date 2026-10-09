@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { UploadSimpleIcon, ArrowsOutCardinalIcon, XIcon } from "@phosphor-icons/react";
 import { typeColor } from "./slugData.js";
 import { combatantNameColor } from "./combatDisplay.js";
+import { WATER_CELL, makeWaterSet, isBurrowed } from "./combatSkills.js";
 import { useAuth } from "./AuthContext.jsx";
 import { volumeToGain } from "./soundVolume.js";
 import { downscaleImageFile } from "./imageDownscale.js";
@@ -81,6 +82,23 @@ const RESOLVE_SETTLE_PX_MS = 3.2; // ms of skid per px of gap, before clamping
 // before that reveal arrives -- see the !fx.outcome branch below.
 const PENDING_MAX_FRACTION = 0.92;
 
+// Performance's style shot: an uncontested hit flies as a curved arc instead
+// of a straight line. The bolt keeps its normal progress along the straight
+// attacker->impact line but is pushed sideways by a parabola (4f(1-f)) that is
+// zero at both ends -- so it leaves and lands exactly where a normal bolt
+// would. STYLE_ARC_FRACTION is the arc's peak height as a share of the shot's
+// length; the arc eases in over STYLE_ARC_EASE_MS from the moment the server
+// reveals the style, so a late reveal never makes the bolt jump.
+const STYLE_ARC_FRACTION = 0.3;
+const STYLE_ARC_MAX = 110;
+const STYLE_ARC_EASE_MS = 450;
+function styleArcGeometry(from, to) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.hypot(dx, dy) || 1;
+  return { len, nx: -dy / len, ny: dx / len, peak: Math.min(STYLE_ARC_MAX, len * STYLE_ARC_FRACTION) };
+}
+
 function lerp(a, b, t) {
   return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
 }
@@ -136,6 +154,8 @@ const SLOW_PHASE_DISTANCE_FRACTION = 0.2;
 // Instead it pops out this share of the windup instantly, then eases
 // through the rest, so the launch is visibly simultaneous with the sound.
 const LAUNCH_KICK_RATIO = 0.4;
+// Bolt colour while the slug is still winding up -- see ShotEffect.
+const WINDUP_BOLT_COLOR = "#cfd6e4";
 
 // Explosion burst sizing -- three clearly distinct tiers so a glance at the
 // map tells you what kind of hit just landed. An AOE Blast slug's burst is
@@ -295,6 +315,13 @@ function ShotEffect({ fx, onDone }) {
   const color = typeColor(fx.slugType);
   // A dual shot's second element -- its bolt is drawn as a pair, one per colour.
   const color2 = fx.secondaryType ? typeColor(fx.secondaryType) : null;
+  // Until the slug has left the barrel and transformed (the windup), the
+  // bolt is a neutral colour so nobody can read the element off the map
+  // early -- matches the counter prompt, which also holds back until the
+  // windup ends. A dual shot's paired bolt collapses to a single one too.
+  const inWindup = elapsed < SLOW_PHASE_MS;
+  const boltColor = inWindup ? WINDUP_BOLT_COLOR : color;
+  const boltColor2 = inWindup ? null : color2;
 
   if (isJam) {
     const opacity = Math.max(0, 1 - elapsed / lifetimeMs);
@@ -370,6 +397,7 @@ function ShotEffect({ fx, onDone }) {
 
   if (!fx.countered) {
     let boltPos = null;
+    let styleBolt = false;
     if (!fx.outcome) {
       // The resolve update hasn't landed yet -- ride the phased curve toward
       // the last known impact point, but never quite finish the approach
@@ -407,11 +435,28 @@ function ShotEffect({ fx, onDone }) {
     } else if (elapsed < burstAt) {
       boltPos = lerp(fx.attackerPos, fx.impactPoint, phasedFraction(elapsed, totalMs, fx.windupFraction));
     } else {
-      bursts.push({ pos: fx.impactPoint, color, kind: fx.outcome, opacity: fadeAfter(burstAt), aoe: fx.aoe, growAt: burstAt });
+      bursts.push({ pos: fx.impactPoint, color, kind: fx.outcome, opacity: fadeAfter(burstAt), aoe: fx.aoe, growAt: burstAt, style: fx.style && fx.outcome === "hit" });
     }
     if (boltPos) {
       lastBoltPosRef.current = boltPos;
-      bolts.push({ pos: boltPos, color, color2, mega: fx.mega, angle: headingDeg(fx.attackerPos, fx.impactPoint) });
+      let angle = headingDeg(fx.attackerPos, fx.impactPoint);
+      if (fx.style && fx.outcome === "hit" && revealElapsed != null && !skidMode) {
+        const geo = styleArcGeometry(fx.attackerPos, fx.impactPoint);
+        const f = Math.max(
+          0,
+          Math.min(1, ((boltPos.x - fx.attackerPos.x) * (fx.impactPoint.x - fx.attackerPos.x) + (boltPos.y - fx.attackerPos.y) * (fx.impactPoint.y - fx.attackerPos.y)) / (geo.len * geo.len))
+        );
+        const ease = Math.min(1, Math.max(0, (elapsed - revealElapsed) / STYLE_ARC_EASE_MS));
+        const off = geo.peak * 4 * f * (1 - f) * ease;
+        boltPos = { x: boltPos.x + geo.nx * off, y: boltPos.y + geo.ny * off };
+        // Aim along the curve: slope of the parabola at f.
+        const slope = geo.peak * 4 * (1 - 2 * f) * ease;
+        angle = headingDeg({ x: 0, y: 0 }, { x: geo.len, y: slope });
+        const base = headingDeg(fx.attackerPos, fx.impactPoint);
+        angle = base + angle;
+        styleBolt = true;
+      }
+      bolts.push({ pos: boltPos, color: boltColor, color2: boltColor2, mega: fx.mega, angle, style: styleBolt });
     }
   } else {
     // The counter doesn't launch until the defender reacts -- until then the
@@ -429,8 +474,8 @@ function ShotEffect({ fx, onDone }) {
       if (elapsed < counterAtMs) {
         bolts.push({
           pos: lerp(fx.attackerPos, fx.impactPoint, phasedFraction(elapsed, totalMs, fx.windupFraction)),
-          color,
-          color2,
+          color: boltColor,
+          color2: boltColor2,
           mega: fx.mega,
           angle: headingDeg(fx.attackerPos, fx.impactPoint),
         });
@@ -438,7 +483,7 @@ function ShotEffect({ fx, onDone }) {
         // Linear from each bolt's position when the counter fired -- both are
         // up to speed by now, no slow launch-out to reproduce.
         const t = (elapsed - counterAtMs) / Math.max(1, clashAt - counterAtMs);
-        bolts.push({ pos: lerp(shotPosAtCounter, mid, t), color, color2, mega: fx.mega, angle: headingDeg(shotPosAtCounter, mid) });
+        bolts.push({ pos: lerp(shotPosAtCounter, mid, t), color: boltColor, color2: boltColor2, mega: fx.mega, angle: headingDeg(shotPosAtCounter, mid) });
         bolts.push({ pos: lerp(fx.targetPos, mid, t), color: counterColor });
       }
     } else {
@@ -483,8 +528,27 @@ function ShotEffect({ fx, onDone }) {
     }
   }
 
+  // The arc the style shot is following, drawn as a faint golden trail.
+  const showStyleTrail = fx.style && fx.outcome === "hit" && !fx.countered && revealElapsed != null && !skidMode && elapsed < burstAt;
+  let styleTrail = null;
+  if (showStyleTrail) {
+    const geo = styleArcGeometry(fx.attackerPos, fx.impactPoint);
+    const mid = lerp(fx.attackerPos, fx.impactPoint, 0.5);
+    const ease = Math.min(1, Math.max(0, (elapsed - revealElapsed) / STYLE_ARC_EASE_MS));
+    // A quadratic bezier's apex is half its control point's offset.
+    const ctrl = { x: mid.x + geo.nx * geo.peak * 2 * ease, y: mid.y + geo.ny * geo.peak * 2 * ease };
+    styleTrail = (
+      <path
+        className="shot-fx-style-trail"
+        d={`M ${fx.attackerPos.x} ${fx.attackerPos.y} Q ${ctrl.x} ${ctrl.y} ${fx.impactPoint.x} ${fx.impactPoint.y}`}
+        style={{ opacity: ease * 0.6 }}
+      />
+    );
+  }
+
   return (
     <>
+      {styleTrail}
       {bolts.flatMap((b, i) => {
         // A dual shot flies as a side-by-side pair, one bolt per element
         // colour, offset across its line of travel; a Mega Morph's bolts are
@@ -522,7 +586,7 @@ function ShotEffect({ fx, onDone }) {
               />
             );
           }
-          return <circle key={key} className="shot-fx-bolt" cx={b.pos.x} cy={b.pos.y} r={7} style={style} />;
+          return <circle key={key} className={`shot-fx-bolt ${b.style ? "shot-fx-bolt--style" : ""}`} cx={b.pos.x} cy={b.pos.y} r={b.style ? 9 : 7} style={style} />;
         });
       })}
       {bursts.map((b, i) =>
@@ -553,6 +617,14 @@ function ShotEffect({ fx, onDone }) {
           />
         )
       )}
+      {bursts
+        .filter((b) => b.style)
+        .map((b, i) => (
+          <g key={`style-burst-${i}`} className="shot-fx-style-burst" style={{ opacity: b.opacity }}>
+            <circle cx={b.pos.x} cy={b.pos.y} r={HIT_BURST_RADIUS + 14 * (1 - b.opacity)} />
+            <circle cx={b.pos.x} cy={b.pos.y} r={HIT_BURST_RADIUS * 0.6 + 26 * (1 - b.opacity)} />
+          </g>
+        ))}
     </>
   );
 }
@@ -603,13 +675,14 @@ function statusEffectBadges(statusEffects) {
   if (statusEffects.enhancedReaction?.turnsLeft > 0) {
     badges.push({ key: "enhanced-reaction", label: "Enhanced reaction -- longer counter window" });
   }
+  if (statusEffects.intimidated) badges.push({ key: "intimidated", label: `Intimidated -- starts next turn ${statusEffects.intimidated.apPenalty} AP short` });
   if (statusEffects.keenVision) badges.push({ key: "keen-vision", label: "Keen vision -- next attack has advantage" });
   if (statusEffects.marked) badges.push({ key: "marked", label: "Marked -- takes splash damage from Arcling's static arcs" });
   if (statusEffects.powerSurge) badges.push({ key: "power-surge", label: "Power surge -- every other shot this turn has its power doubled" });
   return badges;
 }
 
-function Token({ combatant, isActive, isSelected, isActing, draggable, isDragging, pos, onMouseDown, dimmed, mountTarget }) {
+function Token({ combatant, isActive, isSelected, isActing, draggable, isDragging, pos, onMouseDown, dimmed, mountTarget, wallRunning }) {
   // A mounted rider rides small, tucked onto the upper-right of the mecha's
   // token so the two read as one entity (the server keeps their positions in
   // lockstep -- see /actions/move).
@@ -631,7 +704,7 @@ function Token({ combatant, isActive, isSelected, isActing, draggable, isDraggin
 
   return (
     <g
-      className={`combat-token combat-token--${combatant.kind} ${downed ? "combat-token--down" : ""} ${isActing ? "combat-token--acting" : ""} ${draggable ? "combat-token--draggable" : ""} ${dimmed ? "combat-token--invisible" : ""} ${isDragging ? "combat-token--dragging" : ""}`}
+      className={`combat-token combat-token--${combatant.kind} ${downed ? "combat-token--down" : ""} ${isActing ? "combat-token--acting" : ""} ${draggable ? "combat-token--draggable" : ""} ${dimmed ? "combat-token--invisible" : ""} ${isDragging ? "combat-token--dragging" : ""} ${wallRunning ? "combat-token--wallrun" : ""}`}
       transform={`translate(${pos.x + offX}, ${pos.y + offY})`}
       onMouseDown={(e) => {
         e.stopPropagation();
@@ -687,6 +760,9 @@ function Token({ combatant, isActive, isSelected, isActing, draggable, isDraggin
 export default function CombatMap({
   encounter,
   drawMode = false,
+  waterMode = null,
+  waterBrush = 1,
+  onPaintWater,
   onAddWall,
   onRemoveWall,
   onBackgroundClick,
@@ -695,6 +771,7 @@ export default function CombatMap({
   actingCombatantId,
   rangeRing,
   mountRing,
+  wallRunId,
   isDraggable,
   showDragApCost = false,
   estimateApCost,
@@ -938,6 +1015,7 @@ export default function CombatMap({
           ? {
               ...s,
               outcome: shotResolved.outcome,
+              style: Boolean(shotResolved.style),
               countered: shotResolved.countered,
               counterSlugType: shotResolved.counterSlugType,
               // Where the incoming shot and the counter actually collide, and
@@ -983,7 +1061,33 @@ export default function CombatMap({
 
   const mapWidth = encounter.mapWidth;
   const mapHeight = encounter.mapHeight;
-  const dragLocked = drawMode || mapEditMode;
+  const dragLocked = drawMode || mapEditMode || Boolean(waterMode);
+
+  // Water the DM paints during setup. Hidden from everyone once the fight is
+  // on (the map art shows the water), and never shown to players.
+  const [waterStroke, setWaterStroke] = useState(null); // { paint, cells:Set<number> } while dragging
+  const showWater = isDM && encounter.status !== "active";
+  const waterCells = (() => {
+    const set = makeWaterSet(encounter.water);
+    if (waterStroke) for (const c of waterStroke.cells) (waterStroke.paint ? set.add(c) : set.delete(c));
+    return [...set];
+  })();
+  function brushCells(pt) {
+    const half = Math.floor(waterBrush / 2);
+    const cx = Math.floor(pt.x / WATER_CELL);
+    const cy = Math.floor(pt.y / WATER_CELL);
+    const maxX = Math.floor(mapWidth / WATER_CELL);
+    const maxY = Math.floor(mapHeight / WATER_CELL);
+    const out = [];
+    for (let dy = -half; dy <= half; dy++) {
+      for (let dx = -half; dx <= half; dx++) {
+        const x = cx + dx;
+        const y = cy + dy;
+        if (x >= 0 && y >= 0 && x <= maxX && y <= maxY) out.push(y * 1000 + x);
+      }
+    }
+    return out;
+  }
 
   // Cover-fit the uploaded image to the map (like CSS background-size:
   // cover), then layer the DM's own zoom multiplier and pan offset on top.
@@ -1008,6 +1112,11 @@ export default function CombatMap({
         offsetY: mapOffsetY,
         moved: false,
       });
+      return;
+    }
+    if (waterMode) {
+      const pt = mapPoint(svgRef.current, e, mapWidth, mapHeight);
+      setWaterStroke({ paint: waterMode === "paint", cells: new Set(brushCells(pt)) });
       return;
     }
     if (!drawMode) return;
@@ -1045,6 +1154,11 @@ export default function CombatMap({
       );
       return;
     }
+    if (waterStroke) {
+      const pt = mapPoint(svgRef.current, e, mapWidth, mapHeight);
+      setWaterStroke((prev) => (prev ? { ...prev, cells: new Set([...prev.cells, ...brushCells(pt)]) } : prev));
+      return;
+    }
     if (drawing) {
       const pt = mapPoint(svgRef.current, e, mapWidth, mapHeight);
       setDrawing((prev) => (prev ? { ...prev, x2: pt.x, y2: pt.y } : prev));
@@ -1061,6 +1175,11 @@ export default function CombatMap({
     if (mapDrag) {
       if (mapDrag.moved) onMapUpdate?.({ offsetX: mapDrag.offsetX, offsetY: mapDrag.offsetY });
       setMapDrag(null);
+      return;
+    }
+    if (waterStroke) {
+      onPaintWater?.([...waterStroke.cells], waterStroke.paint);
+      setWaterStroke(null);
       return;
     }
     if (drawing) {
@@ -1102,13 +1221,13 @@ export default function CombatMap({
   }
 
   function handleBackgroundClick(e) {
-    if (drawMode || drag || mapEditMode) return;
+    if (drawMode || drag || mapEditMode || waterMode) return;
     const pt = mapPoint(svgRef.current, e, mapWidth, mapHeight);
     onBackgroundClick?.(pt);
   }
 
   const dragDist = drag ? Math.hypot(drag.x - drag.originX, drag.y - drag.originY) : 0;
-  const dragApCost = drag && showDragApCost ? estimateApCost?.(drag.combatant, dragDist) : null;
+  const dragApCost = drag && showDragApCost ? estimateApCost?.(drag.combatant, dragDist, { x: drag.originX, y: drag.originY }, { x: drag.x, y: drag.y }) : null;
 
   async function handleMapFileChange(e) {
     const file = e.target.files?.[0];
@@ -1146,7 +1265,7 @@ export default function CombatMap({
     >
       <svg
         ref={svgRef}
-        className={`combat-map ${drawMode ? "combat-map--drawing" : ""} ${mapEditMode ? "combat-map--map-edit" : ""}`}
+        className={`combat-map ${drawMode || waterMode ? "combat-map--drawing" : ""} ${mapEditMode ? "combat-map--map-edit" : ""}`}
         viewBox={`0 0 ${mapWidth} ${mapHeight}`}
         onMouseDown={handleBackgroundMouseDown}
         onMouseMove={handleMouseMove}
@@ -1239,6 +1358,14 @@ export default function CombatMap({
           <circle className="combat-map-mount-ring" cx={mountRing.x} cy={mountRing.y} r={mountRing.r} />
         )}
 
+        {showWater && waterCells.length > 0 && (
+          <g className="combat-map-water" pointerEvents="none">
+            {waterCells.map((id) => (
+              <rect key={id} x={(id % 1000) * WATER_CELL} y={Math.floor(id / 1000) * WATER_CELL} width={WATER_CELL} height={WATER_CELL} />
+            ))}
+          </g>
+        )}
+
         {encounter.walls.map((w) => {
           const isSlugWall = w.source === "slug";
           const isGrowing = growingWallIds.has(w.id);
@@ -1281,7 +1408,7 @@ export default function CombatMap({
             // still see the token (dimmed, see `dimmed` below) -- every
             // other player never gets it rendered at all, so there's
             // nothing on the map for them to click/target either.
-            if (!c.statusEffects?.invisible) return true;
+            if (!c.statusEffects?.invisible && !isBurrowed(c)) return true;
             return isDM || (c.kind === "character" && c.refUserId === viewerUserId);
           })
           // Mounted riders paint last so they sit on top of their mecha.
@@ -1309,8 +1436,9 @@ export default function CombatMap({
                 draggable={!dragLocked && Boolean(isDraggable?.(c))}
                 isDragging={Boolean(followsDrag)}
                 onMouseDown={handleTokenMouseDown}
-                dimmed={Boolean(c.statusEffects?.invisible)}
+                dimmed={Boolean(c.statusEffects?.invisible) || isBurrowed(c)}
                 mountTarget={Boolean(inMountRange)}
+                wallRunning={c.id === wallRunId}
               />
             );
           })}
@@ -1383,6 +1511,9 @@ export default function CombatMap({
       )}
 
       {mapEditMode && <p className="combat-map-hint">Drag the map to reposition it. Use the slider to zoom.</p>}
+      {!mapEditMode && waterMode && (
+        <p className="combat-map-hint">Drag to {waterMode === "paint" ? "paint water" : "erase water"}. Only you can see it, and only before combat starts.</p>
+      )}
       {!mapEditMode && drawMode && <p className="combat-map-hint">Drag to draw a wall. Right-click a wall to erase it.</p>}
     </div>
   );

@@ -13,7 +13,27 @@ import { DUAL_SHOT_BASE_TYPE, canJoinDualShot } from "./dualShot.js";
 import MindScrambleModal from "./MindScrambleModal.jsx";
 import FrictionModal from "./FrictionModal.jsx";
 import HunkerConfirmModal from "./HunkerConfirmModal.jsx";
+import {
+  combatantSkillMod,
+  areAllies,
+  moveSpeedPerAp,
+  reloadApCostFor,
+  wallRunApCost,
+  firstAidApCost,
+  HIDE_AP_COST,
+  HIDE_RANGE,
+  INTIMIDATE_AP_COST,
+  makeWaterSet,
+  isWaterAt,
+  pathApCost,
+  modeBlasterSpeedFactor,
+  modeMechaSpeedFactor,
+  modeIgnoresWater,
+  effectiveMode,
+  WATER_FOOT_COST_MULT,
+} from "./combatSkills.js";
 import { typeRange } from "./slugData.js";
+import { effectiveReloadApCost } from "./itemData.js";
 import { combatantNameColor } from "./combatDisplay.js";
 import "./Panel.css";
 import "./CombatPage.css";
@@ -55,6 +75,7 @@ async function del(token, url) {
 // live preview while dragging. The server is always the authority on the
 // real AP cost when the move is actually submitted.
 const MOVE_SPEED_PER_AP = 80; // mirrors server combatRules.js -- walking distance only; a given walk costs 2.5x the AP vs. the old 200
+const WALL_RUN_RANGE = 40; // mirrors server -- how close to a wall you must be
 const MOUNT_RANGE = MOVE_SPEED_PER_AP; // mirrors server -- 1 AP of walking, to mount / dismount / ram
 
 function TopBar({ title, subtitle, children }) {
@@ -337,6 +358,8 @@ export default function CombatPage() {
   const [mode, setMode] = useState(null);
   const [actingId, setActingId] = useState(null);
   const [drawMode, setDrawMode] = useState(false);
+  const [waterMode, setWaterMode] = useState(null); // setup-only: "paint" | "erase" | null
+  const [waterBrush, setWaterBrush] = useState(3); // brush width in water cells
   const [error, setError] = useState(null);
   const [allSlugs, setAllSlugs] = useState([]);
   const [allBlasters, setAllBlasters] = useState([]);
@@ -345,6 +368,7 @@ export default function CombatPage() {
   const [actionPicker, setActionPicker] = useState(null); // slug awaiting an Attack/Break Wall/Make Wall/Build Bridge choice
   const [mindScramblePicker, setMindScramblePicker] = useState(null); // Perplexus awaiting an effect choice
   const [frictionPicker, setFrictionPicker] = useState(null); // Psi awaiting a friction choice
+  const [wallRunId, setWallRunId] = useState(null); // combatant mid Wall Run -- gives its token the slow slide
   const [hunkerConfirm, setHunkerConfirm] = useState(null); // { ap, conMod } while awaiting "spend all AP?" confirmation
 
   const isDM = user?.role === "Dungeon Master";
@@ -576,8 +600,52 @@ export default function CombatPage() {
     // only); how many can be covered is capped by the pods on hand.
     const needsPod = pods == null ? 0 : waiting.filter((s) => s.podBroken).length;
     const podless = Math.max(0, needsPod - (pods ?? 0));
-    return { apCost: Math.max(1, activeBlaster.reloadApCost ?? 1), pending: waiting.length - podless, noPods: podless };
-  }, [actingCombatant, allBlasters, allSlugs, pods]);
+    const equippedMods = allMods.filter((m) => m.equippedBlasterId === activeBlaster.id);
+    return { apCost: reloadApCostFor(effectiveReloadApCost(activeBlaster, equippedMods), combatantSkillMod(actingCombatant, "sleightOfHand")), pending: waiting.length - podless, noPods: podless };
+  }, [actingCombatant, allBlasters, allSlugs, allMods, pods]);
+
+  // Wall Run: 6 AP minus Acrobatics (NPCs use DEX), and only offered right
+  // next to a wall. Mirrors server planWallRun/wallRunApCost -- preview only.
+  const wallRunInfo = useMemo(() => {
+    if (!actingCombatant || (actingCombatant.kind !== "character" && actingCombatant.kind !== "npc")) return null;
+    const mod = combatantSkillMod(actingCombatant, "acrobatics");
+    const nearWall = (encounter?.walls || []).some((w) => {
+      const dx = w.x2 - w.x1;
+      const dy = w.y2 - w.y1;
+      const lenSq = dx * dx + dy * dy;
+      if (lenSq < 1e-9) return false;
+      const t = Math.max(0, Math.min(1, ((actingCombatant.x - w.x1) * dx + (actingCombatant.y - w.y1) * dy) / lenSq));
+      return Math.hypot(actingCombatant.x - (w.x1 + t * dx), actingCombatant.y - (w.y1 + t * dy)) <= WALL_RUN_RANGE;
+    });
+    return { apCost: wallRunApCost(mod), nearWall, skilled: mod > 0 };
+  }, [actingCombatant, encounter]);
+
+  // Skill actions beyond Wall Run: Hide (Stealth), Intimidate, First Aid
+  // (Medicine). Stealth / Intimidation need a positive modifier; Hide also
+  // needs nobody hostile within HIDE_RANGE. Mirrors the server's checks.
+  const skillActionInfo = useMemo(() => {
+    if (!actingCombatant || (actingCombatant.kind !== "character" && actingCombatant.kind !== "npc")) return null;
+    const foesNearby = (encounter?.combatants || []).some(
+      (c) =>
+        c.id !== actingCombatant.id &&
+        c.kind !== "decoy" &&
+        !c.unconscious &&
+        !c.disabled &&
+        !areAllies(actingCombatant, c) &&
+        Math.hypot(c.x - actingCombatant.x, c.y - actingCombatant.y) <= HIDE_RANGE
+    );
+    return {
+      hide: { apCost: HIDE_AP_COST, skilled: combatantSkillMod(actingCombatant, "stealth") > 0, foesNearby },
+      intimidate: { apCost: INTIMIDATE_AP_COST, skilled: combatantSkillMod(actingCombatant, "intimidation") > 0 },
+      firstAid: { apCost: firstAidApCost(combatantSkillMod(actingCombatant, "medicine")) },
+    };
+  }, [actingCombatant, encounter]);
+
+  // Which mod-granted modes the ridden mecha has, and the one it's in now.
+  const modeInfo = useMemo(() => {
+    if (!mountedMecha) return null;
+    return { modes: mountedMecha.data?.modes || [], current: mountedMecha.data?.mode ?? null };
+  }, [mountedMecha]);
 
   const rangeRing = useMemo(() => {
     if (!actingCombatant || mode?.type !== "shoot") return null;
@@ -628,13 +696,21 @@ export default function CombatPage() {
   // lone mecha covers a character's walk times its own speed. Mirrors the
   // server's /actions/move math -- preview only.
   const estimateApCost = useCallback(
-    (combatant, dist) => {
-      let speed = null;
-      if (combatant.kind === "mecha") speed = combatant.data?.speed || 1;
-      else if (combatant.mountedOn != null) {
-        speed = encounter?.combatants.find((c) => c.id === combatant.mountedOn)?.data?.speed || 1;
+    (combatant, dist, from, to) => {
+      const water = makeWaterSet(encounter?.water);
+      let vehicle = null;
+      if (combatant.kind === "mecha") vehicle = combatant;
+      else if (combatant.mountedOn != null) vehicle = encounter?.combatants.find((c) => c.id === combatant.mountedOn) || null;
+      let speedPerAp;
+      let mode = null;
+      if (vehicle) {
+        mode = vehicle.data?.mode ?? null;
+        const inWater = isWaterAt(water, { x: vehicle.x, y: vehicle.y });
+        speedPerAp = MOVE_SPEED_PER_AP * Math.max(1, vehicle.data?.speed || 1) * modeMechaSpeedFactor(mode, inWater);
+      } else {
+        speedPerAp = moveSpeedPerAp(combatantSkillMod(combatant, "athletics"));
       }
-      const speedPerAp = speed != null ? MOVE_SPEED_PER_AP * Math.max(1, speed) : MOVE_SPEED_PER_AP;
+      if (from && to) return pathApCost(from, to, water, speedPerAp, modeIgnoresWater(mode), vehicle ? undefined : WATER_FOOT_COST_MULT);
       return Math.max(1, Math.ceil(dist / speedPerAp));
     },
     [encounter]
@@ -687,6 +763,15 @@ export default function CombatPage() {
     setError(null);
     try {
       applyEncounter(await postJson(token, `/api/combat/encounters/${encounter.id}/walls`, w));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handlePaintWater(cells, paint) {
+    setError(null);
+    try {
+      applyEncounter(await patchJson(token, `/api/combat/encounters/${encounter.id}/water`, { cells, paint }));
     } catch (err) {
       setError(err.message);
     }
@@ -784,6 +869,20 @@ export default function CombatPage() {
         applyEncounter(await postJson(token, "/api/combat/actions/dismount", { combatantId: actingCombatant.id }));
       } else if (name === "switch-weapon") {
         applyEncounter(await postJson(token, "/api/combat/actions/switch-weapon", { combatantId: actingCombatant.id }));
+      } else if (name === "mode-off" || name.startsWith("mode-")) {
+        applyEncounter(
+          await postJson(token, "/api/combat/actions/mecha-mode", {
+            combatantId: actingCombatant.id,
+            mode: name === "mode-off" ? null : name.slice(5),
+          })
+        );
+      } else if (name === "hide") {
+        applyEncounter(await postJson(token, "/api/combat/actions/hide", { combatantId: actingCombatant.id }));
+      } else if (name === "wall-run") {
+        const runnerId = actingCombatant.id;
+        applyEncounter(await postJson(token, "/api/combat/actions/wall-run", { combatantId: runnerId }));
+        setWallRunId(runnerId);
+        setTimeout(() => setWallRunId((cur) => (cur === runnerId ? null : cur)), 1100);
       } else if (name === "reload") {
         applyEncounter(await postJson(token, "/api/combat/actions/reload", { combatantId: actingCombatant.id }));
       }
@@ -896,6 +995,18 @@ export default function CombatPage() {
       setMode(null);
       return;
     }
+    if ((mode?.type === "intimidate" || mode?.type === "first-aid") && actingCombatant) {
+      setError(null);
+      try {
+        applyEncounter(
+          await postJson(token, `/api/combat/actions/${mode.type}`, { combatantId: actingCombatant.id, targetId: target.id })
+        );
+      } catch (err) {
+        setError(err.message);
+      }
+      setMode(null);
+      return;
+    }
     if (mode?.type === "ram") {
       setError(null);
       try {
@@ -986,7 +1097,11 @@ export default function CombatPage() {
     const bonus = allMods
       .filter((m) => m.equippedBlasterId === blaster.id)
       .reduce((sum, m) => sum + (m.speedBonus || 0), 0);
-    return Math.max(1, blaster.speed + bonus);
+    const base = Math.max(1, blaster.speed + bonus);
+    const mode = effectiveMode(actingCombatant);
+    if (!mode) return base;
+    const inWater = isWaterAt(makeWaterSet(encounter?.water), { x: actingCombatant.x, y: actingCombatant.y });
+    return Math.max(1, Math.round(base * modeBlasterSpeedFactor(mode, inWater)));
   }
 
   // Dual-shot options for a slug, or null if it can't offer any: its weapon
@@ -1103,10 +1218,41 @@ export default function CombatPage() {
               <button
                 type="button"
                 className={`panel-btn panel-btn--ghost ${drawMode ? "combat-toggle--on" : ""}`}
-                onClick={() => setDrawMode((v) => !v)}
+                onClick={() => {
+                  setDrawMode((v) => !v);
+                  setWaterMode(null);
+                }}
               >
                 Draw Walls
               </button>
+              <button
+                type="button"
+                className={`panel-btn panel-btn--ghost ${waterMode === "paint" ? "combat-toggle--on" : ""}`}
+                onClick={() => {
+                  setWaterMode((m) => (m === "paint" ? null : "paint"));
+                  setDrawMode(false);
+                }}
+              >
+                Paint Water
+              </button>
+              <button
+                type="button"
+                className={`panel-btn panel-btn--ghost ${waterMode === "erase" ? "combat-toggle--on" : ""}`}
+                onClick={() => {
+                  setWaterMode((m) => (m === "erase" ? null : "erase"));
+                  setDrawMode(false);
+                }}
+              >
+                Erase Water
+              </button>
+              {waterMode && (
+                <select value={waterBrush} onChange={(e) => setWaterBrush(Number(e.target.value))} aria-label="Brush size">
+                  <option value={1}>Small brush</option>
+                  <option value={3}>Medium brush</option>
+                  <option value={5}>Large brush</option>
+                  <option value={9}>Huge brush</option>
+                </select>
+              )}
               <p className="combat-map-drag-hint">Drag a token to place it.</p>
             </div>
             <CombatMap
@@ -1114,6 +1260,9 @@ export default function CombatPage() {
               isDM={isDM}
               viewerUserId={user?.id}
               drawMode={drawMode}
+              waterMode={waterMode}
+              waterBrush={waterBrush}
+              onPaintWater={handlePaintWater}
               onAddWall={handleAddWall}
               onRemoveWall={handleRemoveWall}
               onBackgroundClick={handleBackgroundClick}
@@ -1176,6 +1325,7 @@ export default function CombatPage() {
             actingCombatantId={actingCombatant?.id}
             rangeRing={rangeRing}
             mountRing={mountRing}
+            wallRunId={wallRunId}
             isDraggable={isDraggable}
             showDragApCost
             estimateApCost={estimateApCost}
@@ -1191,6 +1341,9 @@ export default function CombatPage() {
             mode={mode}
             weaponSwitch={weaponSwitch}
             reloadInfo={reloadInfo}
+            wallRunInfo={wallRunInfo}
+            skillActionInfo={skillActionInfo}
+            modeInfo={modeInfo}
             mountedMecha={mountedMecha}
             hasMountableMecha={hasMountableMecha}
             onArmMode={setMode}
