@@ -52,6 +52,40 @@ export default function ModForm({ mode, initialValues, players, onSubmit, onCanc
 
   return (
     <form className="slug-form" onSubmit={handleSubmit}>
+      <div className="slug-form-bar">
+        {error && <div className="slug-form-error">{error}</div>}
+
+        <div className="slug-form-actions">
+          {mode === "assign" && (
+            <div className="slug-form-assign-field">
+              <label htmlFor="mod-form-player">Assign To</label>
+              <select
+                id="mod-form-player"
+                value={selectedPlayerId ?? ""}
+                onChange={(e) => setSelectedPlayerId(Number(e.target.value))}
+              >
+                {(players || []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.characterName || p.username}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="slug-form-actions-buttons">
+            {onCancel && (
+              <button type="button" className="slug-form-cancel" onClick={onCancel}>
+                Cancel
+              </button>
+            )}
+            <button type="submit" className="slug-form-submit" disabled={!canSubmit || submitting}>
+              {submitting ? "Saving..." : submitLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="mod-form-icon-preview">
         <WrenchIcon weight="duotone" />
       </div>
@@ -123,38 +157,6 @@ export default function ModForm({ mode, initialValues, players, onSubmit, onCanc
           <strong>Range Finder</strong> -- shows the range ring on the map while aiming with the blaster this is equipped on.
         </span>
       </label>
-
-      {error && <div className="slug-form-error">{error}</div>}
-
-      <div className="slug-form-actions">
-        {mode === "assign" && (
-          <div className="slug-form-assign-field">
-            <label htmlFor="mod-form-player">Assign To</label>
-            <select
-              id="mod-form-player"
-              value={selectedPlayerId ?? ""}
-              onChange={(e) => setSelectedPlayerId(Number(e.target.value))}
-            >
-              {(players || []).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.username}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <div className="slug-form-actions-buttons">
-          {onCancel && (
-            <button type="button" className="slug-form-cancel" onClick={onCancel}>
-              Cancel
-            </button>
-          )}
-          <button type="submit" className="slug-form-submit" disabled={!canSubmit || submitting}>
-            {submitting ? "Saving..." : submitLabel}
-          </button>
-        </div>
-      </div>
     </form>
   );
 }

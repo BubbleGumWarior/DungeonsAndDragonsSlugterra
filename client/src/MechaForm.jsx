@@ -79,6 +79,40 @@ export default function MechaForm({ mode, initialValues, players, onSubmit, onCa
 
   return (
     <form className="slug-form" onSubmit={handleSubmit}>
+      <div className="slug-form-bar">
+        {error && <div className="slug-form-error">{error}</div>}
+
+        <div className="slug-form-actions">
+          {mode === "assign" && (
+            <div className="slug-form-assign-field">
+              <label htmlFor="mecha-form-player">Assign To</label>
+              <select
+                id="mecha-form-player"
+                value={selectedPlayerId ?? ""}
+                onChange={(e) => setSelectedPlayerId(Number(e.target.value))}
+              >
+                {(players || []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.characterName || p.username}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="slug-form-actions-buttons">
+            {onCancel && (
+              <button type="button" className="slug-form-cancel" onClick={onCancel}>
+                Cancel
+              </button>
+            )}
+            <button type="submit" className="slug-form-submit" disabled={!canSubmit || submitting}>
+              {submitting ? "Saving..." : submitLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="slug-form-image-field" style={{ margin: "0 auto" }}>
         <label>Image</label>
         <ImageCropper value={fields.image} onChange={(v) => update("image", v)} />
@@ -130,38 +164,6 @@ export default function MechaForm({ mode, initialValues, players, onSubmit, onCa
           onChange={(v) => update("passengerCapacity", v)}
         />
         <Stepper label="Mod Slots" value={fields.modSlots} min={MOD_SLOTS_MIN} max={MOD_SLOTS_MAX} onChange={(v) => update("modSlots", v)} />
-      </div>
-
-      {error && <div className="slug-form-error">{error}</div>}
-
-      <div className="slug-form-actions">
-        {mode === "assign" && (
-          <div className="slug-form-assign-field">
-            <label htmlFor="mecha-form-player">Assign To</label>
-            <select
-              id="mecha-form-player"
-              value={selectedPlayerId ?? ""}
-              onChange={(e) => setSelectedPlayerId(Number(e.target.value))}
-            >
-              {(players || []).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.username}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <div className="slug-form-actions-buttons">
-          {onCancel && (
-            <button type="button" className="slug-form-cancel" onClick={onCancel}>
-              Cancel
-            </button>
-          )}
-          <button type="submit" className="slug-form-submit" disabled={!canSubmit || submitting}>
-            {submitting ? "Saving..." : submitLabel}
-          </button>
-        </div>
       </div>
     </form>
   );

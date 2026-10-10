@@ -30,13 +30,15 @@ router.use(requireAuth, requireDungeonMaster);
 router.get("/users", async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, username, role, status, must_change_password, created_at
-       FROM users ORDER BY created_at ASC`
+      `SELECT u.id, u.username, u.role, u.status, u.must_change_password, u.created_at, c.name AS character_name
+       FROM users u LEFT JOIN characters c ON c.user_id = u.id
+       ORDER BY u.created_at ASC`
     );
     res.json({
       users: rows.map((row) => ({
         id: row.id,
         username: row.username,
+        characterName: row.character_name || null,
         role: row.role,
         status: row.status,
         mustChangePassword: row.must_change_password,

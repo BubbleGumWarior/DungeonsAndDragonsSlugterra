@@ -1239,6 +1239,10 @@ export async function initSchema() {
     );
   `);
 
+  // Explicit team override (see combatSide in combatRules.js). NULL keeps the
+  // legacy default: party for characters/mecha/friendly NPCs, foes otherwise.
+  await pool.query(`ALTER TABLE combatants ADD COLUMN IF NOT EXISTS team TEXT`);
+
   // NPCs: a reusable DM roster (name, portrait, base stats, a loadout of
   // slug/blaster/mecha *templates*). Pulling one into an encounter clones
   // fresh, independently-tracked gear for that specific instance -- so
@@ -1395,6 +1399,36 @@ export async function initSchema() {
       id SERIAL PRIMARY KEY,
       encounter_id INTEGER NOT NULL REFERENCES encounters(id) ON DELETE CASCADE,
       body TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
+  // Raw stat events for the end-of-fight Battle Report (see combatStats.js).
+  // Append-only so concurrent shots never race a read-modify-write; the report
+  // is aggregated from these when the encounter ends, then frozen into
+  // combat_reports (which outlives the encounter and its events).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS combat_events (
+      id SERIAL PRIMARY KEY,
+      encounter_id INTEGER NOT NULL REFERENCES encounters(id) ON DELETE CASCADE,
+      type TEXT NOT NULL,
+      actor_id INTEGER,
+      actor_name TEXT,
+      target_id INTEGER,
+      target_name TEXT,
+      data JSONB NOT NULL DEFAULT '{}',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS combat_events_encounter_idx ON combat_events (encounter_id, id);`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS combat_reports (
+      id SERIAL PRIMARY KEY,
+      encounter_id INTEGER UNIQUE REFERENCES encounters(id) ON DELETE SET NULL,
+      encounter_name TEXT NOT NULL,
+      recipients JSONB NOT NULL DEFAULT '[]',
+      seen_by JSONB NOT NULL DEFAULT '[]',
+      report JSONB NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);

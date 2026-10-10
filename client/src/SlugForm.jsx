@@ -95,6 +95,40 @@ export default function SlugForm({ mode, initialValues, players, slugId, onSubmi
 
   return (
     <form className="slug-form" onSubmit={handleSubmit}>
+      <div className="slug-form-bar">
+        {error && <div className="slug-form-error">{error}</div>}
+
+        <div className="slug-form-actions">
+          {mode === "assign" && (
+            <div className="slug-form-assign-field">
+              <label htmlFor="slug-form-player">Assign To</label>
+              <select
+                id="slug-form-player"
+                value={selectedPlayerId ?? ""}
+                onChange={(e) => setSelectedPlayerId(Number(e.target.value))}
+              >
+                {(players || []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.characterName || p.username}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="slug-form-actions-buttons">
+            {onCancel && (
+              <button type="button" className="slug-form-cancel" onClick={onCancel}>
+                Cancel
+              </button>
+            )}
+            <button type="submit" className="slug-form-submit" disabled={!canSubmit || submitting}>
+              {submitting ? "Saving..." : submitLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="slug-form-images">
         <div className="slug-form-image-field">
           <label>Protoform Image</label>
@@ -214,38 +248,6 @@ export default function SlugForm({ mode, initialValues, players, slugId, onSubmi
             onChange={(e) => update("velocityAbility", e.target.value)}
             placeholder="The transformation effect when this slug reaches full velocity."
           />
-        </div>
-      </div>
-
-      {error && <div className="slug-form-error">{error}</div>}
-
-      <div className="slug-form-actions">
-        {mode === "assign" && (
-          <div className="slug-form-assign-field">
-            <label htmlFor="slug-form-player">Assign To</label>
-            <select
-              id="slug-form-player"
-              value={selectedPlayerId ?? ""}
-              onChange={(e) => setSelectedPlayerId(Number(e.target.value))}
-            >
-              {(players || []).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.username}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <div className="slug-form-actions-buttons">
-          {onCancel && (
-            <button type="button" className="slug-form-cancel" onClick={onCancel}>
-              Cancel
-            </button>
-          )}
-          <button type="submit" className="slug-form-submit" disabled={!canSubmit || submitting}>
-            {submitting ? "Saving..." : submitLabel}
-          </button>
         </div>
       </div>
     </form>

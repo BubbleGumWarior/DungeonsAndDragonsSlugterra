@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PlusIcon, SwordIcon, XIcon } from "@phosphor-icons/react";
+import { Link } from "react-router-dom";
+import { ScrollIcon, SwordIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import NavBar from "./NavBar.jsx";
 import CombatMap from "./CombatMap.jsx";
+import CombatSetup from "./CombatSetup.jsx";
 import CombatHotbar from "./CombatHotbar.jsx";
-import CombatSlugPanel from "./CombatSlugPanel.jsx";
+import CombatSlugPanel, { HolsteredSlugs } from "./CombatSlugPanel.jsx";
 import CombatRoster from "./CombatRoster.jsx";
 import CombatLog from "./CombatLog.jsx";
 import SlugActionModal, { MEGA_MORPH_MIN_SPEED, MEGA_MORPH_PIP_COST } from "./SlugActionModal.jsx";
@@ -144,211 +146,10 @@ function NewEncounterForm({ onCreate }) {
   );
 }
 
-function AddCombatantForm({ players, mechas, onAdd }) {
-  const [kind, setKind] = useState("character");
-  const [refUserId, setRefUserId] = useState(players[0]?.id ?? "");
-  const [refMechaId, setRefMechaId] = useState(mechas[0]?.id ?? "");
-  const [name, setName] = useState("");
-  const [dexModifier, setDexModifier] = useState(0);
-  const [conModifier, setConModifier] = useState(0);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    try {
-      const px = 150 + Math.random() * 300;
-      const py = 150 + Math.random() * 200;
-      if (kind === "character") {
-        await onAdd({ kind, refUserId: Number(refUserId), name, x: px, y: py });
-      } else if (kind === "mecha") {
-        await onAdd({ kind, refMechaId: Number(refMechaId), name, x: px, y: py });
-      } else {
-        await onAdd({
-          kind,
-          name,
-          x: px,
-          y: py,
-          dexModifier: Number(dexModifier),
-          conModifier: Number(conModifier),
-        });
-      }
-      setName("");
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <form className="combat-add-form" onSubmit={handleSubmit}>
-      <div className="panel-row">
-        <div className="panel-field">
-          <label>Kind</label>
-          <select value={kind} onChange={(e) => setKind(e.target.value)}>
-            <option value="character">Player Character</option>
-            <option value="npc">NPC</option>
-            <option value="mecha">Mecha</option>
-          </select>
-        </div>
-        {kind === "character" && (
-          <div className="panel-field">
-            <label>Player</label>
-            <select value={refUserId} onChange={(e) => setRefUserId(e.target.value)}>
-              {players.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.username}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-        {kind === "mecha" && (
-          <div className="panel-field">
-            <label>Mecha</label>
-            <select value={refMechaId} onChange={(e) => setRefMechaId(e.target.value)}>
-              {mechas.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-      </div>
-
-      <div className="panel-field">
-        <label>Name {kind !== "npc" && "(optional override)"}</label>
-        <input
-          type="text"
-          maxLength={40}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder={kind === "npc" ? "Blakk Goon" : ""}
-        />
-      </div>
-
-      {kind === "npc" && (
-        <>
-          <div className="panel-row">
-            <div className="panel-field">
-              <label>DEX Mod</label>
-              <input type="number" value={dexModifier} min={-5} max={10} onChange={(e) => setDexModifier(e.target.value)} />
-            </div>
-            <div className="panel-field">
-              <label>CON Mod</label>
-              <input type="number" value={conModifier} min={-5} max={10} onChange={(e) => setConModifier(e.target.value)} />
-            </div>
-          </div>
-          <p className="combat-add-form-hint">Grit and AP are derived from these, same as player characters.</p>
-        </>
-      )}
-
-      {error && <p className="panel-error">{error}</p>}
-      <button
-        type="submit"
-        className="panel-btn panel-btn--ghost"
-        disabled={submitting || (kind === "character" && !refUserId) || (kind === "mecha" && !refMechaId)}
-      >
-        <PlusIcon weight="bold" />
-        Add Combatant
-      </button>
-    </form>
-  );
-}
-
-function PullNpcForm({ npcTemplates, onPull }) {
-  const [npcTemplateId, setNpcTemplateId] = useState(npcTemplates[0]?.id ?? "");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
-
-  async function handlePull() {
-    if (!npcTemplateId) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      await onPull(Number(npcTemplateId));
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  if (npcTemplates.length === 0) {
-    return <p className="combat-map-drag-hint">No combat-ready NPCs yet -- create some on the Chronicle page first.</p>;
-  }
-
-  return (
-    <div className="combat-add-form combat-pull-npc-form">
-      <div className="panel-field">
-        <label>Pull an NPC into the fight</label>
-        <select value={npcTemplateId} onChange={(e) => setNpcTemplateId(e.target.value)}>
-          {npcTemplates.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      {error && <p className="panel-error">{error}</p>}
-      <button type="button" className="panel-btn panel-btn--ghost" disabled={submitting} onClick={handlePull}>
-        <PlusIcon weight="bold" />
-        Pull Into Combat
-      </button>
-    </div>
-  );
-}
-
-function PullGruntForm({ gruntTemplates, onPull }) {
-  const [gruntTemplateId, setGruntTemplateId] = useState(gruntTemplates[0]?.id ?? "");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
-
-  async function handlePull() {
-    if (!gruntTemplateId) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      await onPull(Number(gruntTemplateId));
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  if (gruntTemplates.length === 0) {
-    return <p className="combat-map-drag-hint">No grunts yet -- create some on the Chronicle page first.</p>;
-  }
-
-  return (
-    <div className="combat-add-form combat-pull-npc-form">
-      <div className="panel-field">
-        <label>Send in a grunt (rolls its own loadout)</label>
-        <select value={gruntTemplateId} onChange={(e) => setGruntTemplateId(e.target.value)}>
-          {gruntTemplates.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      {error && <p className="panel-error">{error}</p>}
-      <button type="button" className="panel-btn panel-btn--ghost" disabled={submitting} onClick={handlePull}>
-        <PlusIcon weight="bold" />
-        Send Grunt Into Combat
-      </button>
-    </div>
-  );
-}
 
 export default function CombatPage() {
   const { token, user } = useAuth();
-  const { encounter: liveEncounter, slugUpdate, blasterUpdate, modUpdate, shotFx, shotResolved, damageFlash, gruntTemplatesUpdate, gearChanged, podsUpdate, marketChanged, tradeCompleted } = useLiveState();
+  const { encounter: liveEncounter, slugUpdate, blasterUpdate, modUpdate, shotFx, shotResolved, damageFlash, gruntTemplatesUpdate, gearChanged, partyHealed, podsUpdate, marketChanged, tradeCompleted } = useLiveState();
   const [flashActive, setFlashActive] = useState(false);
   const [encounter, setEncounter] = useState(undefined);
   const [players, setPlayers] = useState([]);
@@ -437,7 +238,8 @@ export default function CombatPage() {
     // gearChanged: an NPC was just kitted out. Its per-row slug/blaster
     // broadcasts arrive as a burst the live state can't hold (only the last
     // survives), so refetch everything instead of trusting them.
-  }, [isDM, token, gearChanged]);
+    // partyHealed: Heal All refills every slug's pips in one burst, same story.
+  }, [isDM, token, gearChanged, partyHealed]);
 
   useEffect(() => {
     if (!slugUpdate) return;
@@ -550,6 +352,22 @@ export default function CombatPage() {
       .sort((a, b) => (a.magazineSlot ?? 99) - (b.magazineSlot ?? 99) || a.id - b.id);
   }, [actingCombatant, allSlugs, allBlasters]);
 
+  // The weapon in the *other* slot (characters only): its blaster and the slugs
+  // loaded in it, shown read-only in a small side panel so a Switch Weapon
+  // decision can see what's waiting there and how long its cooldowns have left.
+  const holstered = useMemo(() => {
+    if (!actingCombatant || actingCombatant.kind !== "character") return null;
+    const activeSlot = actingCombatant.data?.activeWeaponSlot ?? 0;
+    const blaster = allBlasters.find(
+      (b) => b.userId === actingCombatant.refUserId && b.equipSlot != null && b.equipSlot !== activeSlot
+    );
+    if (!blaster) return null;
+    const slugs = allSlugs
+      .filter((s) => s.userId === actingCombatant.refUserId && s.equippedBlasterId === blaster.id)
+      .sort((a, b) => (a.magazineSlot ?? 99) - (b.magazineSlot ?? 99) || a.id - b.id);
+    return { blaster, slugs };
+  }, [actingCombatant, allSlugs, allBlasters]);
+
   // The active weapon's base type -- lets the slug panel show a Gatling's
   // reduced shot AP cost (see BASE_TYPE_EFFECT_NOTES / server itemRules.js).
   const activeBlasterBaseType = useMemo(() => {
@@ -635,17 +453,11 @@ export default function CombatPage() {
         Math.hypot(c.x - actingCombatant.x, c.y - actingCombatant.y) <= HIDE_RANGE
     );
     return {
-      hide: { apCost: HIDE_AP_COST, skilled: combatantSkillMod(actingCombatant, "stealth") > 0, foesNearby },
+      hide: { apCost: HIDE_AP_COST, skilled: combatantSkillMod(actingCombatant, "stealth") > 0, foesNearby, tried: !!actingCombatant.statusEffects?.hideTried },
       intimidate: { apCost: INTIMIDATE_AP_COST, skilled: combatantSkillMod(actingCombatant, "intimidation") > 0 },
       firstAid: { apCost: firstAidApCost(combatantSkillMod(actingCombatant, "medicine")) },
     };
   }, [actingCombatant, encounter]);
-
-  // Which mod-granted modes the ridden mecha has, and the one it's in now.
-  const modeInfo = useMemo(() => {
-    if (!mountedMecha) return null;
-    return { modes: mountedMecha.data?.modes || [], current: mountedMecha.data?.mode ?? null };
-  }, [mountedMecha]);
 
   const rangeRing = useMemo(() => {
     if (!actingCombatant || mode?.type !== "shoot") return null;
@@ -677,6 +489,12 @@ export default function CombatPage() {
     if (!encounter || actingCombatant?.mountedOn == null) return null;
     return encounter.combatants.find((c) => c.id === actingCombatant.mountedOn) || null;
   }, [encounter, actingCombatant]);
+
+  // Which mod-granted modes the ridden mecha has, and the one it's in now.
+  const modeInfo = useMemo(() => {
+    if (!mountedMecha) return null;
+    return { modes: mountedMecha.data?.modes || [], current: mountedMecha.data?.mode ?? null };
+  }, [mountedMecha]);
 
   // Whether there's any mecha this combatant could actually mount -- a live
   // (non-disabled) one they own is in the fight. Nothing to mount => the
@@ -795,6 +613,15 @@ export default function CombatPage() {
     }
   }
 
+  async function handleSetTeam(id, team) {
+    setError(null);
+    try {
+      applyEncounter(await patchJson(token, `/api/combat/encounters/${encounter.id}/combatants/${id}/team`, { team }));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   async function handleRemoveCombatant(id) {
     setError(null);
     try {
@@ -804,28 +631,20 @@ export default function CombatPage() {
     }
   }
 
-  async function handlePullNpc(npcTemplateId) {
+  async function handlePullNpc(payload) {
     setError(null);
     try {
-      const px = 150 + Math.random() * 300;
-      const py = 150 + Math.random() * 200;
-      applyEncounter(
-        await postJson(token, `/api/combat/encounters/${encounter.id}/npc-combatants`, { npcTemplateId, x: px, y: py })
-      );
+      applyEncounter(await postJson(token, `/api/combat/encounters/${encounter.id}/npc-combatants`, payload));
     } catch (err) {
       setError(err.message);
       throw err;
     }
   }
 
-  async function handlePullGrunt(gruntTemplateId) {
+  async function handlePullGrunt(payload) {
     setError(null);
     try {
-      const px = 150 + Math.random() * 300;
-      const py = 150 + Math.random() * 200;
-      applyEncounter(
-        await postJson(token, `/api/combat/encounters/${encounter.id}/grunt-combatants`, { gruntTemplateId, x: px, y: py })
-      );
+      applyEncounter(await postJson(token, `/api/combat/encounters/${encounter.id}/grunt-combatants`, payload));
     } catch (err) {
       setError(err.message);
       throw err;
@@ -1156,6 +975,9 @@ export default function CombatPage() {
       <>
         <NavBar />
         <div className="combat-page combat-page--empty">
+          <Link className="panel-btn panel-btn--ghost combat-reports-link" to="/combat/reports">
+            <ScrollIcon weight="bold" /> Battle reports
+          </Link>
           {isDM ? (
             <NewEncounterForm onCreate={handleCreate} />
           ) : (
@@ -1171,90 +993,34 @@ export default function CombatPage() {
   }
 
   if (encounter.status === "setup") {
+    const setupTool = drawMode ? "walls" : waterMode || "move";
+    function handleToolChange(tool) {
+      setDrawMode(tool === "walls");
+      setWaterMode(tool === "paint" || tool === "erase" ? tool : null);
+    }
     return (
       <>
         <NavBar />
-        <div className="combat-page">
-          <TopBar title={encounter.name} subtitle="Setting up" />
-        <div className="panel combat-setup-panel">
-          <div className="panel-header">
-            <span className="panel-header-icon">
-              <SwordIcon weight="duotone" />
-            </span>
-            <div className="panel-header-text">
-              <h2>{encounter.name}</h2>
-              <p>Setting up -- add combatants, then start.</p>
-            </div>
-            {isDM && (
-              <button type="button" className="panel-btn" disabled={encounter.combatants.length === 0} onClick={handleStart}>
-                Start Encounter
-              </button>
-            )}
-          </div>
-          <div className="panel-body">
-            {isDM && <AddCombatantForm players={players} mechas={mechas} onAdd={handleAddCombatant} />}
-            {isDM && <PullNpcForm npcTemplates={npcTemplates} onPull={handlePullNpc} />}
-            {isDM && <PullGruntForm gruntTemplates={gruntTemplates} onPull={handlePullGrunt} />}
-            <div className="combat-setup-list">
-              {encounter.combatants.map((c) => (
-                <div key={c.id} className="combat-setup-item">
-                  <span style={{ color: combatantNameColor(c) || undefined }}>{c.name}</span>
-                  <span className="combat-setup-item-kind">{c.kind}</span>
-                  {isDM && (
-                    <button type="button" className="panel-btn panel-btn--icon panel-btn--ghost" onClick={() => handleRemoveCombatant(c.id)}>
-                      <XIcon weight="bold" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-            {error && <p className="panel-error">{error}</p>}
-          </div>
-        </div>
-
-        {isDM && (
-          <div className="combat-setup-map">
-            <div className="combat-setup-map-controls">
-              <button
-                type="button"
-                className={`panel-btn panel-btn--ghost ${drawMode ? "combat-toggle--on" : ""}`}
-                onClick={() => {
-                  setDrawMode((v) => !v);
-                  setWaterMode(null);
-                }}
-              >
-                Draw Walls
-              </button>
-              <button
-                type="button"
-                className={`panel-btn panel-btn--ghost ${waterMode === "paint" ? "combat-toggle--on" : ""}`}
-                onClick={() => {
-                  setWaterMode((m) => (m === "paint" ? null : "paint"));
-                  setDrawMode(false);
-                }}
-              >
-                Paint Water
-              </button>
-              <button
-                type="button"
-                className={`panel-btn panel-btn--ghost ${waterMode === "erase" ? "combat-toggle--on" : ""}`}
-                onClick={() => {
-                  setWaterMode((m) => (m === "erase" ? null : "erase"));
-                  setDrawMode(false);
-                }}
-              >
-                Erase Water
-              </button>
-              {waterMode && (
-                <select value={waterBrush} onChange={(e) => setWaterBrush(Number(e.target.value))} aria-label="Brush size">
-                  <option value={1}>Small brush</option>
-                  <option value={3}>Medium brush</option>
-                  <option value={5}>Large brush</option>
-                  <option value={9}>Huge brush</option>
-                </select>
-              )}
-              <p className="combat-map-drag-hint">Drag a token to place it.</p>
-            </div>
+        <div className="combat-page combat-page--setup">
+          <CombatSetup
+            encounter={encounter}
+            isDM={isDM}
+            players={players}
+            mechas={mechas}
+            npcTemplates={npcTemplates}
+            gruntTemplates={gruntTemplates}
+            error={error}
+            tool={setupTool}
+            onToolChange={handleToolChange}
+            brush={waterBrush}
+            onBrushChange={setWaterBrush}
+            onAddCombatant={handleAddCombatant}
+            onPullNpc={handlePullNpc}
+            onPullGrunt={handlePullGrunt}
+            onSetTeam={handleSetTeam}
+            onRemove={handleRemoveCombatant}
+            onStart={handleStart}
+          >
             <CombatMap
               encounter={encounter}
               isDM={isDM}
@@ -1271,8 +1037,7 @@ export default function CombatPage() {
               onTokenDragEnd={handleTokenDragEnd}
               onMapUpdate={handleMapUpdate}
             />
-          </div>
-        )}
+          </CombatSetup>
         </div>
       </>
     );
@@ -1284,6 +1049,9 @@ export default function CombatPage() {
       {flashActive && <div className="combat-damage-flash" />}
       <div className="combat-page combat-page--active">
       <TopBar title={encounter.name} subtitle={`Round ${encounter.round}`}>
+        <Link className="panel-btn panel-btn--ghost" to="/combat/reports">
+          <ScrollIcon weight="bold" /> Battle reports
+        </Link>
         {isDM && (
           <>
             <button
@@ -1301,15 +1069,18 @@ export default function CombatPage() {
       </TopBar>
 
       <div className="combat-page-columns">
-        <CombatSlugPanel
-          actingCombatant={actingCombatant}
-          slugs={eligibleSlugs}
-          pods={pods}
-          activeBlasterBaseType={activeBlasterBaseType}
-          armedSlugId={mode?.type === "shoot" ? mode.slugId : null}
-          onPickSlug={handlePickSlug}
-          hotkeysActive={actingCombatant?.id === encounter.activeCombatantId}
-        />
+        <div className="combat-page-left">
+          <CombatSlugPanel
+            actingCombatant={actingCombatant}
+            slugs={eligibleSlugs}
+            pods={pods}
+            activeBlasterBaseType={activeBlasterBaseType}
+            armedSlugId={mode?.type === "shoot" ? mode.slugId : null}
+            onPickSlug={handlePickSlug}
+            hotkeysActive={actingCombatant?.id === encounter.activeCombatantId}
+          />
+          {holstered && <HolsteredSlugs blaster={holstered.blaster} slugs={holstered.slugs} />}
+        </div>
 
         <div className="combat-page-center">
           <CombatMap

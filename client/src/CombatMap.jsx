@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { UploadSimpleIcon, ArrowsOutCardinalIcon, XIcon } from "@phosphor-icons/react";
 import { typeColor } from "./slugData.js";
 import { combatantNameColor } from "./combatDisplay.js";
-import { WATER_CELL, makeWaterSet, isBurrowed } from "./combatSkills.js";
+import { WATER_CELL, makeWaterSet, isBurrowed, combatSide } from "./combatSkills.js";
+import { teamById } from "./combatTeams.js";
 import { useAuth } from "./AuthContext.jsx";
 import { volumeToGain } from "./soundVolume.js";
 import { downscaleImageFile } from "./imageDownscale.js";
@@ -318,10 +319,12 @@ function ShotEffect({ fx, onDone }) {
   // Until the slug has left the barrel and transformed (the windup), the
   // bolt is a neutral colour so nobody can read the element off the map
   // early -- matches the counter prompt, which also holds back until the
-  // windup ends. A dual shot's paired bolt collapses to a single one too.
+  // windup ends. A dual shot keeps both bolts through the windup (both neutral)
+  // -- collapsing the pair to one made short flights, which spend most of their
+  // visible travel in the windup, look like a single projectile.
   const inWindup = elapsed < SLOW_PHASE_MS;
   const boltColor = inWindup ? WINDUP_BOLT_COLOR : color;
-  const boltColor2 = inWindup ? null : color2;
+  const boltColor2 = color2 ? (inWindup ? WINDUP_BOLT_COLOR : color2) : null;
 
   if (isJam) {
     const opacity = Math.max(0, 1 - elapsed / lifetimeMs);
@@ -435,7 +438,7 @@ function ShotEffect({ fx, onDone }) {
     } else if (elapsed < burstAt) {
       boltPos = lerp(fx.attackerPos, fx.impactPoint, phasedFraction(elapsed, totalMs, fx.windupFraction));
     } else {
-      bursts.push({ pos: fx.impactPoint, color, kind: fx.outcome, opacity: fadeAfter(burstAt), aoe: fx.aoe, growAt: burstAt, style: fx.style && fx.outcome === "hit" });
+      bursts.push({ pos: fx.impactPoint, color, kind: fx.outcome, opacity: fadeAfter(burstAt), aoe: fx.aoe && fx.outcome !== "out-of-range", growAt: burstAt, style: fx.style && fx.outcome === "hit" });
     }
     if (boltPos) {
       lastBoltPosRef.current = boltPos;
@@ -555,8 +558,8 @@ function ShotEffect({ fx, onDone }) {
         // teardrops instead of circles (both can combine).
         const shapes = b.color2
           ? [
-              { color: b.color, offset: -7 },
-              { color: b.color2, offset: 7 },
+              { color: b.color, offset: -8 },
+              { color: b.color2, offset: 8 },
             ]
           : [{ color: b.color, offset: 0 }];
         return shapes.map((shape, j) => {
@@ -704,8 +707,9 @@ function Token({ combatant, isActive, isSelected, isActing, draggable, isDraggin
 
   return (
     <g
-      className={`combat-token combat-token--${combatant.kind} ${downed ? "combat-token--down" : ""} ${isActing ? "combat-token--acting" : ""} ${draggable ? "combat-token--draggable" : ""} ${dimmed ? "combat-token--invisible" : ""} ${isDragging ? "combat-token--dragging" : ""} ${wallRunning ? "combat-token--wallrun" : ""}`}
+      className={`combat-token combat-token--${combatant.mimic?.kind ?? combatant.kind} ${downed ? "combat-token--down" : ""} ${isActing ? "combat-token--acting" : ""} ${draggable ? "combat-token--draggable" : ""} ${dimmed ? "combat-token--invisible" : ""} ${isDragging ? "combat-token--dragging" : ""} ${wallRunning ? "combat-token--wallrun" : ""}`}
       transform={`translate(${pos.x + offX}, ${pos.y + offY})`}
+      style={{ "--team-color": teamById(combatSide(combatant)).token }}
       onMouseDown={(e) => {
         e.stopPropagation();
         onMouseDown?.(combatant, e);

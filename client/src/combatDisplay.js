@@ -1,3 +1,5 @@
+import { COMBAT_TEAMS } from "./combatTeams.js";
+
 // How a combatant's name is tinted in the combat roster, the setup list, and
 // on the map. Party members always read gold; an NPC or grunt takes its
 // relationship hue (from encounter serialization -- see loadFullEncounter in
@@ -14,6 +16,10 @@ const REL_COLOR = {
 
 export function combatantNameColor(combatant) {
   if (!combatant) return null;
+  // A Mirage Coil decoy is tinted exactly like its owner.
+  if (combatant.mimic) combatant = combatant.mimic;
+  const team = COMBAT_TEAMS.find((t) => t.id === combatant.team);
+  if (team) return team.token;
   if (combatant.kind === "character") return "var(--gold-soft)";
   if (combatant.kind === "npc") return REL_COLOR[combatant.relationship] || REL_COLOR.Unknown;
   return null;

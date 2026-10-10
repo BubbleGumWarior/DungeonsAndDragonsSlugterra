@@ -25,6 +25,8 @@ import Mechas from "./Mechas.jsx";
 import GalaxyPage from "./GalaxyPage.jsx";
 import ShipPage from "./ShipPage.jsx";
 import CombatPage from "./CombatPage.jsx";
+import CombatReports from "./CombatReports.jsx";
+import CombatReportToasts from "./CombatReportToasts.jsx";
 import Chronicle from "./Chronicle.jsx";
 import Settings from "./Settings.jsx";
 
@@ -76,6 +78,7 @@ function App() {
       <AccessSocket>
        <ToastProvider>
         <TradeToasts />
+        <CombatReportToasts />
         <ChallengeResultOverlay />
         <DiceRollPrompt />
         <SlugHuntPrompt />
@@ -115,6 +118,7 @@ function App() {
               <Route path="/galaxy" element={<GalaxyPage />} />
               <Route path="/ship" element={<ShipPage />} />
               <Route path="/combat" element={<CombatPage />} />
+              <Route path="/combat/reports" element={<CombatReports />} />
               <Route path="/chronicle" element={<Chronicle />} />
               <Route path="/npcs" element={<Navigate to="/chronicle" replace />} />
             </Route>

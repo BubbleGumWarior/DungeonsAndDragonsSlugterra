@@ -300,3 +300,97 @@
   font-style: italic;
   text-align: center;
 }
+
+/* Holstered weapon: a compact, read-only list under the active slug panel. */
+.combat-holstered {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.combat-holstered-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.combat-holstered-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.combat-holstered-weapon {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gold-soft);
+}
+
+.combat-holstered-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.combat-holstered-slug {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 2px;
+}
+
+.combat-holstered-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--type-color);
+}
+
+.combat-holstered-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.combat-holstered-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.combat-holstered-type {
+  font-size: 10.5px;
+  color: var(--ink-dim);
+}
+
+.combat-holstered-state {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--success);
+}
+
+.combat-holstered-state--cooldown {
+  color: var(--gold-soft);
+}
+
+.combat-holstered-state--unloaded,
+.combat-holstered-state--exhausted {
+  color: var(--ink-dim);
+}

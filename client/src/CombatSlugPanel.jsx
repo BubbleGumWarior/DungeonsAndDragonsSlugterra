@@ -225,3 +225,43 @@ export default function CombatSlugPanel({
     </div>
   );
 }
+
+// Read-only look at the weapon in the other slot: which slugs are chambered in
+// it and whether each is ready, cooling down, unloaded or out of energy. No
+// firing from here -- Switch Weapon first.
+export function HolsteredSlugs({ blaster, slugs }) {
+  return (
+    <div className="panel panel--quiet combat-holstered">
+      <div className="combat-holstered-head">
+        <span className="combat-holstered-label">Holstered</span>
+        <span className="combat-holstered-weapon" title={blaster.name}>
+          {blaster.name}
+        </span>
+      </div>
+      {slugs.length === 0 ? (
+        <p className="combat-slug-panel-empty">No slugs loaded.</p>
+      ) : (
+        <ul className="combat-holstered-list">
+          {slugs.map((s) => {
+            const cooldown = s.cooldownTurnsLeft || 0;
+            const charged = Array.isArray(s.energyPips) && s.energyPips.some(Boolean);
+            let state = { key: "ready", label: "Ready" };
+            if (cooldown > 0) state = { key: "cooldown", label: `${cooldown} turn${cooldown === 1 ? "" : "s"}` };
+            else if (s.loaded === false) state = { key: "unloaded", label: s.podBroken ? "Pod broken" : "Not loaded" };
+            else if (!charged) state = { key: "exhausted", label: "Exhausted" };
+            return (
+              <li key={s.id} className="combat-holstered-slug" style={{ "--type-color": typeColor(s.type) }}>
+                <span className="combat-holstered-dot" aria-hidden="true" />
+                <span className="combat-holstered-text">
+                  <span className="combat-holstered-name">{s.name}</span>
+                  <span className="combat-holstered-type">{s.type}</span>
+                </span>
+                <span className={`combat-holstered-state combat-holstered-state--${state.key}`}>{state.label}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}

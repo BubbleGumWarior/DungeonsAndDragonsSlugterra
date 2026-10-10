@@ -269,7 +269,7 @@ export default function ChronicleGallery() {
       headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Could not create the card.");
     setModal(null);
     loadNpcs();
@@ -280,7 +280,7 @@ export default function ChronicleGallery() {
       headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Could not update the card.");
     setModal(null);
     loadNpcs();
@@ -298,7 +298,7 @@ export default function ChronicleGallery() {
       headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Could not create the grunt.");
     setModal(null);
     loadGrunts();
@@ -309,7 +309,7 @@ export default function ChronicleGallery() {
       headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Could not update the grunt.");
     setModal(null);
     loadGrunts();
@@ -369,7 +369,7 @@ export default function ChronicleGallery() {
         headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ slugTemplateId }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setNpcs((prev) =>
           prev.map((n) => (n.id === npcId ? { ...n, guessedSlugTemplateIds: data.guessedSlugTemplateIds } : n))

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { XIcon } from "@phosphor-icons/react";
 import ImageCropper from "./ImageCropper.jsx";
 import { typeColor } from "./slugData.js";
@@ -22,6 +22,18 @@ export default function GruntForm({ initialValues, slugTemplates, blasterTemplat
   const [fields, setFields] = useState(() => fromInitial(initialValues));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [tab, setTab] = useState("grunt");
+  const nameRef = useRef(null);
+  const errorRef = useRef(null);
+
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [error]);
+
+  const sortedSlugTemplates = [...slugTemplates].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+  );
+  const pooledSlugs = sortedSlugTemplates.filter((t) => fields.slugTemplateIds.includes(t.id));
 
   function update(key, value) {
     setFields((prev) => ({ ...prev, [key]: value }));
@@ -36,8 +48,14 @@ export default function GruntForm({ initialValues, slugTemplates, blasterTemplat
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setSubmitting(true);
     setError("");
+    if (!fields.name.trim()) {
+      setTab("grunt");
+      setError("Give the grunt a name before saving.");
+      setTimeout(() => nameRef.current?.focus(), 0);
+      return;
+    }
+    setSubmitting(true);
     try {
       await onSubmit({
         name: fields.name,
@@ -57,12 +75,45 @@ export default function GruntForm({ initialValues, slugTemplates, blasterTemplat
 
   return (
     <form className="chronicle-form" onSubmit={handleSubmit}>
-      <div className="chronicle-form-panel">
-        <p className="chronicle-form-hint">
-          Each grunt sent into a fight rolls one blaster (leaning toward the lower-quality picks) and a full magazine of
-          slugs (leaning toward the commoner, lower-rarity picks) from these pools. Repeated grunts auto-number.
-        </p>
+      <div className="chronicle-form-bar">
+        <div className="chronicle-form-bar-row">
+        <div className="chronicle-form-tabs" role="tablist">
+            {[
+              ["grunt", "Grunt"],
+              ["slugs", "Slugs"],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={tab === id}
+                className={`chronicle-form-tab ${tab === id ? "chronicle-form-tab--active" : ""}`}
+                onClick={() => setTab(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        <div className="chronicle-form-actions">
+          {onCancel && (
+            <button type="button" className="chronicle-form-cancel" onClick={onCancel}>
+              Cancel
+            </button>
+          )}
+          <button type="submit" className="chronicle-form-submit" disabled={submitting}>
+            {submitting ? "Saving..." : submitLabel}
+          </button>
+        </div>
+        </div>
+        {error && (
+          <div className="chronicle-form-error" role="alert" ref={errorRef}>
+            {error}
+          </div>
+        )}
+      </div>
 
+      {tab === "grunt" && (
+      <div className="chronicle-form-panel">
         <div className="chronicle-form-image">
           <ImageCropper value={fields.image} onChange={(v) => update("image", v)} />
         </div>
@@ -73,6 +124,7 @@ export default function GruntForm({ initialValues, slugTemplates, blasterTemplat
             <div className="chronicle-field-input">
               <input
                 id="grunt-name"
+                ref={nameRef}
                 type="text"
                 maxLength={40}
                 value={fields.name}
@@ -129,33 +181,6 @@ export default function GruntForm({ initialValues, slugTemplates, blasterTemplat
         <p className="chronicle-form-hint">Max Grit and Max AP are derived from these modifiers, the same as an NPC's.</p>
 
         <div className="npc-form-picker">
-          <label>Slug pool <span className="npc-form-picker-note">click to add / remove</span></label>
-          <div className="npc-form-picker-list">
-            {slugTemplates.length === 0 && <p className="npc-form-picker-empty">No slug templates yet.</p>}
-            {slugTemplates.map((t) => (
-              <button
-                type="button"
-                key={t.id}
-                className={`npc-form-picker-item npc-form-picker-item--slug ${fields.slugTemplateIds.includes(t.id) ? "npc-form-picker-item--picked" : ""}`}
-                style={{ "--type-color": typeColor(t.type) }}
-                onClick={() => toggleId("slugTemplateIds", t.id)}
-              >
-                {t.protoformImage ? <img src={t.protoformImage} alt="" /> : <span className="npc-form-picker-placeholder" />}
-                <span className="npc-form-picker-item-label">
-                  {t.name}
-                  {Number.isInteger(t.rarity) ? ` · R${t.rarity}` : ""}
-                </span>
-                {fields.slugTemplateIds.includes(t.id) && (
-                  <span className="npc-form-picker-item-x" aria-hidden="true">
-                    <XIcon weight="bold" />
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="npc-form-picker">
           <label>Blaster pool</label>
           <div className="npc-form-picker-list">
             {blasterTemplates.length === 0 && <p className="npc-form-picker-empty">No blaster templates yet.</p>}
@@ -176,19 +201,81 @@ export default function GruntForm({ initialValues, slugTemplates, blasterTemplat
           </div>
         </div>
       </div>
+      )}
 
-      {error && <div className="chronicle-form-error">{error}</div>}
+      {tab === "slugs" && (
+        <div className="chronicle-form-panel slugpick">
+          <section className="slugpick-meter" aria-label="Slug pool">
+            <div className="slugpick-meter-head">
+              <h3>Slug pool</h3>
+              <p className="slugpick-meter-count" aria-live="polite">
+                <strong>{pooledSlugs.length}</strong>
+                <span> in pool</span>
+              </p>
+            </div>
+            <p className="slugpick-meter-note">
+              Each grunt sent into a fight fills its whole magazine by rolling from this pool, leaning toward the
+              commoner, lower-rarity picks. A slug can come up more than once, so the pool needs no magazine limit.
+            </p>
+          </section>
 
-      <div className="chronicle-form-actions">
-        {onCancel && (
-          <button type="button" className="chronicle-form-cancel" onClick={onCancel}>
-            Cancel
-          </button>
-        )}
-        <button type="submit" className="chronicle-form-submit" disabled={!fields.name.trim() || submitting}>
-          {submitting ? "Saving..." : submitLabel}
-        </button>
-      </div>
+          <section className="slugpick-section">
+            <h3>
+              Slug library <span>click to add or remove</span>
+            </h3>
+            {slugTemplates.length === 0 && <p className="slugpick-empty">No slug templates yet.</p>}
+            <div className="slugpick-grid">
+              {sortedSlugTemplates.map((t) => {
+                const picked = fields.slugTemplateIds.includes(t.id);
+                return (
+                  <button
+                    type="button"
+                    key={t.id}
+                    className={`slugpick-tile ${picked ? "slugpick-tile--picked" : ""}`}
+                    style={{ "--type-color": typeColor(t.type) }}
+                    aria-pressed={picked}
+                    onClick={() => toggleId("slugTemplateIds", t.id)}
+                  >
+                    {t.protoformImage ? <img src={t.protoformImage} alt="" /> : <span className="slugpick-thumb" />}
+                    <span className="slugpick-tile-name">{t.name}</span>
+                    {Number.isInteger(t.rarity) && <span className="slugpick-tile-count">R{t.rarity}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="slugpick-section">
+            <h3>In the pool</h3>
+            {pooledSlugs.length === 0 ? (
+              <p className="slugpick-empty">Nothing picked yet. Choose slugs below.</p>
+            ) : (
+              <ul className="slugpick-loadout">
+                {pooledSlugs.map((t) => (
+                  <li key={t.id} className="slugpick-row" style={{ "--type-color": typeColor(t.type) }}>
+                    {t.protoformImage ? <img src={t.protoformImage} alt="" /> : <span className="slugpick-thumb" />}
+                    <span className="slugpick-row-name">
+                      {t.name}
+                      <small>
+                        {t.type}
+                        {Number.isInteger(t.rarity) ? ` · Rarity ${t.rarity}` : ""}
+                      </small>
+                    </span>
+                    <button
+                      type="button"
+                      className="slugpick-row-remove"
+                      onClick={() => toggleId("slugTemplateIds", t.id)}
+                      aria-label={`Remove ${t.name} from the pool`}
+                    >
+                      <XIcon weight="bold" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      )}
     </form>
   );
 }

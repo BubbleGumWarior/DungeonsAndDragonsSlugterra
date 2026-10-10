@@ -7,6 +7,10 @@
   gap: 20px;
 }
 
+.combat-page--setup {
+  width: min(98vw, 2000px);
+}
+
 .combat-page--empty {
   width: min(94vw, 560px);
   padding-top: 40px;
@@ -73,6 +77,13 @@
   gap: 20px;
 }
 
+.combat-page-left {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
 .combat-page-center {
   display: flex;
   flex-direction: column;
@@ -94,8 +105,13 @@
   .combat-page-columns {
     grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
   }
-  .combat-slug-panel {
+  .combat-page-left {
     grid-column: 1 / -1;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .combat-page-left > * {
+    flex: 1 1 260px;
   }
 }
 
@@ -194,4 +210,13 @@
   100% {
     opacity: 0;
   }
+}
+
+.combat-reports-link {
+  align-self: flex-end;
+  text-decoration: none;
+}
+
+.combat-topbar-actions .panel-btn {
+  text-decoration: none;
 }

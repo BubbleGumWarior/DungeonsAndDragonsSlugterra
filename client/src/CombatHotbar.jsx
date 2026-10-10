@@ -179,7 +179,7 @@ export default function CombatHotbar({
               icon={<EyeSlashIcon weight="bold" />}
               label="Hide"
               apCost={skillActionInfo.hide.apCost}
-              disabled={ap < skillActionInfo.hide.apCost || !skillActionInfo.hide.skilled || skillActionInfo.hide.foesNearby}
+              disabled={ap < skillActionInfo.hide.apCost || !skillActionInfo.hide.skilled || skillActionInfo.hide.foesNearby || skillActionInfo.hide.tried}
               onClick={() => onAction("hide")}
             />
             <HotbarButton

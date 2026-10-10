@@ -470,9 +470,9 @@
 
 .combat-token-border {
   fill: none;
-  stroke: var(--ink);
-  stroke-width: 1.5;
-  opacity: 0.6;
+  stroke: var(--team-color, var(--ink));
+  stroke-width: 2;
+  opacity: 0.9;
 }
 
 .combat-token--down .combat-token-fill,

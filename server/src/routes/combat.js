@@ -9,6 +9,7 @@ import { LOYALTY_TIER_MIN, LOYALTY_TIER_MAX, RARITY_MAX } from "../slugRules.js"
 import { toClientSlug } from "./slugs.js";
 import { toClientBlaster } from "./blasters.js";
 import { recordSlugpediaEntry } from "../slugpediaStore.js";
+import { recordCombatEvent, publishCombatReport } from "../combatStats.js";
 import { slugReturnTurns, syncTempoAura } from "../slugAura.js";
 import {
   MOVE_SPEED_PER_AP,
@@ -102,6 +103,7 @@ import {
   isBurrowed,
   combatantSkillMod,
   areAllies,
+  COMBAT_TEAM_IDS,
   PERCEPTION_DC,
   PERCEPTION_RANGE,
   moveSpeedPerAp,
@@ -195,6 +197,38 @@ router.use("/actions", async (req, res, next) => {
   }
 });
 
+// Battle Report: every successful action route leaves a one-line "this
+// combatant did X" event (Reload, Hide, Hunker Down...). Shooting and moving
+// have richer, dedicated events of their own, so they're skipped here.
+const STAT_SKIP_ACTIONS = new Set(["/shoot", "/move", "/end-turn", "/arm-slug"]);
+router.use("/actions", (req, res, next) => {
+  if (req.method !== "POST" || STAT_SKIP_ACTIONS.has(req.path)) return next();
+  res.on("finish", async () => {
+    if (res.statusCode >= 400) return;
+    try {
+      const body = req.body || {};
+      const actorId = body.combatantId ?? body.attackerId ?? body.mechaCombatantId;
+      if (actorId == null) return;
+      const actor = await getCombatant(actorId);
+      if (actor) await recordCombatEvent(actor.encounter_id, "action", { actor, action: req.path.slice(1) });
+    } catch (err) {
+      console.error("Could not record action stat:", err);
+    }
+  });
+  next();
+});
+
+function recordShotResult(encounterId, actor, target, outcome, slug, extra = {}) {
+  return recordCombatEvent(encounterId, "shot_result", {
+    actor,
+    target,
+    outcome,
+    slug: slug?.name ?? null,
+    slugType: slug?.type ?? null,
+    ...extra,
+  });
+}
+
 function requireDungeonMaster(req, res, next) {
   if (req.user.role !== "Dungeon Master") {
     return res.status(403).json({ error: "Dungeon Master access required." });
@@ -221,6 +255,7 @@ function toClientCombatant(row) {
     // characters/mecha. Combat shows everyone fully, so this is never gated on
     // the NPC card's per-line "shown" flag.
     relationship: row.relationship ?? row.data?.relationship ?? null,
+    team: row.team ?? null,
     name: row.name,
     portrait: row.portrait,
     x: row.x,
@@ -264,8 +299,21 @@ function toClientEncounter(row, combatants) {
     activeTurnIndex: row.active_turn_index,
     activeCombatantId: row.turn_order?.[row.active_turn_index] ?? null,
     round: row.round,
-    combatants: combatants.map(toClientCombatant),
+    combatants: withDecoyMimics(combatants.map(toClientCombatant)),
   };
+}
+
+// A Mirage Coil decoy must read exactly like its owner on every client -- same
+// team ring, same name tint -- so the DM's teams (and relationship hues) can't
+// give it away. `mimic` carries the owner's side-defining fields; the client
+// resolves colour and team through it (see combatSide / combatantNameColor).
+function withDecoyMimics(list) {
+  const byId = new Map(list.map((c) => [c.id, c]));
+  return list.map((c) => {
+    if (c.kind !== "decoy") return c;
+    const owner = byId.get(c.data?.decoyOwnerId);
+    return owner ? { ...c, mimic: { kind: owner.kind, relationship: owner.relationship, team: owner.team } } : c;
+  });
 }
 
 async function loadFullEncounter(id) {
@@ -447,6 +495,61 @@ router.get("/encounters/:id/log", async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Battle reports (frozen at the end of each fight -- see combatStats.js)
+// ---------------------------------------------------------------------------
+
+router.get("/reports", async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, encounter_name, created_at, seen_by, report->'encounter' AS encounter
+       FROM combat_reports WHERE recipients @> $1::jsonb ORDER BY created_at DESC LIMIT 60`,
+      [JSON.stringify([req.user.sub])]
+    );
+    res.json({
+      reports: rows.map((r) => ({
+        id: r.id,
+        name: r.encounter_name,
+        createdAt: r.created_at,
+        seen: (r.seen_by || []).includes(req.user.sub),
+        rounds: r.encounter?.rounds ?? null,
+        totalDamage: r.encounter?.totalDamage ?? 0,
+      })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not load battle reports." });
+  }
+});
+
+router.get("/reports/:id", async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "SELECT id, encounter_name, created_at, report FROM combat_reports WHERE id = $1 AND recipients @> $2::jsonb",
+      [Number(req.params.id), JSON.stringify([req.user.sub])]
+    );
+    if (!rows[0]) return res.status(404).json({ error: "Report not found." });
+    res.json({ id: rows[0].id, name: rows[0].encounter_name, createdAt: rows[0].created_at, report: rows[0].report });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not load battle report." });
+  }
+});
+
+router.post("/reports/:id/seen", async (req, res) => {
+  try {
+    await pool.query(
+      `UPDATE combat_reports SET seen_by = seen_by || $2::jsonb
+       WHERE id = $1 AND recipients @> $2::jsonb AND NOT seen_by @> $2::jsonb`,
+      [Number(req.params.id), JSON.stringify([req.user.sub])]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not mark report seen." });
+  }
+});
+
 router.post("/encounters", requireDungeonMaster, async (req, res) => {
   const { name, mapWidth, mapHeight } = req.body || {};
   if (typeof name !== "string" || !name.trim()) {
@@ -522,6 +625,9 @@ router.post("/encounters/:id/end", requireDungeonMaster, async (req, res) => {
     const encounter = await loadFullEncounter(id);
     broadcastAll({ type: "encounter-updated", encounter });
     await pushCombatLog(id, `${encounter.name} has ended.`);
+    // Freeze the Battle Report and send it to every participant + the DM.
+    const reportId = await publishCombatReport(id);
+    if (reportId) await pushCombatLog(id, "A battle report has been sent to everyone who took part.");
     res.json({ encounter });
   } catch (err) {
     console.error(err);
@@ -666,8 +772,9 @@ router.delete("/encounters/:id/walls/:wallId", requireDungeonMaster, async (req,
 
 router.post("/encounters/:id/combatants", requireDungeonMaster, async (req, res) => {
   const encounterId = Number(req.params.id);
-  const { kind, refUserId, refMechaId, name, x, y } = req.body || {};
+  const { kind, refUserId, refMechaId, name, x, y, team } = req.body || {};
 
+  if (team != null && !COMBAT_TEAM_IDS.includes(team)) return res.status(400).json({ error: "Unknown team." });
   if (!["character", "npc", "mecha"].includes(kind)) {
     return res.status(400).json({ error: "Kind must be character, npc, or mecha." });
   }
@@ -691,6 +798,7 @@ router.post("/encounters/:id/combatants", requireDungeonMaster, async (req, res)
       max_structure: null,
       current_structure: null,
       knockout_pips: null,
+      team: team ?? null,
       data: {},
     };
 
@@ -788,6 +896,21 @@ router.patch("/encounters/:id/combatants/:cid/position", requireDungeonMaster, a
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not move token." });
+  }
+});
+
+router.patch("/encounters/:id/combatants/:cid/team", requireDungeonMaster, async (req, res) => {
+  const id = Number(req.params.id);
+  const cid = Number(req.params.cid);
+  const { team } = req.body || {};
+  if (team !== null && !COMBAT_TEAM_IDS.includes(team)) return res.status(400).json({ error: "Unknown team." });
+  try {
+    await pool.query("UPDATE combatants SET team = $1 WHERE id = $2 AND encounter_id = $3", [team, cid, id]);
+    const encounter = await broadcastEncounter(id);
+    res.json({ encounter });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not change team." });
   }
 });
 
@@ -1048,7 +1171,8 @@ function weightedSample(items, n, weightFn) {
 // number. (Disposable minions that DO stack live at /grunt-combatants.)
 router.post("/encounters/:id/npc-combatants", requireDungeonMaster, async (req, res) => {
   const encounterId = Number(req.params.id);
-  const { npcTemplateId, x, y } = req.body || {};
+  const { npcTemplateId, x, y, team } = req.body || {};
+  if (team != null && !COMBAT_TEAM_IDS.includes(team)) return res.status(400).json({ error: "Unknown team." });
   if (!Number.isInteger(npcTemplateId)) {
     return res.status(400).json({ error: "An NPC is required." });
   }
@@ -1070,8 +1194,8 @@ router.post("/encounters/:id/npc-combatants", requireDungeonMaster, async (req, 
 
     const combatantResult = await pool.query(
       `INSERT INTO combatants
-        (encounter_id, kind, ref_npc_template_id, name, portrait, x, y, max_ap, current_ap, max_grit, current_grit, knockout_pips, data)
-       VALUES ($1, 'npc', $2, $3, $4, $5, $6, $7, 0, $8, $8, $9, $10)
+        (encounter_id, kind, ref_npc_template_id, name, portrait, x, y, max_ap, current_ap, max_grit, current_grit, knockout_pips, data, team)
+       VALUES ($1, 'npc', $2, $3, $4, $5, $6, $7, 0, $8, $8, $9, $10, $11)
        RETURNING *`,
       [
         encounterId,
@@ -1084,6 +1208,7 @@ router.post("/encounters/:id/npc-combatants", requireDungeonMaster, async (req, 
         npcMaxGrit(template.con_modifier, template.dex_modifier),
         JSON.stringify([false, false, false]),
         JSON.stringify({ dexMod: template.dex_modifier, conMod: template.con_modifier, relationship }),
+        team ?? null,
       ]
     );
     const combatant = combatantResult.rows[0];
@@ -1110,7 +1235,8 @@ router.post("/encounters/:id/npc-combatants", requireDungeonMaster, async (req, 
 // different and a little weaker than a hand-built NPC.
 router.post("/encounters/:id/grunt-combatants", requireDungeonMaster, async (req, res) => {
   const encounterId = Number(req.params.id);
-  const { gruntTemplateId, x, y } = req.body || {};
+  const { gruntTemplateId, x, y, team } = req.body || {};
+  if (team != null && !COMBAT_TEAM_IDS.includes(team)) return res.status(400).json({ error: "Unknown team." });
   if (!Number.isInteger(gruntTemplateId)) {
     return res.status(400).json({ error: "A grunt is required." });
   }
@@ -1128,8 +1254,8 @@ router.post("/encounters/:id/grunt-combatants", requireDungeonMaster, async (req
 
     const combatantResult = await pool.query(
       `INSERT INTO combatants
-        (encounter_id, kind, ref_grunt_template_id, name, portrait, x, y, max_ap, current_ap, max_grit, current_grit, knockout_pips, data)
-       VALUES ($1, 'npc', $2, $3, $4, $5, $6, $7, 0, $8, $8, $9, $10)
+        (encounter_id, kind, ref_grunt_template_id, name, portrait, x, y, max_ap, current_ap, max_grit, current_grit, knockout_pips, data, team)
+       VALUES ($1, 'npc', $2, $3, $4, $5, $6, $7, 0, $8, $8, $9, $10, $11)
        RETURNING *`,
       [
         encounterId,
@@ -1146,6 +1272,7 @@ router.post("/encounters/:id/grunt-combatants", requireDungeonMaster, async (req
           conMod: template.con_modifier,
           relationship: template.relationship || "Enemy",
         }),
+        team ?? null,
       ]
     );
     const combatant = combatantResult.rows[0];
@@ -1208,6 +1335,24 @@ router.post("/encounters/:id/start", requireDungeonMaster, async (req, res) => {
       return res.status(400).json({ error: "Add at least one combatant first." });
     }
 
+    // Everyone enters the fight with every slug ready: no stale return-to-hand
+    // cooldown and nothing left un-chambered from a previous encounter, a
+    // Reload, or swapping gear in the lobby. Slugs in a destroyed pod
+    // (pod_broken) stay out until their owner replaces the pod.
+    const { rows: readiedSlugs } = await pool.query(
+      `UPDATE slugs s SET cooldown_turns_left = 0, loaded = true
+       FROM combatants c
+       WHERE c.encounter_id = $1
+         AND (s.user_id = c.ref_user_id OR s.owner_combatant_id = c.id)
+         AND NOT s.pod_broken
+         AND (s.cooldown_turns_left > 0 OR s.loaded = false)
+       RETURNING s.*`,
+      [id]
+    );
+    for (const slugRow of readiedSlugs) {
+      broadcastAll({ type: "slug-updated", userId: slugRow.user_id, slug: toClientSlug(slugRow) });
+    }
+
     const rolled = [];
     for (const c of combatantRows) {
       const dexMod = c.data?.dexMod ?? 0;
@@ -1228,6 +1373,15 @@ router.post("/encounters/:id/start", requireDungeonMaster, async (req, res) => {
       "UPDATE encounters SET status = 'active', turn_order = $1, active_turn_index = 0, round = 1 WHERE id = $2",
       [JSON.stringify(turnOrder), id]
     );
+
+    // Fame snapshot so the Battle Report can show what each player earned.
+    const fameStart = {};
+    for (const c of combatantRows) {
+      if (c.kind !== "character" || !c.ref_user_id) continue;
+      const { rows: fr } = await pool.query("SELECT fame FROM characters WHERE user_id = $1", [c.ref_user_id]);
+      if (fr[0]) fameStart[c.ref_user_id] = fr[0].fame;
+    }
+    await recordCombatEvent(id, "start", { fame: fameStart });
 
     const encounter = await broadcastEncounter(id);
     await pushCombatLog(
@@ -1277,7 +1431,7 @@ async function perceptionSweep(encounterId, observer) {
   }
 }
 
-async function advanceTurn(encounterId) {
+async function advanceTurn(encounterId, { skipped = false } = {}) {
   const { rows } = await pool.query("SELECT * FROM encounters WHERE id = $1", [encounterId]);
   const encounter = rows[0];
   if (!encounter) return null;
@@ -1286,6 +1440,14 @@ async function advanceTurn(encounterId) {
 
   // A power surge (Fandango) only lasts through the turn it was set up on.
   const endingCombatant = turnOrder[encounter.active_turn_index] != null ? await getCombatant(turnOrder[encounter.active_turn_index]) : null;
+  if (endingCombatant && endingCombatant.kind !== "mecha" && endingCombatant.kind !== "decoy") {
+    await recordCombatEvent(encounterId, "turn_end", {
+      actor: endingCombatant,
+      apLeft: skipped ? 0 : endingCombatant.current_ap || 0,
+      apMax: endingCombatant.max_ap || 0,
+      skipped,
+    });
+  }
   if (endingCombatant?.status_effects?.powerSurge) {
     const { powerSurge, ...rest } = endingCombatant.status_effects;
     await updateCombatant(endingCombatant.id, { status_effects: JSON.stringify(rest) });
@@ -1344,9 +1506,11 @@ async function advanceTurn(encounterId) {
     // combatant is actually standing right now -- see insideDisarmZone's
     // doc on tickStatusEffects.
     const insideDisarmZone = isInsideAnyZone(encounter.zones, { x: nextCombatant.x, y: nextCombatant.y }, "disarm");
-    const { damage: dotDamage, statusEffects: nextStatus, notes: dotNotes } = tickStatusEffects(statusAfterStun, insideDisarmZone);
+    const { damage: dotDamage, statusEffects: nextStatus, notes: dotNotes, sources: dotSources } = tickStatusEffects(statusAfterStun, insideDisarmZone);
 
     await tickSlugCooldowns(nextCombatant);
+    // A fresh turn, a fresh Hide attempt (see /actions/hide).
+    delete nextStatus.hideTried;
 
     const fields = {
       current_ap: refillAp,
@@ -1388,6 +1552,19 @@ async function advanceTurn(encounterId) {
 
     if (dotDamage > 0 && hasGrit) {
       await syncCharacterFromCombatant(updatedCombatant);
+      let gritLeft = nextCombatant.current_grit;
+      for (const src of dotSources) {
+        const applied = Math.min(src.amount, gritLeft);
+        gritLeft -= applied;
+        const by = src.by ? await getCombatant(src.by) : null;
+        await recordCombatEvent(encounterId, "damage", {
+          actor: by,
+          target: nextCombatant,
+          amount: applied,
+          via: "dot",
+          kill: applied > 0 && gritLeft === 0 && !nextCombatant.unconscious,
+        });
+      }
       await pushCombatLog(encounterId, `${nextCombatant.name} takes ${dotDamage} damage from ${dotNotes.join(" + ")}.`);
       if (updatedCombatant.current_grit === 0 && !updatedCombatant.unconscious) {
         await triggerKnockoutRoll(updatedCombatant.id, "grit");
@@ -1414,7 +1591,7 @@ async function advanceTurn(encounterId) {
     // the chain from there.
     await pushCombatLog(encounterId, fledLog || `${nextCombatant.name} is shocked -- their turn is skipped!`);
     await broadcastEncounter(encounterId);
-    return await advanceTurn(encounterId);
+    return await advanceTurn(encounterId, { skipped: true });
   }
 
   const updated = await broadcastEncounter(encounterId);
@@ -1515,6 +1692,12 @@ router.post("/actions/move", async (req, res) => {
       if (firstWallHit({ x: vehicle.x, y: vehicle.y }, { x, y }, encounter.walls)) {
         return res.status(400).json({ error: "A wall blocks that path." });
       }
+      await recordCombatEvent(combatant.encounter_id, "move", {
+        actor: combatant,
+        distance: distance({ x: vehicle.x, y: vehicle.y }, { x, y }),
+        ap: apNeeded,
+        mounted: true,
+      });
       await updateCombatant(vehicle.id, { x, y, current_ap: vehicle.current_ap - apNeeded });
       const riders = await mechaRiders(vehicle.id);
       for (const rider of riders) {
@@ -1639,6 +1822,11 @@ router.post("/actions/move", async (req, res) => {
       y,
       current_ap: slipped ? 0 : combatant.current_ap - apNeeded,
       ...(doused ? { status_effects: JSON.stringify(dousedStatus) } : {}),
+    });
+    await recordCombatEvent(combatant.encounter_id, "move", {
+      actor: combatant,
+      distance: distance({ x: combatant.x, y: combatant.y }, { x, y }),
+      ap: slipped ? combatant.current_ap : apNeeded,
     });
     if (doused) await pushCombatLog(combatant.encounter_id, `${combatant.name} splashes into the water and the flames go out.`);
 
@@ -1781,6 +1969,7 @@ router.post("/actions/hide", async (req, res) => {
     const stealthMod = combatantSkillMod(combatant, "stealth");
     if (stealthMod <= 0) return res.status(400).json({ error: "You need a positive Stealth modifier to Hide." });
     if (combatant.current_ap < HIDE_AP_COST) return res.status(400).json({ error: "Not enough AP to Hide." });
+    if (combatant.status_effects?.hideTried) return res.status(400).json({ error: "You've already tried to Hide this turn." });
 
     const { rows } = await pool.query(
       "SELECT * FROM combatants WHERE encounter_id = $1 AND id <> $2 AND kind <> 'decoy' AND NOT unconscious AND NOT disabled",
@@ -1795,7 +1984,7 @@ router.post("/actions/hide", async (req, res) => {
 
     const total = rollD20() + stealthMod;
     const hidden = total > HIDE_DC;
-    const status = { ...(combatant.status_effects || {}) };
+    const status = { ...(combatant.status_effects || {}), hideTried: true };
     if (hidden) status.invisible = { turnsLeft: INVISIBLE_DURATION_TURNS };
     await updateCombatant(combatant.id, {
       current_ap: combatant.current_ap - HIDE_AP_COST,
@@ -2034,6 +2223,12 @@ router.post("/actions/hunker-down", async (req, res) => {
       current_ap: 0,
     });
     await syncCharacterFromCombatant(updated);
+    await recordCombatEvent(combatant.encounter_id, "heal", {
+      actor: combatant,
+      target: combatant,
+      amount: newGrit - combatant.current_grit,
+      source: "hunker",
+    });
     const encounterOut = await broadcastEncounter(combatant.encounter_id);
     await pushCombatLog(
       combatant.encounter_id,
@@ -2151,6 +2346,8 @@ router.post("/actions/reload", async (req, res) => {
     for (const slugRow of reloaded) {
       broadcastAll({ type: "slug-updated", userId: slugRow.user_id, slug: toClientSlug(slugRow) });
     }
+    // The burst above only leaves the last slug in the client's single slot.
+    if (reloaded.length > 1) broadcastAll({ type: "combat-gear-changed", at: Date.now() });
 
     const encounterOut = await broadcastEncounter(combatant.encounter_id);
     await pushCombatLog(
@@ -2282,6 +2479,9 @@ async function tickSlugCooldowns(combatant) {
     );
     if (updated[0]) broadcastAll({ type: "slug-updated", userId: updated[0].user_id, slug: toClientSlug(updated[0]) });
   }
+  // Several slugs ticking at once is a burst the client's single slot can't
+  // hold -- send the refetch signal so every countdown shows.
+  if (rows.length > 1) broadcastAll({ type: "combat-gear-changed", at: Date.now() });
 }
 
 // `excludeSlugIds` is one id or an array -- a dual shot excludes both slugs
@@ -2380,10 +2580,21 @@ async function findChainTarget(encounterId, fromCombatantId, excludeCombatantId,
   let nearestDist = Infinity;
   let fromFallback = null; // the from-combatant itself, used only when allowFrom and nothing else is in reach
   let fromFallbackDist = Infinity;
+  const byId = new Map(rows.map((r) => [r.id, r]));
   for (const c of rows) {
-    // A decoy only ever pops from being directly targeted (see dealHit) --
-    // it's not a legitimate incidental chain/splash target.
-    if (c.kind === "decoy" || isBurrowed(c)) continue;
+    if (isBurrowed(c)) continue;
+    // Hidden units can't be picked out -- a ricochet or arc never homes in on
+    // someone invisible (hitting them directly still reveals them, see dealHit).
+    if (c.status_effects?.invisible) continue;
+    // A Mirage Coil decoy is a perfectly good target: it looks like its owner,
+    // so a bolt that picks "the closest" must be able to pick a clone over the
+    // real thing (the shot just pops it, see dealHit). Not the shooter's own
+    // clones, and not clones of someone hidden.
+    if (c.kind === "decoy") {
+      const ownerId = c.data?.decoyOwnerId;
+      const owner = byId.get(ownerId);
+      if (ownerId === excludeCombatantId || !owner || owner.status_effects?.invisible) continue;
+    }
     if (c.current_grit === null && c.current_structure === null) continue;
     const d = distance({ x: from.x, y: from.y }, { x: c.x, y: c.y });
     if (d > maxRadius) continue;
@@ -2437,7 +2648,7 @@ async function disableMecha(mechaCombatantId) {
 // rider) and returns { riderDamage, note } for the caller to fold into its
 // own Grit write and log line. A no-op -- returns the amount untouched -- when
 // the target isn't riding a live mecha.
-async function absorbRiderDamage(target, amount, { electric = false } = {}) {
+async function absorbRiderDamage(target, amount, { electric = false, stat = null } = {}) {
   if (!(amount > 0) || target.mounted_on == null) return { riderDamage: amount, note: "" };
   const mecha = await getCombatant(target.mounted_on);
   if (!mecha || mecha.kind !== "mecha" || mecha.disabled) return { riderDamage: amount, note: "" };
@@ -2448,6 +2659,18 @@ async function absorbRiderDamage(target, amount, { electric = false } = {}) {
   const mechaShare = electric ? split.mecha * ELECTRIC_MECHA_DAMAGE_MULTIPLIER : split.mecha;
   const newStructure = Math.max(0, (mecha.current_structure ?? 0) - mechaShare);
   await updateCombatant(mecha.id, { current_structure: newStructure });
+  if (stat) {
+    await recordCombatEvent(mecha.encounter_id, "damage", {
+      actor: stat.actor,
+      target: mecha,
+      amount: Math.min(mechaShare, mecha.current_structure ?? 0),
+      structure: true,
+      via: stat.via,
+      slug: stat.slug ?? null,
+      slugType: stat.slugType ?? null,
+      kill: newStructure === 0,
+    });
+  }
   let note = ` ${mecha.name} soaks ${mechaShare} Structure`;
   if (newStructure === 0 && !mecha.disabled) {
     await disableMecha(mecha.id);
@@ -2483,6 +2706,7 @@ async function triggerKnockoutRoll(combatantId, reason) {
   if (!makesKnockoutSave) {
     if (combatant.current_grit !== null) {
       await updateCombatant(combatantId, { unconscious: true });
+      await recordCombatEvent(combatant.encounter_id, "down", { actor: combatant, reason });
       await pushCombatLog(combatant.encounter_id, `${combatant.name} is knocked out.`);
       await broadcastEncounter(combatant.encounter_id);
     }
@@ -2493,6 +2717,7 @@ async function triggerKnockoutRoll(combatantId, reason) {
   if (pipsUsed >= 3) {
     const updated = await updateCombatant(combatantId, { unconscious: true });
     await syncCharacterFromCombatant(updated);
+    await recordCombatEvent(combatant.encounter_id, "down", { actor: combatant, reason });
     await pushCombatLog(combatant.encounter_id, `${combatant.name} has nothing left to give and falls unconscious.`);
     await broadcastEncounter(combatant.encounter_id);
     return;
@@ -2612,14 +2837,14 @@ async function addTrailWall(encounterId, fromPos, toPos, slugType) {
 // already-computed impact point), tagged with the leaving slug's own type
 // and clashPower so applyHazardEffect below knows what to do when someone
 // walks into it later.
-async function addDamageHazard(encounterId, point, slug, logText) {
+async function addDamageHazard(encounterId, point, slug, logText, ownerId = null) {
   try {
     const { rows } = await pool.query("SELECT hazards, next_hazard_id FROM encounters WHERE id = $1", [encounterId]);
     if (!rows[0]) return;
     const hazardId = rows[0].next_hazard_id;
     const hazards = [
       ...(rows[0].hazards || []),
-      { id: hazardId, type: "damage", slugType: slug.type, x: point.x, y: point.y, radius: HAZARD_RADIUS, clashPower: slug.clash_power },
+      { id: hazardId, type: "damage", slugType: slug.type, x: point.x, y: point.y, radius: HAZARD_RADIUS, clashPower: slug.clash_power, ownerId, slugName: slug.name },
     ];
     await pool.query("UPDATE encounters SET hazards = $1, next_hazard_id = $2 WHERE id = $3", [
       JSON.stringify(hazards),
@@ -2686,23 +2911,27 @@ async function clearOrCreateSteamTerrain(encounterId, point, slug) {
 // same way dealHit itself would, on top of a flat Grit hit. Returns the
 // damage dealt and a short log fragment; callers handle their own
 // knockout-roll check.
-async function applyEnvironmentalDamage(combatant, amount, slugType) {
+async function applyEnvironmentalDamage(combatant, amount, slugType, stat = null) {
+  const byRow = stat?.by && typeof stat.by === "object" ? stat.by : null;
+  const byId = byRow ? byRow.id : stat?.by ?? null;
+  const statActor = byRow || (byId ? await getCombatant(byId) : null);
   const tb = typeBallistics(slugType);
   const nextStatus = { ...(combatant.status_effects || {}) };
   let note = "";
   if (tb.trait === "burn") {
     const burnDamage = computeBurnDamage(amount);
-    nextStatus.burning = { turnsLeft: BURN_DURATION_TURNS, damage: burnDamage };
+    nextStatus.burning = { turnsLeft: BURN_DURATION_TURNS, damage: burnDamage, by: byId };
     note = " and catches fire";
   } else if (tb.trait === "poison") {
     const stacks = (nextStatus.poison?.stacks || 0) + 1;
-    nextStatus.poison = { stacks, turnsLeft: POISON_DURATION_TURNS };
+    nextStatus.poison = { stacks, turnsLeft: POISON_DURATION_TURNS, by: byId };
     note = " and is poisoned";
   }
   // A mounted rider's mecha soaks most of the hit (Structure); the DoT status
   // above still lands on the rider themselves.
   const { riderDamage, note: absorbNote } = await absorbRiderDamage(combatant, amount, {
     electric: slugType === "Electricity",
+    stat: stat ? { actor: statActor, via: stat.via, slug: stat.slug } : null,
   });
   const newGrit = Math.max(0, (combatant.current_grit ?? 0) - riderDamage);
   const updated = await updateCombatant(combatant.id, {
@@ -2711,6 +2940,20 @@ async function applyEnvironmentalDamage(combatant, amount, slugType) {
     status_effects: JSON.stringify(nextStatus),
   });
   await syncCharacterFromCombatant(updated);
+  if (stat) {
+    const hpBefore = combatant.current_grit ?? 0;
+    const applied = Math.min(riderDamage, hpBefore);
+    await recordCombatEvent(combatant.encounter_id, "damage", {
+      actor: statActor,
+      target: combatant,
+      amount: applied,
+      overkill: riderDamage - applied,
+      via: stat.via,
+      slug: stat.slug ?? null,
+      slugType,
+      kill: newGrit === 0 && hpBefore > 0 && !combatant.unconscious,
+    });
+  }
   return { amount: riderDamage, newGrit, note: note + absorbNote };
 }
 
@@ -2721,7 +2964,7 @@ async function applyEnvironmentalDamage(combatant, amount, slugType) {
 // Move route) handles the knockout-roll check.
 async function applyHazardEffect(hazard, combatant) {
   const amount = Math.max(1, Math.floor(hazard.clashPower * HAZARD_DAMAGE_FRACTION));
-  return applyEnvironmentalDamage(combatant, amount, hazard.slugType);
+  return applyEnvironmentalDamage(combatant, amount, hazard.slugType, { by: hazard.ownerId ?? null, via: "hazard", slug: hazard.slugName ?? null });
 }
 
 // A mecha rolling onto a damaging hazard takes it as Structure damage (armor
@@ -2732,6 +2975,15 @@ async function applyMechaHazard(hazard, mecha, rider) {
   const dmg = Math.max(0, amount - (mecha.data?.armor ?? 0));
   const newStructure = Math.max(0, (mecha.current_structure ?? 0) - dmg);
   await updateCombatant(mecha.id, { current_structure: newStructure });
+  await recordCombatEvent(mecha.encounter_id, "damage", {
+    actor: hazard.ownerId ? await getCombatant(hazard.ownerId) : null,
+    target: mecha,
+    amount: Math.min(dmg, mecha.current_structure ?? 0),
+    structure: true,
+    via: "hazard",
+    slug: hazard.slugName ?? null,
+    kill: newStructure === 0 && !mecha.disabled,
+  });
   let note = `${mecha.name} takes ${dmg} Structure damage from the hazard`;
   const tb = typeBallistics(hazard.slugType);
   if (rider && (tb.trait === "burn" || tb.trait === "poison")) {
@@ -2758,7 +3010,7 @@ async function applyMechaHazard(hazard, mecha, rider) {
 // a fixed random direction and an independently rolled 3-10 counter. See
 // POD_* in combatRules.js and tickPods below (where they actually fire).
 // Called once, unconditional on hit/miss, same trigger rule as Ice's patch.
-async function spawnPods(encounterId, point, slug) {
+async function spawnPods(encounterId, point, slug, ownerId = null) {
   try {
     const { rows } = await pool.query("SELECT pods, next_pod_id FROM encounters WHERE id = $1", [encounterId]);
     if (!rows[0]) return;
@@ -2774,6 +3026,8 @@ async function spawnPods(encounterId, point, slug) {
         counter: rollPodTimer(),
         slugType: slug.type,
         clashPower: slug.clash_power,
+        ownerId,
+        slugName: slug.name,
       });
       podId += 1;
     }
@@ -2821,7 +3075,7 @@ async function tickPods(encounterId) {
         if (c.kind === "mecha" || c.kind === "decoy") continue; // Grit-only hazard, same as any other; a decoy only pops from a direct shot (see dealHit), not incidental splash
         if (c.current_grit === null) continue;
         if (distanceToSegment({ x: c.x, y: c.y }, pod, end) > POD_LINE_HIT_TOLERANCE) continue;
-        const hit = await applyEnvironmentalDamage(c, pod.clashPower, pod.slugType);
+        const hit = await applyEnvironmentalDamage(c, pod.clashPower, pod.slugType, { by: pod.ownerId ?? null, via: "pod", slug: pod.slugName ?? null });
         await pushCombatLog(
           encounterId,
           `A steam pod erupts, catching ${c.name} in its blast -- ${hit.amount} Grit damage${hit.note}.`
@@ -2854,7 +3108,7 @@ async function tickPods(encounterId) {
 // clashPower damage, once -- after that the segments persist as ordinary
 // walls (no further damage on touch). Unconditional on hit/miss, same
 // trigger rule as Ice's patch/addTrailWall.
-async function formStarWall(encounterId, point, slug) {
+async function formStarWall(encounterId, point, slug, ownerId = null) {
   try {
     const segments = starSegments(point);
     const { rows } = await pool.query("SELECT walls, next_wall_id FROM encounters WHERE id = $1", [encounterId]);
@@ -2884,7 +3138,7 @@ async function formStarWall(encounterId, point, slug) {
         (seg) => distanceToSegment({ x: c.x, y: c.y }, { x: seg.x1, y: seg.y1 }, { x: seg.x2, y: seg.y2 }) <= STAR_HIT_TOLERANCE
       );
       if (!caught) continue;
-      const hit = await applyEnvironmentalDamage(c, slug.clash_power, slug.type);
+      const hit = await applyEnvironmentalDamage(c, slug.clash_power, slug.type, { by: ownerId, via: "star", slug: slug.name });
       await pushCombatLog(encounterId, `The bursting star of fire walls catches ${c.name} -- ${hit.amount} Grit damage${hit.note}.`);
       if (hit.newGrit === 0 && !c.unconscious) await triggerKnockoutRoll(c.id, "grit");
     }
@@ -3061,6 +3315,14 @@ async function applyMarkedSplash(encounterId, shooterId, primaryTargetId, amount
     const newGrit = Math.max(0, c.current_grit - riderDamage);
     const updated = await updateCombatant(c.id, { current_grit: newGrit });
     await syncCharacterFromCombatant(updated);
+    await recordCombatEvent(encounterId, "damage", {
+      actor: { id: shooterId, name: null },
+      target: c,
+      amount: Math.min(riderDamage, c.current_grit),
+      overkill: Math.max(0, riderDamage - c.current_grit),
+      via: "splash",
+      kill: newGrit === 0 && c.current_grit > 0,
+    });
     notes.push(`${c.name} takes ${riderDamage} from the static arc${newGrit === 0 ? " and is at 0 Grit!" : ""}${absorbNote}`);
     if (newGrit === 0 && !c.unconscious) await triggerKnockoutRoll(c.id, "grit");
   }
@@ -3084,11 +3346,15 @@ async function dealHit(
     isRicochetLeg = false,
     mindScrambleEffect = null,
     frictionEffect = null,
+    statTag = null,
   } = {}
 ) {
   const shooter = await getCombatant(shooterCombatantId);
   const target = await getCombatant(targetCombatantId);
   if (!shooter || !target) return "the target is no longer there.";
+  // Battle Report attribution: how this particular hit reached its target.
+  const via = statTag || (isRicochetLeg ? "ricochet" : half ? "chain" : isSplash ? "splash" : "direct");
+  const statSlug = { slug: slug.name, slugType: slug.type };
   // Knockback (below) shoves the target directly away from wherever the
   // shot actually came from -- normally that's just the shooter's own
   // position, but a ricocheted leg (Speedstinger) is visually launched from
@@ -3133,6 +3399,15 @@ async function dealHit(
     const newGrit = Math.min(target.max_grit ?? amount, (target.current_grit ?? 0) + amount);
     const updated = await updateCombatant(target.id, { current_grit: newGrit });
     await syncCharacterFromCombatant(updated);
+    const healed = newGrit - (target.current_grit ?? 0);
+    await recordCombatEvent(encounterId, "heal", {
+      actor: shooter,
+      target,
+      amount: healed,
+      overheal: Math.max(0, amount - healed),
+      source: "slug",
+      slug: slug.name,
+    });
     log = `${target.name} is healed for ${amount} Grit.`;
     skipDamageResolution = true;
   } else if (slug.type === "None") {
@@ -3174,6 +3449,16 @@ async function dealHit(
       const mechaFameGain = slug.clash_power + mechaOverkill;
       if (mechaFameGain > 0) await grantFame(shooter.ref_user_id, mechaFameGain);
     }
+    await recordCombatEvent(encounterId, "damage", {
+      actor: shooter,
+      target,
+      amount: Math.min(dmg, target.current_structure ?? 0),
+      overkill: Math.max(0, dmg - (target.current_structure ?? 0)),
+      structure: true,
+      via,
+      kill: newStructure === 0 && (target.current_structure ?? 0) > 0,
+      ...statSlug,
+    });
     log = `${target.name} takes ${dmg} Structure damage${electricMult > 1 ? " (Electricity -- doubled)" : ""}.`;
     if (newStructure === 0) {
       await disableMecha(target.id);
@@ -3194,7 +3479,10 @@ async function dealHit(
     // A mounted rider's mecha soaks 75% of the hit as Structure.
     let riderAbsorbNote = "";
     if (!isSelfTarget) {
-      const split = await absorbRiderDamage(target, gritDamage, { electric: slugHasType(slug, "Electricity") });
+      const split = await absorbRiderDamage(target, gritDamage, {
+        electric: slugHasType(slug, "Electricity"),
+        stat: { actor: shooter, via, ...statSlug },
+      });
       gritDamage = split.riderDamage;
       riderAbsorbNote = split.note;
     }
@@ -3212,7 +3500,7 @@ async function dealHit(
       // recalculates the damage off this hit's own clashPower. (Wildfire's
       // dual-shot combo doubles it -- burnMult.)
       burnDamage = computeBurnDamage(slug.clash_power) * (slug.dual?.burnMult ?? 1);
-      nextStatus.burning = { turnsLeft: BURN_DURATION_TURNS, damage: burnDamage };
+      nextStatus.burning = { turnsLeft: BURN_DURATION_TURNS, damage: burnDamage, by: shooter.id };
     }
     let poisonStacks = 0;
     if (slugHasTrait(slug, "poison") && !isSelfTarget) {
@@ -3220,7 +3508,7 @@ async function dealHit(
       // resets the shared duration back to the full length. A dual-shot combo
       // can add more than one at once (poisonStacks).
       poisonStacks = (nextStatus.poison?.stacks || 0) + (slug.dual?.poisonStacks ?? 1);
-      nextStatus.poison = { stacks: poisonStacks, turnsLeft: POISON_DURATION_TURNS };
+      nextStatus.poison = { stacks: poisonStacks, turnsLeft: POISON_DURATION_TURNS, by: shooter.id };
     }
     if (slugHasTrait(slug, "snare") && !isSelfTarget) nextStatus.snared = { turnsLeft: SNARE_DURATION_TURNS };
     // Perplexus's mind_scramble replaces Psychic's own baseline stun
@@ -3367,6 +3655,25 @@ async function dealHit(
       ...(stealsMount ? { mounted_on: null } : {}),
     });
     await syncCharacterFromCombatant(updated);
+    if (!isSelfTarget) {
+      const hpBefore = target.current_grit ?? 0;
+      const applied = Math.min(gritDamage, hpBefore);
+      await recordCombatEvent(encounterId, "damage", {
+        actor: shooter,
+        target,
+        amount: applied,
+        raw: amount,
+        overkill: gritDamage - applied,
+        via,
+        kill: newGrit === 0 && hpBefore > 0 && !target.unconscious,
+        ...statSlug,
+      });
+      for (const key of NEGATIVE_STATUS_KEYS) {
+        if (nextStatus[key] && JSON.stringify(nextStatus[key]) !== JSON.stringify(target.status_effects?.[key])) {
+          await recordCombatEvent(encounterId, "status", { actor: shooter, target, status: key, ...statSlug });
+        }
+      }
+    }
     // Fame: the raw clash_power of whatever slug landed (not the type/
     // triple/dual-modified `amount`, and not the post-mecha-soak
     // `gritDamage` for the power term) -- a bigger slug earns more on its
@@ -3565,7 +3872,7 @@ async function dealHit(
       if (c.kind === "decoy" || isBurrowed(c)) continue; // decoys only pop from a direct hit, see dealHit
       if (c.current_grit === null && c.current_structure === null) continue;
       if (!pointInCone(apex, knockbackOrigin, { x: c.x, y: c.y }, CONE_HALF_ANGLE_DEG, CONE_LENGTH)) continue;
-      const hit = await applyEnvironmentalDamage(c, coneAmount, slug.type);
+      const hit = await applyEnvironmentalDamage(c, coneAmount, slug.type, { by: shooter, via: "cone", slug: slug.name });
       log += ` The cone of spikes also catches ${c.name} -- ${hit.amount} Grit damage${hit.note}.`;
       if (hit.newGrit === 0 && !c.unconscious) await triggerKnockoutRoll(c.id, "grit");
     }
@@ -3768,11 +4075,11 @@ async function applyShotTerrain(offer, endPoint) {
   const { slug } = offer;
   const eid = offer.encounterId;
   if (slugHasTrait(slug, "ice")) await addIceHazard(eid, endPoint, slug.dual?.iceMult ?? 1);
-  if (slug.hazard_maker) await addDamageHazard(eid, endPoint, slug);
+  if (slug.hazard_maker) await addDamageHazard(eid, endPoint, slug, undefined, offer.attackerCombatantId);
   if (slug.trail_wall) await addTrailWall(eid, offer.attackerPos, endPoint, slug.type);
-  if (slug.star_wall) await formStarWall(eid, endPoint, slug);
+  if (slug.star_wall) await formStarWall(eid, endPoint, slug, offer.attackerCombatantId);
   if (slug.anchor_zone) await addAnchorZone(eid, endPoint);
-  if (slug.spawns_pods) await spawnPods(eid, endPoint, slug);
+  if (slug.spawns_pods) await spawnPods(eid, endPoint, slug, offer.attackerCombatantId);
   if (slug.clears_fire_terrain) await clearOrCreateSteamTerrain(eid, endPoint, slug);
   if (slug.disarm_zone) await addDisarmZone(eid, endPoint);
   if (slug.crosswind_zone) await addCrosswindZone(eid, endPoint);
@@ -4122,7 +4429,7 @@ async function resolveAttackRoll(offer, attacker, target) {
     // Bike mode trades aim for speed.
     (effectiveMode(attacker) === "bike" ? BIKE_ACCURACY_PENALTY : 0);
   const dc = 10 + targetDexMod;
-  return { attackTotal, dc };
+  return { attackTotal, dc, roll };
 }
 
 // The hit branch's consequences -- shared by resolveNormalHit and a failed
@@ -4235,13 +4542,22 @@ async function resolveNormalHit(offer) {
 
   // You never fumble a slug fired at yourself -- a self-buff always lands.
   const isSelfShot = attacker.id === target.id;
-  const { attackTotal, dc } = await resolveAttackRoll(offer, attacker, target);
+  const { attackTotal, dc, roll } = await resolveAttackRoll(offer, attacker, target);
   const hit = isSelfShot || attackTotal >= dc;
   // Went wide instead of stopping dead-on the target -- see missDeflection.
   // Only computed for a miss; a hit's reveal doesn't need it.
   const deflected = hit ? null : missDeflection(offer.attackerPos, offer.impactPoint, walls);
 
   const styleTotal = hit ? rollStyleShot(offer, attacker, target) : null;
+  if (!isSelfShot) {
+    await recordShotResult(offer.encounterId, attacker, target, hit ? "hit" : "miss", offer.slug, {
+      roll,
+      attackTotal,
+      dc,
+      style: styleTotal != null,
+      bonus: Boolean(offer.isRicochetLeg),
+    });
+  }
   broadcastShotResolved(offer, hit ? { outcome: "hit", style: styleTotal != null } : { outcome: "miss", impactPoint: deflected });
 
   scheduleAfterFlight(offer.firedAt, offer.windowMs, async () => {
@@ -4303,7 +4619,7 @@ async function resolveDodgeAttempt(id) {
 
   const wallsRow = (await pool.query("SELECT walls FROM encounters WHERE id = $1", [offer.encounterId])).rows[0];
   const walls = wallsRow?.walls || [];
-  const { attackTotal, dc } = await resolveAttackRoll(offer, attacker, defender);
+  const { attackTotal, dc, roll } = await resolveAttackRoll(offer, attacker, defender);
   const acrobaticsMod = combatantSkillMod(defender, "acrobatics");
   const dodgeTotal = rollD20() + acrobaticsMod;
   // Opposed roll -- a tie favors the attacker, same convention as
@@ -4317,6 +4633,21 @@ async function resolveDodgeAttempt(id) {
   const deflected = !dodged && !hit ? missDeflection(offer.attackerPos, offer.impactPoint, walls) : null;
 
   const styleTotal = hit ? rollStyleShot(offer, attacker, defender) : null;
+  await recordCombatEvent(offer.encounterId, "dodge", {
+    actor: defender,
+    target: attacker,
+    success: dodged,
+    dodgeTotal,
+    attackTotal,
+    ap: DODGE_AP_COST,
+  });
+  await recordShotResult(offer.encounterId, attacker, defender, dodged ? "dodged" : hit ? "hit" : "miss", offer.slug, {
+    roll,
+    attackTotal,
+    dc,
+    style: styleTotal != null,
+    bonus: Boolean(offer.isRicochetLeg),
+  });
   broadcastShotResolved(
     offer,
     dodged ? { outcome: "dodged" } : hit ? { outcome: "hit", style: styleTotal != null } : { outcome: "miss", impactPoint: deflected }
@@ -4477,6 +4808,20 @@ async function resolveCounterOffer(id, chosenSlugId) {
         ? defenderPowerVal - attackerDefenseVal
         : 0;
 
+  const CLASH_OUTCOME_STAT = { "attacker-wins": "clash_won", "defender-wins": "clash_lost", bounce: "clash_bounce", "double-break": "clash_double" };
+  await recordShotResult(offer.encounterId, attacker, defender, CLASH_OUTCOME_STAT[outcome] ?? "clash_bounce", offer.slug, {
+    counterSlug: counterSlugRow.name,
+    bonus: Boolean(offer.isRicochetLeg),
+  });
+  await recordCombatEvent(offer.encounterId, "counter", {
+    actor: defender,
+    target: attacker,
+    outcome: outcome === "defender-wins" ? "won" : outcome === "attacker-wins" ? "lost" : "bounce",
+    slug: counterSlugRow.name,
+    slugType: counterSlugRow.type,
+    ap: counterSlugRow.ap_cost || 0,
+    neverWoundUp: counterNeverWoundUp,
+  });
   // The clash math (who wins) is "the direction" -- fine to know and reveal
   // right away. What it actually *does* (ejects, damage) is held back for
   // scheduleAfterFlight so it lands with the clash/aftermath burst instead
@@ -4545,6 +4890,7 @@ async function resolveCounterOffer(id, chosenSlugId) {
       // for the same reason as the two call sites above.
       const hitLog = await dealHit(offer.encounterId, offer.targetCombatantId, offer.attackerCombatantId, reflectingSlug, {
         originPos: offer.targetPos,
+        statTag: "counter",
       });
       log = `${offer.targetName}'s ${counterSlugRow.name} reflects the shot back at ${offer.attackerName}! ${hitLog}`;
       // Speedstinger as the counter slug: the reflected shot doesn't just
@@ -4830,6 +5176,36 @@ async function resolveEnvironmentShot({ actionType, attacker, slug, blaster, tb,
   const finalPoint = hit ? intendedPoint : missDeflection(attackerPos, intendedPoint, encounterRow.walls);
 
   const speed = await blasterEffectiveSpeed(blaster, attacker);
+
+  // Break Wall needs the slug to finish winding up before it reaches the wall,
+  // exactly like an Attack on a close target (see shotTooClose in the shoot
+  // route) -- a wall inside that distance can't be broken, and saying "finds
+  // nothing to break" there was misleading.
+  if (actionType === "break-wall" && tb.trait !== "phase") {
+    const wallAhead = firstWallHit(attackerPos, finalPoint, encounterRow.walls);
+    const breakDist = wallAhead ? wallAhead.hit.t * distance(attackerPos, finalPoint) : distance(attackerPos, finalPoint);
+    if (shotTooClose(breakDist, speed, slug)) {
+      await recordShotResult(attacker.encounter_id, attacker, null, "too_close", slug);
+      broadcastShotFx({
+        fxId,
+        attackerCombatantId: attacker.id,
+        targetCombatantId: null,
+        attackerPos,
+        targetPos: attackerPos,
+        impactPoint: attackerPos,
+        slug,
+        windowMs: 0,
+        outcome: "too-close",
+      });
+      await pushCombatLog(
+        attacker.encounter_id,
+        `${attacker.name}'s ${slug.name} doesn't have enough time to wind up before reaching ${wallAhead ? "the wall" : "that spot"}, so it can't break it. Stand further back.`
+      );
+      const encounter = await broadcastEncounter(attacker.encounter_id);
+      return { pending: false, encounter };
+    }
+  }
+
   const windowMs = shotFlightMs(dist, speed, slug);
 
   broadcastShotFx({
@@ -5027,6 +5403,17 @@ router.post("/actions/shoot", async (req, res) => {
       await pushCombatLog(attacker.encounter_id, `${attacker.name}'s ${slug.name} MEGA MORPHS!`);
     }
 
+    await recordCombatEvent(attacker.encounter_id, "shot", {
+      actor: attacker,
+      target,
+      action: actionType,
+      slug: slug.name,
+      slugType: slug.type,
+      ap: shotApCost,
+      mega: megaMorph,
+      dual: dualShot,
+    });
+
     // Ties together this shot's launch broadcast, its later resolve
     // broadcast, and (if a counter is offered) the pending-counter entry --
     // so the client can find its way back to the same in-flight ShotEffect
@@ -5052,6 +5439,7 @@ router.post("/actions/shoot", async (req, res) => {
           status_effects: JSON.stringify({ ...(attacker.status_effects || {}), jammed: false }),
         });
       }
+      if (actionType === "attack") await recordShotResult(attacker.encounter_id, attacker, target, "jam", slug);
       broadcastShotFx({
         fxId,
         attackerCombatantId: attacker.id,
@@ -5132,6 +5520,7 @@ router.post("/actions/shoot", async (req, res) => {
     // shot just fails outright instead, exactly like a jam (no launch, no
     // counter offered). Being too close is bad.
     if (!isSelfShot && shotTooClose(dist, speed, slug)) {
+      await recordShotResult(attacker.encounter_id, attacker, target, "too_close", slug);
       broadcastShotFx({
         fxId,
         attackerCombatantId: attacker.id,
@@ -5213,6 +5602,7 @@ router.post("/actions/shoot", async (req, res) => {
     // attempt, it just ruins its aim.
     if (attacker.status_effects?.confused && Math.random() < CONFUSION_CHANCE) {
       const wildPoint = confusedDeflection(attackerPos, impactPoint, encounterRow.walls);
+      await recordShotResult(attacker.encounter_id, attacker, target, "wild", slug);
       broadcastShotFx({ ...offer, outcome: null });
       broadcastShotResolved(offer, { outcome: "miss", impactPoint: wildPoint });
       scheduleAfterFlight(firedAt, windowMs, async () => {
@@ -5251,6 +5641,7 @@ router.post("/actions/shoot", async (req, res) => {
       const offsetDeg = rollCrosswindOffset();
       if (offsetDeg !== 0) {
         const windPoint = rotateDeflection(attackerPos, impactPoint, offsetDeg, encounterRow.walls);
+        await recordShotResult(attacker.encounter_id, attacker, target, "crosswind", slug);
         broadcastShotFx({ ...offer, outcome: null });
         broadcastShotResolved(offer, { outcome: "miss", impactPoint: windPoint });
         scheduleAfterFlight(firedAt, windowMs, async () => {
@@ -5336,16 +5727,23 @@ router.post("/actions/shoot", async (req, res) => {
     }
 
     if (!reaches) {
-      // Out of range / blocked by a wall: the shot never gets close enough
-      // to be worth animating, so nothing launches and no resolve reveal
-      // goes out -- no bolt, no burst, no miss sound. Only the Combat Log
-      // records the wasted shot, and any terrain the slug leaves still
-      // appears where it fizzled out (impactPoint is already clamped there).
-      scheduleAfterFlight(firedAt, windowMs, async () => {
-        await pushCombatLog(attacker.encounter_id, `${attacker.name}'s ${slug.name} goes wide of ${target.name}.`);
+      // Out of range / blocked by a wall: the shot still launches and flies,
+      // but only as far as it can -- impactPoint is already clamped to the
+      // range or the wall -- and fizzles there with the out-of-range reveal.
+      // No counter is offered (nothing reaches the target). The flight is
+      // timed to the ground it actually covers, not the full distance.
+      const fizzleMs = Math.max(400, shotFlightMs(stopDist, speed, slug));
+      const fizzleOffer = { ...offer, windowMs: fizzleMs, windupFraction: shotWindupFraction(stopDist, speed, slug) };
+      await recordShotResult(attacker.encounter_id, attacker, target, "out_of_range", slug);
+      broadcastShotFx({ ...fizzleOffer, outcome: null });
+      broadcastShotResolved(fizzleOffer, { outcome: "out-of-range", impactPoint });
+      scheduleAfterFlight(firedAt, fizzleMs, async () => {
+        await pushCombatLog(attacker.encounter_id, wallBlocks && wallDist < combinedRange
+            ? `${attacker.name}'s ${slug.name} is stopped by a wall before reaching ${target.name}.`
+            : `${attacker.name}'s ${slug.name} is out of range of ${target.name}.`);
         await broadcastEncounter(attacker.encounter_id);
       });
-      scheduleShotTerrain(offer, impactPoint);
+      scheduleShotTerrain(fizzleOffer, impactPoint);
       const encounter = await broadcastEncounter(attacker.encounter_id);
       return res.json({ pending: false, encounter });
     }
@@ -5414,6 +5812,8 @@ router.post("/knockout/:id/resolve", async (req, res) => {
       updated = await updateCombatant(combatant.id, { unconscious: true });
     }
     await syncCharacterFromCombatant(updated);
+    await recordCombatEvent(combatant.encounter_id, "ko_save", { actor: combatant, success, total, dc: offer.dc });
+    if (!success) await recordCombatEvent(combatant.encounter_id, "down", { actor: combatant, reason: offer.reason });
     await broadcastEncounter(combatant.encounter_id);
     await pushCombatLog(
       combatant.encounter_id,
@@ -5542,6 +5942,7 @@ router.post("/actions/ram", async (req, res) => {
     const tierInfo = MECHA_TIER_LABELS[mecha.data?.tier ?? 0] || MECHA_TIER_LABELS[0];
     if (Math.random() * 100 < (tierInfo.breakdownChance ?? 0)) {
       broadcastRamFailFx({ fromPos, toPos });
+      await recordCombatEvent(mecha.encounter_id, "ram", { actor: turnRider, target, outcome: "stall" });
       await pushCombatLog(mecha.encounter_id, `${mecha.name} lurches forward but stalls out -- mechanical failure!`);
       const encounter = await broadcastEncounter(mecha.encounter_id);
       return res.json({ encounter, log: "Mechanical failure." });
@@ -5556,14 +5957,26 @@ router.post("/actions/ram", async (req, res) => {
     let log;
     if (attackTotal < dc) {
       broadcastRamFailFx({ fromPos, toPos });
+      await recordCombatEvent(mecha.encounter_id, "ram", { actor: turnRider, target, outcome: "miss" });
       log = `${mecha.name} rams at ${target.name} and misses (${attackTotal} vs DC ${dc}).`;
     } else {
       const rammingPower = mecha.data?.rammingPower ?? 1;
       const dmg = rammingPower * RAM_DAMAGE_MULTIPLIER;
+      await recordCombatEvent(mecha.encounter_id, "ram", { actor: turnRider, target, outcome: "hit" });
       if (target.kind === "mecha") {
         const reduced = Math.max(0, dmg - (target.data?.armor ?? 0));
         const newStructure = Math.max(0, (target.current_structure ?? 0) - reduced);
         await updateCombatant(target.id, { current_structure: newStructure });
+        await recordCombatEvent(mecha.encounter_id, "damage", {
+          actor: turnRider,
+          target,
+          amount: Math.min(reduced, target.current_structure ?? 0),
+          overkill: Math.max(0, reduced - (target.current_structure ?? 0)),
+          structure: true,
+          via: "ram",
+          slug: "Ram",
+          kill: newStructure === 0 && (target.current_structure ?? 0) > 0,
+        });
         log = `${mecha.name} rams ${target.name} for ${reduced} Structure damage.`;
         if (newStructure === 0) {
           await disableMecha(target.id);
@@ -5582,10 +5995,21 @@ router.post("/actions/ram", async (req, res) => {
         // the mecha's ramming power (see RAM_CHARACTER_MAX_GRIT_FRACTION).
         const gritDmg = Math.max(1, Math.floor((target.max_grit ?? 0) * RAM_CHARACTER_MAX_GRIT_FRACTION));
         // If the rammed character is themselves mounted, their mecha soaks 75%.
-        const { riderDamage, note: absorbNote } = await absorbRiderDamage(target, gritDmg);
+        const { riderDamage, note: absorbNote } = await absorbRiderDamage(target, gritDmg, {
+          stat: { actor: turnRider, via: "ram", slug: "Ram" },
+        });
         const newGrit = Math.max(0, (target.current_grit ?? 0) - riderDamage);
         const updatedTarget = await updateCombatant(target.id, { current_grit: newGrit, damaged_this_turn: true });
         await syncCharacterFromCombatant(updatedTarget);
+        await recordCombatEvent(mecha.encounter_id, "damage", {
+          actor: turnRider,
+          target,
+          amount: Math.min(riderDamage, target.current_grit ?? 0),
+          overkill: Math.max(0, riderDamage - (target.current_grit ?? 0)),
+          via: "ram",
+          slug: "Ram",
+          kill: newGrit === 0 && (target.current_grit ?? 0) > 0 && !target.unconscious,
+        });
         log = `${mecha.name} rams ${target.name} for ${riderDamage} Grit damage.${absorbNote}`;
 
         const kb = knockbackTarget({ x: mecha.x, y: mecha.y }, { x: target.x, y: target.y }, encounterRow.walls, KNOCKBACK_DISTANCE);

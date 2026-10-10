@@ -1,3 +1,4 @@
+import { COMBAT_TEAMS } from "./combatTeams.js";
 // Client mirror of the character-skill rules in server/src/combatRules.js --
 // keep the numbers in sync. Used for button costs / enable state only; the
 // server re-checks everything.
@@ -22,6 +23,9 @@ export function combatantSkillMod(combatant, skillKey) {
 
 const PARTY_RELATIONSHIPS = ["Ally", "Friend", "Party"];
 export function combatSide(combatant) {
+  // A Mirage Coil decoy sides with (and looks like) its owner.
+  if (combatant?.mimic) combatant = combatant.mimic;
+  if (COMBAT_TEAMS.some((t) => t.id === combatant?.team)) return combatant.team;
   if (combatant?.kind === "character" || combatant?.kind === "mecha") return "party";
   const rel = combatant?.relationship ?? combatant?.data?.relationship ?? null;
   return PARTY_RELATIONSHIPS.includes(rel) ? "party" : "foes";

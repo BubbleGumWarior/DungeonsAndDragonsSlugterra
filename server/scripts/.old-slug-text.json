@@ -1,0 +1,366 @@
+{
+ "Aquabeek": {
+  "velocity": "Swells into a sleek, beaked water-beast and tears through the air trailing a roaring jet of white water that can blast stone loose and snuff out flames.",
+  "proto": "Shoots clean squirts of fresh water for drinking or washing away small debris."
+ },
+ "Arachnet": {
+  "velocity": "Sprouts eight long legs and a cluster of glittering eyes, spitting glistening webbing that snaps open into a net, bows into a springy web, and leaves whatever it touches glued in place.",
+  "proto": "Spins strong silk strands useful for grappling lines, securing cargo, or tying knots."
+ },
+ "Armashelt": {
+  "velocity": "Clamps shut into a boulder wrapped in overlapping armor plates, then spins up and thunders forward like a wrecking ball, scattering rubble in its wake.",
+  "proto": "Deflects minor incoming projectiles off its tough outer shell or acts as a doorstop."
+ },
+ "Blastipede": {
+  "velocity": "Unfurls into a long, many-legged centipede that skitters along dropping glowing nodes behind it. Each one pulses faintly, waiting to burst when stepped on or called to.",
+  "proto": "Leaves small, benign glowing dots that can mark paths or serve as signal markers."
+ },
+ "Boon Doc": {
+  "velocity": "Blooms into a shimmering creature wreathed in soft golden light. Warm waves ripple outward, closing wounds and chasing away the sickly dark clinging to Ghoul slugs.",
+  "proto": "Emits a soothing light that heals minor cuts and relieves fatigue."
+ },
+ "Bubbaleone": {
+  "velocity": "Puffs up round as a balloon and lobs enormous, shimmering soap bubbles that swallow whoever they hit, or swell wide to cushion a heavy blow.",
+  "proto": "Blows durable, buoyant bubbles that act as soft cushions, floating rafts, or makeshift storage containers."
+ },
+ "Crystalyd": {
+  "velocity": "Sharpens into a glittering crystal creature with a spinning drill for a head, and bores into solid rock in a spray of sparks and rock dust, leaving a winding tunnel behind.",
+  "proto": "Focuses ambient light into sharp crystalline beams to mark stone walls."
+ },
+ "Diggrix": {
+  "velocity": "Grows into a broad, clawed mole that rips up the ground in great furrows. The earth shudders under it as it hurls boulders from the churned dirt.",
+  "proto": "Scoops away soft dirt quickly to create small trenches or shelters."
+ },
+ "Dirt Urchin": {
+  "velocity": "Bristles into a ball of needle-sharp quills and fires them out in a hissing volley that pins targets to the nearest wall and leaves the ground studded with spikes.",
+  "proto": "Shoots tiny, soft quills that stick to surfaces, useful for marking trails or setting minor traps."
+ },
+ "Enigmo": {
+  "velocity": "Bursts into a swirl of pale, shifting light. Slugs fired alongside it blaze brighter, nearby slugs are tugged toward where it was shot, and enemy slugs flicker and fail to transform.",
+  "proto": "Produces a soft aura and aids in locating hidden paths or ancient slug lore."
+ },
+ "Fandango": {
+  "velocity": "Unfolds into a glowing, clock-faced figure with spinning rings of light. Whoever it strikes staggers, dizzy and disoriented, their shots whirling around and flying back the way they came. Once it has been shot, a rippling halo of energy follows it, and every slug fired afterwards that turn streaks out blazing twice as bright and hard.",
+  "proto": "Wears a shimmering aura of restless energy that spills over into every slug beside it in its slinger's blaster. They hum and twitch with life, spring back into the chamber almost as soon as they have left it, and never seem to tire."
+ },
+ "Firenzar": {
+  "velocity": "Stretches into a blazing lizard that tears across the field in a streak of flame, leaving a line of fire burning behind it and searing whatever it brushes past.",
+  "proto": "Leaves glowing trail marks that stay hot for several minutes to track back through cold caverns."
+ },
+ "Flaringo": {
+  "velocity": "Spreads fiery wings and darts straight at its target like a flaming arrow, striking with a flash and leaving a burning trail across the whole path it flew.",
+  "proto": "Emits a bright, glowing flame from its head that can illuminate dark caverns, ignite campfires or fuses, and thaw frozen locks without expending energy pips."
+ },
+ "Flatulorhinkus": {
+  "velocity": "Balloons into a bloated, wheezing beast and belches out thick, sickly clouds of stink-gas that drift wide, leaving anyone caught in them choking, reeling, and half-blind.",
+  "proto": "Releases tiny, harmless puffs of foul-smelling gas to deter small creatures or clear personal space."
+ },
+ "Flopper": {
+  "velocity": "Doesn't transform at all. It sails through the air as a limp, floppy slug and bounces off its target with a wet slap.",
+  "proto": "Squirts a harmless drop of water or flops around uselessly, offering mild moral support or serving as a distraction."
+ },
+ "Forgesmelter": {
+  "velocity": "Swells into a hulking figure of glowing molten iron, gushing streams of liquid magma that sizzle through equipment and pool into glowing, bubbling slag.",
+  "proto": "Generates extreme localized heat capable of welding broken metal or rapidly heating tools."
+ },
+ "Frightgeist": {
+  "velocity": "Fades into a pale, translucent phantom that glides straight through walls. Whoever it touches sees horrifying shapes crowd in around them and bolts away in blind terror from where the shot came.",
+  "proto": "Distorts nearby light and shadows to spook wild animals or send eerie signals."
+ },
+ "Frostcrawler": {
+  "velocity": "Hardens into a spiny, frost-white beast that fires jagged icicles, encases targets in thick ice, and raises tall walls of glittering ice.",
+  "proto": "Instantly cools water, freezes small puddles into footholds, or chills rations."
+ },
+ "Gazzer": {
+  "velocity": "Dissolves into a drifting, grinning cloud that sprays the area with giddy gas. Anyone breathing it doubles over in helpless fits of laughter, unable to fight.",
+  "proto": "Emits tiny puffs of gas that cause mild giggling or lightheadedness."
+ },
+ "Geoshard": {
+  "velocity": "Hardens into a faceted crystal knight, flinging shards of glass and raising gleaming crystal shields that catch beams of energy and throw them straight back at the attacker.",
+  "proto": "Creates small decorative quartz-like crystals on surfaces to reflect light."
+ },
+ "Grenuke": {
+  "velocity": "Swells into a heavy, glowing bomb-beast that detonates on contact in a blinding fireball and shockwave, leaving rubble and scorched armor where it struck.",
+  "proto": "Generates low-frequency ticking vibrations to signal danger or test structural stability."
+ },
+ "Hexlet": {
+  "velocity": "Melts into a hooded shadow that hurls crackling curse-bolts. Whether it hits or misses, a dark mark settles over the target's blaster, and their next shot sputters and fails.",
+  "proto": "Causes minor unlucky glitches in nearby electronics, like flickering lights or faulty sensors."
+ },
+ "Hop Rock": {
+  "velocity": "Rounds into a stony, spiked ball that bounces wildly across the ground, then bursts apart in a spray of flying, exploding shards.",
+  "proto": "Generates small, controlled micro-blasts useful for cracking nuts or starting small rockslides."
+ },
+ "Hoverbug": {
+  "velocity": "Sprouts translucent wings and buzzes in place, whipping up howling gusts that can carry allies across gaps and knock incoming slug shots off course.",
+  "proto": "Creates light breezes to clear smoke, dust, or cool down companions while hovering in place."
+ },
+ "Hypnogrif": {
+  "velocity": "Spreads great wings and a pair of swirling eyes, sending out rippling waves of pulsing light that leave targets glassy-eyed, muddled, or slumped in a deep trance.",
+  "proto": "Emits low-frequency waves that make nearby creatures feel calm or drowsy."
+ },
+ "Infurnus": {
+  "velocity": "Bursts into a roaring firebird and rockets through the air, spewing rivers of lava and leaving curtains of flame hanging behind it.",
+  "proto": "Produces small controlled flames for lighting torches, warming allies, or welding small metal objects."
+ },
+ "Jellyish": {
+  "velocity": "Slumps into a wobbling, translucent blob that hurls heavy globs of sticky slime, gluing opponents to the spot or cushioning a long fall.",
+  "proto": "Produces small droplets of non-toxic adhesive, perfect for quick makeshift repairs."
+ },
+ "Lariat": {
+  "velocity": "Takes the shape of a wide-mouthed frog and lashes out a long, stretchy tongue that plucks blasters out of hands, reels opponents in, or swings allies across wide gaps.",
+  "proto": "Extends a sticky tongue to grab small objects from out-of-reach places like a quick grappling hook."
+ },
+ "Lavalynx": {
+  "velocity": "Prowls out as a sleek cat of glowing magma, spitting rivers of lava, drinking in the heat around it, and leaving smoldering pools where it has been.",
+  "proto": "Radiates high ambient heat to melt ice or heat metal tools rapidly."
+ },
+ "Makobreaker": {
+  "velocity": "Hardens into an armored land-shark that slips beneath the rock like water, then bursts out with a crunch of snapping jaws.",
+  "proto": "Uses its hardened, razor-sharp head-crest to slice through thin metals or score stone."
+ },
+ "Mimkey": {
+  "velocity": "Changes into a cheeky little monkey that does hardly any harm on its own. Shot to answer another slug, it twists into a perfect copy of it, and the two cancel each other out in a flash.",
+  "proto": "Intelligenty mocks enemies"
+ },
+ "Narwhaddle": {
+  "velocity": "Rears up as a horned beast with a spiraling ice drill for a tusk, ramming through obstacles and sending a shiver of frost rolling out from the impact.",
+  "proto": "Uses its small frozen horn to chip away at ice buildup or poke holes in soft materials."
+ },
+ "Negashade": {
+  "velocity": "Stretches into a shadowy dragon-shape that blots out the light around its target, leaving them blinking in total darkness, and leaves a patch of gloom lingering where it struck.",
+  "proto": "Absorbs ambient light around itself, creating small pockets of pitch-black shadow for concealment."
+ },
+ "Neotox": {
+  "velocity": "Shifts into a scaly, dripping lizard that spits pools of hissing acid and drifts clouds of sickly green gas that leave anyone caught in them stiff and numb.",
+  "proto": "Secretes tiny drops of corrosive fluid to dissolve rust or weaken small fasteners."
+ },
+ "Phosphora": {
+  "velocity": "Brightens into a dazzling creature of pure light, firing thin beams of laser and bursting in blinding flashes that leave targets seeing spots.",
+  "proto": "Glows intensely like a high-powered lantern to illuminate dark subterranean caverns."
+ },
+ "Pieper": {
+  "velocity": "Opens its mouth as a delicate, singing creature whose shimmering notes lull wild slugs nearby and draw them to follow its lead.",
+  "proto": "Emits high-pitched chirps that can mimic simple sounds or distract small subterranean critters."
+ },
+ "Polero": {
+  "velocity": "Streaks out as a spinning bola, splitting mid-air and wrapping glowing cords around the target's limbs, pinning them tight in place for a while.",
+  "proto": "Wraps its split tail around small objects to carry them or hang from overhead beams."
+ },
+ "Rammstone": {
+  "velocity": "Bulks up into a heavy, armored ram that crashes through solid stone walls and sends shockwaves rolling out across the ground.",
+  "proto": "Crushes small stones, digs footholds into soft earth, or wedges small openings open."
+ },
+ "Sand Angler": {
+  "velocity": "Burrows up as a sandy beast that kicks up a stinging storm of grit, blinding the target, while the ground beneath them turns to quicksand and swallows their legs.",
+  "proto": "Softens small patches of soil or sand, making digging easier."
+ },
+ "Slicksilver": {
+  "velocity": "Flows into a gleaming silver creature that sends out a crackling pulse, drawing or shoving metal objects around and frying the electronics in the target's blaster. Hit or miss, the blaster fizzles on its next shot.",
+  "proto": "Attracts small metallic items like keys or loose bolts with a low-grade magnetic field."
+ },
+ "Slyren": {
+  "velocity": "Unfurls wings and sings a slow, lilting song. Everyone caught by the sound sags to the ground, fast asleep, and misses their next turn.",
+  "proto": "Hums a quiet lullaby that induces mild drowsiness in small creatures."
+ },
+ "Speedstinger": {
+  "velocity": "Streamlines into a sleek, armored blur that ricochets off walls with a ringing clang, flashing in from unexpected angles.",
+  "proto": "Moves at incredible speeds over short distances to retrieve dropped tools or scout ahead unnoticed."
+ },
+ "Tazerling": {
+  "velocity": "Crackles to life as an electric lizard, arcing lightning between its target and a second one nearby. Anyone struck locks up, twitching, and loses their next turn.",
+  "proto": "Acts as a portable battery to jumpstart machinery, charge power packs, or produce mild static sparks."
+ },
+ "Thresher": {
+  "velocity": "Grows into a razor-toothed shark ringed with whirring blades that shear through metal, armor and stone as if they were paper.",
+  "proto": "Cuts through thin ropes or vines using its sharp head-fin."
+ },
+ "Thugglet": {
+  "velocity": "Grins into an impish phantom, flickering into a crowd of copies that confuse and hex an enemy's blaster so their next shot fizzles. Turned on its own slinger, it wraps them in shimmering air that hides them from view until they are struck or the moment passes.",
+  "proto": "Uses faint telekinesis to nudge small objects or tug on loose gear to annoy opponents."
+ },
+ "Tormato": {
+  "velocity": "Whirls into a roaring spirit of wind, raising a violent tornado that lifts targets off their feet and flings incoming shots in every direction.",
+  "proto": "Produces small, gentle whirlwinds that clear dust, blow away light debris, or fan flames."
+ },
+ "Vinedrill": {
+  "velocity": "Swells into a great plant-beast that tunnels beneath the ground, then bursts out with thorned vines that wrap around enemies, and clouds of spores that leave them stiff and stuck.",
+  "proto": "Sprouts fast-growing vines to weave temporary ropes, secure gear, or harvest hard-to-reach flora."
+ },
+ "Xmitter": {
+  "velocity": "Charges into a humming, electric figure that releases a crackling pulse, short-circuiting the target's blaster. Hit or miss, its next shot sputters and fails.",
+  "proto": "Emits minor static pulses that clear radio static or briefly disrupt digital displays."
+ },
+ "Emberblade": {
+  "velocity": "Takes form as a slug wielding a blade of fire, slashing at its foes and leaving a wall of flame burning along its path. When it meets another slug in a clash, it flares up dramatically brighter and stronger.",
+  "proto": "When cooking from a fire made by this slug, the food quality is increased."
+ },
+ "Frostfire": {
+  "velocity": "Burns in two ways: it can strike with a bolt of flame, or sweep its path into a glittering wall or bridge of solid ice.",
+  "proto": "The slug can freeze and defreeze objects in a cryo stasis."
+ },
+ "Sagebloom": {
+  "velocity": "Sprouts into a flowering creature whose hands flick out a barrage of hard seeds that hit like bullets.",
+  "proto": "This slug grows seeds on its head and hands that make for tasteful spices."
+ },
+ "Zeus": {
+  "velocity": "Crackles into a streak of lightning that is gone before the eye can follow, nearly impossible to answer in time, the slug itself just a blur of light.",
+  "proto": "This slug can super charge equipment making htem function at 200% for an hour, but afterwards breaks the technology"
+ },
+ "Bladier": {
+  "velocity": "Sharpens into a slug holding a dagger. It punches clean through the first wall in its way, splintering it open, and carries on to strike its target with full force.",
+  "proto": "Shifts and hardens it's body to form a strong dagger that can be thrown or used in Melee"
+ },
+ "Cybercut": {
+  "velocity": "Flashes into a figure holding two crackling swords of electricity, throwing arcs of lightning at the nearest target.",
+  "proto": "This slug can connect to electronics and hack them."
+ },
+ "Graspvine": {
+  "velocity": "Holds its shape for a few seconds, then dives into the ground. Moments later, vines burst up beneath nearby slingers and wrap around them, holding them completely still.",
+  "proto": "This slugs can manipulate the growth of plants to support beams or caverns to be safer"
+ },
+ "Sapheart": {
+  "velocity": "Lands in a puff of soft, glowing mist. The cloud drifts over every slinger inside it, warming and mending their wounds.",
+  "proto": "This slug's feces is very commonly used in medicine for its healing properties."
+ },
+ "Thornlash": {
+  "velocity": "Whips its body around and shoots a fan of thorns across a wide arc, then lunges to strike its target directly.",
+  "proto": "This slug's thorns can be plucked and used as needles, it is stronger than steel."
+ },
+ "Pressure Tick": {
+  "velocity": "Drops three plump pods nearby, hissing quietly. A moment later, each one bursts in a scalding blast of steam, catching anyone close.",
+  "proto": "This slug can swallow water and shoot it out as steam."
+ },
+ "Mirage Coil": {
+  "velocity": "Shimmers, and several ghostly copies of its slinger appear all around, leaving opponents unsure which one is real.",
+  "proto": "This slug can create mirrage copies of themselves to confuse predators"
+ },
+ "Regulator": {
+  "velocity": "Strikes the ground and lines of flame spring out in a star pattern. A slinger caught on one of the burning lines is badly scorched.",
+  "proto": "This slug on random occasions needs to blow off steam releasing heat waves to keep itself healthy."
+ },
+ "Anchorage": {
+  "velocity": "Settles on the ground and a shimmering ring of stillness spreads out. Within it, slingers cannot be shoved, and the ground, walls and bridges stay solid, whatever hits them.",
+  "proto": "This slug can make small objects remain in place for a short period of time, even if the object should be falling it stays in place."
+ },
+ "Echo-ash": {
+  "velocity": "Bursts into a cloud of swirling ash that stings eyes and blinds the opponents nearby, then smolders on, burning anyone who stays within it.",
+  "proto": "This slug can manipulate ash to form shapes or pictures."
+ },
+ "Keystone": {
+  "velocity": "Slams down and stone shoots up around it, forming walls and a sturdy foundation that shelters whatever it landed beside.",
+  "proto": "This slug is able to detect structural weakness by touching structures and point it out to slingers."
+ },
+ "Caligo": {
+  "velocity": "Drifts out as a small, silent wisp trailing thick mist. Meeting a Fire-type slug in a clash, the mist billows into scalding steam and both slugs fizzle out harmlessly. Where it lands, the steam snuffs out nearby flames, fire walls and fire bridges, or, if there is nothing to put out, it leaves a hissing cloud of steam instead.",
+  "proto": "Can sterilize surfaces, objects and people."
+ },
+ "Cynosure": {
+  "velocity": "Swells into a giant, humming electromagnet. Hit or miss, the target's blaster sparks and goes dead for a while, and where it lands, a crackling field is left in the air, keeping anyone inside it disarmed while they stay and a little while after they leave.",
+  "proto": "Can become slightly magnetic and thus is good for fixing or tightening small screws within mechanical equipment."
+ },
+ "Perplexus": {
+  "velocity": "Swirls into a shifting, shimmering shape that muddles minds. Used on another, it can turn their steps backward, plunge their sight into darkness, or leave their reactions sluggish. Used on its own slinger, it can sharpen their reflexes or clear their eyes and aim.",
+  "proto": "When looking directly into its eyes it makes it difficult but not impossible to lie."
+ },
+ "Tesser": {
+  "velocity": "Thins into a flickering, ghostly wisp. When it strikes someone, the two of them blink and trade places.",
+  "proto": "Able to store an item less than 10cm x 10cm in a sort of pocket dimension."
+ },
+ "Tremorock": {
+  "velocity": "Slams into the ground with a deafening boom. A shockwave rolls outward, throwing everyone nearby off their feet and cracking apart anything fragile in its path.",
+  "proto": "Although it has no discerning abilities, it has crazy endurance and is able to outlast most well trained slugs even when just caught."
+ },
+ "Ventus": {
+  "velocity": "Bursts apart in a ring of howling wind that rushes out in every direction, knocking everyone nearby off their feet.",
+  "proto": "Can whip up small, controlled gusts even without transforming, making it excellent for breaking small objects or playing pranks."
+ },
+ "Mantis": {
+  "velocity": "Snaps out a pair of huge claws that smash through walls and shove opponents back, closing with a sharp crack, like the punch of a mantis shrimp. It hits with less weight than Armashelt.",
+  "proto": "Very good at finding places to hide from rain, wind, or currents -- following one will always lead you out of a disaster."
+ },
+ "Psi": {
+  "velocity": "Pulses with a strange, shifting glow. A target it strikes either feels the ground grip their feet and hold them fast, or slides about as if on ice, sometimes skidding off before they can finish moving.",
+  "proto": "Able to reduce the friction of objects it touches, making it common among mechanics and assemblers."
+ },
+ "Lentus": {
+  "velocity": "Spins up a wide, lingering gust of crosswind. Any shot flying through it, friend or foe, is shoved off its path and veers wildly away from its mark.",
+  "proto": "Can be trained to enter blasters all by itself, no manual reloading needed once it truly trusts its slinger."
+ },
+ "Zephur": {
+  "velocity": "Lashes out in a flurry of tail whips, slashes, punches and headbutts. It's not much in a straight fight, but the moment it's caught in a clash it flares up fierce and quick, and it can outmatch much stronger types.",
+  "proto": "Famously territorial, often used as home defense systems."
+ },
+ "Eunoa": {
+  "velocity": "Pours out a wave of overwhelming emotion. On its own slinger, it brings sharp calm and focus, and a steadier eye. On anyone else, it leaves them lost in a fog of confusion and darkness.",
+  "proto": "Able to greatly reduce a slinger's own emotions in times of danger, letting them focus purely on the fight."
+ },
+ "Meduslug": {
+  "velocity": "Opens a single glowing eye. Anyone who meets its gaze freezes in place, unable to answer it, and is hit with terrible force, then stands rooted and helpless until their next turn is over.",
+  "proto": "This slug does not need water to survive and gets all its nutrition from its diet -- the only slug that's omnivorous."
+ },
+ "Arcling": {
+  "velocity": "Strikes with a spark that leaves a faint, crackling charge clinging to its target. From then on, whenever it hurts anyone, little arcs of lightning leap to every slinger still carrying that charge.",
+  "proto": "When interacting with an electrical item, it can track where it was for the last 6 hours."
+ },
+ "Driplet": {
+  "velocity": "Splashes weakly against its target, just enough to startle them.",
+  "proto": "Leaks a thin trickle of water, just enough to fill a cup or dampen a rag."
+ },
+ "Puffshroom": {
+  "velocity": "Puffs out a small spore cloud that stings the eyes for a moment.",
+  "proto": "Releases a light cloud of harmless spores when squeezed, good for marking a trail."
+ },
+ "Chillnip": {
+  "velocity": "Fires a small ice pellet that leaves a slick, thin patch of frost underfoot.",
+  "proto": "Cools a drink or numbs a small bruise with a light frosty touch."
+ },
+ "Soot Pup": {
+  "velocity": "Coughs up a weak puff of stinging soot that briefly clouds vision.",
+  "proto": "Leaves faint sooty pawprints that fade quickly."
+ },
+ "Driftmoth": {
+  "velocity": "Kicks up a light gust, just enough to nudge a target off balance.",
+  "proto": "Flutters gently, useful for testing wind direction."
+ },
+ "Glowdab": {
+  "velocity": "Gives off a brief flash, bright enough to make a target flinch and blink.",
+  "proto": "Gives off a faint, comforting nightlight glow."
+ },
+ "Murkling": {
+  "velocity": "Wraps a target in a thin veil of shadow, unsettling but brief.",
+  "proto": "Casts a small, harmless shadow puppet shape on nearby walls."
+ },
+ "Dustkin": {
+  "velocity": "Kicks a weak spray of pebbles and grit at a target.",
+  "proto": "Kicks up a small dust cloud, handy for covering tracks."
+ },
+ "Fernwick": {
+  "velocity": "Sprouts a short, low screen of leaves that offers a moment of cover.",
+  "proto": "Weaves a couple of thin leaves into a small basket or wrap."
+ },
+ "Spark Mite": {
+  "velocity": "Delivers a weak jolt that makes a target flinch but does little else.",
+  "proto": "Produces a tiny static tingle, enough to fluff up hair."
+ },
+ "Tidbit": {
+  "velocity": "Releases a faint warmth that takes the edge off minor pain.",
+  "proto": "Licks a small scrape clean, more comforting than medicinal."
+ },
+ "Cobblet": {
+  "velocity": "Bonks a target with a small, dull metal knock, mostly just annoying.",
+  "proto": "Taps out a dull clink, useful for testing if metal is hollow."
+ },
+ "Wisplet": {
+  "velocity": "Floats toward a target and bumps them with a soft, harmless pulse.",
+  "proto": "Drifts lazily and glows faintly when it's calm."
+ },
+ "Cindermite": {
+  "velocity": "Flicks out a tiny spark that singes but doesn't truly burn.",
+  "proto": "Keeps a single ember alive, just enough to relight a torch."
+ },
+ "Ripplet": {
+  "velocity": "Sends out a short-range ripple that gently rocks a target's footing.",
+  "proto": "Sends small ripples across still water to signal from a distance."
+ }
+}

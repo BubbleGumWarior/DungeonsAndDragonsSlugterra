@@ -386,10 +386,13 @@ export function tickStatusEffects(statusEffects, insideDisarmZone = false) {
   const next = { ...(statusEffects || {}) };
   let damage = 0;
   const notes = [];
+  // Per-effect breakdown (kind/amount/who applied it) for the Battle Report.
+  const sources = [];
 
   if (next.burning) {
     damage += next.burning.damage;
     notes.push(`${next.burning.damage} burn`);
+    sources.push({ kind: "burn", amount: next.burning.damage, by: next.burning.by ?? null });
     const turnsLeft = next.burning.turnsLeft - 1;
     if (turnsLeft > 0) next.burning = { ...next.burning, turnsLeft };
     else delete next.burning;
@@ -399,6 +402,7 @@ export function tickStatusEffects(statusEffects, insideDisarmZone = false) {
     const poisonDamage = next.poison.stacks * POISON_DAMAGE_PER_STACK;
     damage += poisonDamage;
     notes.push(`${poisonDamage} poison`);
+    sources.push({ kind: "poison", amount: poisonDamage, by: next.poison.by ?? null });
     const turnsLeft = next.poison.turnsLeft - 1;
     if (turnsLeft > 0) next.poison = { ...next.poison, turnsLeft };
     else delete next.poison;
@@ -463,7 +467,7 @@ export function tickStatusEffects(statusEffects, insideDisarmZone = false) {
     else delete next.disarmed;
   }
 
-  return { damage, statusEffects: next, notes };
+  return { damage, statusEffects: next, notes, sources };
 }
 
 // ---- AOE blast ----------------------------------------------------------
@@ -847,8 +851,12 @@ export const SHOT_CRUISE_SPEED_MULTIPLIER = 2;
 // The windup crawls at the weapon's own (effective) speed for
 // SHOT_SLOW_PHASE_MS, so it covers a fixed distance for a given weapon+slug
 // pairing -- not a fraction of range or of this particular shot's distance.
-export function shotWindupDistance(blasterSpeed, slug) {
-  return shotEffectiveSpeed(blasterSpeed, slug) * SHOT_SLOW_PHASE_MS;
+// Uses the weapon's plain speed, NOT the slug's boosted one: a Mega Morph or
+// ultra_fast only speeds the cruise leg (see shotFlightMs), so it must not
+// stretch the windup -- otherwise a Mega Morph "point-blank" fizzles at twice
+// the range a normal shot does.
+export function shotWindupDistance(blasterSpeed) {
+  return (Math.max(0.001, blasterSpeed) / 1000) * SHOT_SLOW_PHASE_MS;
 }
 
 // Point-blank failure: if the target is within the ground the weapon's own
@@ -868,10 +876,10 @@ export function shotTooClose(dist, blasterSpeed, slug) {
 // whole way. Matches the client's phasedFraction in CombatMap.jsx: a fixed
 // windup time covering windupFraction of the distance, then a linear cruise.
 export function shotFlightMs(dist, blasterSpeed, slug) {
-  const windupSpeed = shotEffectiveSpeed(blasterSpeed, slug);
+  const windupSpeed = Math.max(0.001, blasterSpeed) / 1000;
   const windupDist = windupSpeed * SHOT_SLOW_PHASE_MS;
   if (dist <= windupDist) return Math.round(dist / windupSpeed);
-  const cruiseMs = (dist - windupDist) / (windupSpeed * SHOT_CRUISE_SPEED_MULTIPLIER);
+  const cruiseMs = (dist - windupDist) / (shotEffectiveSpeed(blasterSpeed, slug) * SHOT_CRUISE_SPEED_MULTIPLIER);
   return Math.round(SHOT_SLOW_PHASE_MS + cruiseMs);
 }
 
@@ -1220,7 +1228,12 @@ export function combatantSkillMod(combatant, skillKey) {
 // NPCs flagged Ally/Friend/Party) or everyone else. Two combatants are allies
 // when they're on the same side.
 const PARTY_RELATIONSHIPS = ["Ally", "Friend", "Party"];
+// Teams the DM can field. "party" and "foes" are the classic two sides; an
+// explicit `team` on a combatant overrides the kind/relationship default, so
+// a rival crew can fight both, or a player can turn coat.
+export const COMBAT_TEAM_IDS = ["party", "foes", "azure", "verdant", "violet", "rose"];
 export function combatSide(combatant) {
+  if (COMBAT_TEAM_IDS.includes(combatant?.team)) return combatant.team;
   if (combatant?.kind === "character" || combatant?.kind === "mecha") return "party";
   const rel = combatant?.relationship ?? combatant?.data?.relationship ?? null;
   return PARTY_RELATIONSHIPS.includes(rel) ? "party" : "foes";

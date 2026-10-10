@@ -3,6 +3,7 @@ import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { broadcastAll } from "../ws.js";
 import { npcActionPoints, npcMaxGrit } from "../characterRules.js";
+import { BASE_TYPES } from "../itemRules.js";
 
 const router = Router();
 
@@ -183,6 +184,24 @@ function validateCore({ name, image, dexModifier, conModifier, slugTemplateIds, 
   return null;
 }
 
+// An NPC can't be given more slugs than its equipped blasters (the first two)
+// can hold; with no blaster it gets a Standard Blaster. Returns an error
+// string or null. Grunts roll to fill their slots, so this is NPC-only.
+async function checkMagazineCapacity(slugTemplateIds, blasterTemplateIds) {
+  let capacity = BASE_TYPES.Pistol.magazineSize;
+  const equippedIds = blasterTemplateIds.slice(0, 2);
+  if (equippedIds.length) {
+    const { rows } = await pool.query("SELECT id, magazine_size FROM blaster_templates WHERE id = ANY($1::int[])", [equippedIds]);
+    const sizeById = new Map(rows.map((r) => [r.id, r.magazine_size]));
+    const found = equippedIds.filter((id) => sizeById.has(id));
+    if (found.length) capacity = found.reduce((sum, id) => sum + sizeById.get(id), 0);
+  }
+  if (slugTemplateIds.length > capacity) {
+    return `Too many slugs: ${slugTemplateIds.length} won't fit in a ${capacity}-slug magazine.`;
+  }
+  return null;
+}
+
 const SELECT_WITH_GUESSES = `
   SELECT nt.*,
     COALESCE(
@@ -223,6 +242,8 @@ router.post("/", requireDungeonMaster, async (req, res) => {
   } = req.body || {};
   const error = validateCore({ name, image, dexModifier, conModifier, slugTemplateIds, blasterTemplateIds, mechaTemplateId });
   if (error) return res.status(400).json({ error });
+  const magazineError = await checkMagazineCapacity(slugTemplateIds, blasterTemplateIds);
+  if (magazineError) return res.status(400).json({ error: magazineError });
   const normalized = normalizeProfile(profile);
   if (normalized.error) return res.status(400).json({ error: normalized.error });
   if (dmNotes !== undefined && dmNotes !== null && (typeof dmNotes !== "string" || dmNotes.length > MAX_DM_NOTES)) {
@@ -276,6 +297,8 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
   } = req.body || {};
   const error = validateCore({ name, image, dexModifier, conModifier, slugTemplateIds, blasterTemplateIds, mechaTemplateId });
   if (error) return res.status(400).json({ error });
+  const magazineError = await checkMagazineCapacity(slugTemplateIds, blasterTemplateIds);
+  if (magazineError) return res.status(400).json({ error: magazineError });
   const normalized = normalizeProfile(profile);
   if (normalized.error) return res.status(400).json({ error: normalized.error });
   if (dmNotes !== undefined && dmNotes !== null && (typeof dmNotes !== "string" || dmNotes.length > MAX_DM_NOTES)) {

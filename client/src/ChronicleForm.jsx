@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { EyeIcon, EyeSlashIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
+import { useEffect, useRef, useState } from "react";
+import { EyeIcon, EyeSlashIcon, MinusIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
 import ImageCropper from "./ImageCropper.jsx";
 import { typeColor } from "./slugData.js";
 import "./ChronicleForm.css";
@@ -15,6 +15,24 @@ const IDENTITY_FIELDS = [
   { key: "firstMetLocation", label: "First met, where" },
   { key: "firstMetSession", label: "First met, when" },
 ];
+
+// Only the first two blasters get an equip slot in combat, and a blaster-less
+// NPC is handed a Standard Blaster (a Pistol), so those set the magazine room.
+const FALLBACK_MAGAZINE = 6;
+function magazineCapacity(blasterTemplateIds, blasterTemplates) {
+  const equipped = blasterTemplateIds
+    .slice(0, 2)
+    .map((id) => blasterTemplates.find((b) => b.id === id))
+    .filter(Boolean);
+  if (equipped.length === 0) {
+    return { total: FALLBACK_MAGAZINE, sources: [{ name: "Standard Blaster", size: FALLBACK_MAGAZINE }], fallback: true };
+  }
+  return {
+    total: equipped.reduce((sum, b) => sum + (b.magazineSize || 0), 0),
+    sources: equipped.map((b) => ({ name: b.name, size: b.magazineSize || 0 })),
+    fallback: false,
+  };
+}
 
 function blankField(value = "") {
   return { value, shown: false };
@@ -84,6 +102,11 @@ export default function ChronicleForm({
   const [fields, setFields] = useState(() => fromInitial(initialValues));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const errorRef = useRef(null);
+
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [error]);
 
   function update(key, value) {
     setFields((prev) => ({ ...prev, [key]: value }));
@@ -98,10 +121,27 @@ export default function ChronicleForm({
       return { ...prev, [key]: next };
     });
   }
+  const capacity = magazineCapacity(fields.blasterTemplateIds, blasterTemplates);
+  const slugCount = fields.slugTemplateIds.length;
+  const sortedSlugTemplates = [...slugTemplates].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  const overBy = slugCount - capacity.total;
+
   function addSlug(id) {
-    setFields((prev) => ({ ...prev, slugTemplateIds: [...prev.slugTemplateIds, id] }));
+    setFields((prev) =>
+      prev.slugTemplateIds.length >= magazineCapacity(prev.blasterTemplateIds, blasterTemplates).total
+        ? prev
+        : { ...prev, slugTemplateIds: [...prev.slugTemplateIds, id] }
+    );
   }
-  function removeSlug(id) {
+  // One copy off the end-most matching entry.
+  function removeOneSlug(id) {
+    setFields((prev) => {
+      const at = prev.slugTemplateIds.lastIndexOf(id);
+      if (at === -1) return prev;
+      return { ...prev, slugTemplateIds: prev.slugTemplateIds.filter((_, i) => i !== at) };
+    });
+  }
+  function removeAllSlug(id) {
     setFields((prev) => ({ ...prev, slugTemplateIds: prev.slugTemplateIds.filter((v) => v !== id) }));
   }
 
@@ -132,8 +172,22 @@ export default function ChronicleForm({
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setSubmitting(true);
     setError("");
+    if (!fields.name.trim()) {
+      // The name lives on the Identity tab; make sure the DM can see what's missing.
+      setTab("identity");
+      setError("Give the character a name before saving.");
+      setTimeout(() => document.getElementById("chronicle-name")?.focus(), 0);
+      return;
+    }
+    if (overBy > 0) {
+      setTab("slugs");
+      setError(
+        `${slugCount} slugs won't fit in a ${capacity.total}-slug magazine. Remove ${overBy} or pick a bigger blaster.`
+      );
+      return;
+    }
+    setSubmitting(true);
     const payload = {
       name: fields.name,
       image: fields.image,
@@ -163,23 +217,43 @@ export default function ChronicleForm({
 
   return (
     <form className="chronicle-form" onSubmit={handleSubmit}>
-      <div className="chronicle-form-tabs" role="tablist">
-        {[
-          ["identity", "Identity"],
-          ["story", "Story"],
-          ["combat", "Combat"],
-        ].map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            className={`chronicle-form-tab ${tab === id ? "chronicle-form-tab--active" : ""}`}
-            onClick={() => setTab(id)}
-          >
-            {label}
+      <div className="chronicle-form-bar">
+        <div className="chronicle-form-bar-row">
+        <div className="chronicle-form-tabs" role="tablist">
+            {[
+              ["identity", "Identity"],
+              ["story", "Story"],
+              ["combat", "Combat"],
+              ["slugs", "Slugs"],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={tab === id}
+                className={`chronicle-form-tab ${tab === id ? "chronicle-form-tab--active" : ""}`}
+                onClick={() => setTab(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        <div className="chronicle-form-actions">
+          {onCancel && (
+            <button type="button" className="chronicle-form-cancel" onClick={onCancel}>
+              Cancel
+            </button>
+          )}
+          <button type="submit" className="chronicle-form-submit" disabled={submitting}>
+            {submitting ? "Saving..." : submitLabel}
           </button>
-        ))}
+        </div>
+        </div>
+        {error && (
+          <div className="chronicle-form-error" role="alert" ref={errorRef}>
+            {error}
+          </div>
+        )}
       </div>
 
       {tab === "identity" && (
@@ -389,52 +463,6 @@ export default function ChronicleForm({
           <p className="chronicle-form-hint">Max Grit and Max AP are derived from these modifiers, the same way a player character's are.</p>
 
           <div className="npc-form-picker">
-            <label>
-              Slugs <span className="npc-form-picker-note">click to add, click again for another copy</span>
-            </label>
-            <div className="npc-form-picker-list">
-              {slugTemplates.length === 0 && <p className="npc-form-picker-empty">No slug templates yet.</p>}
-              {slugTemplates.map((t) => {
-                const count = fields.slugTemplateIds.filter((v) => v === t.id).length;
-                return (
-                  <button
-                    type="button"
-                    key={t.id}
-                    className={`npc-form-picker-item npc-form-picker-item--slug ${count > 0 ? "npc-form-picker-item--picked" : ""}`}
-                    style={{ "--type-color": typeColor(t.type) }}
-                    onClick={() => addSlug(t.id)}
-                  >
-                    {t.protoformImage ? <img src={t.protoformImage} alt="" /> : <span className="npc-form-picker-placeholder" />}
-                    <span className="npc-form-picker-item-label">{t.name}</span>
-                    {count > 1 && <span className="npc-form-picker-item-count">&times;{count}</span>}
-                    {count > 0 && (
-                      <span
-                        className="npc-form-picker-item-x"
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`Remove all ${t.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeSlug(t.id);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            removeSlug(t.id);
-                          }
-                        }}
-                      >
-                        <XIcon weight="bold" />
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="npc-form-picker">
             <label>Blasters</label>
             <div className="npc-form-picker-list">
               {blasterTemplates.length === 0 && <p className="npc-form-picker-empty">No blaster templates yet.</p>}
@@ -472,18 +500,120 @@ export default function ChronicleForm({
         </div>
       )}
 
-      {error && <div className="chronicle-form-error">{error}</div>}
+      {tab === "slugs" && (
+        <div className="chronicle-form-panel slugpick">
+          <section
+            className={`slugpick-meter ${overBy > 0 ? "slugpick-meter--over" : slugCount === capacity.total ? "slugpick-meter--full" : ""}`}
+            aria-label="Magazine capacity"
+          >
+            <div className="slugpick-meter-head">
+              <h3>Magazine</h3>
+              <p className="slugpick-meter-count" aria-live="polite">
+                <strong>{slugCount}</strong>
+                <span> / {capacity.total} slugs</span>
+              </p>
+            </div>
+            <div className="slugpick-pips" role="presentation">
+              {Array.from({ length: Math.max(capacity.total, slugCount) }, (_, i) => {
+                const id = fields.slugTemplateIds[i];
+                const t = id === undefined ? null : slugTemplates.find((x) => x.id === id);
+                return (
+                  <span
+                    key={i}
+                    className={`slugpick-pip ${t ? "slugpick-pip--filled" : ""} ${i >= capacity.total ? "slugpick-pip--over" : ""}`}
+                    style={t ? { "--type-color": typeColor(t.type) } : undefined}
+                    title={t ? t.name : "Empty slot"}
+                  />
+                );
+              })}
+            </div>
+            <p className="slugpick-meter-note">
+              {capacity.fallback
+                ? "No blaster picked, so it carries a Standard Blaster (6). "
+                : `${capacity.sources.map((src) => `${src.name} ${src.size}`).join(" + ")}. `}
+              {fields.blasterTemplateIds.length > 2 && "Only the first two blasters are equipped. "}
+              {overBy > 0 ? (
+                <span className="slugpick-meter-warn">
+                  Over by {overBy}. Remove some, or pick a bigger blaster on the Combat tab.
+                </span>
+              ) : (
+                "Change blasters on the Combat tab."
+              )}
+            </p>
+          </section>
 
-      <div className="chronicle-form-actions">
-        {onCancel && (
-          <button type="button" className="chronicle-form-cancel" onClick={onCancel}>
-            Cancel
-          </button>
-        )}
-        <button type="submit" className="chronicle-form-submit" disabled={!fields.name.trim() || submitting}>
-          {submitting ? "Saving..." : submitLabel}
-        </button>
-      </div>
+          <section className="slugpick-section">
+            <h3>Loadout</h3>
+            {slugCount === 0 ? (
+              <p className="slugpick-empty">Nothing loaded yet. Pick slugs below.</p>
+            ) : (
+              <ul className="slugpick-loadout">
+                {sortedSlugTemplates.filter((t) => fields.slugTemplateIds.includes(t.id)).map((t) => t.id).map((id) => {
+                  const t = slugTemplates.find((x) => x.id === id);
+                  const count = fields.slugTemplateIds.filter((v) => v === id).length;
+                  return (
+                    <li key={id} className="slugpick-row" style={{ "--type-color": t ? typeColor(t.type) : undefined }}>
+                      {t?.protoformImage ? <img src={t.protoformImage} alt="" /> : <span className="slugpick-thumb" />}
+                      <span className="slugpick-row-name">
+                        {t ? t.name : "Missing slug"}
+                        {t?.type && <small>{t.type}</small>}
+                      </span>
+                      <span className="slugpick-stepper">
+                        <button type="button" onClick={() => removeOneSlug(id)} aria-label={`One fewer ${t?.name || "slug"}`}>
+                          <MinusIcon weight="bold" />
+                        </button>
+                        <output aria-label={`${count} copies`}>{count}</output>
+                        <button
+                          type="button"
+                          onClick={() => addSlug(id)}
+                          disabled={slugCount >= capacity.total}
+                          aria-label={`One more ${t?.name || "slug"}`}
+                        >
+                          <PlusIcon weight="bold" />
+                        </button>
+                      </span>
+                      <button
+                        type="button"
+                        className="slugpick-row-remove"
+                        onClick={() => removeAllSlug(id)}
+                        aria-label={`Remove all ${t?.name || "slug"}`}
+                      >
+                        <XIcon weight="bold" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          <section className="slugpick-section">
+            <h3>
+              Slug library <span>{slugCount >= capacity.total ? "magazine full" : "click to load one"}</span>
+            </h3>
+            {slugTemplates.length === 0 && <p className="slugpick-empty">No slug templates yet.</p>}
+            <div className="slugpick-grid">
+              {sortedSlugTemplates.map((t) => {
+                const count = fields.slugTemplateIds.filter((v) => v === t.id).length;
+                return (
+                  <button
+                    type="button"
+                    key={t.id}
+                    className={`slugpick-tile ${count > 0 ? "slugpick-tile--picked" : ""}`}
+                    style={{ "--type-color": typeColor(t.type) }}
+                    onClick={() => addSlug(t.id)}
+                    disabled={slugCount >= capacity.total}
+                  >
+                    {t.protoformImage ? <img src={t.protoformImage} alt="" /> : <span className="slugpick-thumb" />}
+                    <span className="slugpick-tile-name">{t.name}</span>
+                    {count > 0 && <span className="slugpick-tile-count">&times;{count}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+      )}
     </form>
   );
 }

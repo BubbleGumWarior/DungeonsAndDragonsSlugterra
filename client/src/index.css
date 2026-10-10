@@ -91,6 +91,16 @@
   --rel-enemy: var(--danger);
   --rel-unknown: #8b9096;
 
+  /* Combat teams -- one hue each, constant across accent themes. Party reads
+     gold, hostiles read danger; the rest are for third crews and turncoats.
+     See combatTeams.js. */
+  --team-party: var(--gold-soft);
+  --team-foes: var(--danger);
+  --team-azure: #6fb1ea;
+  --team-verdant: #9bd16f;
+  --team-violet: #b69cf0;
+  --team-rose: #f08fc0;
+
   --charcoal-950: #0c0d0f;
   --charcoal-900: #16171a;
   --charcoal-800: #1e2023;

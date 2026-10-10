@@ -298,3 +298,21 @@
 .mod-form-check strong {
   color: var(--ink);
 }
+
+/* Error + Assign To + Save/Cancel pinned to the top of the modal so a long
+   form never hides them. The modal pads 32px, so bleed the bar to its edges. */
+.slug-form-bar {
+  position: sticky;
+  top: -32px;
+  z-index: 5;
+  margin: -4px -32px 0;
+  padding: 12px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--charcoal-900);
+  border-bottom: 1px solid var(--charcoal-700);
+}
+.slug-form-bar .slug-form-assign-field {
+  gap: 4px;
+}

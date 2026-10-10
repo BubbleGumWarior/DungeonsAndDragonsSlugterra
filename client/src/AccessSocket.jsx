@@ -27,6 +27,7 @@ export default function AccessSocket({ children }) {
   // single-slot note on voiceSignalQueueRef below).
   const [marketChanged, setMarketChanged] = useState(null);
   const [tradeChanged, setTradeChanged] = useState(null);
+  const [combatReportReady, setCombatReportReady] = useState(null);
   const [tradeCompleted, setTradeCompleted] = useState(null);
   const [podsUpdate, setPodsUpdate] = useState(null);
   const [slugUpdate, setSlugUpdate] = useState(null);
@@ -234,6 +235,10 @@ export default function AccessSocket({ children }) {
         setMarketChanged(data.at ?? Date.now());
         return;
       }
+      if (data.type === "combat-report-ready") {
+        setCombatReportReady({ reportId: data.reportId, name: data.encounterName, at: data.at });
+        return;
+      }
       if (data.type === "trade-changed") {
         setTradeChanged({ event: data.event, tradeId: data.tradeId, at: data.at });
         return;
@@ -437,6 +442,7 @@ export default function AccessSocket({ children }) {
         characterCreated,
         partyHealed,
         marketChanged,
+        combatReportReady,
         tradeChanged,
         tradeCompleted,
         podsUpdate,
