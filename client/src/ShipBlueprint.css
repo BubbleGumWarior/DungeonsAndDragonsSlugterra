@@ -387,3 +387,311 @@
 .ship-detail-select select {
   flex: 1;
 }
+
+/* Ship stats strip above the deck plan. */
+.ship-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin: 0 0 16px;
+}
+
+.ship-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 82%);
+  border: 1px solid var(--charcoal-600);
+  border-radius: 12px;
+}
+
+.ship-stat-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.ship-stat-label svg {
+  width: 14px;
+  height: 14px;
+  color: var(--gold);
+}
+
+.ship-stat-value {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 26px;
+  color: var(--gold-soft);
+}
+
+.ship-stat-value small {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink-dim);
+}
+
+.ship-stat-note {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.ship-stat-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ship-stat-edit input {
+  width: 56px;
+  padding: 2px 6px;
+  border: 1px solid var(--charcoal-600);
+  border-radius: 6px;
+  background: rgba(7, 7, 11, 0.6);
+  color: var(--ink);
+  font: inherit;
+}
+
+/* Build section of a compartment's detail panel. */
+.ship-build {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0;
+  padding: 14px;
+  border: 1px solid var(--charcoal-600);
+  border-radius: 10px;
+  background: rgba(7, 7, 11, 0.35);
+}
+
+.ship-build-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.ship-build-title svg {
+  width: 15px;
+  height: 15px;
+  color: var(--gold);
+}
+
+.ship-build-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.ship-build-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ship-progress-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--charcoal-700, #25262e);
+  overflow: hidden;
+}
+
+.ship-progress-bar span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #e0a53c;
+  transform-origin: left center;
+  transition: transform 0.4s var(--ease-out);
+}
+
+.ship-progress-text {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+/* ---- the crew tablet: the Deck Plan as a slab in the player's hands ---------- */
+
+.tablet-stage {
+  perspective: 1600px;
+}
+
+.tablet {
+  position: relative;
+  padding: 14px;
+  border-radius: 30px;
+  background: linear-gradient(150deg, #3a3d42 0%, #1a1b1e 42%, #0e0f11 100%);
+  box-shadow:
+    0 0 0 1px #4b4e54,
+    0 0 0 2px #0a0a0b,
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 40px 70px rgba(0, 0, 0, 0.65),
+    0 8px 18px rgba(0, 0, 0, 0.5);
+  transform-origin: 50% 100%;
+}
+
+.tablet-camera {
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50%;
+  background: #050506;
+  box-shadow: 0 0 0 1px #2a2c30, inset 0 0 2px rgba(120, 140, 170, 0.5);
+}
+
+.tablet-home {
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  width: 88px;
+  height: 3px;
+  margin-left: -44px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.tablet-screen {
+  position: relative;
+  padding: 14px 16px 18px;
+  border-radius: 18px;
+  background: var(--charcoal-900);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.8), inset 0 0 50px rgba(0, 0, 0, 0.5);
+}
+
+/* A pane of glass over the screen: one faint diagonal sheen, never in the way. */
+.tablet-screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0.045) 16%, transparent 16.2%);
+}
+
+.tablet-status {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--charcoal-700);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-dim);
+}
+
+/* Stepping into the console drops the tablet: it slips, then falls away
+   toward your feet, gathering speed. Leaving picks it back up. */
+.tablet--drop {
+  animation: tablet-drop 0.95s cubic-bezier(0.5, 0, 0.9, 0.4) both;
+  pointer-events: none;
+}
+
+.tablet--raise {
+  animation: tablet-raise 0.75s var(--ease-out) both;
+}
+
+@keyframes tablet-drop {
+  0% {
+    transform: none;
+  }
+  16% {
+    transform: translateY(-1.5%) rotateX(-4deg);
+  }
+  100% {
+    transform: translateY(125vh) rotateX(58deg) rotateZ(-5deg);
+  }
+}
+
+@keyframes tablet-raise {
+  from {
+    transform: translateY(125vh) rotateX(58deg) rotateZ(-5deg);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .tablet {
+    padding: 9px;
+    border-radius: 20px;
+  }
+
+  .tablet-camera,
+  .tablet-home {
+    display: none;
+  }
+
+  .tablet-screen {
+    padding: 10px 10px 14px;
+    border-radius: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tablet--drop,
+  .tablet--raise {
+    animation: none;
+  }
+}
+
+/* ---- the working Nav Computer: the one pin that is a door ---------------- */
+
+.ship-node--nav {
+  width: 46px;
+  height: 46px;
+  z-index: 3;
+}
+
+.ship-node--nav .ship-node-dot {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  background: radial-gradient(circle at 50% 40%, rgba(201, 162, 75, 0.45), rgba(12, 13, 15, 0.94) 72%);
+  border: 2px solid var(--gold);
+  box-shadow: 0 0 0 3px rgba(12, 13, 15, 0.88), 0 0 20px rgba(201, 162, 75, 0.7);
+}
+
+.ship-node--nav .ship-node-dot svg {
+  width: 19px;
+  height: 19px;
+  color: var(--gold-soft);
+}
+
+.ship-node--nav:hover .ship-node-dot {
+  transform: scale(1.12);
+}
+
+.ship-node-nav-tag {
+  position: absolute;
+  top: calc(100% + 1px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 2px 8px;
+  border: 1px solid var(--gold);
+  border-radius: 6px;
+  background: rgba(12, 13, 15, 0.94);
+  color: var(--gold-soft);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.3;
+  pointer-events: none;
+}

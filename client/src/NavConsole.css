@@ -1,0 +1,768 @@
+/* The Nav Computer's star console.
+   First person, inside the ship's bridge: a photograph of the room (the DM's
+   own artwork, client/public/ship/nav-bridge.webp) with the star map projected
+   in gold light from the holotable at its centre. The hologram is pinned to the
+   table in the picture's own coordinates, so it keeps the same proportions on
+   every screen; a wider screen stretches the whole stage, picture and hologram
+   together, instead of leaving black bars. Nothing here moves on its own: the
+   console powers on once, and the worlds only travel when a long rest passes a
+   day. */
+
+.nav-console {
+  --holo: 224, 197, 132; /* --gold-soft as an rgb triplet, for translucent light */
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  background: #050506;
+  color: var(--ink);
+  overflow: hidden;
+  animation: nav-power-on 0.45s var(--ease-out) both;
+}
+
+.nav-console ::selection {
+  background: rgba(var(--holo), 0.3);
+  color: var(--ink);
+}
+
+.nav-console * {
+  scrollbar-color: var(--gold-dim) transparent;
+  scrollbar-width: thin;
+}
+
+@keyframes nav-power-on {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ---- the top bar ------------------------------------------------------ */
+
+.nav-bar {
+  position: relative;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 24px;
+  /* Over the picture, so keep the room's ceiling readable behind the title. */
+  background: linear-gradient(to bottom, rgba(5, 5, 6, 0.78), rgba(5, 5, 6, 0));
+}
+
+.nav-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: 0.06em;
+  color: var(--gold-soft);
+}
+
+.nav-leave {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  min-height: 40px;
+  padding: 0 16px;
+  white-space: nowrap;
+  border: 1px solid rgba(var(--holo), 0.4);
+  border-radius: 8px;
+  background: rgba(5, 5, 6, 0.6);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+}
+
+.nav-leave svg {
+  width: 14px;
+  height: 14px;
+}
+
+.nav-leave:hover {
+  border-color: var(--gold);
+  background: rgba(var(--holo), 0.1);
+}
+
+.nav-console button:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* Bottom-left, over the foreground seat: the top of the screen belongs to the
+   map, and a background cluster sits out on each side of it. */
+.nav-readout {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  z-index: 5;
+  width: min(300px, 26vw);
+  max-height: calc(100% - 120px);
+  overflow-y: auto;
+}
+
+.nav-dossier-host {
+  position: absolute;
+  top: 66px;
+  right: 24px;
+  bottom: 16px;
+  z-index: 5;
+  width: min(350px, 30vw);
+  display: flex;
+  align-items: flex-start;
+  pointer-events: none;
+}
+
+.nav-dossier-host > * {
+  pointer-events: auto;
+}
+
+.nav-warming {
+  margin: 0;
+  padding: 80px 0;
+  text-align: center;
+  color: var(--ink-dim);
+  font-size: 14px;
+}
+
+/* ---- the map, as projected light -------------------------------------- */
+
+.nav-console .galaxy-map {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.nav-console .galaxy-orbit {
+  stroke: rgba(var(--holo), 0.2);
+}
+
+.nav-console .galaxy-cluster--back:hover .galaxy-orbit,
+.nav-console .galaxy-cluster--back:focus-visible .galaxy-orbit {
+  stroke: rgba(var(--holo), 0.4);
+}
+
+.nav-console .galaxy-sun {
+  filter: drop-shadow(0 0 18px rgba(247, 179, 74, 0.5));
+}
+
+/* Rings are shown, not pulsed: the party's is dashed gold, the course's is
+   dashed ink. */
+.nav-console .galaxy-planet-ring {
+  stroke: var(--gold);
+  stroke-dasharray: 3 4;
+}
+
+.nav-console .galaxy-planet--target .galaxy-planet-ring {
+  stroke: var(--ink);
+  stroke-dasharray: 2 5;
+}
+
+/* A world nobody has surveyed is drawn as a wireframe ghost. */
+.nav-console .galaxy-planet--unsurveyed .galaxy-planet-body {
+  fill: rgba(var(--holo), 0.06);
+  stroke: rgba(var(--holo), 0.75);
+  stroke-width: 1.2;
+  stroke-dasharray: 3 3;
+}
+
+.nav-console .galaxy-planet--unsurveyed .galaxy-planet-shade {
+  display: none;
+}
+
+/* ---- the dossier ------------------------------------------------------ */
+
+.holo-dossier {
+  position: relative;
+  width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 18px 18px 20px;
+  border: 1px solid rgba(var(--holo), 0.35);
+  border-radius: 14px;
+  background: linear-gradient(165deg, rgba(14, 12, 10, 0.92), rgba(5, 5, 6, 0.9) 70%);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(var(--holo), 0.18);
+  animation: holo-rise 0.3s var(--ease-out) both;
+}
+
+@keyframes holo-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.holo-dossier-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(var(--holo), 0.35);
+  border-radius: 8px;
+  background: rgba(5, 5, 6, 0.7);
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.holo-dossier-close:hover {
+  border-color: var(--gold);
+  color: var(--ink);
+}
+
+.holo-dossier-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.holo-image-btn {
+  position: relative;
+  display: block;
+  width: calc(100% + 36px);
+  margin: -18px -18px 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 13px 13px 0 0;
+  overflow: hidden;
+  background: var(--charcoal-950);
+  cursor: zoom-in;
+}
+
+.holo-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-bottom: 1px solid rgba(var(--holo), 0.3);
+  transition: transform 0.25s var(--ease-out);
+}
+
+.holo-image-btn:hover .holo-image {
+  transform: scale(1.03);
+}
+
+.holo-image-btn:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+}
+
+.holo-image-hint {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: rgba(5, 5, 6, 0.7);
+  color: var(--ink);
+  opacity: 0;
+  transition: opacity 0.15s var(--ease-out);
+  pointer-events: none;
+}
+
+.holo-image-btn:hover .holo-image-hint,
+.holo-image-btn:focus-visible .holo-image-hint {
+  opacity: 1;
+}
+
+.holo-image-hint svg {
+  width: 14px;
+  height: 14px;
+}
+
+@media (hover: none) {
+  .holo-image-hint {
+    opacity: 1;
+  }
+}
+
+/* No survey picture yet: a hatched plate with the unknown on it. */
+.holo-image--unknown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(100% + 36px);
+  margin: -18px -18px 14px;
+  border-radius: 13px 13px 0 0;
+  background:
+    repeating-linear-gradient(135deg, rgba(var(--holo), 0.09) 0 1px, transparent 1px 9px),
+    var(--charcoal-950);
+}
+
+.holo-image--unknown span {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 44px;
+  letter-spacing: 0.12em;
+  color: var(--gold);
+}
+
+.holo-dossier-name {
+  margin: 0 0 2px;
+  padding-right: 36px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 23px;
+  line-height: 1.2;
+  text-wrap: balance;
+  color: var(--gold-soft);
+}
+
+.holo-dossier-where {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+.holo-dm-note {
+  margin: -6px 0 12px;
+  font-size: 12.5px;
+  color: var(--gold);
+}
+
+.holo-dossier-body {
+  margin: 0 0 14px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-dim);
+}
+
+.holo-dossier-body--unknown {
+  font-family: var(--font-display);
+  font-size: 20px;
+  letter-spacing: 0.12em;
+  color: var(--gold);
+}
+
+.holo-facts {
+  margin: 0 0 4px;
+  padding: 0;
+}
+
+.holo-fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(var(--holo), 0.14);
+  font-size: 13px;
+}
+
+.holo-fact dt {
+  flex: none;
+  color: var(--ink-dim);
+}
+
+.holo-fact dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.holo-fact--unknown dd {
+  font-family: var(--font-display);
+  letter-spacing: 0.14em;
+  color: var(--gold);
+}
+
+.holo-route {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+.holo-route strong {
+  color: var(--gold-soft);
+}
+
+.holo-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.holo-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid rgba(var(--holo), 0.3);
+  border-radius: 8px;
+  background: rgba(5, 5, 6, 0.55);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+}
+
+.holo-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.holo-btn:hover:not(:disabled) {
+  border-color: var(--gold);
+  background: rgba(var(--holo), 0.1);
+}
+
+.holo-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.holo-btn--primary {
+  border-color: var(--gold);
+  background: rgba(201, 162, 75, 0.16);
+  color: var(--gold-soft);
+}
+
+.holo-error {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--danger);
+}
+
+/* ---- the stage: the bridge picture, with the hologram pinned to its table -- */
+
+.nav-stage {
+  /* The picture is 1935 x 812. Everything on the stage is placed as a share of
+     the picture's own height or width, so the hologram keeps its proportions
+     against the table on any screen. The stage fills the screen's height; when
+     the screen is wider than the picture it stretches sideways (up to 1.4x),
+     picture and hologram together, and when narrower the sides are cropped. */
+  --img-ar: 2.3831;
+  --stage-h: 100vh;
+  --stage-w: max(calc(var(--stage-h) * var(--img-ar)), min(100vw, calc(var(--stage-h) * var(--img-ar) * 1.4)));
+  --sheet-bottom: 58.5%; /* the front edge of the table's plate, where the hologram meets it */
+  --plate-h: calc(var(--stage-h) * 0.106);
+  --sh: calc(var(--stage-h) * 0.58);
+  --sw: calc(var(--sh) * var(--nav-aspect, 3.2));
+  --plate-w: calc(var(--stage-w) * 0.297); /* the table's dark plate, as seen in the picture */
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 1;
+  width: var(--stage-w);
+  height: var(--stage-h);
+  transform: translateX(-50%);
+}
+
+.nav-bridge {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* A little darkness toward the edges keeps the readout and dossier legible and
+   pulls the eye to the table. */
+.nav-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 62% 58% at 50% 46%, transparent 45%, rgba(5, 5, 6, 0.5) 100%),
+    linear-gradient(to bottom, rgba(5, 5, 6, 0.35), transparent 22%);
+}
+
+/* The beam: a fan of light from the table's plate up to the full width of the
+   hologram, so the projection effect covers every cluster, not just the middle. */
+.nav-cone {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--sheet-bottom) - var(--sh));
+  width: var(--sw);
+  /* Ends on the plate's centre line; the emitter's glow carries it from there
+     round the plate's front edge. */
+  height: calc(var(--sh) - var(--plate-h) / 2);
+  transform: translateX(-50%);
+  clip-path: polygon(
+    calc(50% - var(--plate-w) / 2) 100%,
+    calc(50% + var(--plate-w) / 2) 100%,
+    100% 0,
+    0 0
+  );
+  background: linear-gradient(to top, rgba(var(--holo), 0.42), rgba(var(--holo), 0.1) 58%, transparent 96%);
+  /* Light has no hard edges: it falls off toward the sides and into the plate. */
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 14%, #000 86%, transparent),
+    linear-gradient(to top, transparent, #000 22%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, transparent, #000 14%, #000 86%, transparent),
+    linear-gradient(to top, transparent, #000 22%);
+  mask-composite: intersect;
+  pointer-events: none;
+}
+
+/* The emitter: light pooled on the table's plate. */
+.nav-emitter {
+  position: absolute;
+  left: 50%;
+  top: 53.2%;
+  width: var(--plate-w);
+  height: calc(var(--stage-h) * 0.106);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1px solid rgba(var(--holo), 0.6);
+  background: radial-gradient(ellipse at 50% 50%, rgba(var(--holo), 0.75) 0%, rgba(var(--holo), 0.22) 55%, transparent 76%);
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+.nav-emitter::after {
+  content: "";
+  position: absolute;
+  inset: 16% 10%;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--holo), 0.35);
+}
+
+/* The hologram sheet: a flat map of light leaning back from the table. */
+.nav-holo {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--sheet-bottom) - var(--sh));
+  width: var(--sw);
+  height: var(--sh);
+  transform: translateX(-50%);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 7%, #000 93%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 7%, #000 93%, transparent);
+}
+
+.nav-holo-map {
+  position: relative;
+  transform: perspective(1500px) rotateX(10deg);
+  transform-origin: 50% 100%;
+  animation: nav-project 1s 1.4s var(--ease-out) both;
+  /* The sheet has a round foot, not a flat one: the top band is whole, and below
+     it only a bowl-shaped ellipse survives, its lowest point over the middle of
+     the table, so the map seems to rise out of the round plate. */
+  height: 100%;
+  -webkit-mask-image: linear-gradient(#000, #000),
+    radial-gradient(ellipse 44% 78% at 50% 22%, #000 78%, transparent 100%);
+  -webkit-mask-size: 100% 22%, 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-composite: source-over;
+  mask-image: linear-gradient(#000, #000),
+    radial-gradient(ellipse 44% 78% at 50% 22%, #000 78%, transparent 100%);
+  mask-size: 100% 22%, 100% 100%;
+  mask-repeat: no-repeat;
+  mask-composite: add;
+}
+
+/* Projected light has to stay legible over a busy room, so the sheet carries a
+   faint darkening behind it, and static scanlines (they never crawl). */
+.nav-holo-map::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 65% 62% at 50% 52%, rgba(4, 4, 6, 0.62), rgba(4, 4, 6, 0.28) 62%, transparent 100%);
+}
+
+.nav-holo-map > * {
+  position: relative;
+}
+
+.nav-holo-map::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 3px);
+}
+
+@keyframes nav-project {
+  from {
+    opacity: 0;
+    clip-path: inset(100% 0 0 0);
+    transform: perspective(1500px) rotateX(10deg) translateY(24px);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+    transform: perspective(1500px) rotateX(10deg) translateY(0);
+  }
+}
+
+/* ---- narrow screens: the room becomes a dimmed backdrop, the map a flat sheet -- */
+
+@media (max-width: 880px) {
+  .nav-console {
+    overflow-y: auto;
+  }
+
+  .nav-bar {
+    order: -1;
+    padding: 10px 14px;
+  }
+
+  .nav-title {
+    font-size: 16px;
+  }
+
+  .nav-stage {
+    position: static;
+    left: auto;
+    width: 100%;
+    height: auto;
+    transform: none;
+  }
+
+  .nav-bridge {
+    position: fixed;
+    object-fit: cover;
+    filter: brightness(0.4);
+  }
+
+  .nav-scrim,
+  .nav-cone,
+  .nav-emitter {
+    display: none;
+  }
+
+  .nav-holo {
+    position: relative;
+    left: auto;
+    top: auto;
+    width: 100%;
+    height: auto;
+    transform: none;
+    padding: 0 8px;
+  }
+
+  .nav-holo-map {
+    transform: none;
+    animation: nav-project-flat 0.8s 0.1s var(--ease-out) both;
+  }
+
+  .nav-readout,
+  .nav-dossier-host {
+    position: static;
+    width: calc(100% - 24px);
+    max-height: none;
+    margin: 12px 12px 0;
+  }
+
+  /* The map is scaled down to the screen's width, so its labels need to start
+     larger to stay readable. */
+  .nav-console .galaxy-planet-label {
+    font-size: 24px;
+  }
+
+  .nav-console .galaxy-threshold-label {
+    font-size: 20px;
+  }
+
+  .holo-dossier {
+    max-height: none;
+  }
+}
+
+@keyframes nav-project-flat {
+  from { opacity: 0; clip-path: inset(100% 0 0 0); }
+  to { opacity: 1; clip-path: inset(0 0 0 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-console,
+  .nav-holo-map,
+  .holo-dossier {
+    animation: none;
+  }
+
+  .holo-image {
+    transition: none;
+  }
+}
+
+/* ---- arriving: the tablet falls, you look up, the room comes into view ------ */
+
+/* The console's backdrop arrives a beat after the tablet starts to fall, so the
+   fall is seen; then the room rises into view as the head lifts from the floor. */
+.nav-console {
+  background: transparent;
+  animation: none;
+}
+
+.nav-console::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #050506;
+  animation: nav-fade 0.45s 0.3s both;
+}
+
+.nav-stage {
+  animation: nav-look-up 1.25s 0.4s var(--ease-out) both;
+}
+
+.nav-bar,
+.nav-readout {
+  animation: nav-fade 0.5s 1.2s both;
+}
+
+.nav-cone,
+.nav-emitter {
+  animation: nav-fade 0.7s 1.35s both;
+}
+
+@keyframes nav-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes nav-look-up {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-13%) scale(1.14);
+    filter: brightness(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+    filter: none;
+  }
+}
+
+@media (max-width: 880px) {
+  .nav-stage {
+    animation: none;
+  }
+
+  .nav-bridge {
+    animation: nav-fade 0.8s 0.4s both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-console::before,
+  .nav-stage,
+  .nav-bridge,
+  .nav-bar,
+  .nav-readout,
+  .nav-cone,
+  .nav-emitter {
+    animation: none;
+  }
+}

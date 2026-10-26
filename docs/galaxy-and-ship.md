@@ -9,14 +9,49 @@ To keep the bar from sprawling, related destinations are grouped into
 dropdowns (`NavGroup` in `client/src/NavBar.jsx`):
 
 - **Loadout** — Slugs/Creatures, Inventory
-- **Star Charts** — Galaxy Map, Deck Plan, Mecha-Beasts
+- **Galaxy** — Deck Plan, Chronicle (there is no Galaxy Map link: the map is only reachable through the ship, see below)
 
 Desktop shows a click-to-open popover under the trigger; the mobile hamburger
 panel flattens each group into an always-open labelled subsection. Both groups
 are gated behind `showSlugterraTabs` (`isDungeonMaster || slugterraRevealed`, where `slugterraRevealed` now means "has created a character"),
 same as the tabs they replaced.
 
-## Galaxy Map (`/galaxy`)
+## Galaxy Map (the Nav Computer's star console)
+
+The map has no page of its own. `/galaxy` redirects to `/ship`, and the only way
+in is the **Nav Computer** compartment on the Deck Plan (template key
+`nav-computer`, mirrored in `ShipBlueprint.jsx` and `server/src/shipRules.js`).
+A player clicking an **online** Nav Computer pin steps straight into
+`NavConsole.jsx`; in any other status the console stays dark. The DM selects the
+pin to edit it and has **Enter the star console** in its panel, plus an **Open
+the star console** toolbar button that works with no Nav Computer at all.
+
+**The Nav Computer is also required to travel.** Without an online one the
+server refuses `POST /api/travel/propose` (and scraps a vote that passes after
+it went offline), `GET /api/travel` reports `navReady: false`, and the dossier's
+button reads "The Nav Computer is offline". The DM's **Launch now** and
+teleport still work. The Nav Computer keeps its +1 speed bonus.
+
+`NavConsole.jsx` / `NavConsole.css` is a full-screen, first-person view from the
+bridge. The room is the DM's own artwork, `client/public/ship/nav-bridge.webp`
+(1935 x 812; the sidecar `.json` records where it came from), and the star map
+is gold light projected above the holotable at its centre (a fan of light from
+the table's plate, scanlines, a tilted sheet). To swap the picture, replace the
+file, and if the table moves, update the plate numbers in the `.nav-stage` block
+of `NavConsole.css` (`--sheet-bottom`, `--plate-w`, the emitter's `top`/height)
+and `IMAGE_AR` in `NavConsole.jsx`.
+
+Everything on the stage is placed as a share of the picture, so the hologram has
+the same proportions against the table on every screen. The stage fills the
+screen's height; a screen wider than the picture stretches the stage sideways
+(up to 1.4x), picture and hologram together, and a narrower one crops the sides.
+The star field and the spread of the background clusters stretch with it, and
+the clusters are kept inside the part of the sheet that is actually on screen.
+Gold (`--gold-soft`) is the projection, so it follows the chosen theme. The only
+motion is a one-time power-on and a ring rotation on click. Below 880px the
+picture becomes a dimmed backdrop and the map a flat sheet. The ship readout
+(`TravelPanel`) sits bottom-left and the world dossier on the right, portalled
+out of the tilted map so it stays flat.
 
 The setting is **the Three Clusters** (`docs/the-three-clusters-player-facing.md`):
 three rival powers, each its own star system (Threxa Combine/red giant, Verrin
@@ -43,21 +78,55 @@ Space (The Threshold), all orbiting a shared gravitational anchor on the long
   clusters' ring angles (`clusterAngles`, tweened over `ROTATE_MS`) so the
   clicked one swaps to the front — only the focused cluster's planets are
   individually clickable. Within a cluster, planet orbits/positions use the
-  same per-planet `orbitRx/orbitRy/periodSec/phaseDeg` approach as before, just
-  local to that cluster's own star (`ClusterStar`, styled per `starType`:
-  `red-giant` / `binary` / `black-hole`). The Threshold is rendered separately,
-  drifting on its own slow path, always clickable. `prefers-reduced-motion`
-  freezes orbital motion and skips the rotation tween (cluster focus jumps
-  instantly instead).
+  per-planet `orbitRx/orbitRy/yearDays/phaseDeg`, local to that cluster's own
+  star (`ClusterStar`, styled per `starType`: `red-giant` / `binary` /
+  `black-hole`). **Nothing moves on its own.** A world's place on its orbit is a
+  function of the campaign day (`planetPos`): it sits at `phaseDeg` on day 1 and
+  goes once round every `yearDays` days. After a long rest the map catches up
+  from the old day to the new one over a couple of seconds (`clock`), so you
+  watch each world sweep exactly one day's worth along its orbit. The stars and
+  The Threshold (no year; it wanders on a ~120 day cycle) follow the same clock.
+  `prefers-reduced-motion` skips both tweens.
 - Illustrations: clicking a world (or a cluster's star) shows `client/public/planets/<name>.jpg`
   at the top of the detail panel, and clicking that image opens it full screen
   (`DetailImage` in `GalaxyMap.jsx`). File names derive from the world name
   (`planetImageUrl`/`starImageUrl` in `planetData.js`); a missing file is simply
   not shown. Generation prompts: `docs/planet-image-prompts.md`.
 - Party location: reuses the existing Slug Hunt plumbing — reads `slugHuntArea`
-  from `useLiveState()`, and the DM's "Send the party here" button posts to
-  `POST /api/settings/slug-hunt-area` (which already broadcasts `slug-hunt-area`
-  to everyone). No new persistence.
+  from `useLiveState()`. The DM's "Teleport the party here" button still posts
+  to `POST /api/settings/slug-hunt-area`, which also cancels any voyage or open
+  vote. Normal movement goes through the travel system below.
+- `TravelPanel.jsx` (fed by `useTravel.js`) is the console's left-hand readout:
+  day, ship speed, and the current state (docked / vote open / under way). The
+  world being voted on or flown to gets a dashed ring.
+
+## Travel & voting
+
+Players choose where the ship goes; a long rest is one day of the voyage.
+
+- **Distance** is in units, and a ship's speed is units per day. `worldDistance`
+  in `server/src/shipRules.js`: same system `3 + 2 × orbit-slot gap`; between
+  systems the system gap (Threxa–Verrin 20, Verrin–Kaeth 24, Threxa–Kaeth 32)
+  plus `2 × (slotA + slotB)`; The Threshold `12 + 2 × slot` from anywhere.
+  Days = `ceil(distance / effective speed)`, minimum 1. The world sizes there
+  mirror `planetData.js`, so keep them in step if worlds are added.
+- **Vote** (`routes/travel.js`): any player proposes a charted world (one open
+  proposal at a time, needs an active ship); the proposer's yes counts at once.
+  Voters are everyone with a character who isn't the DM. A strict majority of
+  yes votes launches; once a majority can't be reached the proposal is thrown
+  out. Votes can be changed. The proposer can withdraw. The DM can **Launch now**
+  (skips the vote), **Turn the ship around** (abort, party stays at the origin)
+  or teleport.
+- **A long rest** calls `advanceDay()` in `server/src/travelService.js`: bumps
+  `campaign_settings.campaign_day`, counts `travel_state.days_left` down (the
+  party lands on the last day, which moves `slug_hunt_area` and closes markets
+  like a DM teleport), and moves compartment builds along. The result is sent in
+  the `long-rest` broadcast as `day` and shown in the sleep overlay.
+- While under way, Slug Hunt attempts are refused (`routes/slugHunt.js`). Markets
+  are not gated.
+- State: `travel_state` (single row), `travel_votes`, `campaign_settings.campaign_day`.
+  `GET /api/travel` returns everything the UI needs, tailored to the caller, and
+  every change sends one bare `travel-updated` WebSocket nudge to refetch.
 
 ## Ship Deck Plan (`/ship`)
 
@@ -95,3 +164,69 @@ Every write broadcasts a bare `{ type: "ship-updated" }` — a "refetch" nudge
 (single-slot signal pattern). The client handles it in `AccessSocket.jsx`
 (`shipUpdate`); `ShipBlueprint.jsx` re-fetches on change, but keeps the DM
 parked on whichever ship they were inspecting.
+
+### Stats and compartment building
+
+- **Ship stats:** `ships.speed` (base units per day, DM-edited) and
+  `ships.compartment_slots` (cap on pins; only *adding* a pin past it is
+  refused). Effective speed = base + the `speedBonus` of every **online**
+  compartment (`speedBreakdown` in `shipRules.js`). A stats strip at the top of
+  the page shows speed, compartments online / placed / slots, and the voyage.
+- **Compartment fields** (inside the `compartments` JSON): `templateKey`,
+  `speedBonus`, `buildDays`, `progressDays`, `engineers` (user ids). The server
+  carries `progressDays` and `engineers` over from what is stored — the client
+  PATCHes the whole array on every drag, so it can't be allowed to overwrite
+  progress that moves on its own. Switching a pin to `building` restarts it at 0;
+  leaving `building` clears both.
+- **Templates:** 12 built-in (`DEFAULT_COMPARTMENT_TEMPLATES` in `shipRules.js`;
+  Engine Room +2, Thruster Array +3 and Nav Computer +1 speed, the rest are
+  descriptive) plus the DM's own in `compartment_templates`
+  (`GET/POST /api/ships/templates`, `DELETE /api/ships/templates/:id`, DM only).
+  A pin copies a template's fields when applied, so deleting one never changes a
+  ship. In the DM's detail panel: pick a template (or type your own name, days
+  and bonus), **Start building**, or **Save as template**.
+- **Build progress per long rest** (`buildProgressPerRest`): docked, a building
+  compartment gains 1 day. Under way it gains 1 day per **engineer** assigned to
+  it, and none otherwise (the overlay reports it as stalled). A player signs on
+  with `POST /api/ships/engineer { compartmentId | null }`; it needs Survival
+  proficiency and a player works on one compartment at a time. A finished
+  compartment goes `online` and clears its engineers.
+
+## Survey data, and ??? for worlds nobody has visited
+
+Each world in `planetData.js` has `yearDays` (days to orbit its star) and
+`facts`: `dayHours`, `temperatureC`, `humidityPct`, `gravityG`, `atmosphere`,
+`moons`. They show in the dossier alongside the year progress ("Year 1, day 8").
+The numbers are invented to fit each world's description and its habitat model
+entry, so edit them freely.
+
+The party only knows what it has visited:
+
+- `visited_worlds` table. A world is added when the party lands (or is
+  teleported) there; the world the party is on always counts, even in a campaign
+  that predates tracking. `GET /api/travel` returns `visited`.
+- For an **unvisited** world the console keeps the name, the cluster and the
+  distance / travel time (you can still plot a course) but shows **???** for the
+  picture, description and every fact, and draws the world as a dashed wireframe
+  on the map. A cluster's lore stays hidden until one of its worlds has been
+  visited.
+- The DM sees everything, with a note on worlds players still see as ???, and
+  can **Reveal to players** / **Hide from players** (`POST /api/travel/visited`,
+  DM only; the world the party is on can't be hidden).
+- This is a display rule, not a secret: the text and image paths still ship in
+  the client bundle, as the pre-reveal copy elsewhere in the app does.
+
+## The starting ship
+
+A brand-new database is seeded with **The Traveler**, the ship the DM built:
+`server/src/seedDefaultShip.js` reads `server/src/seed/default-ship.json` (name,
+speed 50, 12 slots, all 12 compartments with their positions, statuses and
+build numbers) and `default-ship.jpg` (the deck plan), inserts it and makes it
+the active ship. It runs once: `campaign_settings.default_ship_seeded` is set
+even when nothing was inserted, so an existing campaign, or a DM who deletes
+every ship, never gets it back.
+
+The DM's three custom compartments (Pub, Bathroom, Lexical Graft) are built-in
+templates now, and the ship's compartments point at their built-in keys
+(`pub`, `bathroom`, `lexical-graft`). To change the starting ship, edit that
+JSON and image. It only affects databases created afterwards.

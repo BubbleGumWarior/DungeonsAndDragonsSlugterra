@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowsOutIcon, RocketLaunchIcon, XIcon } from "@phosphor-icons/react";
+import { ArrowsOutIcon, EyeIcon, EyeSlashIcon, RocketLaunchIcon, XIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import { CLUSTERS, UNCLAIMED, PLANETS, planetImageUrl, starImageUrl } from "./planetData.js";
@@ -31,21 +31,33 @@ const LABEL_FONT_FRONT = 26;
 const LABEL_FONT_BACK = 9;
 const ROTATE_MS = 700;
 
+// The star field is laid out wider than the map itself, so a wide screen can
+// reveal more sky on either side of the clusters (the viewBox widens to the
+// screen's shape, see the `aspect` prop) without the stars thinning out.
+const STAR_X_MIN = -1100;
+const STAR_X_MAX = VIEW_W + 1100;
+
 // A fixed scatter of background stars -- generated once from a tiny seeded
 // PRNG so the field is stable across renders (no twinkle-jitter from
-// Math.random on every frame).
+// Math.random on every frame). Most are faint pinpricks; a few are bright and
+// slightly warm or cool.
+const STAR_TINTS = ["#cdd6ff", "#cdd6ff", "#cdd6ff", "#ffe9c4", "#e4ecff"];
 function starField(count) {
   let seed = 20260909;
   const rand = () => {
     seed = (seed * 1664525 + 1013904223) % 4294967296;
     return seed / 4294967296;
   };
-  return Array.from({ length: count }, () => ({
-    x: rand() * VIEW_W,
-    y: rand() * VIEW_H,
-    r: 0.4 + rand() * 1.1,
-    o: 0.2 + rand() * 0.6,
-  }));
+  return Array.from({ length: count }, () => {
+    const bright = rand() < 0.07;
+    return {
+      x: STAR_X_MIN + rand() * (STAR_X_MAX - STAR_X_MIN),
+      y: rand() * VIEW_H,
+      r: bright ? 1.2 + rand() * 0.9 : 0.35 + rand() * 0.9,
+      o: bright ? 0.75 + rand() * 0.25 : 0.2 + rand() * 0.6,
+      c: STAR_TINTS[Math.floor(rand() * STAR_TINTS.length)],
+    };
+  });
 }
 
 // The Threshold isn't a planet -- it's a graveyard of derelict hulls, so it
@@ -84,12 +96,23 @@ function debrisField(radius, count) {
   });
 }
 
-function planetPos(planet, tSec) {
-  const angle = (planet.phaseDeg * Math.PI) / 180 + (tSec / planet.periodSec) * Math.PI * 2;
+// A world's spot on its orbit for a given campaign day. Nothing moves on its
+// own: on day 1 a world sits at phaseDeg, and it goes once round every
+// `yearDays` days, so a long rest nudges it 360 / yearDays degrees along.
+function planetPos(planet, day) {
+  const angle = (planet.phaseDeg * Math.PI) / 180 + ((day - 1) / planet.yearDays) * Math.PI * 2;
   return {
     x: planet.orbitRx * Math.cos(angle),
     y: planet.orbitRy * Math.sin(angle),
   };
+}
+
+// Where the survey data says "year 3, day 12 of 62" -- how far through its
+// current year a world is on a given day.
+export function yearProgress(planet, day) {
+  if (!planet.yearDays) return null;
+  const elapsed = Math.max(0, day - 1);
+  return { year: Math.floor(elapsed / planet.yearDays) + 1, dayOfYear: (elapsed % planet.yearDays) + 1 };
 }
 
 // Wrap a delta angle to (-180, 180] so a rotation always takes the shorter way round.
@@ -106,14 +129,15 @@ function easeInOutCubic(t) {
 
 // Where a cluster's angle on the ring places it: position, apparent scale
 // (front = big, back = small), and opacity (back slots are dimmed for depth).
-function clusterSlot(angleDeg) {
+function clusterSlot(angleDeg, ringRx = RING_RX, look = {}) {
+  const { ringCy = RING_CY, frontScale = SCALE_FRONT, backScale = SCALE_BACK, backOpacity = OPACITY_BACK } = look;
   const rad = (angleDeg * Math.PI) / 180;
   const depth = (Math.sin(rad) + 1) / 2; // 0 = back, 1 = front
   return {
-    x: RING_CX + RING_RX * Math.cos(rad),
-    y: RING_CY + RING_RY * Math.sin(rad),
-    scale: SCALE_BACK + (SCALE_FRONT - SCALE_BACK) * depth,
-    opacity: OPACITY_BACK + (1 - OPACITY_BACK) * depth,
+    x: RING_CX + ringRx * Math.cos(rad),
+    y: ringCy + RING_RY * Math.sin(rad),
+    scale: backScale + (frontScale - backScale) * depth,
+    opacity: backOpacity + (1 - backOpacity) * depth,
     depth,
   };
 }
@@ -130,9 +154,12 @@ function locateFlatIndex(flatIndex) {
   return { clusterIndex: -1, worldIndex: 0 };
 }
 
-function ClusterStar({ starType, tSec }) {
+// Stars are as still as the worlds: the binary pair and the accretion disc
+// only turn as the campaign day does (`clock` is the day, fractional while
+// the map is catching up after a rest).
+function ClusterStar({ starType, clock }) {
   if (starType === "binary") {
-    const angle = (tSec / 34) * Math.PI * 2;
+    const angle = (clock / 12) * Math.PI * 2;
     const off = 28;
     const stars = [
       { cx: off * Math.cos(angle), cy: off * Math.sin(angle) * 0.55, r: 23 },
@@ -148,8 +175,7 @@ function ClusterStar({ starType, tSec }) {
     );
   }
   if (starType === "black-hole") {
-    const spin = (tSec / 20) % 360;
-    const discRotate = 18 + spin * 0.05;
+    const discRotate = 18 + (clock % 90) * 0.4;
     const discRx = 80;
     const discRy = 22;
     return (
@@ -207,12 +233,12 @@ function DetailImage({ src, alt }) {
     <>
       <button
         type="button"
-        className="galaxy-detail-image-btn"
+        className="holo-image-btn"
         aria-label={`View ${alt} full screen`}
         onClick={() => setFullscreen(true)}
       >
-        <img className="galaxy-detail-image" src={src} alt={alt} onError={() => setFailed(true)} />
-        <span className="galaxy-detail-image-hint" aria-hidden="true">
+        <img className="holo-image" src={src} alt={alt} onError={() => setFailed(true)} />
+        <span className="holo-image-hint" aria-hidden="true">
           <ArrowsOutIcon weight="bold" />
         </span>
       </button>
@@ -242,61 +268,240 @@ function DetailImage({ src, alt }) {
   );
 }
 
-export default function GalaxyMap({ isDungeonMaster = false }) {
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+// A survey value, or ??? while the party has never been there.
+function Fact({ label, value }) {
+  const unknown = value == null;
+  return (
+    <div className={`holo-fact ${unknown ? "holo-fact--unknown" : ""}`}>
+      <dt>{label}</dt>
+      <dd>{unknown ? "???" : value}</dd>
+    </div>
+  );
+}
+
+// The world's dossier: picture, name, survey facts and what the party can do
+// about it. Everything the party hasn't surveyed reads ???, but the name and
+// the distance stay, since you can still plot a course to a world you haven't seen.
+function Dossier({
+  detail,
+  travel,
+  travelBusy,
+  travelAct,
+  isDungeonMaster,
+  partyFlatIndex,
+  sendPartyHere,
+  sending,
+  error,
+  onClose,
+}) {
+  const planet = detail.planet;
+  const facts = detail.known ? planet?.facts : null;
+  const here = detail.flatIndex === partyFlatIndex;
+  const canPropose =
+    Boolean(travel) && !travel.traveling && !travel.proposal && Boolean(travel.ship) && travel.navReady && !here;
+
+  let proposeLabel = "Plot a course here";
+  if (here) proposeLabel = "The party is here";
+  else if (travel?.traveling) proposeLabel = "The ship is under way";
+  else if (travel?.proposal) proposeLabel = "A vote is already open";
+  else if (!travel?.ship) proposeLabel = "No ship to travel in";
+  else if (!travel.navReady) proposeLabel = "The Nav Computer is offline";
+
+  return (
+    <aside className="holo-dossier" aria-label={`${detail.name} survey`}>
+      <button type="button" className="holo-dossier-close" aria-label="Close" onClick={onClose}>
+        <XIcon weight="bold" />
+      </button>
+
+      {detail.known ? (
+        <DetailImage key={detail.image} src={detail.image} alt={detail.name} />
+      ) : (
+        <div className="holo-image holo-image--unknown" role="img" aria-label="No survey picture yet">
+          <span>???</span>
+        </div>
+      )}
+
+      <h2 className="holo-dossier-name" style={detail.color && detail.known ? { color: detail.color } : undefined}>
+        {detail.name}
+      </h2>
+      <p className="holo-dossier-where">
+        {detail.where ?? "???"}
+        {here && " · the party is here"}
+      </p>
+      {isDungeonMaster && detail.type === "planet" && !detail.playersKnow && (
+        <p className="holo-dm-note">Players still see this world as ???.</p>
+      )}
+
+      <p className={`holo-dossier-body ${detail.known ? "" : "holo-dossier-body--unknown"}`}>
+        {detail.known ? detail.body : "???"}
+      </p>
+
+      {detail.type === "planet" && (
+        <dl className="holo-facts">
+          <Fact
+            label="Year"
+            value={detail.known ? (planet.yearDays ? `${planet.yearDays} days` : "None, it only drifts") : null}
+          />
+          <Fact
+            label="Today"
+            value={
+              detail.known
+                ? detail.progress
+                  ? `Year ${detail.progress.year}, day ${detail.progress.dayOfYear}`
+                  : "Adrift"
+                : null
+            }
+          />
+          <Fact label="Day length" value={facts ? (facts.dayHours ? `${facts.dayHours} hours` : "None") : null} />
+          <Fact label="Temperature" value={facts ? `${facts.temperatureC} °C` : null} />
+          <Fact label="Humidity" value={facts ? `${facts.humidityPct}%` : null} />
+          <Fact label="Gravity" value={facts ? `${facts.gravityG} g` : null} />
+          <Fact label="Atmosphere" value={facts ? facts.atmosphere : null} />
+          <Fact label="Moons" value={facts ? facts.moons : null} />
+        </dl>
+      )}
+
+      {detail.type === "planet" && !here && detail.route && (
+        <p className="holo-route">
+          {detail.route.distance} units away. <strong>{plural(detail.route.days, "day")}</strong> at speed{" "}
+          {travel.ship?.effective ?? "?"}.
+        </p>
+      )}
+
+      {detail.type === "planet" && (
+        <div className="holo-actions">
+          <button
+            type="button"
+            className="holo-btn holo-btn--primary"
+            disabled={travelBusy || !canPropose}
+            onClick={() => travelAct("propose", { area: detail.flatIndex })}
+          >
+            <RocketLaunchIcon weight="bold" />
+            {proposeLabel}
+          </button>
+
+          {isDungeonMaster && (
+            <>
+              <button
+                type="button"
+                className="holo-btn"
+                disabled={travelBusy || !travel || travel.traveling || !travel.ship || here}
+                onClick={() => travelAct("depart", { area: detail.flatIndex })}
+              >
+                Launch there now, no vote
+              </button>
+              <button type="button" className="holo-btn" disabled={sending || here} onClick={() => sendPartyHere(detail.flatIndex)}>
+                Teleport the party here
+              </button>
+              {!here && (
+                <button
+                  type="button"
+                  className="holo-btn"
+                  disabled={travelBusy}
+                  onClick={() => travelAct("visited", { area: detail.flatIndex, visited: !detail.playersKnow })}
+                >
+                  {detail.playersKnow ? <EyeSlashIcon weight="bold" /> : <EyeIcon weight="bold" />}
+                  {detail.playersKnow ? "Hide from players (???)" : "Reveal to players"}
+                </button>
+              )}
+            </>
+          )}
+          {error && <p className="holo-error">{error}</p>}
+        </div>
+      )}
+    </aside>
+  );
+}
+
+// The star map itself. `travel` / `travelAct` come from the nav console, which
+// owns the one useTravel() subscription for the whole screen.
+export default function GalaxyMap({
+  travel,
+  travelAct,
+  travelBusy = false,
+  isDungeonMaster = false,
+  dossierHost = null,
+  aspect = VIEW_W / VIEW_H, // width / height the map is drawn at; wider shows more sky
+  look = {}, // { ringCy, frontScale, backScale }: how big and how high the clusters sit
+  visibleShare = 1, // how much of the map's width is actually on screen (the rest is cropped)
+}) {
   const { token } = useAuth();
   const { slugHuntArea } = useLiveState();
   const partyFlatIndex = Math.min(Math.max(slugHuntArea ?? 0, 0), PLANETS.length - 1);
   const party = locateFlatIndex(partyFlatIndex);
+  // The world the ship is flying to, or the one being voted on -- ringed on the map.
+  const targetFlatIndex = travel?.traveling ? travel.destination : travel?.proposal?.area ?? null;
 
-  const stars = useMemo(() => starField(140), []);
+  // What the party has surveyed. The DM sees everything (and which worlds the
+  // players still see as ???).
+  const visited = useMemo(() => new Set(travel?.visited ?? []), [travel?.visited]);
+  const clusterFlatBase = (ci) => CLUSTERS.slice(0, ci).reduce((sum, c) => sum + c.worlds.length, 0);
+  const isKnown = (flatIndex) => isDungeonMaster || visited.has(flatIndex);
+  const isClusterKnown = (ci) =>
+    isDungeonMaster || CLUSTERS[ci].worlds.some((_, wi) => visited.has(clusterFlatBase(ci) + wi));
+
+  const stars = useMemo(() => starField(1100), []);
   const debris = useMemo(() => debrisField(UNCLAIMED.worlds[0].sizeR, 11), []);
   const reduceMotion = useMemo(
     () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches,
     []
   );
 
-  // Seconds of orbital time elapsed -- drives every planet's (and star's)
-  // position, and doubles as the driver for the ring-rotation tween below.
-  // Frozen at 0 when the viewer prefers reduced motion.
-  const [tSec, setTSec] = useState(0);
-  const rafRef = useRef(null);
-  const startRef = useRef(null);
+  // The campaign day the map is showing. Worlds only move when the day does:
+  // after a long rest it catches up from the old day to the new one over a
+  // couple of seconds, so you watch every world sweep along its orbit by
+  // exactly one day's worth. Nothing animates between rests.
+  const targetDay = travel?.day ?? 1;
+  const [clock, setClock] = useState(targetDay);
+  const clockRef = useRef(clock);
+  clockRef.current = clock;
+  useEffect(() => {
+    const from = clockRef.current;
+    if (reduceMotion || Math.abs(targetDay - from) < 0.001) {
+      setClock(targetDay);
+      return undefined;
+    }
+    const duration = Math.min(3200, 1000 + Math.abs(targetDay - from) * 350);
+    let raf;
+    let startTs = null;
+    function frame(ts) {
+      if (startTs == null) startTs = ts;
+      const t = Math.min(1, (ts - startTs) / duration);
+      setClock(from + (targetDay - from) * easeInOutCubic(t));
+      if (t < 1) raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, [targetDay, reduceMotion]);
 
   const [focusedCluster, setFocusedCluster] = useState(0);
   const [clusterAngles, setClusterAngles] = useState([FRONT_ANGLE, FRONT_ANGLE + 120, FRONT_ANGLE + 240]);
-  const rotationRef = useRef(null); // { start, target, startTs, duration }
+  const rotationRaf = useRef(null);
+  useEffect(() => () => cancelAnimationFrame(rotationRaf.current), []);
 
-  useEffect(() => {
-    if (reduceMotion) return undefined;
-    function frame(ts) {
-      if (startRef.current == null) startRef.current = ts;
-      setTSec((ts - startRef.current) / 1000);
-
-      const anim = rotationRef.current;
-      if (anim) {
-        if (anim.startTs == null) anim.startTs = ts;
-        const t = Math.min(1, (ts - anim.startTs) / anim.duration);
-        const eased = easeInOutCubic(t);
-        setClusterAngles(anim.start.map((a, i) => a + (anim.target[i] - a) * eased));
-        if (t >= 1) rotationRef.current = null;
-      }
-
-      rafRef.current = requestAnimationFrame(frame);
-    }
-    rafRef.current = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [reduceMotion]);
-
+  // Rotating the ring is the one animation that follows a click.
   function focusCluster(clusterIndex) {
     if (clusterIndex === focusedCluster) return;
     setFocusedCluster(clusterIndex);
-    const delta = normalizeDelta(FRONT_ANGLE - clusterAngles[clusterIndex]);
-    const target = clusterAngles.map((a) => a + delta);
+    const start = clusterAngles;
+    const delta = normalizeDelta(FRONT_ANGLE - start[clusterIndex]);
+    const target = start.map((a) => a + delta);
+    cancelAnimationFrame(rotationRaf.current);
     if (reduceMotion) {
       setClusterAngles(target);
-    } else {
-      rotationRef.current = { start: clusterAngles, target, startTs: null, duration: ROTATE_MS };
+      return;
     }
+    let startTs = null;
+    function frame(ts) {
+      if (startTs == null) startTs = ts;
+      const t = Math.min(1, (ts - startTs) / ROTATE_MS);
+      const eased = easeInOutCubic(t);
+      setClusterAngles(start.map((a, i) => a + (target[i] - a) * eased));
+      if (t < 1) rotationRaf.current = requestAnimationFrame(frame);
+    }
+    rotationRaf.current = requestAnimationFrame(frame);
   }
 
   // selected is either a flat-planet detail ({ type: "planet", flatIndex })
@@ -305,6 +510,7 @@ export default function GalaxyMap({ isDungeonMaster = false }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
 
+  // The DM's teleport: skips the voyage (and cancels any under way).
   async function sendPartyHere(flatIndex) {
     setSending(true);
     setError(null);
@@ -327,15 +533,27 @@ export default function GalaxyMap({ isDungeonMaster = false }) {
   }
 
   const threshold = UNCLAIMED.worlds[0];
+  // The Threshold has no year; it wanders slowly between the clusters.
+  // It sits above the front cluster's outer orbits; when the clusters are drawn
+  // larger and lifted (`look`), it rides higher so it stays clear of their rings.
+  const thresholdBaseY = 150 - (RING_CY - (look.ringCy ?? RING_CY)) * 0.8;
   const thresholdPos = {
-    x: RING_CX + 30 * Math.sin(tSec / 43),
-    y: 145 + 18 * Math.cos(tSec / 57),
+    x: RING_CX + 30 * Math.sin((clock * Math.PI * 2) / 120),
+    y: thresholdBaseY + 14 * Math.cos((clock * Math.PI * 2) / 170),
   };
   const thresholdFlatIndex = PLANETS.length - 1;
   const thresholdIsParty = party.clusterIndex === -1;
 
+  // On a wide screen the ring opens up: the two background clusters sit out
+  // toward the edges instead of crowding the one in front.
+  const wideRx = RING_RX + Math.max(0, VIEW_H * aspect - VIEW_W) * 0.4;
+  // ...but never past the edge of what is on screen: a background cluster is
+  // about 90 units across, so keep its centre that far plus a margin inside.
+  const onScreenRx = (VIEW_H * aspect * visibleShare) / 2 - 150;
+  const ringRx = Math.max(RING_RX, Math.min(wideRx, onScreenRx));
+
   const clusterOrder = CLUSTERS.map((_, i) => i).sort(
-    (a, b) => clusterSlot(clusterAngles[a]).depth - clusterSlot(clusterAngles[b]).depth
+    (a, b) => clusterSlot(clusterAngles[a], ringRx, look).depth - clusterSlot(clusterAngles[b], ringRx, look).depth
   );
 
   let selectedDetail = null;
@@ -343,36 +561,58 @@ export default function GalaxyMap({ isDungeonMaster = false }) {
     const p = PLANETS[selected.flatIndex];
     const loc = locateFlatIndex(selected.flatIndex);
     selectedDetail = {
-      kicker:
-        selected.flatIndex === partyFlatIndex
-          ? "Party is here"
-          : loc.clusterIndex === -1
-          ? "Unclaimed Space"
-          : `${CLUSTERS[loc.clusterIndex].name} — world ${loc.worldIndex + 1} of ${CLUSTERS[loc.clusterIndex].worlds.length}`,
+      type: "planet",
       name: p.name,
       color: p.color,
+      planet: p,
+      known: isKnown(selected.flatIndex),
+      playersKnow: visited.has(selected.flatIndex),
+      where:
+        loc.clusterIndex === -1
+          ? "Unclaimed Space"
+          : `${CLUSTERS[loc.clusterIndex].name} · world ${loc.worldIndex + 1} of ${CLUSTERS[loc.clusterIndex].worlds.length}`,
       body: p.blurb,
       image: planetImageUrl(p.name),
-      canSend: true,
+      progress: yearProgress(p, targetDay),
       flatIndex: selected.flatIndex,
+      route: travel?.routes?.find((r) => r.area === selected.flatIndex) ?? null,
     };
   } else if (selected?.type === "cluster") {
     const c = CLUSTERS[selected.clusterIndex];
     selectedDetail = {
-      kicker: c.subtitle ? `Orbiting ${c.subtitle}` : "Star system",
+      type: "cluster",
       name: c.name,
       color: null,
+      known: isClusterKnown(selected.clusterIndex),
+      where: c.subtitle ? `Orbiting ${c.subtitle}` : "Star system",
       body: c.blurb,
       image: starImageUrl(c.key),
-      canSend: false,
     };
   }
 
+  // The console gives the dossier a host outside the tilted projection so it
+  // stays flat and readable; elsewhere it just sits in the map's own box.
+  const dossier = selectedDetail && (
+    <Dossier
+      detail={selectedDetail}
+      travel={travel}
+      travelBusy={travelBusy}
+      travelAct={travelAct}
+      isDungeonMaster={isDungeonMaster}
+      partyFlatIndex={partyFlatIndex}
+      sendPartyHere={sendPartyHere}
+      sending={sending}
+      error={error}
+      onClose={() => setSelected(null)}
+    />
+  );
+
   return (
     <div className="galaxy-wrap">
+      <div className="galaxy-stage">
       <svg
         className="galaxy-map"
-        viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+        viewBox={`${(VIEW_W - VIEW_H * aspect) / 2} 0 ${VIEW_H * aspect} ${VIEW_H}`}
         role="img"
         aria-label="Star map of the Three Clusters"
       >
@@ -431,16 +671,15 @@ export default function GalaxyMap({ isDungeonMaster = false }) {
           ))}
         </defs>
 
-        <rect x="0" y="0" width={VIEW_W} height={VIEW_H} fill="url(#galaxy-space)" />
         {stars.map((s, i) => (
-          <circle key={`star-${i}`} cx={s.x} cy={s.y} r={s.r} fill="#cdd6ff" opacity={s.o} />
+          <circle key={`star-${i}`} cx={s.x} cy={s.y} r={s.r} fill={s.c} opacity={s.o} />
         ))}
 
         {/* The Threshold -- unclaimed, drifts on its own, no cluster to belong to */}
         <g
           className={`galaxy-threshold ${thresholdIsParty ? "galaxy-planet--party" : ""} ${
-            selected?.type === "planet" && selected.flatIndex === thresholdFlatIndex ? "galaxy-planet--selected" : ""
-          }`}
+            targetFlatIndex === thresholdFlatIndex ? "galaxy-planet--target" : ""
+          } ${selected?.type === "planet" && selected.flatIndex === thresholdFlatIndex ? "galaxy-planet--selected" : ""}`}
           transform={`translate(${thresholdPos.x} ${thresholdPos.y})`}
           onClick={() => setSelected({ type: "planet", flatIndex: thresholdFlatIndex })}
           tabIndex={0}
@@ -453,11 +692,13 @@ export default function GalaxyMap({ isDungeonMaster = false }) {
             }
           }}
         >
-          {(thresholdIsParty || (selected?.type === "planet" && selected.flatIndex === thresholdFlatIndex)) && (
+          {(thresholdIsParty ||
+            targetFlatIndex === thresholdFlatIndex ||
+            (selected?.type === "planet" && selected.flatIndex === thresholdFlatIndex)) && (
             <circle className="galaxy-planet-ring" r={threshold.sizeR + 8} />
           )}
           <circle className="galaxy-planet-hit" r={Math.max(threshold.sizeR + 10, 18)} />
-          <g className="galaxy-threshold-debris" transform={`rotate(${(tSec / 45) % 360})`}>
+          <g className="galaxy-threshold-debris" transform={`rotate(${(clock * 3) % 360})`}>
             {debris.map((d, i) => (
               <rect
                 key={i}
@@ -490,7 +731,7 @@ export default function GalaxyMap({ isDungeonMaster = false }) {
         {/* The three clusters, drawn back-to-front so the focused one is on top */}
         {clusterOrder.map((ci) => {
           const cluster = CLUSTERS[ci];
-          const slot = clusterSlot(clusterAngles[ci]);
+          const slot = clusterSlot(clusterAngles[ci], ringRx, look);
           const isFocused = ci === focusedCluster;
           return (
             <g
@@ -539,20 +780,22 @@ export default function GalaxyMap({ isDungeonMaster = false }) {
                 const positioned = cluster.worlds.map((p, wi) => ({
                   p,
                   flatIndex: clusterFlatBase + wi,
-                  pos: planetPos(p, tSec),
+                  pos: planetPos(p, clock),
                 }));
                 const behind = positioned.filter((w) => w.pos.y < 0);
                 const front = positioned.filter((w) => w.pos.y >= 0);
 
                 const renderPlanet = ({ p, flatIndex, pos }) => {
                   const isParty = flatIndex === partyFlatIndex;
+                  const isTarget = flatIndex === targetFlatIndex;
                   const isSelected = selected?.type === "planet" && selected.flatIndex === flatIndex;
+                  const surveyed = visited.has(flatIndex);
                   return (
                     <g
                       key={p.name}
                       className={`galaxy-planet ${isParty ? "galaxy-planet--party" : ""} ${
-                        isSelected ? "galaxy-planet--selected" : ""
-                      }`}
+                        isTarget ? "galaxy-planet--target" : ""
+                      } ${isSelected ? "galaxy-planet--selected" : ""} ${surveyed ? "" : "galaxy-planet--unsurveyed"}`}
                       transform={`translate(${pos.x} ${pos.y})`}
                       onClick={
                         isFocused
@@ -577,9 +820,9 @@ export default function GalaxyMap({ isDungeonMaster = false }) {
                           : undefined
                       }
                     >
-                      {(isParty || isSelected) && <circle className="galaxy-planet-ring" r={p.sizeR + 8} />}
+                      {(isParty || isSelected || isTarget) && <circle className="galaxy-planet-ring" r={p.sizeR + 8} />}
                       <circle className="galaxy-planet-hit" r={Math.max(p.sizeR + 10, 18)} />
-                      <circle className="galaxy-planet-body" r={p.sizeR} style={{ fill: p.color }} />
+                      <circle className="galaxy-planet-body" r={p.sizeR} style={surveyed ? { fill: p.color } : undefined} />
                       <circle
                         className="galaxy-planet-shade"
                         r={p.sizeR}
@@ -611,7 +854,7 @@ export default function GalaxyMap({ isDungeonMaster = false }) {
                           : undefined
                       }
                     >
-                      <ClusterStar starType={cluster.starType} tSec={tSec} />
+                      <ClusterStar starType={cluster.starType} clock={clock} />
                     </g>
                     {front.map(renderPlanet)}
                   </>
@@ -626,9 +869,9 @@ export default function GalaxyMap({ isDungeonMaster = false }) {
             themselves -- the focused one drifts to center and grows, the
             other two settle to the sides and shrink. */}
         {CLUSTERS.map((cluster, ci) => {
-          const slot = clusterSlot(clusterAngles[ci]);
+          const slot = clusterSlot(clusterAngles[ci], ringRx, look);
           const rad = (clusterAngles[ci] * Math.PI) / 180;
-          const x = RING_CX + LABEL_SPREAD_X * Math.cos(rad);
+          const x = RING_CX + (ringRx + (LABEL_SPREAD_X - RING_RX)) * Math.cos(rad);
           const fontSize = LABEL_FONT_BACK + (LABEL_FONT_FRONT - LABEL_FONT_BACK) * slot.depth;
           const isFocused = ci === focusedCluster;
           return (
@@ -659,39 +902,8 @@ export default function GalaxyMap({ isDungeonMaster = false }) {
         })}
       </svg>
 
-      {selectedDetail && (
-        <div className="galaxy-detail">
-          <button
-            type="button"
-            className="galaxy-detail-close"
-            aria-label="Close"
-            onClick={() => setSelected(null)}
-          >
-            <XIcon weight="bold" />
-          </button>
-          <DetailImage key={selectedDetail.image} src={selectedDetail.image} alt={selectedDetail.name} />
-          <p className="galaxy-detail-kicker">{selectedDetail.kicker}</p>
-          <h2 className="galaxy-detail-name" style={selectedDetail.color ? { color: selectedDetail.color } : undefined}>
-            {selectedDetail.name}
-          </h2>
-          <p className="galaxy-detail-body">{selectedDetail.body}</p>
-
-          {isDungeonMaster && selectedDetail.canSend && (
-            <div className="galaxy-detail-actions">
-              <button
-                type="button"
-                className="galaxy-jump-btn"
-                disabled={sending || selectedDetail.flatIndex === partyFlatIndex}
-                onClick={() => sendPartyHere(selectedDetail.flatIndex)}
-              >
-                <RocketLaunchIcon weight="bold" />
-                {selectedDetail.flatIndex === partyFlatIndex ? "Party already here" : "Send the party here"}
-              </button>
-              {error && <p className="galaxy-detail-error">{error}</p>}
-            </div>
-          )}
-        </div>
-      )}
+        {dossier && (dossierHost ? createPortal(dossier, dossierHost) : dossier)}
+      </div>
     </div>
   );
 }

@@ -453,6 +453,38 @@ async function seedDefaultBlasterModTemplates() {
   }
 }
 
+// The starter equipment catalog (Market / "assign" shortcut): three melee weapons, shields, ammo belts
+// and armor. Numbers are the benchmark set from scripts/combat-sim; prices stay derived
+// (marketRules.js defaultEquipmentPrice) because base_price is left null.
+const DEFAULT_EQUIPMENT_TEMPLATES = [
+  { kind: "melee", name: "Rapier", damage: 4, accuracy: 3, apCost: 1, reach: 80, meleeType: "pierce" },
+  { kind: "melee", name: "Longsword", damage: 6, accuracy: 1, apCost: 2, reach: 80, meleeType: "slash" },
+  { kind: "melee", name: "Mace", damage: 6, accuracy: 0, apCost: 3, reach: 80, meleeType: "bludgeon" },
+  { kind: "shield", name: "Buckler", absorb: 10 },
+  { kind: "shield", name: "Round Shield", absorb: 20 },
+  { kind: "shield", name: "Kite Shield", absorb: 30 },
+  { kind: "shield", name: "Tower Shield", absorb: 50 },
+  { kind: "ammo_belt", name: "Ammo Belt (+2)", extraSlots: 2 },
+  { kind: "ammo_belt", name: "Ammo Belt (+4)", extraSlots: 4 },
+  { kind: "armor", name: "Leather Armor", gritBonus: 8 },
+  { kind: "armor", name: "Chain Armor", gritBonus: 15 },
+  { kind: "armor", name: "Plate Armor", gritBonus: 25 },
+];
+
+// Idempotent per kind + name -- seeds the catalog on a fresh install and back-fills anything a
+// later release adds; never touches a row a DM has edited. A deleted entry comes back on the
+// next boot, same as the blaster mod catalog.
+async function seedDefaultEquipmentTemplates() {
+  for (const t of DEFAULT_EQUIPMENT_TEMPLATES) {
+    await pool.query(
+      `INSERT INTO equipment_templates (kind, name, damage, accuracy, ap_cost, reach, extra_slots, melee_type, absorb, grit_bonus)
+       SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+       WHERE NOT EXISTS (SELECT 1 FROM equipment_templates WHERE kind = $1 AND name = $2)`,
+      [t.kind, t.name, t.damage ?? 0, t.accuracy ?? 0, t.apCost ?? 2, t.reach ?? 80, t.extraSlots ?? 0, t.meleeType ?? "slash", t.absorb ?? 0, t.gritBonus ?? 0]
+    );
+  }
+}
+
 export async function initSchema() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -563,6 +595,72 @@ export async function initSchema() {
   `);
   await pool.query(`
     ALTER TABLE campaign_settings ADD COLUMN IF NOT EXISTS active_ship_id INTEGER REFERENCES ships(id) ON DELETE SET NULL;
+  `);
+
+  // Ship stats. `speed` is distance units covered per day of travel (a
+  // compartment's speed bonus stacks on top while it is online);
+  // `compartment_slots` caps how many compartment pins the deck plan can hold.
+  // Compartments themselves also carry templateKey / speedBonus / buildDays /
+  // progressDays / engineers inside the `compartments` JSON -- see shipRules.js.
+  await pool.query(`
+    ALTER TABLE ships ADD COLUMN IF NOT EXISTS speed INTEGER NOT NULL DEFAULT 5;
+    ALTER TABLE ships ADD COLUMN IF NOT EXISTS compartment_slots INTEGER NOT NULL DEFAULT 12;
+  `);
+
+  // Reusable compartments the DM has designed, alongside the built-in ones in
+  // shipRules.js. A compartment copies these fields when it is built, so
+  // deleting a template never changes a ship.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS compartment_templates (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      build_days INTEGER NOT NULL DEFAULT 3,
+      speed_bonus INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
+  // The campaign calendar and the party's voyage. A long rest is one day: it
+  // bumps `campaign_day`, counts `days_left` down while `traveling`, and moves
+  // compartment builds along (see travelService.js advanceDay). At most one
+  // destination proposal is open at a time, with a yes/no vote per player.
+  await pool.query(`
+    ALTER TABLE campaign_settings ADD COLUMN IF NOT EXISTS campaign_day INTEGER NOT NULL DEFAULT 1;
+    CREATE TABLE IF NOT EXISTS travel_state (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      traveling BOOLEAN NOT NULL DEFAULT false,
+      origin INTEGER,
+      destination INTEGER,
+      days_total INTEGER NOT NULL DEFAULT 0,
+      days_left INTEGER NOT NULL DEFAULT 0,
+      proposal_area INTEGER,
+      proposer_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      CONSTRAINT travel_single_row CHECK (id = 1)
+    );
+    INSERT INTO travel_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+    CREATE TABLE IF NOT EXISTS travel_votes (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      vote BOOLEAN NOT NULL
+    );
+  `);
+
+  // Set once the starting ship has been seeded (or skipped because ships
+  // already existed), so it is never re-created. See seedDefaultShip.js.
+  await pool.query(`
+    ALTER TABLE campaign_settings ADD COLUMN IF NOT EXISTS default_ship_seeded BOOLEAN NOT NULL DEFAULT false;
+  `);
+
+  // Worlds the party has set foot on. The nav console shows ??? for the name's
+  // survey data (details, picture, climate) until a world is in here: landing
+  // adds it, the world the party is on always counts, and the DM can reveal or
+  // hide one by hand. See travelService.js.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS visited_worlds (
+      area INTEGER PRIMARY KEY,
+      first_day INTEGER NOT NULL DEFAULT 1,
+      visited_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
   `);
 
   // A player's "Try Hunt" tally for this rest: `attempts` used so far (their
@@ -1237,6 +1335,7 @@ export async function initSchema() {
   await seedDefaultMechaModTemplates();
   await refreshSeededMechaMods();
   await seedDefaultBlasterModTemplates();
+  await seedDefaultEquipmentTemplates();
 
   // Self-heal / backfill: derive the terrain-mode flags on `mechas` from
   // whatever mod is equipped right now. Runs here -- after `mecha_mods` exists

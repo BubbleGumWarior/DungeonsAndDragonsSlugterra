@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { MoonStarsIcon, SkullIcon, StorefrontIcon, WarningIcon } from "@phosphor-icons/react";
+import {
+  MoonStarsIcon,
+  RocketLaunchIcon,
+  SkullIcon,
+  StorefrontIcon,
+  WarningIcon,
+  WrenchIcon,
+} from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
+import { PLANETS } from "./planetData.js";
 import { LOYALTY_TIER_LABELS } from "./slugData.js";
 import { FOOD_DRAIN_PER_REST } from "./careData.js";
 import "./LongRestOverlay.css";
@@ -41,6 +49,33 @@ function describeEvent(event, who) {
     default:
       return null;
   }
+}
+
+// The ship's news from the night: the voyage and any compartments that moved
+// on. Same for everyone, so it lives outside the per-player consequences.
+function shipNews(day) {
+  if (!day) return [];
+  const lines = [];
+  const world = (i) => PLANETS[i]?.name ?? "its destination";
+  if (day.travel?.status === "arrived") {
+    lines.push({ key: "arrived", icon: <RocketLaunchIcon weight="bold" />, text: `The ship has landed at ${world(day.travel.destination)}.` });
+  } else if (day.travel?.status === "underway") {
+    const left = day.travel.daysLeft;
+    lines.push({
+      key: "underway",
+      icon: <RocketLaunchIcon weight="bold" />,
+      text: `${left} ${left === 1 ? "day" : "days"} to ${world(day.travel.destination)}.`,
+    });
+  }
+  for (const b of day.builds || []) {
+    const text = b.completed
+      ? `${b.label || "A compartment"} is finished and online.`
+      : b.stalled
+      ? `${b.label || "A compartment"} is stalled: nobody is engineering it while the ship is under way.`
+      : `${b.label || "A compartment"}: ${b.progress} of ${b.buildDays} days built.`;
+    lines.push({ key: `build-${b.label}-${b.progress}`, icon: <WrenchIcon weight="bold" />, text });
+  }
+  return lines;
 }
 
 // The whole table sees the party go to sleep, once. A player is told what their
@@ -86,6 +121,7 @@ export default function LongRestOverlay() {
         .filter((r) => r.text)
     : [];
   const mood = shown?.marketMood;
+  const news = shown ? shipNews(shown.day) : [];
   const hasConsequences = rows.length > 0;
 
   useEffect(() => {
@@ -133,6 +169,14 @@ export default function LongRestOverlay() {
             ))}
           </ul>
         )}
+
+        {shown.day?.day != null && <p className="rest-sub">Day {shown.day.day}</p>}
+        {news.map((n) => (
+          <p key={n.key} className="rest-mood">
+            {n.icon}
+            <span>{n.text}</span>
+          </p>
+        ))}
 
         {isDM && mood && (
           <p className="rest-mood">

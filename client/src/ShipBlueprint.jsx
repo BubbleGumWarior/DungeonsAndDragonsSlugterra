@@ -7,11 +7,21 @@ import {
   TrashIcon,
   XIcon,
   CheckIcon,
+  GaugeIcon,
+  PlanetIcon,
+  WrenchIcon,
 } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import { downscaleImageFile } from "./imageDownscale.js";
+import { PLANETS } from "./planetData.js";
+import useTravel from "./useTravel.js";
+import NavConsole from "./NavConsole.jsx";
 import "./ShipBlueprint.css";
+
+// The compartment a ship needs to travel: its online Nav Computer opens the star
+// console (mirrors NAV_COMPUTER_KEY in server/src/shipRules.js).
+const NAV_COMPUTER_KEY = "nav-computer";
 
 function authHeaders(token, extra) {
   return { Authorization: `Bearer ${token}`, ...extra };
@@ -40,11 +50,86 @@ function statusMeta(status) {
   return STATUS_META[status] || STATUS_META.empty;
 }
 
-export default function ShipBlueprint({ isDungeonMaster = false }) {
-  const { token } = useAuth();
-  const { shipUpdate } = useLiveState();
+// Days built so far against days needed, plus the rule for how they accrue.
+function BuildProgress({ compartment }) {
+  const done = compartment.progressDays || 0;
+  const total = Math.max(1, compartment.buildDays || 1);
+  return (
+    <div className="ship-progress">
+      <div
+        className="ship-progress-bar"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-valuenow={done}
+      >
+        <span style={{ transform: `scaleX(${Math.min(1, done / total)})` }} />
+      </div>
+      <p className="ship-progress-text">
+        {done} of {total} days built. Each long rest adds a day while docked. Under way, a day is added for each
+        engineer working on it.
+      </p>
+    </div>
+  );
+}
 
-  const [ship, setShip] = useState(null); // { id, name, image, compartments }
+function Engineers({ compartment }) {
+  const crew = compartment.engineers || [];
+  return (
+    <p className="ship-progress-text">
+      {crew.length
+        ? `Engineering: ${crew.map((e) => e.name).join(", ")}`
+        : "No engineer assigned. It only moves forward while docked. Someone proficient in Survival can work on it."}
+    </p>
+  );
+}
+
+const worldName = (i) => PLANETS[i]?.name ?? "Unknown";
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+// A compartment pin as the server stores it. Build fields start empty; a
+// template (or the DM's own numbers) fills them in.
+function blankCompartment(xPct, yPct) {
+  return {
+    id: newCompartmentId(),
+    label: "New compartment",
+    description: "",
+    status: "empty",
+    xPct,
+    yPct,
+    templateKey: null,
+    speedBonus: 0,
+    buildDays: 0,
+    progressDays: 0,
+    engineers: [],
+  };
+}
+
+export default function ShipBlueprint({ isDungeonMaster = false }) {
+  const { token, user } = useAuth();
+  const { shipUpdate } = useLiveState();
+  const { travel } = useTravel();
+
+  const [ship, setShip] = useState(null); // { id, name, image, speed, compartmentSlots, compartments, ... }
+  const [templates, setTemplates] = useState({ defaults: [], custom: [] }); // DM only
+  const [engineerError, setEngineerError] = useState(null);
+  const [consoleOpen, setConsoleOpen] = useState(false); // the Nav Computer's star console
+  // The Deck Plan is a tablet in the player's hands. Stepping into the console
+  // drops it (it falls out of view as the room comes up around you); leaving
+  // picks it back up. "drop" holds while the console is open.
+  const [tabletPhase, setTabletPhase] = useState("idle"); // idle | drop | raise
+  const raiseTimer = useRef(null);
+  useEffect(() => () => clearTimeout(raiseTimer.current), []);
+  function openConsole() {
+    clearTimeout(raiseTimer.current);
+    setTabletPhase("drop");
+    setConsoleOpen(true);
+  }
+  function closeConsole() {
+    setConsoleOpen(false);
+    setTabletPhase("raise");
+    raiseTimer.current = setTimeout(() => setTabletPhase("idle"), 800);
+  }
   const shipRef = useRef(null);
   shipRef.current = ship;
   const [loading, setLoading] = useState(true);
@@ -115,6 +200,13 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
 
     let list = [];
     if (isDungeonMaster) {
+      try {
+        const res = await fetch("/api/ships/templates", { headers: authHeaders(token) });
+        const data = await res.json();
+        if (res.ok) setTemplates({ defaults: data.defaults || [], custom: data.custom || [] });
+      } catch {
+        /* non-fatal -- the template picker just stays empty */
+      }
       try {
         const res = await fetch("/api/ships", { headers: authHeaders(token) });
         const data = await res.json();
@@ -238,7 +330,7 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
   function handleStageClick(e) {
     if (!placing || !ship) return;
     const { xPct, yPct } = stagePct(e.clientX, e.clientY);
-    const comp = { id: newCompartmentId(), label: "New compartment", description: "", status: "empty", xPct, yPct };
+    const comp = blankCompartment(xPct, yPct);
     const next = [...(ship.compartments || []), comp];
     saveCompartments(next);
     setSelectedId(comp.id);
@@ -299,13 +391,108 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
     saveCompartments(next);
   }
 
+  // Change one compartment's fields and save straight away (selects and
+  // buttons have no blur step to commit on).
+  function patchSelectedNow(patch) {
+    const next = (shipRef.current?.compartments || []).map((c) => (c.id === selectedId ? { ...c, ...patch } : c));
+    saveCompartments(next);
+  }
+
+  // Fill the selected pin from a built-in or custom template.
+  function applyTemplate(key) {
+    if (!key) return patchSelectedNow({ templateKey: null });
+    const t = [...templates.defaults, ...templates.custom].find((x) => x.key === key);
+    if (!t) return;
+    patchSelectedNow({
+      templateKey: t.key,
+      label: t.name,
+      description: t.description,
+      buildDays: t.buildDays,
+      speedBonus: t.speedBonus,
+    });
+  }
+
+  async function saveAsTemplate() {
+    const c = shipRef.current?.compartments.find((x) => x.id === selectedId);
+    if (!c) return;
+    try {
+      const res = await fetch("/api/ships/templates", {
+        method: "POST",
+        headers: authHeaders(token, { "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          name: c.label,
+          description: c.description,
+          buildDays: c.buildDays || 3,
+          speedBonus: c.speedBonus || 0,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not save the template.");
+      setTemplates((t) => ({ ...t, custom: [...t.custom, data.template] }));
+      patchSelectedNow({ templateKey: data.template.key });
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function deleteTemplate(key) {
+    const t = templates.custom.find((x) => x.key === key);
+    if (!t) return;
+    try {
+      await fetch(`/api/ships/templates/${t.id}`, { method: "DELETE", headers: authHeaders(token) });
+      setTemplates((cur) => ({ ...cur, custom: cur.custom.filter((x) => x.key !== key) }));
+      patchSelectedNow({ templateKey: null });
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  // Sign on (or off) as the engineer for the open compartment.
+  async function setEngineering(compartmentId) {
+    setEngineerError(null);
+    try {
+      const res = await fetch("/api/ships/engineer", {
+        method: "POST",
+        headers: authHeaders(token, { "Content-Type": "application/json" }),
+        body: JSON.stringify({ compartmentId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not update your assignment.");
+    } catch (err) {
+      setEngineerError(err.message);
+    }
+  }
+
+  async function saveShipStat(patch) {
+    try {
+      const updated = await patchShip(ship.id, patch);
+      setShip((s) => (s ? { ...s, ...updated, image: s.image } : s));
+    } catch (err) {
+      setError(err.message);
+      refresh();
+    }
+  }
+
   if (loading) return <p className="ship-empty">Loading the deck plan…</p>;
 
   const selected = ship?.compartments?.find((c) => c.id === selectedId) || null;
   const compartments = ship?.compartments || [];
+  const navComputer = compartments.find((c) => c.templateKey === NAV_COMPUTER_KEY) || null;
+  const navReady = compartments.some((c) => c.templateKey === NAV_COMPUTER_KEY && c.status === "online");
+  const isNavPin = (c) => c.templateKey === NAV_COMPUTER_KEY;
 
   return (
     <div className="ship-wrap">
+      <div className="tablet-stage">
+        <div
+          className={`tablet ${tabletPhase === "drop" ? "tablet--drop" : tabletPhase === "raise" ? "tablet--raise" : ""}`}
+        >
+          <span className="tablet-camera" aria-hidden="true" />
+          <div className="tablet-screen">
+            <div className="tablet-status">
+              <span>{ship?.name ?? "Crew tablet"}</span>
+              <span>{travel ? `Day ${travel.day}` : ""}</span>
+            </div>
       {isDungeonMaster && (
         <div className="ship-toolbar">
           <label className="ship-toolbar-field">
@@ -359,9 +546,17 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
                 type="button"
                 className={`ship-btn ${placing ? "ship-btn--on" : ""}`}
                 onClick={() => setPlacing((v) => !v)}
-                disabled={!ship.image}
+                disabled={!ship.image || (ship.compartments?.length ?? 0) >= (ship.compartmentSlots ?? 12)}
+                title={
+                  (ship.compartments?.length ?? 0) >= (ship.compartmentSlots ?? 12)
+                    ? "Every compartment slot is used. Raise the slot count to add more."
+                    : undefined
+                }
               >
                 <MapPinSimpleIcon weight="bold" /> {placing ? "Click the plan…" : "Add compartment"}
+              </button>
+              <button type="button" className="ship-btn" onClick={openConsole}>
+                <PlanetIcon weight="bold" /> Open the star console
               </button>
               {ships.find((s) => s.id === viewShipId && !s.isActive) && (
                 <button type="button" className="ship-btn ship-btn--primary" onClick={() => activateShip(ship.id)}>
@@ -376,6 +571,84 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
 
       {uploadError && <p className="ship-error">{uploadError}</p>}
       {error && <p className="ship-error">{error}</p>}
+
+      {ship && (
+        <section className="ship-stats" aria-label="Ship stats">
+          <div className="ship-stat">
+            <span className="ship-stat-label">
+              <GaugeIcon weight="bold" /> Travel speed
+            </span>
+            <span className="ship-stat-value">
+              {ship.speedStats?.effective ?? ship.speed}
+              <small> units a day</small>
+            </span>
+            <span className="ship-stat-note">
+              {isDungeonMaster ? (
+                <label className="ship-stat-edit">
+                  Base
+                  <input
+                    type="number"
+                    min={1}
+                    max={99}
+                    value={ship.speed}
+                    onChange={(e) => setShip((s) => ({ ...s, speed: Number(e.target.value) }))}
+                    onBlur={() => saveShipStat({ speed: ship.speed })}
+                  />
+                </label>
+              ) : (
+                <>Base {ship.speed}</>
+              )}
+              {ship.speedStats?.bonus
+                ? ` ${ship.speedStats.bonus > 0 ? "+" : "−"} ${Math.abs(ship.speedStats.bonus)} from online compartments`
+                : " · no compartment bonuses yet"}
+            </span>
+          </div>
+
+          <div className="ship-stat">
+            <span className="ship-stat-label">Compartments</span>
+            <span className="ship-stat-value">
+              {compartments.filter((c) => c.status === "online").length}
+              <small> online</small>
+            </span>
+            <span className="ship-stat-note">
+              {compartments.length} placed of{" "}
+              {isDungeonMaster ? (
+                <label className="ship-stat-edit">
+                  <input
+                    type="number"
+                    min={0}
+                    max={60}
+                    value={ship.compartmentSlots}
+                    onChange={(e) => setShip((s) => ({ ...s, compartmentSlots: Number(e.target.value) }))}
+                    onBlur={() => saveShipStat({ compartmentSlots: ship.compartmentSlots })}
+                  />
+                </label>
+              ) : (
+                ship.compartmentSlots
+              )}{" "}
+              slots
+              {compartments.some((c) => c.status === "building") &&
+                ` · ${compartments.filter((c) => c.status === "building").length} being built`}
+            </span>
+          </div>
+
+          <div className="ship-stat">
+            <span className="ship-stat-label">Voyage</span>
+            <span className="ship-stat-value">{travel ? `Day ${travel.day}` : "…"}</span>
+            <span className="ship-stat-note">
+              {travel?.traveling
+                ? `Under way to ${worldName(travel.destination)}, ${plural(travel.daysLeft, "day")} left`
+                : travel
+                ? `Docked at ${worldName(travel.area)}`
+                : ""}
+              {!navReady &&
+                (isDungeonMaster
+                  ? ". No working Nav Computer, so the ship can't travel."
+                  : ". The Nav Computer isn't working, so the ship can't travel.")}
+            </span>
+          </div>
+        </section>
+      )}
 
       {!ship ? (
         <div className="ship-empty-card">
@@ -405,13 +678,16 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
             <img className="ship-plan-img" src={ship.image} alt={`${ship.name} deck plan`} draggable={false} />
             {compartments.map((c) => {
               const status = STATUS_META[c.status] ? c.status : "empty";
+              const navOnline = isNavPin(c) && status === "online";
               return (
                 <button
                   key={c.id}
                   type="button"
-                  className={`ship-node ship-node--${status} ${c.id === selectedId ? "ship-node--selected" : ""}`}
+                  className={`ship-node ship-node--${status} ${c.id === selectedId ? "ship-node--selected" : ""} ${navOnline ? "ship-node--nav" : ""}`}
                   style={{ left: `${c.xPct}%`, top: `${c.yPct}%`, "--flag": statusMeta(status).color }}
-                  title={`${c.label} · ${statusMeta(status).label}`}
+                  title={`${c.label} · ${statusMeta(status).label}${
+                    status === "building" ? ` ${c.progressDays || 0}/${c.buildDays} days` : ""
+                  }${isNavPin(c) && status === "online" ? " · click to enter the star console" : ""}`}
                   onMouseDown={(e) => handleNodeMouseDown(e, c)}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -419,11 +695,22 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
                       justDraggedRef.current = false;
                       return;
                     }
+                    // A working Nav Computer is a door, not a pin: players
+                    // step straight into the console. (The DM selects it to edit
+                    // it, and has an Enter button in the panel.)
+                    if (isNavPin(c) && status === "online" && !isDungeonMaster) {
+                      openConsole();
+                      return;
+                    }
                     setSelectedId(c.id);
                   }}
                 >
-                  <span className="ship-node-dot" />
-                  <span className="ship-node-hint">{c.label}</span>
+                  <span className="ship-node-dot">{navOnline && <PlanetIcon weight="fill" />}</span>
+                  {navOnline ? (
+                    <span className="ship-node-nav-tag">Star console</span>
+                  ) : (
+                    <span className="ship-node-hint">{c.label}</span>
+                  )}
                 </button>
               );
             })}
@@ -485,6 +772,99 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
                   onBlur={commitSelected}
                 />
               </label>
+
+              <div className="ship-build">
+                <h3 className="ship-build-title">
+                  <WrenchIcon weight="bold" /> Build
+                </h3>
+                <label className="ship-detail-field">
+                  Template
+                  <select value={selected.templateKey || ""} onChange={(e) => applyTemplate(e.target.value)}>
+                    <option value="">Custom</option>
+                    <optgroup label="Standard">
+                      {templates.defaults.map((t) => (
+                        <option key={t.key} value={t.key}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                    {templates.custom.length > 0 && (
+                      <optgroup label="Yours">
+                        {templates.custom.map((t) => (
+                          <option key={t.key} value={t.key}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                </label>
+                <div className="ship-build-row">
+                  <label className="ship-detail-field">
+                    Days to build
+                    <input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={selected.buildDays || ""}
+                      onChange={(e) => updateSelected({ buildDays: Number(e.target.value) })}
+                      onBlur={commitSelected}
+                    />
+                  </label>
+                  <label className="ship-detail-field">
+                    Speed bonus
+                    <input
+                      type="number"
+                      min={-20}
+                      max={20}
+                      value={selected.speedBonus ?? 0}
+                      onChange={(e) => updateSelected({ speedBonus: Number(e.target.value) })}
+                      onBlur={commitSelected}
+                    />
+                  </label>
+                </div>
+
+                {selected.status === "building" ? (
+                  <>
+                    <BuildProgress compartment={selected} />
+                    <div className="ship-build-actions">
+                      <button type="button" className="ship-btn" onClick={() => patchSelectedNow({ status: "online" })}>
+                        Finish now
+                      </button>
+                      <button type="button" className="ship-btn" onClick={() => patchSelectedNow({ status: "empty" })}>
+                        Cancel build
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="ship-build-actions">
+                    <button
+                      type="button"
+                      className="ship-btn ship-btn--primary"
+                      disabled={selected.status === "online"}
+                      onClick={() => patchSelectedNow({ status: "building", buildDays: selected.buildDays || 3 })}
+                    >
+                      Start building
+                    </button>
+                    <button type="button" className="ship-btn" onClick={saveAsTemplate}>
+                      Save as template
+                    </button>
+                    {templates.custom.some((t) => t.key === selected.templateKey) && (
+                      <button type="button" className="ship-btn" onClick={() => deleteTemplate(selected.templateKey)}>
+                        Delete template
+                      </button>
+                    )}
+                  </div>
+                )}
+                {selected.status === "building" && <Engineers compartment={selected} />}
+              </div>
+
+              {isNavPin(selected) && selected.status === "online" && (
+                <button type="button" className="ship-btn ship-btn--primary" onClick={openConsole}>
+                  <PlanetIcon weight="bold" /> Enter the star console
+                </button>
+              )}
+
               <button type="button" className="ship-btn ship-btn--danger" onClick={deleteSelected}>
                 <TrashIcon weight="bold" /> Delete compartment
               </button>
@@ -497,9 +877,51 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
                 {statusMeta(selected.status).label}
               </p>
               <p className="ship-detail-body">{selected.description || "No details recorded."}</p>
+              {isNavPin(selected) && selected.status !== "online" && (
+                <p className="ship-detail-body">The star console stays dark until this compartment is online.</p>
+              )}
+              {selected.speedBonus ? (
+                <p className="ship-detail-body">
+                  Travel speed {selected.speedBonus > 0 ? "+" : "−"}
+                  {Math.abs(selected.speedBonus)} while online.
+                </p>
+              ) : null}
+              {selected.status === "building" && (
+                <div className="ship-build">
+                  <BuildProgress compartment={selected} />
+                  <Engineers compartment={selected} />
+                  {user?.id != null && (
+                    <div className="ship-build-actions">
+                      {(selected.engineers || []).some((e) => e.userId === user.id) ? (
+                        <button type="button" className="ship-btn" onClick={() => setEngineering(null)}>
+                          Stop working on this
+                        </button>
+                      ) : (
+                        <button type="button" className="ship-btn ship-btn--primary" onClick={() => setEngineering(selected.id)}>
+                          <WrenchIcon weight="bold" /> Work on this
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {engineerError && <p className="ship-error">{engineerError}</p>}
+                </div>
+              )}
             </>
           )}
         </div>
+      )}
+
+          </div>
+          <span className="tablet-home" aria-hidden="true" />
+        </div>
+      </div>
+
+      {consoleOpen && (
+        <NavConsole
+          isDungeonMaster={isDungeonMaster}
+          chamberName={navComputer?.label || "Nav Computer"}
+          onClose={closeConsole}
+        />
       )}
     </div>
   );

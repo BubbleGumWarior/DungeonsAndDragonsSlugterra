@@ -30,11 +30,13 @@ import chronicleRouter from "./routes/chronicle.js";
 import slugpediaRouter from "./routes/slugpedia.js";
 import slugHuntRouter from "./routes/slugHunt.js";
 import shipsRouter from "./routes/ships.js";
+import travelRouter from "./routes/travel.js";
 import voiceRouter from "./routes/voice.js";
 import marketRouter from "./routes/market.js";
 import tradesRouter from "./routes/trades.js";
 import consumablesRouter from "./routes/consumables.js";
 import imagesRouter from "./routes/images.js";
+import { seedDefaultShip } from "./seedDefaultShip.js";
 import { imageMiddleware } from "./imageStore.js";
 import { requireAuth } from "./middleware/auth.js";
 import { setupWebSocket, getOnlineUserIds } from "./ws.js";
@@ -75,6 +77,7 @@ app.use("/api/chronicle", chronicleRouter);
 app.use("/api/slugpedia", slugpediaRouter);
 app.use("/api/slug-hunt", slugHuntRouter);
 app.use("/api/ships", shipsRouter);
+app.use("/api/travel", travelRouter);
 app.use("/api/voice", voiceRouter);
 app.use("/api/market", marketRouter);
 app.use("/api/trades", tradesRouter);
@@ -126,6 +129,7 @@ initSchema()
   .then(() => backfillSpeedstingerRicochet())
   .then(() => backfillFandangoTempo())
   .then(() => backfillMechanicFlags())
+  .then(() => seedDefaultShip())
   .then(() => {
     server.listen(port, () => console.log(`Server listening on port ${port}`));
   })

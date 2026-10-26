@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { broadcastAll } from "../ws.js";
+import { resetTravel, setPartyLocation } from "../travelService.js";
 
 const router = Router();
 
@@ -175,15 +176,11 @@ router.post("/slug-hunt-area", requireDungeonMaster, async (req, res) => {
     return res.status(400).json({ error: "Area must be a whole number between 0 and 16." });
   }
   try {
-    const { rows: prev } = await pool.query("SELECT slug_hunt_area FROM campaign_settings WHERE id = 1");
-    await pool.query("UPDATE campaign_settings SET slug_hunt_area = $1 WHERE id = 1", [area]);
     // Setting off for a new world shuts every market; the DM reopens the one
     // they want (market.js PUT /open).
-    if (prev[0]?.slug_hunt_area !== area) {
-      await pool.query("UPDATE planet_markets SET market_open = false WHERE market_open");
-      broadcastAll({ type: "market-changed", at: Date.now() });
-    }
-    broadcastAll({ type: "slug-hunt-area", area });
+    await setPartyLocation(area);
+    // A DM teleport overrides any voyage or open vote.
+    await resetTravel();
     res.json({ slugHuntArea: area });
   } catch (err) {
     console.error(err);

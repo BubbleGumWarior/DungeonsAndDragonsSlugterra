@@ -97,7 +97,7 @@ export default function NavBar() {
     { to: "/market", label: "Market", icon: <StorefrontIcon weight="bold" /> },
   ];
   const starChartItems = [
-    { to: "/galaxy", label: "Galaxy Map", icon: <PlanetIcon weight="bold" /> },
+    // The star map lives inside the ship now: the Nav Computer on the Deck Plan.
     { to: "/ship", label: "Deck Plan", icon: <RocketIcon weight="bold" /> },
     { to: "/chronicle", label: "Chronicle", icon: <BookOpenTextIcon weight="bold" /> },
   ];

@@ -14,6 +14,7 @@ import { syncTempoAura } from "../slugAura.js";
 import { FOOD_DRAIN_PER_REST, rollMoodKey } from "../careRules.js";
 import { MARKET_MOODS, moodPctFor } from "../marketRules.js";
 import { LOYALTY_TIER_MIN } from "../slugRules.js";
+import { advanceDay } from "../travelService.js";
 
 const router = Router();
 
@@ -311,6 +312,11 @@ router.post(["/long-rest", "/heal-all"], requireDungeonMaster, async (req, res) 
 
     // A rest also refreshes everyone's once-per-rest Slug Hunt attempt.
     await pool.query("DELETE FROM slug_hunt_locks");
+    // ...and is one day on the calendar: the voyage counts down a day (landing
+    // the party if that was the last one) and compartment builds move along.
+    // Done before the markets settle so the mood below is rolled for the world
+    // the party wakes up on.
+    const day = await advanceDay();
     // ...and settles the markets: everyone may haggle again, any planet-wide
     // markup from a poor barter roll wears off, and the merchants wake up in a
     // new mood (weighted toward neutral -- see MOOD_WEIGHTS).
@@ -339,6 +345,7 @@ router.post(["/long-rest", "/heal-all"], requireDungeonMaster, async (req, res) 
       skippedInCombat: inCombat.size,
       slugEvents,
       marketMood: { key: marketMood, pct: moodPctFor(marketMood) },
+      day,
     };
     // The sleep overlay: its own slot, sent once and last.
     broadcastAll({ type: "long-rest", ...summary });

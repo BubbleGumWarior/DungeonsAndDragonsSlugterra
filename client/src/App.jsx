@@ -25,7 +25,6 @@ import TradeToasts from "./TradeToasts.jsx";
 import SlugToasts from "./SlugToasts.jsx";
 import Slugs from "./Slugs.jsx";
 import Mechas from "./Mechas.jsx";
-import GalaxyPage from "./GalaxyPage.jsx";
 import ShipPage from "./ShipPage.jsx";
 import CombatPage from "./CombatPage.jsx";
 import CombatReports from "./CombatReports.jsx";
@@ -121,7 +120,7 @@ function App() {
               <Route path="/market" element={<Market />} />
               <Route path="/slugs" element={<Slugs />} />
               <Route path="/mechas" element={<Mechas />} />
-              <Route path="/galaxy" element={<GalaxyPage />} />
+              <Route path="/galaxy" element={<Navigate to="/ship" replace />} />
               <Route path="/ship" element={<ShipPage />} />
               <Route path="/combat" element={<CombatPage />} />
               <Route path="/combat/reports" element={<CombatReports />} />

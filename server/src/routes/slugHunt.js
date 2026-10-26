@@ -8,6 +8,7 @@ import { broadcastAll, notifyUser } from "../ws.js";
 import { skillModifier } from "../characterRules.js";
 import { huntAttemptsFor, huntFindsOnlyFloppers, arcanaOddsFactor, FLOPPER_NAME } from "../huntRules.js";
 import { recordSlugpediaEntry } from "../slugpediaStore.js";
+import { isTraveling } from "../travelService.js";
 import { toClientTemplate } from "./slugTemplates.js";
 
 const router = Router();
@@ -196,6 +197,11 @@ router.post("/attempt", async (req, res) => {
     const character = charRows[0];
     if (!character) {
       return res.status(400).json({ error: "You don't have a character sheet yet." });
+    }
+
+    // Nothing to hunt in deep space -- wait until the ship lands.
+    if (await isTraveling()) {
+      return res.status(409).json({ error: "The ship is in transit -- you can hunt once it lands." });
     }
 
     const before = await huntStatusFor(req.user.sub, character);

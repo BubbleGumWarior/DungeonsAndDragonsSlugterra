@@ -6,10 +6,16 @@ import slugHuntOdds from "./slugHuntOdds.json";
 // large/focused at a time and the other two small in the background --
 // clicking a background cluster brings it to the front.
 //
-// Each world's orbitRx/orbitRy/sizeR/periodSec/phaseDeg are LOCAL to its own
+// Each world's orbitRx/orbitRy/sizeR/yearDays/phaseDeg are LOCAL to its own
 // cluster (star at local origin 0,0) -- GalaxyMap.jsx positions/scales the
 // whole cluster as a group, so these numbers are sized for when a cluster is
 // in the focused/front slot.
+//
+// Worlds don't move on their own. A world's place on its orbit is fixed by the
+// campaign day: it starts at phaseDeg on day 1 and goes once round every
+// `yearDays` days, so each long rest nudges it 360/yearDays degrees along.
+// `facts` is the survey data the nav console shows once the party has visited.
+// `dayHours` and `yearDays` are null for The Threshold, which only drifts.
 //
 // ORDER MATTERS. PLANETS (below) flattens these in cluster order -- Threxa,
 // Verrin, Kaeth, then Unclaimed -- and that flat index is the value stored in
@@ -39,7 +45,8 @@ export const CLUSTERS = [
         orbitRx: 70,
         orbitRy: 43,
         sizeR: 15,
-        periodSec: 55,
+        yearDays: 62,
+        facts: { dayHours: 19, temperatureC: 58, humidityPct: 8, gravityG: 1.1, atmosphere: "Thin, sulfurous ash haze", moons: 0 },
         phaseDeg: 140,
         blurb:
           "A volcanic world of black glass ridges and slow rivers of lava, chosen for Threxa's fleet command precisely because nothing grows here to get in the way. Warden recruits drill on obstacle courses laid over cooling flow fields, the heat a constant test of endurance. Command spires rise from the ash-fall like teeth, lit orange from below.",
@@ -50,7 +57,8 @@ export const CLUSTERS = [
         orbitRx: 108,
         orbitRy: 67,
         sizeR: 15,
-        periodSec: 85,
+        yearDays: 98,
+        facts: { dayHours: 27, temperatureC: 46, humidityPct: 92, gravityG: 0.9, atmosphere: "Dense, scalding steam", moons: 1 },
         phaseDeg: 80,
         blurb:
           "A flat, scalding expanse of geysers and mineral crust, used almost exclusively as a Threxa labor camp. Steam rolls low and constant, swallowing sound and sight past a few dozen metres, and the ground is never quite as solid as it looks. Nobody is sent here who has a choice in the matter.",
@@ -61,7 +69,8 @@ export const CLUSTERS = [
         orbitRx: 146,
         orbitRy: 91,
         sizeR: 13,
-        periodSec: 115,
+        yearDays: 140,
+        facts: { dayHours: 22, temperatureC: 34, humidityPct: 38, gravityG: 1.2, atmosphere: "Breathable, heavy with ash and sulfur", moons: 2 },
         phaseDeg: 260,
         blurb:
           "Steep, geothermal-scarred mountains vent steam and heat from fissures that never quite close. An occupied population works the mineral seams under Threxa oversight, terraces and rope-bridges strung between ridgelines heavy with drifting ash. The air tastes of sulfur and effort.",
@@ -72,7 +81,8 @@ export const CLUSTERS = [
         orbitRx: 184,
         orbitRy: 114,
         sizeR: 16,
-        periodSec: 150,
+        yearDays: 190,
+        facts: { dayHours: 30, temperatureC: 29, humidityPct: 24, gravityG: 1, atmosphere: "Breathable, industrial haze", moons: 0 },
         phaseDeg: 320,
         blurb:
           "A shipyard world humming with industrial scale — hulls under construction, cargo lifters, and processing floors where captured slugs are bonded and yoked before shipping out across the Expanse. The work never stops; neither does the noise.",
@@ -83,7 +93,8 @@ export const CLUSTERS = [
         orbitRx: 222,
         orbitRy: 138,
         sizeR: 17,
-        periodSec: 190,
+        yearDays: 255,
+        facts: { dayHours: 24, temperatureC: 21, humidityPct: 45, gravityG: 1, atmosphere: "Breathable, clear", moons: 3 },
         phaseDeg: 200,
         blurb:
           "The Combine's capital, raised inside ruins far older than Threxa itself — vast stone halls whose builders nobody now remembers. At its heart sits the Grand Coliseum, where sanctioned hunts and duels are broadcast across the whole Expanse. Power here runs on spectacle as much as on the Yoke.",
@@ -94,7 +105,8 @@ export const CLUSTERS = [
         orbitRx: 260,
         orbitRy: 161,
         sizeR: 14,
-        periodSec: 230,
+        yearDays: 340,
+        facts: { dayHours: 26, temperatureC: 17, humidityPct: 55, gravityG: 0.95, atmosphere: "Breathable, mild", moons: 1 },
         phaseDeg: 20,
         blurb:
           "Open grassland rolls to every horizon under Threxa's dim red sky, kept deliberately without roads, towers, or permanent settlement. The Combine polices it just enough to keep the hunting grounds pristine — sanctioned parties come and go, and the tall grass never quite loses the smell of old blood. Slugs run wild here in numbers found almost nowhere else in the Expanse, which is exactly the point.",
@@ -118,7 +130,8 @@ export const CLUSTERS = [
         orbitRx: 80,
         orbitRy: 50,
         sizeR: 17,
-        periodSec: 60,
+        yearDays: 70,
+        facts: { dayHours: 21, temperatureC: 31, humidityPct: 88, gravityG: 0.95, atmosphere: "Oxygen-rich, humid, thick with spores", moons: 2 },
         phaseDeg: 170,
         blurb:
           "A dense jungle world held as a Concord resource concession, its endless canopy worked for timber and rare compounds found nowhere else. Extraction crews clear paths that the forest reclaims within a season. Under all that green, something is always still growing back.",
@@ -129,7 +142,8 @@ export const CLUSTERS = [
         orbitRx: 122,
         orbitRy: 76,
         sizeR: 13,
-        periodSec: 95,
+        yearDays: 115,
+        facts: { dayHours: 25, temperatureC: 22, humidityPct: 52, gravityG: 1, atmosphere: "Breathable, mild", moons: 1 },
         phaseDeg: 250,
         blurb:
           "Wide cultivated fields and orchard terraces stretch under the soft double daylight of the binary pair, supplying much of the Lattice's food. Life here is unhurried and practical, the kind of place that quietly keeps an entire trade alliance fed.",
@@ -140,7 +154,8 @@ export const CLUSTERS = [
         orbitRx: 165,
         orbitRy: 102,
         sizeR: 15,
-        periodSec: 135,
+        yearDays: 165,
+        facts: { dayHours: 28, temperatureC: 19, humidityPct: 97, gravityG: 1, atmosphere: "Breathable, salt-laden", moons: 4 },
         phaseDeg: 10,
         blurb:
           "An ocean world with no true land, its long-settled population living in floating city-states that rise and fall gently on the swell. Government, history, and old grudges all run deep here, independent of the Concord that nominally hosts them. Light off the twin suns scatters silver across open water in every direction.",
@@ -151,7 +166,8 @@ export const CLUSTERS = [
         orbitRx: 207,
         orbitRy: 128,
         sizeR: 16,
-        periodSec: 175,
+        yearDays: 215,
+        facts: { dayHours: 24, temperatureC: 18, humidityPct: 40, gravityG: 1, atmosphere: "Breathable, recycled", moons: 0 },
         phaseDeg: 130,
         blurb:
           "A sprawling shipyard-and-market world treated as neutral ground by every power in the Three Clusters. Threxan agents, Dominion officers, Concord traders, and plenty of people who'd rather not say who they work for all do business here in the open. If it can be bought, sold, or smuggled, it passes through the Docks eventually.",
@@ -162,7 +178,8 @@ export const CLUSTERS = [
         orbitRx: 250,
         orbitRy: 155,
         sizeR: 12,
-        periodSec: 220,
+        yearDays: 275,
+        facts: { dayHours: 24, temperatureC: 15, humidityPct: 35, gravityG: 1, atmosphere: "Breathable, dry", moons: 1 },
         phaseDeg: 40,
         blurb:
           "A world of towers, ledgers, and courts — the place to go for contracts, shipping law, and ownership disputes across the Lattice. Nothing moves here without paperwork, and paperwork here can move mountains. It is scrupulously, coldly fair, which is its own kind of ruthless.",
@@ -187,7 +204,8 @@ export const CLUSTERS = [
         orbitRx: 80,
         orbitRy: 50,
         sizeR: 15,
-        periodSec: 65,
+        yearDays: 80,
+        facts: { dayHours: 32, temperatureC: 33, humidityPct: 94, gravityG: 1.1, atmosphere: "Thick, warm, faintly toxic", moons: 2 },
         phaseDeg: 190,
         blurb:
           "A swamp world held under open Dominion occupation, its wetlands threaded with patrol causeways and checkpoint towers. The air is thick, warm, and always faintly toxic; the locals have learned exactly how far they're allowed to go, and no further.",
@@ -198,7 +216,8 @@ export const CLUSTERS = [
         orbitRx: 122,
         orbitRy: 76,
         sizeR: 14,
-        periodSec: 100,
+        yearDays: 125,
+        facts: { dayHours: 12, temperatureC: -85, humidityPct: 0, gravityG: 0.3, atmosphere: "None (vacuum); pressurised interiors", moons: 0 },
         phaseDeg: 60,
         blurb:
           "An asteroid-belt complex strung with docking scaffolds and foundries, building the Dominion's warships one hull at a time. Rock and metal drift between work sites in slow, engineered orbits, and the accretion disc's glow never quite reaches the shadowed depths between them.",
@@ -209,7 +228,8 @@ export const CLUSTERS = [
         orbitRx: 165,
         orbitRy: 102,
         sizeR: 14,
-        periodSec: 140,
+        yearDays: 180,
+        facts: { dayHours: 20, temperatureC: -4, humidityPct: 12, gravityG: 0.9, atmosphere: "Breathable, thin and cold", moons: 1 },
         phaseDeg: 150,
         blurb:
           "A harsh, wind-scoured training world where Dominion conscripts are broken down and rebuilt into soldiers. Obstacle ranges scar the terrain for kilometres in every direction, and the drop in temperature at night is considered part of the curriculum.",
@@ -220,7 +240,8 @@ export const CLUSTERS = [
         orbitRx: 207,
         orbitRy: 128,
         sizeR: 12,
-        periodSec: 180,
+        yearDays: 235,
+        facts: { dayHours: 8, temperatureC: -110, humidityPct: 0, gravityG: 0.2, atmosphere: "None (vacuum); pressurised interiors", moons: 0 },
         phaseDeg: 20,
         blurb:
           "A fortified outpost bristling with sensor arrays and gun emplacements, watching the border with Threxa space around the clock. Named, the story goes, for what was found drifting nearby when the Dominion first claimed the position. Nothing about it has gotten less grim since.",
@@ -231,7 +252,8 @@ export const CLUSTERS = [
         orbitRx: 250,
         orbitRy: 155,
         sizeR: 16,
-        periodSec: 225,
+        yearDays: 300,
+        facts: { dayHours: 31, temperatureC: -46, humidityPct: 30, gravityG: 1.15, atmosphere: "Breathable, bitingly cold", moons: 0 },
         phaseDeg: 300,
         blurb:
           "An icebound homeworld under the pale, restless light thrown off the accretion disc, its cities built low and armored against the cold. Every street here answers to the Dominion's military command, and every child grows up expecting conscription. It is beautiful in a hard, unforgiving way — glacier-blue, silent, absolutely disciplined.",
@@ -251,6 +273,8 @@ export const UNCLAIMED = {
       name: "The Threshold",
       color: "#8a6a52",
       sizeR: 11,
+      yearDays: null,
+      facts: { dayHours: null, temperatureC: -170, humidityPct: 0, gravityG: 0, atmosphere: "None (vacuum)", moons: 0 },
       blurb:
         "A vast graveyard of derelict hulls drifting in open space between the clusters, claimed by no power and policed by none. Scavengers, outcasts, and people from all Three Clusters who ran out of good options call it home, picking the wrecks for parts and stories in equal measure. Out here, the old rules simply don't apply.",
     },

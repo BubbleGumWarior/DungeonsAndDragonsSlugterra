@@ -82,6 +82,7 @@ export default function AccessSocket({ children }) {
   const [gruntTemplatesUpdate, setGruntTemplatesUpdate] = useState(null);
   const [slugpediaUpdate, setSlugpediaUpdate] = useState(null);
   const [shipUpdate, setShipUpdate] = useState(null);
+  const [travelUpdate, setTravelUpdate] = useState(null);
   const [slugHuntArea, setSlugHuntArea] = useState(0);
   const [slugHuntOffered, setSlugHuntOffered] = useState(null);
   const [slugHuntUpdated, setSlugHuntUpdated] = useState(null);
@@ -296,6 +297,7 @@ export default function AccessSocket({ children }) {
           skippedInCombat: data.skippedInCombat,
           slugEvents: data.slugEvents || [],
           marketMood: data.marketMood || null,
+          day: data.day || null,
         });
         return;
       }
@@ -431,6 +433,13 @@ export default function AccessSocket({ children }) {
         return;
       }
 
+      // Votes, proposals, departures and each day of the voyage all ride one
+      // bare "refetch" nudge, so a burst can't drop one.
+      if (data.type === "travel-updated") {
+        setTravelUpdate(Date.now());
+        return;
+      }
+
       if (data.type === "slug-hunt-area") {
         setSlugHuntArea(data.area);
         return;
@@ -537,6 +546,7 @@ export default function AccessSocket({ children }) {
         gruntTemplatesUpdate,
         slugpediaUpdate,
         shipUpdate,
+        travelUpdate,
         slugHuntArea,
         slugHuntOffered,
         slugHuntUpdated,

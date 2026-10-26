@@ -1,0 +1,187 @@
+/* The ship's readout, hanging in the dark beside the star table. It is light on
+   nothing, so no card: type, hairlines and the console's own keys. */
+.travel-panel {
+  padding: 14px 0 12px;
+  border-top: 1px solid rgba(224, 197, 132, 0.4);
+  border-bottom: 1px solid rgba(224, 197, 132, 0.14);
+  background: linear-gradient(to bottom, rgba(5, 5, 6, 0.78), rgba(5, 5, 6, 0.55));
+}
+
+.travel-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+
+.travel-day {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 22px;
+  color: var(--gold-soft);
+}
+
+.travel-ship {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-dim);
+}
+
+.travel-ship svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--gold);
+}
+
+.travel-ship-bonus {
+  opacity: 0.8;
+}
+
+.travel-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.travel-line svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  color: var(--gold);
+}
+
+.travel-sub {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+}
+
+.travel-bar {
+  height: 6px;
+  margin-top: 10px;
+  border-radius: 3px;
+  background: rgba(224, 197, 132, 0.14);
+  overflow: hidden;
+}
+
+.travel-bar span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--gold);
+  transform-origin: left center;
+  transition: transform 0.4s var(--ease-out);
+}
+
+.travel-votes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.travel-vote {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: 1px solid rgba(224, 197, 132, 0.25);
+  border-radius: 999px;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+
+.travel-vote svg {
+  width: 12px;
+  height: 12px;
+}
+
+.travel-vote--yes {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.travel-vote--no {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.travel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.travel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(224, 197, 132, 0.3);
+  background: rgba(5, 5, 6, 0.55);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+}
+
+.travel-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.travel-btn:hover:not(:disabled) {
+  border-color: var(--gold);
+  background: rgba(224, 197, 132, 0.1);
+}
+
+.travel-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.travel-btn--yes.travel-btn--on {
+  border-color: var(--success);
+  background: rgba(127, 217, 154, 0.14);
+  color: var(--success);
+}
+
+.travel-btn--no.travel-btn--on {
+  border-color: var(--danger);
+  background: rgba(255, 122, 107, 0.14);
+  color: var(--danger);
+}
+
+.travel-btn--primary {
+  border-color: var(--gold);
+  background: rgba(201, 162, 75, 0.16);
+  color: var(--gold-soft);
+}
+
+.travel-btn--danger {
+  margin-top: 10px;
+  color: var(--danger);
+}
+
+.travel-error {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  color: var(--danger);
+}
