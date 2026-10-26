@@ -214,7 +214,7 @@
   height: 28px;
   border: 1px solid var(--charcoal-600);
   border-radius: 7px;
-  background: transparent;
+  background: rgba(7, 7, 11, 0.6);
   color: var(--ink-dim);
   cursor: pointer;
 }
@@ -227,6 +227,132 @@
 .galaxy-detail-close svg {
   width: 14px;
   height: 14px;
+}
+
+.galaxy-detail-image-btn {
+  position: relative;
+  display: block;
+  width: calc(100% + 40px);
+  margin: -20px -20px 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 13px 13px 0 0;
+  overflow: hidden;
+  background: var(--charcoal-950);
+  cursor: zoom-in;
+}
+
+.galaxy-detail-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-bottom: 1px solid var(--charcoal-600);
+  transition: transform 0.25s var(--ease-out);
+}
+
+.galaxy-detail-image-btn:hover .galaxy-detail-image {
+  transform: scale(1.03);
+}
+
+.galaxy-detail-image-btn:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+}
+
+.galaxy-detail-image-hint {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: rgba(7, 7, 11, 0.6);
+  color: var(--ink);
+  opacity: 0;
+  transition: opacity 0.15s var(--ease-out);
+  pointer-events: none;
+}
+
+.galaxy-detail-image-btn:hover .galaxy-detail-image-hint,
+.galaxy-detail-image-btn:focus-visible .galaxy-detail-image-hint {
+  opacity: 1;
+}
+
+.galaxy-detail-image-hint svg {
+  width: 14px;
+  height: 14px;
+}
+
+@media (hover: none) {
+  .galaxy-detail-image-hint {
+    opacity: 1;
+  }
+}
+
+/* Full-screen view of a world's illustration. Click anywhere, the X, or Esc
+   to close. */
+.galaxy-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  background: rgba(4, 4, 7, 0.94);
+  cursor: zoom-out;
+  animation: galaxy-lightbox-in 0.2s var(--ease-out);
+}
+
+@keyframes galaxy-lightbox-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.galaxy-lightbox-image {
+  max-width: 100%;
+  max-height: calc(100vh - 90px);
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+}
+
+.galaxy-lightbox-caption {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  color: var(--ink-dim);
+}
+
+.galaxy-lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--charcoal-600);
+  border-radius: 9px;
+  background: rgba(7, 7, 11, 0.7);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.galaxy-lightbox-close:hover {
+  border-color: var(--gold);
+}
+
+.galaxy-lightbox-close svg {
+  width: 18px;
+  height: 18px;
 }
 
 .galaxy-detail-kicker {
@@ -315,6 +441,14 @@
   }
 
   .galaxy-orbit {
+    transition: none;
+  }
+
+  .galaxy-lightbox {
+    animation: none;
+  }
+
+  .galaxy-detail-image {
     transition: none;
   }
 }

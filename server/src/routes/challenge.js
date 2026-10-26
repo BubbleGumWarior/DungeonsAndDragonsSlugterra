@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { broadcastAll } from "../ws.js";
+import { loadCharacterNames } from "../displayNames.js";
 
 const router = Router();
 
@@ -25,15 +26,22 @@ function serializeChallenge(row) {
   };
 }
 
-function serializeRoll(row) {
+// `names` is a userId -> character name map (see loadCharacterNames); the
+// stored login username is only a last-resort fallback.
+function serializeRoll(row, names) {
   return {
     id: row.id,
     challengeId: row.challenge_id,
     userId: row.user_id,
-    username: row.username,
+    name: names.get(row.user_id) || row.username,
     value: row.value,
     createdAt: row.created_at,
   };
+}
+
+async function serializeRolls(rows) {
+  const names = await loadCharacterNames(rows.map((r) => r.user_id));
+  return rows.map((r) => serializeRoll(r, names));
 }
 
 async function loadCurrent() {
@@ -48,7 +56,7 @@ async function loadCurrent() {
     [challenge.id]
   );
 
-  return { challenge: serializeChallenge(challenge), rolls: rollRows.map(serializeRoll) };
+  return { challenge: serializeChallenge(challenge), rolls: await serializeRolls(rollRows) };
 }
 
 router.get("/current", async (req, res) => {
@@ -113,7 +121,7 @@ router.post("/:id/roll", async (req, res) => {
       return res.status(409).json({ error: "You already rolled for this challenge." });
     }
 
-    const roll = serializeRoll(rows[0]);
+    const [roll] = await serializeRolls(rows);
     broadcastAll({ type: "challenge-roll-added", challengeId, roll });
     res.status(201).json({ roll });
   } catch (err) {
@@ -158,7 +166,7 @@ router.post("/:id/finish", requireDungeonMaster, async (req, res) => {
       "SELECT * FROM challenge_rolls WHERE challenge_id = $1 ORDER BY value DESC, created_at ASC",
       [challengeId]
     );
-    const rolls = rollRows.map(serializeRoll);
+    const rolls = await serializeRolls(rollRows);
     // Only rolls that actually beat the target are eligible to win --
     // "roll above X" means a roll of X or below never wins, however high it
     // is relative to everyone else's.

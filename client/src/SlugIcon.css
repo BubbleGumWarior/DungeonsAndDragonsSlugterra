@@ -1,0 +1,10 @@
+.slug-icon {
+  display: inline-block;
+  flex-shrink: 0;
+  width: calc(var(--slug-icon-size, 17px) * 0.9);
+  height: var(--slug-icon-size, 17px);
+  vertical-align: middle;
+  background-color: currentColor;
+  -webkit-mask: var(--slug-icon-url) center / contain no-repeat;
+  mask: var(--slug-icon-url) center / contain no-repeat;
+}

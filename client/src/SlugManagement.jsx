@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { PlusIcon, TrashIcon, UserPlusIcon, DownloadSimpleIcon, CaretDownIcon, SparkleIcon } from "@phosphor-icons/react";
+import { PlusIcon, TrashIcon, UserPlusIcon, DownloadSimpleIcon, CaretDownIcon, SparkleIcon, ShuffleIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
+import { useLiveState } from "./AccessSocket.jsx";
 import SlugCard from "./SlugCard.jsx";
 import SlugForm from "./SlugForm.jsx";
 import SlugToolbar, { filterTemplates, sortTemplates } from "./SlugToolbar.jsx";
@@ -71,6 +72,12 @@ export default function SlugManagement() {
       .catch(() => {});
   }
 
+  // Slugs earn loyalty as they're fired: refetch so the shot counts stay current.
+  const { slugLoyaltyChanged } = useLiveState();
+  useEffect(() => {
+    if (slugLoyaltyChanged) loadSlugs();
+  }, [slugLoyaltyChanged]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     loadTemplates();
     loadSlugs();
@@ -126,8 +133,8 @@ export default function SlugManagement() {
   async function removeAllTemplates() {
     if (templates.length === 0 || bulkBusy) return;
     const confirmed = window.confirm(
-      `Delete all ${templates.length} slug templates? This can't be undone -- any custom templates go with it ` +
-        `(slugs already assigned to players are unaffected, but the party's slugpedia is wiped along with it). ` +
+      `Delete all ${templates.length} slug templates AND every slug assigned to a player? This can't be undone -- ` +
+        `any custom templates go with it, and the party's slugpedia is wiped along with it. ` +
         `You can re-import the default roster afterward.`
     );
     if (!confirmed) return;
@@ -137,8 +144,13 @@ export default function SlugManagement() {
       const res = await fetch("/api/slug-templates", { method: "DELETE", headers: authHeaders() });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not remove templates.");
-      setBulkStatus(`Removed ${data.deletedCount} template${data.deletedCount === 1 ? "" : "s"}.`);
+      const slugCount = data.slugsDeletedCount ?? 0;
+      setBulkStatus(
+        `Removed ${data.deletedCount} template${data.deletedCount === 1 ? "" : "s"} and ` +
+          `${slugCount} player slug${slugCount === 1 ? "" : "s"}.`
+      );
       loadTemplates();
+      loadSlugs();
     } catch (err) {
       setBulkStatus(err.message || "Could not remove templates.");
     } finally {
@@ -162,6 +174,47 @@ export default function SlugManagement() {
       setTemplates(data.templates);
     } catch (err) {
       setBulkStatus(err.message || "Could not import default slugs.");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  // TEST-ONLY: remove with the /api/slugs/test/* routes before production.
+  async function giveRandomSlugs() {
+    if (bulkBusy || players.length === 0) return;
+    setBulkBusy(true);
+    setBulkStatus(null);
+    try {
+      const res = await fetch("/api/slugs/test/give-random", { method: "POST", headers: authHeaders() });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not give random slugs.");
+      setBulkStatus(
+        data.given > 0
+          ? `Gave ${data.given} random slug${data.given === 1 ? "" : "s"} to ${data.players} player${data.players === 1 ? "" : "s"}.`
+          : "Every equipped blaster slot is already full."
+      );
+      loadSlugs();
+    } catch (err) {
+      setBulkStatus(err.message || "Could not give random slugs.");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  // TEST-ONLY: see giveRandomSlugs.
+  async function removeAllPlayerSlugs() {
+    if (bulkBusy || slugs.length === 0) return;
+    if (!window.confirm(`Remove all ${slugs.length} slugs from every player? This can't be undone.`)) return;
+    setBulkBusy(true);
+    setBulkStatus(null);
+    try {
+      const res = await fetch("/api/slugs/test/player-slugs", { method: "DELETE", headers: authHeaders() });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not remove player slugs.");
+      setBulkStatus(`Removed ${data.deletedCount} player slug${data.deletedCount === 1 ? "" : "s"}.`);
+      loadSlugs();
+    } catch (err) {
+      setBulkStatus(err.message || "Could not remove player slugs.");
     } finally {
       setBulkBusy(false);
     }
@@ -303,14 +356,39 @@ export default function SlugManagement() {
       </section>
 
       <section className="slug-management-section">
-        <h2>Players &amp; Their Slugs</h2>
+        <div className="slug-management-section-header">
+          <h2>Players &amp; Their Slugs</h2>
+          {/* TEST-ONLY buttons -- remove before production. */}
+          <div className="slug-management-header-actions">
+            <button
+              type="button"
+              className="slug-management-ghost-btn"
+              onClick={giveRandomSlugs}
+              disabled={bulkBusy || players.length === 0 || templates.length === 0}
+              title="Test: fill every empty slot on each player's equipped blasters with a random slug"
+            >
+              <ShuffleIcon weight="bold" />
+              Give Random to Players
+            </button>
+            <button
+              type="button"
+              className="slug-management-ghost-btn slug-management-ghost-btn--danger"
+              onClick={removeAllPlayerSlugs}
+              disabled={bulkBusy || slugs.length === 0}
+              title="Test: delete every slug owned by a player"
+            >
+              <TrashIcon weight="bold" />
+              Remove Player Slugs
+            </button>
+          </div>
+        </div>
         {players.length === 0 ? (
           <p className="slug-management-empty">No players yet.</p>
         ) : (
           <div className="slug-management-players">
             {slugsByPlayer.map(({ player, slugs: playerSlugs }) => (
               <div className="slug-management-player" key={player.id}>
-                <h3>{player.username}</h3>
+                <h3>{player.characterName || player.username}</h3>
                 {playerSlugs.length === 0 ? (
                   <p className="slug-management-empty">No slugs assigned.</p>
                 ) : (

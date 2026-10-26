@@ -394,3 +394,76 @@
 .combat-holstered-state--exhausted {
   color: var(--ink-dim);
 }
+
+.combat-slug-panel-card-wrap {
+  display: block;
+}
+
+.combat-slug-panel-card {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.combat-holstered-slug {
+  cursor: help;
+}
+
+/* Velocity-ability hover tip (portaled to <body>, so it sits above any panel). */
+.combat-slug-tip {
+  position: fixed;
+  z-index: 1000;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--charcoal-950);
+  border: 1px solid var(--type-color, var(--charcoal-600));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  color: var(--ink);
+  pointer-events: none;
+}
+
+.combat-slug-tip-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.combat-slug-tip-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.combat-slug-tip-type {
+  font-size: 11px;
+  color: var(--type-color, var(--ink-dim));
+}
+
+.combat-slug-tip-label {
+  margin-top: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.combat-slug-tip-text {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.combat-slug-tip-note {
+  margin: 8px 0 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--charcoal-600);
+  font-size: 11.5px;
+  font-style: italic;
+  color: var(--gold-soft);
+}
+
+/* How far this slug is toward its next loyalty tier -- creeps up as it fires. */
+.combat-slug-panel-card-loyalty {
+  width: 100%;
+  margin-top: 5px;
+}

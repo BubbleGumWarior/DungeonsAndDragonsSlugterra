@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ScrollIcon, SwordIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
@@ -13,6 +13,7 @@ import CombatLog from "./CombatLog.jsx";
 import SlugActionModal, { MEGA_MORPH_MIN_SPEED, MEGA_MORPH_PIP_COST } from "./SlugActionModal.jsx";
 import { DUAL_SHOT_BASE_TYPE, canJoinDualShot } from "./dualShot.js";
 import MindScrambleModal from "./MindScrambleModal.jsx";
+import TurnBanner from "./TurnBanner.jsx";
 import FrictionModal from "./FrictionModal.jsx";
 import HunkerConfirmModal from "./HunkerConfirmModal.jsx";
 import {
@@ -35,7 +36,7 @@ import {
   WATER_FOOT_COST_MULT,
 } from "./combatSkills.js";
 import { typeRange } from "./slugData.js";
-import { effectiveReloadApCost } from "./itemData.js";
+import { effectiveReloadApCost, meleeDamageFor } from "./itemData.js";
 import { combatantNameColor } from "./combatDisplay.js";
 import "./Panel.css";
 import "./CombatPage.css";
@@ -149,7 +150,7 @@ function NewEncounterForm({ onCreate }) {
 
 export default function CombatPage() {
   const { token, user } = useAuth();
-  const { encounter: liveEncounter, slugUpdate, blasterUpdate, modUpdate, shotFx, shotResolved, damageFlash, gruntTemplatesUpdate, gearChanged, partyHealed, podsUpdate, marketChanged, tradeCompleted } = useLiveState();
+  const { encounter: liveEncounter, slugUpdate, blasterUpdate, modUpdate, shotFx, shotResolved, damageFlash, gruntTemplatesUpdate, gearChanged, partyHealed, podsUpdate, marketChanged, tradeCompleted, equipmentChanged } = useLiveState();
   const [flashActive, setFlashActive] = useState(false);
   const [encounter, setEncounter] = useState(undefined);
   const [players, setPlayers] = useState([]);
@@ -160,10 +161,11 @@ export default function CombatPage() {
   const [actingId, setActingId] = useState(null);
   const [drawMode, setDrawMode] = useState(false);
   const [waterMode, setWaterMode] = useState(null); // setup-only: "paint" | "erase" | null
-  const [waterBrush, setWaterBrush] = useState(3); // brush width in water cells
   const [error, setError] = useState(null);
   const [allSlugs, setAllSlugs] = useState([]);
   const [allBlasters, setAllBlasters] = useState([]);
+  // Melee weapons / ammo belts (the Secondary slot's non-blaster occupants) -- drives the Melee button.
+  const [allEquipment, setAllEquipment] = useState([]);
   // Only read to learn which blasters carry a dual-shot mod (see dualInfoFor).
   const [allMods, setAllMods] = useState([]);
   const [actionPicker, setActionPicker] = useState(null); // slug awaiting an Attack/Break Wall/Make Wall/Build Bridge choice
@@ -173,6 +175,28 @@ export default function CombatPage() {
   const [hunkerConfirm, setHunkerConfirm] = useState(null); // { ap, conMod } while awaiting "spend all AP?" confirmation
 
   const isDM = user?.role === "Dungeon Master";
+
+  // Space is the Dodge hotkey (CounterClashPrompt) and nothing else on this page
+  // wants it -- the browser's own Space would scroll the page to the bottom (or
+  // "click" whatever button has focus). Swallow it for the whole fight, not just
+  // while a counter window is open, so a hurried press a moment early or late
+  // can't scroll either. Text fields keep their spaces.
+  useEffect(() => {
+    function swallowSpace(e) {
+      if (e.key !== " " && e.code !== "Space") return;
+      const el = e.target;
+      if (el instanceof HTMLElement && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))) return;
+      e.preventDefault();
+    }
+    window.addEventListener("keydown", swallowSpace, true);
+    window.addEventListener("keypress", swallowSpace, true);
+    window.addEventListener("keyup", swallowSpace, true);
+    return () => {
+      window.removeEventListener("keydown", swallowSpace, true);
+      window.removeEventListener("keypress", swallowSpace, true);
+      window.removeEventListener("keyup", swallowSpace, true);
+    };
+  }, []);
 
   useEffect(() => {
     fetch("/api/combat/active", { headers: authHeaders(token) })
@@ -235,11 +259,29 @@ export default function CombatPage() {
       .then((res) => res.json())
       .then((data) => setAllMods(data.mods || []))
       .catch(() => {});
+    fetch(isDM ? "/api/equipment" : "/api/equipment/me", { headers: authHeaders(token) })
+      .then((res) => res.json())
+      .then((data) => setAllEquipment(data.equipment || []))
+      .catch(() => {});
     // gearChanged: an NPC was just kitted out. Its per-row slug/blaster
     // broadcasts arrive as a burst the live state can't hold (only the last
     // survives), so refetch everything instead of trusting them.
     // partyHealed: Heal All refills every slug's pips in one burst, same story.
-  }, [isDM, token, gearChanged, partyHealed]);
+    // equipmentChanged: an ammo belt resized a magazine (and may have unloaded slugs).
+  }, [isDM, token, gearChanged, partyHealed, equipmentChanged]);
+
+  // A fired slug earned loyalty: refetch the slugs (slug-updated is a single
+  // slot, so a dual shot's pair could drop one) so the fill and, for the DM,
+  // the shot counts are current.
+  const { slugLoyaltyChanged } = useLiveState();
+  const loyaltyChangeAt = slugLoyaltyChanged && (isDM || slugLoyaltyChanged.userId === user?.id) ? slugLoyaltyChanged.at : null;
+  useEffect(() => {
+    if (!loyaltyChangeAt || !token) return;
+    fetch(isDM ? "/api/slugs" : "/api/slugs/me", { headers: authHeaders(token) })
+      .then((res) => res.json())
+      .then((data) => setAllSlugs(data.slugs || []))
+      .catch(() => {});
+  }, [loyaltyChangeAt, isDM, token]);
 
   useEffect(() => {
     if (!slugUpdate) return;
@@ -273,6 +315,14 @@ export default function CombatPage() {
     });
   }, [modUpdate, isDM, user]);
 
+  // Everyone in the current phase who still has a turn to take. Teammates next
+  // to each other in the initiative order act at the same time.
+  const activeIds = useMemo(
+    () => encounter?.activeCombatantIds ?? (encounter?.activeCombatantId != null ? [encounter.activeCombatantId] : []),
+    [encounter?.activeCombatantIds, encounter?.activeCombatantId]
+  );
+  const activeIdsKey = activeIds.join(",");
+
   const myCombatant = useMemo(
     () => encounter?.combatants.find((c) => c.kind === "character" && c.refUserId === user?.id) || null,
     [encounter, user]
@@ -284,12 +334,19 @@ export default function CombatPage() {
       // When it's this player's own unmounted mecha's turn, hand them the
       // mecha's controls (move + End Turn); otherwise they drive their
       // character. A ridden mecha never gets its own turn (server skips it).
-      const active = encounter.combatants.find((c) => c.id === encounter.activeCombatantId);
-      const ownsActiveMecha =
-        active?.kind === "mecha" &&
-        active.data?.ownerUserId === user?.id &&
-        !encounter.combatants.some((c) => c.mountedOn === active.id);
-      setActingId(ownsActiveMecha ? active.id : myCombatant?.id ?? null);
+      // Teammates in a row act together, so their mecha can be up alongside
+      // them -- the character keeps the controls while they still have a turn.
+      const active =
+        myCombatant && activeIds.includes(myCombatant.id)
+          ? null
+          : encounter.combatants.find(
+              (c) =>
+                activeIds.includes(c.id) &&
+                c.kind === "mecha" &&
+                c.data?.ownerUserId === user?.id &&
+                !encounter.combatants.some((r) => r.mountedOn === c.id)
+            );
+      setActingId(active ? active.id : myCombatant?.id ?? null);
       return;
     }
     if (actingId && encounter.combatants.some((c) => c.id === actingId)) return;
@@ -298,6 +355,27 @@ export default function CombatPage() {
   }, [encounter, isDM, myCombatant, user]);
 
   const actingCombatant = encounter?.combatants.find((c) => c.id === actingId) || null;
+  const actingIdRef = useRef(actingId);
+  actingIdRef.current = actingId;
+
+  // The DM follows the turn: when it moves on (End Turn, or a player ending
+  // theirs) and the DM was controlling whoever just finished, switch them to
+  // whoever is up now. If they'd deliberately picked someone else, leave it.
+  const prevActiveRef = useRef([]);
+  useEffect(() => {
+    const prev = prevActiveRef.current;
+    prevActiveRef.current = activeIds;
+    if (!isDM || activeIds.length === 0 || prev.length === 0) return;
+    const cur = actingIdRef.current;
+    // Only move the DM along if the combatant they were driving just finished
+    // (or the phase changed under them) -- a teammate wrapping up mid-phase
+    // shouldn't yank them off whoever they're still playing.
+    if (cur != null && prev.includes(cur) && !activeIds.includes(cur)) {
+      setActingId(activeIds[0]);
+      setMode(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIdsKey, isDM]);
 
   // Spare slug pods for the character being played (null for NPCs/grunts --
   // they have infinite pods and never see the pod UI). A reload that finds a
@@ -395,6 +473,25 @@ export default function CombatPage() {
     return { activeSlot, otherSlot, hasOther };
   }, [actingCombatant, allBlasters]);
 
+  // Drives the hotbar's Melee button: the melee weapon in the acting character's
+  // Secondary slot (see server/src/equipmentRules.js). Hit roll is d20 + STR
+  // (+ the weapon's accuracy), damage is the weapon's damage x STR when STR is positive, + STR otherwise, min 1.
+  const meleeInfo = useMemo(() => {
+    if (!actingCombatant || actingCombatant.kind !== "character") return null;
+    const weapon = allEquipment.find(
+      (e) => e.userId === actingCombatant.refUserId && e.kind === "melee" && e.equipSlot === 1
+    );
+    if (!weapon) return null;
+    const strMod = actingCombatant.data?.strMod ?? null;
+    return {
+      weapon,
+      apCost: weapon.apCost,
+      reach: weapon.reach,
+      strMod,
+      damage: strMod == null ? null : meleeDamageFor(weapon.damage, strMod),
+    };
+  }, [actingCombatant, allEquipment]);
+
   // Drives the hotbar's Reload button: the active weapon's reload AP cost and
   // how many of this combatant's slugs have returned to hand but aren't
   // chambered (loaded === false, cooldown done). Mirrors the server's
@@ -460,6 +557,10 @@ export default function CombatPage() {
   }, [actingCombatant, encounter]);
 
   const rangeRing = useMemo(() => {
+    // An armed melee swing shows its reach, for everyone -- there's no Range Finder to own.
+    if (actingCombatant && mode?.type === "melee" && meleeInfo) {
+      return { x: actingCombatant.x, y: actingCombatant.y, r: meleeInfo.reach };
+    }
     if (!actingCombatant || mode?.type !== "shoot") return null;
     const slug = allSlugs.find((s) => s.id === mode.slugId);
     if (!slug) return null;
@@ -473,7 +574,7 @@ export default function CombatPage() {
     // Mirrors the server's combinedRange = blaster.range + type's range --
     // the two stack.
     return { x: actingCombatant.x, y: actingCombatant.y, r: blaster.range + typeRange(slug.type) };
-  }, [actingCombatant, mode, allSlugs, allBlasters, allMods, isDM]);
+  }, [actingCombatant, mode, meleeInfo, allSlugs, allBlasters, allMods, isDM]);
 
   // While "Mount" is armed, show how close you have to be -- a ring at
   // MOUNT_RANGE around the character, with every in-range mecha highlighted
@@ -489,6 +590,33 @@ export default function CombatPage() {
     if (!encounter || actingCombatant?.mountedOn == null) return null;
     return encounter.combatants.find((c) => c.id === actingCombatant.mountedOn) || null;
   }, [encounter, actingCombatant]);
+
+  // Players don't have to click End Turn once there's nothing left to do: when
+  // their combatant is out of AP (a rider also needs the mecha's AP spent, since
+  // moving drives it on that) or has been knocked down mid-turn, the turn ends
+  // by itself after a beat so the last action's result can land first. The DM
+  // keeps manual control of whoever they're running.
+  const autoEndedRef = useRef(null);
+  useEffect(() => {
+    if (!encounter || isDM || !actingCombatant || !activeIds.includes(actingCombatant.id)) return undefined;
+    const down = actingCombatant.unconscious || actingCombatant.disabled;
+    const spent =
+      (actingCombatant.currentAp ?? 0) <= 0 && (!mountedMecha || (mountedMecha.currentAp ?? 0) <= 0);
+    if (!down && !spent) return undefined;
+    const turnKey = `${actingCombatant.id}:${encounter.round}:${encounter.activeTurnIndex}`;
+    if (autoEndedRef.current === turnKey) return undefined;
+    const timer = setTimeout(async () => {
+      autoEndedRef.current = turnKey;
+      setMode(null);
+      try {
+        applyEncounter(await postJson(token, "/api/combat/actions/end-turn", { combatantId: actingCombatant.id }));
+      } catch (err) {
+        setError(err.message);
+      }
+    }, 700);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [encounter, isDM, actingCombatant, activeIdsKey, mountedMecha]);
 
   // Which mod-granted modes the ridden mecha has, and the one it's in now.
   const modeInfo = useMemo(() => {
@@ -567,6 +695,18 @@ export default function CombatPage() {
     }
   }
 
+  // Scraps a still-staging encounter (no battle report -- nothing was fought).
+  async function handleCancelEncounter() {
+    if (!window.confirm("Cancel this encounter? Everything placed on the map will be discarded.")) return;
+    setError(null);
+    try {
+      await del(token, `/api/combat/encounters/${encounter.id}`);
+      setEncounter(null);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   async function handleEndEncounter() {
     setError(null);
     try {
@@ -604,6 +744,15 @@ export default function CombatPage() {
     }
   }
 
+  async function handleResizeMap(meters) {
+    setError(null);
+    try {
+      applyEncounter(await patchJson(token, `/api/combat/encounters/${encounter.id}/size`, { meters }));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   async function handleRemoveWall(wallId) {
     setError(null);
     try {
@@ -626,6 +775,35 @@ export default function CombatPage() {
     setError(null);
     try {
       applyEncounter(await del(token, `/api/combat/encounters/${encounter.id}/combatants/${id}`));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  // DM rescue: someone got shoved somewhere they can't walk back from.
+  async function handleResetPosition(id) {
+    setError(null);
+    try {
+      applyEncounter(await postJson(token, `/api/combat/encounters/${encounter.id}/combatants/${id}/reset-position`, {}));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  // DM: hand an NPC/grunt's counter windows to the server (see server/src/autoCounter.js).
+  async function handleToggleAutoCounter(id, enabled) {
+    setError(null);
+    try {
+      applyEncounter(await patchJson(token, `/api/combat/encounters/${encounter.id}/combatants/${id}/auto-counter`, { enabled }));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleBulkAutoCounter(scope, enabled) {
+    setError(null);
+    try {
+      applyEncounter(await patchJson(token, `/api/combat/encounters/${encounter.id}/auto-counter`, { scope, enabled }));
     } catch (err) {
       setError(err.message);
     }
@@ -683,7 +861,14 @@ export default function CombatPage() {
         }
         applyEncounter(await postJson(token, "/api/combat/actions/hunker-down", { combatantId: actingCombatant.id }));
       } else if (name === "end-turn") {
-        applyEncounter(await postJson(token, "/api/combat/actions/end-turn", { combatantId: actingCombatant.id }));
+        const data = await postJson(token, "/api/combat/actions/end-turn", { combatantId: actingCombatant.id });
+        applyEncounter(data);
+        // Clicking End Turn always hands the DM the next combatant, even if
+        // they'd been controlling someone out of turn.
+        if (isDM && data?.encounter?.activeCombatantId != null) {
+          setActingId(data.encounter.activeCombatantId);
+          setMode(null);
+        }
       } else if (name === "dismount") {
         applyEncounter(await postJson(token, "/api/combat/actions/dismount", { combatantId: actingCombatant.id }));
       } else if (name === "switch-weapon") {
@@ -762,10 +947,14 @@ export default function CombatPage() {
     return false;
   }
 
-  async function handleTokenDragEnd(combatant, point) {
+  // The DM moves NPCs like anyone else mid-fight: through /actions/move, so AP,
+  // hazards, ghosts and blooms all apply. Holding Shift on the drop (or any drag
+  // outside an active fight, i.e. setup) is a free reposition instead -- no AP,
+  // no hazards, no bites.
+  async function handleTokenDragEnd(combatant, point, shiftKey = false) {
     setError(null);
     try {
-      if (isDM) {
+      if (isDM && (shiftKey || encounter.status !== "active")) {
         applyEncounter(
           await patchJson(token, `/api/combat/encounters/${encounter.id}/combatants/${combatant.id}/position`, point)
         );
@@ -795,6 +984,18 @@ export default function CombatPage() {
             ...(mode.megaMorph ? { megaMorph: true } : {}),
             ...(mode.partnerSlugId ? { partnerSlugId: mode.partnerSlugId } : {}),
           })
+        );
+      } catch (err) {
+        setError(err.message);
+      }
+      setMode(null);
+      return;
+    }
+    if (mode?.type === "melee" && actingCombatant) {
+      setError(null);
+      try {
+        applyEncounter(
+          await postJson(token, "/api/combat/actions/melee", { attackerId: actingCombatant.id, targetId: target.id })
         );
       } catch (err) {
         setError(err.message);
@@ -861,7 +1062,7 @@ export default function CombatPage() {
     // as before.
     // A DM-approved Mega Morph slug gets the same picker, for its extra
     // "Shoot Mega Morph" choice.
-    if (slug.breaksWalls || slug.wallMaker || slug.bridgeMaker || slug.megaMorphAllowed || dualInfoFor(slug)) {
+    if (slug.breaksWalls || slug.wallMaker || slug.bridgeMaker || slug.grapple || slug.summonsPlant || slug.megaMorphAllowed || dualInfoFor(slug)) {
       setActionPicker(slug);
       return;
     }
@@ -1012,14 +1213,14 @@ export default function CombatPage() {
             error={error}
             tool={setupTool}
             onToolChange={handleToolChange}
-            brush={waterBrush}
-            onBrushChange={setWaterBrush}
+            onResizeMap={handleResizeMap}
             onAddCombatant={handleAddCombatant}
             onPullNpc={handlePullNpc}
             onPullGrunt={handlePullGrunt}
             onSetTeam={handleSetTeam}
             onRemove={handleRemoveCombatant}
             onStart={handleStart}
+            onCancel={handleCancelEncounter}
           >
             <CombatMap
               encounter={encounter}
@@ -1027,7 +1228,6 @@ export default function CombatPage() {
               viewerUserId={user?.id}
               drawMode={drawMode}
               waterMode={waterMode}
-              waterBrush={waterBrush}
               onPaintWater={handlePaintWater}
               onAddWall={handleAddWall}
               onRemoveWall={handleRemoveWall}
@@ -1068,6 +1268,19 @@ export default function CombatPage() {
         )}
       </TopBar>
 
+      {encounter.status === "active" && (
+        <TurnBanner
+          activeCombatants={encounter.combatants.filter((c) => activeIds.includes(c.id))}
+          actingCombatant={actingCombatant}
+          isDM={isDM}
+          onSelectActive={(id) => {
+            setActingId(id);
+            setMode(null);
+          }}
+          round={encounter.round}
+        />
+      )}
+
       <div className="combat-page-columns">
         <div className="combat-page-left">
           <CombatSlugPanel
@@ -1077,7 +1290,7 @@ export default function CombatPage() {
             activeBlasterBaseType={activeBlasterBaseType}
             armedSlugId={mode?.type === "shoot" ? mode.slugId : null}
             onPickSlug={handlePickSlug}
-            hotkeysActive={actingCombatant?.id === encounter.activeCombatantId}
+            hotkeysActive={activeIds.includes(actingCombatant?.id)}
           />
           {holstered && <HolsteredSlugs blaster={holstered.blaster} slugs={holstered.slugs} />}
         </div>
@@ -1092,7 +1305,7 @@ export default function CombatPage() {
             onRemoveWall={handleRemoveWall}
             onBackgroundClick={handleBackgroundClick}
             onTokenClick={handleTokenClick}
-            activeCombatantId={encounter.activeCombatantId}
+            activeCombatantIds={activeIds}
             actingCombatantId={actingCombatant?.id}
             rangeRing={rangeRing}
             mountRing={mountRing}
@@ -1107,10 +1320,11 @@ export default function CombatPage() {
           />
           <CombatHotbar
             actingCombatant={actingCombatant}
-            isActiveTurn={actingCombatant?.id === encounter.activeCombatantId}
+            isActiveTurn={activeIds.includes(actingCombatant?.id)}
             isDM={isDM}
             mode={mode}
             weaponSwitch={weaponSwitch}
+            meleeInfo={meleeInfo}
             reloadInfo={reloadInfo}
             wallRunInfo={wallRunInfo}
             skillActionInfo={skillActionInfo}
@@ -1133,6 +1347,9 @@ export default function CombatPage() {
             onSelect={handleRosterRowClick}
             onRevive={handleRevive}
             onRemove={handleRemoveCombatant}
+            onReset={handleResetPosition}
+            onToggleAutoCounter={handleToggleAutoCounter}
+            onBulkAutoCounter={handleBulkAutoCounter}
           />
           <CombatLog encounterId={encounter.id} />
         </div>

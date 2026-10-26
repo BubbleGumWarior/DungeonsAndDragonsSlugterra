@@ -1,0 +1,88 @@
+.blaster-condition-hint {
+  display: flex;
+  width: 100%;
+}
+
+.blaster-condition {
+  --cond-color: var(--success);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.blaster-condition--warn {
+  --cond-color: #dd7a4a;
+}
+
+.blaster-condition--bad {
+  --cond-color: var(--danger);
+}
+
+.blaster-condition-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px;
+}
+
+.blaster-condition-label {
+  color: var(--ink-dim);
+}
+
+.blaster-condition-value {
+  font-weight: 700;
+  color: var(--cond-color);
+}
+
+.blaster-condition-value strong {
+  color: var(--ink);
+}
+
+.blaster-condition-bar {
+  height: 7px;
+  overflow: hidden;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-600);
+  border-radius: 999px;
+}
+
+.blaster-condition-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--cond-color);
+  border-radius: 999px;
+  transform-origin: left center;
+  transition: transform 0.5s var(--ease-out), background 0.3s var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blaster-condition-fill {
+    transition: none;
+  }
+}
+
+.blaster-repair-btn {
+  padding: 7px 14px;
+  font-size: 12.5px;
+}
+
+.blaster-broken-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--danger);
+  background: rgba(255, 122, 107, 0.08);
+  border: 1px solid rgba(255, 122, 107, 0.35);
+  border-radius: 8px;
+}
+
+.blaster-broken-note svg {
+  width: 14px;
+  height: 14px;
+}

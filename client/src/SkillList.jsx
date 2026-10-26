@@ -1,4 +1,4 @@
-import { PROFICIENCIES, STATS, describeEntry, formatModifier, skillModifier } from "./characterData.js";
+import { PROFICIENCIES, STATS, describeEntry, entryLabel, formatModifier, skillModifier } from "./characterData.js";
 import "./SkillList.css";
 
 export default function SkillList({ stats, proficiencies, revealed = true }) {
@@ -20,7 +20,7 @@ export default function SkillList({ stats, proficiencies, revealed = true }) {
                   key={p.key}
                   data-tooltip={describeEntry(p, revealed)}
                 >
-                  <span className="skill-row-label">{p.label}</span>
+                  <span className="skill-row-label">{entryLabel(p, revealed)}</span>
                   <span className="skill-row-badge-slot">
                     {isProficient && <span className="skill-row-badge">Proficient</span>}
                   </span>

@@ -157,3 +157,9 @@
   color: var(--gold-soft);
   font-style: italic;
 }
+
+/* The hotbar glows gold on the acting combatant's turn. */
+.combat-hotbar--active-turn {
+  border-color: var(--gold-dim);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(201, 162, 75, 0.3), 0 0 22px rgba(201, 162, 75, 0.18);
+}

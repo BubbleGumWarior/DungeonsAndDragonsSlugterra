@@ -1,0 +1,247 @@
+/* The one authored moment of a long rest: the room goes dark, the moon settles,
+   the card rises. Everything is static after that. */
+.rest-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 520;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(1.5px 1.5px at 12% 18%, rgba(224, 197, 132, 0.7), transparent),
+    radial-gradient(1px 1px at 27% 62%, rgba(224, 197, 132, 0.5), transparent),
+    radial-gradient(1.5px 1.5px at 41% 28%, rgba(243, 231, 226, 0.55), transparent),
+    radial-gradient(1px 1px at 58% 78%, rgba(224, 197, 132, 0.45), transparent),
+    radial-gradient(1.5px 1.5px at 73% 14%, rgba(243, 231, 226, 0.6), transparent),
+    radial-gradient(1px 1px at 86% 54%, rgba(224, 197, 132, 0.5), transparent),
+    radial-gradient(1px 1px at 91% 86%, rgba(243, 231, 226, 0.4), transparent),
+    radial-gradient(1px 1px at 8% 84%, rgba(224, 197, 132, 0.4), transparent),
+    radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--maroon-950) 70%, transparent), transparent 70%),
+    rgba(6, 5, 9, 0.92);
+  backdrop-filter: blur(5px);
+  animation: rest-fade 0.7s var(--ease-out);
+}
+
+@keyframes rest-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.rest-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 440px;
+  padding: 36px 30px 28px;
+  text-align: center;
+  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 75%);
+  border: 1px solid var(--gold-dim);
+  border-radius: 18px;
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.75),
+    0 0 0 1px rgba(201, 162, 75, 0.12);
+  animation: rest-rise 0.7s var(--ease-out) 0.15s backwards;
+}
+
+@keyframes rest-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rest-moon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 16px;
+  color: var(--gold);
+  border-radius: 50%;
+  border: 1px solid rgba(201, 162, 75, 0.4);
+  background: radial-gradient(circle, rgba(201, 162, 75, 0.2), transparent 70%);
+  animation: rest-moon-settle 1.1s var(--ease-out) 0.3s backwards;
+}
+
+.rest-moon svg {
+  width: 32px;
+  height: 32px;
+}
+
+@keyframes rest-moon-settle {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+    transform: translateY(-14px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+}
+
+.rest-title {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--gold-soft);
+  text-wrap: balance;
+}
+
+.rest-sub {
+  margin: 0 0 20px;
+  max-width: 34ch;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-dim);
+  text-wrap: pretty;
+}
+
+.rest-events {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-height: 240px;
+  margin: 0 0 20px;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.rest-event {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: left;
+  color: var(--ink);
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-600);
+  border-radius: 10px;
+}
+
+.rest-event svg {
+  flex-shrink: 0;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+}
+
+.rest-event--warn {
+  border-color: rgba(221, 122, 74, 0.5);
+}
+
+.rest-event--warn svg {
+  color: #dd7a4a;
+}
+
+.rest-event--bad {
+  border-color: rgba(255, 122, 107, 0.5);
+}
+
+.rest-event--bad svg {
+  color: var(--danger);
+}
+
+.rest-mood {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 20px;
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+.rest-mood svg {
+  width: 16px;
+  height: 16px;
+  color: var(--gold-dim);
+}
+
+.rest-mood strong {
+  color: var(--gold-soft);
+}
+
+.rest-wake {
+  width: 100%;
+  padding: 12px 18px;
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--charcoal-950);
+  background: linear-gradient(180deg, var(--gold), var(--gold-dim));
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 0.12s var(--ease-out), filter 0.15s var(--ease-out);
+}
+
+.rest-wake:hover {
+  filter: brightness(1.08);
+}
+
+.rest-wake:active {
+  transform: scale(0.97);
+}
+
+.rest-wake:focus-visible {
+  outline: 2px solid var(--gold-soft);
+  outline-offset: 3px;
+}
+
+/* Waking up: the card lets go first, then the dark lifts and the room comes
+   back to light. Duration matches WAKE_MS in LongRestOverlay.jsx. */
+.rest-overlay--waking {
+  pointer-events: none;
+  animation: rest-dawn 1.1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.rest-overlay--waking .rest-card {
+  animation: rest-card-out 0.45s var(--ease-out) forwards;
+}
+
+@keyframes rest-dawn {
+  from {
+    opacity: 1;
+    backdrop-filter: blur(5px);
+  }
+  to {
+    opacity: 0;
+    backdrop-filter: blur(0);
+  }
+}
+
+@keyframes rest-card-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rest-overlay,
+  .rest-card,
+  .rest-moon {
+    animation: none;
+  }
+}

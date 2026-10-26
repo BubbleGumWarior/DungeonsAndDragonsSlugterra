@@ -220,9 +220,29 @@ export default function GruntForm({ initialValues, slugTemplates, blasterTemplat
           </section>
 
           <section className="slugpick-section">
-            <h3>
-              Slug library <span>click to add or remove</span>
-            </h3>
+            <div className="slugpick-library-head">
+              <h3>
+                Slug library <span>click to add or remove</span>
+              </h3>
+              <div className="slugpick-bulk">
+                <button
+                  type="button"
+                  className="slugpick-bulk-btn"
+                  disabled={slugTemplates.length === 0 || pooledSlugs.length === slugTemplates.length}
+                  onClick={() => update("slugTemplateIds", slugTemplates.map((t) => t.id))}
+                >
+                  Add all slugs
+                </button>
+                <button
+                  type="button"
+                  className="slugpick-bulk-btn"
+                  disabled={pooledSlugs.length === 0}
+                  onClick={() => update("slugTemplateIds", [])}
+                >
+                  Clear pool
+                </button>
+              </div>
+            </div>
             {slugTemplates.length === 0 && <p className="slugpick-empty">No slug templates yet.</p>}
             <div className="slugpick-grid">
               {sortedSlugTemplates.map((t) => {

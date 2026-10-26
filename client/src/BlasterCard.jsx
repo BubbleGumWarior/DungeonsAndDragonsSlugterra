@@ -9,6 +9,7 @@ import {
   qualityColor,
   qualityInfo,
 } from "./itemData.js";
+import BlasterCondition from "./BlasterCondition.jsx";
 import "./BlasterCard.css";
 
 const EQUIP_SLOT_LABELS = ["Primary", "Secondary"];
@@ -93,7 +94,10 @@ export default function BlasterCard({
           <span className="blaster-card-stat-label">Speed</span>
         </div>
         <div className="blaster-card-stat">
-          <span className="blaster-card-stat-value">{blaster.magazineSize}</span>
+          <span className="blaster-card-stat-value">
+            {blaster.magazineSize}
+            {blaster.magazineBonus > 0 && <span className="blaster-card-stat-bonus"> +{blaster.magazineBonus}</span>}
+          </span>
           <span className="blaster-card-stat-label">Magazine</span>
         </div>
       </div>
@@ -101,6 +105,8 @@ export default function BlasterCard({
       <div className="blaster-card-fail-rate">
         Fail Rate <strong>{quality.failRate}%</strong>
       </div>
+
+      {blaster.durability != null && <BlasterCondition blaster={blaster} />}
 
       {effectNote && (
         <div className="blaster-card-effect">

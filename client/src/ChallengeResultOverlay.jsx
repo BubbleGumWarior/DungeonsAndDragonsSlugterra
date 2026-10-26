@@ -56,7 +56,7 @@ export default function ChallengeResultOverlay() {
                 <span className="challenge-overlay-winner-portrait">
                   <UserCircleIcon weight="duotone" />
                 </span>
-                <span className="challenge-overlay-winner-name">{w.username}</span>
+                <span className="challenge-overlay-winner-name">{w.name}</span>
                 <span className="challenge-overlay-winner-value">{w.value}</span>
               </div>
             ))}

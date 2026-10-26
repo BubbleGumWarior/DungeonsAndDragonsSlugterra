@@ -1,0 +1,1715 @@
+SLUG IMAGE GENERATION INSTRUCTIONS
+========================================================================
+
+PURPOSE
+-------
+Generate a complete, consistent set of artwork for ALL 200 slugs (creatures from a Slugterra-inspired
+D&D game). The whole roster is being redone in one unified style, so even slugs that already have
+art are included. Every slug needs TWO images:
+  1. PROTOFORM image -- the slug's calm, cute, non-combat form (portrait).
+  2. VELOCITY image  -- the same slug transformed for battle (landscape).
+That is 400 images in total. Each slug's section below gives its element, rarity, a
+design brief to use for BOTH images (so the two clearly show the same creature), what
+each image should show, and the exact output filenames.
+
+Two kinds of slug appear in the list:
+  EXISTING slugs -- reference art for them is in ./References. KEEP THE SAME CREATURE: the
+    same body shape, colors, markings and distinguishing features as in that reference art (read
+    ./References/<filebase>_Proto.png and <filebase>_Velocity.png), rendered in the unified
+    style below. Where a slug's text description below mentions an effect the reference art does
+    not show, add it to the new image.
+  NEW slugs -- no art exists yet. Use the written DESIGN BRIEF to create the creature.
+
+REFERENCE IMAGES -- READ THESE FIRST
+------------------------------------
+The reference images are found in ./References. Study them before generating anything and
+match them: the rendering style, the proportions, the lighting, the level of detail, the way
+the protoform and velocity images of the same slug relate to each other, and how each
+element's color and effects are used. Files are named <Name>_Proto.png and
+<Name>_Velocity.png (spaces removed from the name). When in doubt, the reference images beat
+the written style notes below.
+
+STYLE -- PROTOFORM IMAGE (<Name>_Proto.png)
+-----------------------------------------
+- A single cute, friendly slug (a small, soft-bodied, mollusc-like creature with a stubby
+  body, little arms or fins, and a big expressive face) standing upright and facing the
+  viewer, full body visible, centered.
+- Glossy, polished 3D-render look with soft studio lighting: smooth skin with subtle
+  texture, large round glossy eyes with highlights, a simple friendly mouth.
+- Portrait orientation, about 3:4 (for example 1024 x 1365 px). Leave a little space
+  around the creature.
+- Plain very dark background (near black / deep charcoal) with a few ambient accents of the
+  slug's element around it and at its feet (for a water slug: droplets and ripples around
+  the base). Subtle only -- the creature is the focus.
+
+STYLE -- VELOCITY IMAGE (<Name>_Velocity.png)
+-------------------------------------------
+- The SAME creature (same colors, markings and distinguishing features as its protoform
+  image) transformed into its fierce battle form: sharper, more angular, more muscular or
+  armored, aggressive expression, mid-action in a dynamic pose with a strong sense of motion.
+- Painterly digital comic / fantasy illustration look: bold clean outlines, saturated colors,
+  dramatic lighting and high contrast.
+- Landscape orientation, about 3:2 (for example 1536 x 1024 px). The creature is large in the
+  frame, with its whole body or at least its head and main weapon-like features visible.
+- Dark background filled with swirling energy, particles, debris or splashes of the slug's
+  element, flowing around the creature to emphasize the motion. Effects should match what
+  the slug actually does (see each slug's velocity description).
+
+TECHNICAL REQUIREMENTS (BOTH IMAGES)
+-------------------------------------
+- PNG files. No text, letters, numbers, labels, logos, signatures or watermarks anywhere.
+- Family-friendly, cartoon-style only: no blood, gore, realistic weapons or graphic injury. Show harm with stylised
+  energy effects instead. (Some slug descriptions are about bleeding or surgery -- draw the goofy cartoon version.)
+- Exactly one creature per image, no other characters, no people, no UI.
+- The whole creature must be inside the frame and not cropped awkwardly.
+- Consistent look across all slugs: the same rendering style, the same eye style, the same
+  level of polish. Slugs should read as one family of creatures.
+- The two images of a slug must be obviously the same creature.
+- The game shrinks images to 800 px on the long edge, so very high resolutions are unnecessary.
+
+ELEMENT COLOR / EFFECT GUIDE (each slug below lists its element; use the matching palette and effects for the ambient accents and velocity effects)
+----------------------------
+  Air         pale sky blue, white and silver; swirling wind streaks, feathers, drifting cloud wisps
+  Dark        deep violet, black and indigo with a faint purple glow; creeping shadow, smoke and pale moonlight specks
+  Earth       browns, ochre and stone grey; rocks, crystals, dust and cracked ground
+  Electricity bright yellow and white-blue; crackling arcs, sparks and glowing coils
+  Energy      neon cyan and magenta with white-hot cores; pulsing rings, sparks and star-like flares
+  Fire        orange, red and gold; embers, flames and glowing cracks
+  Healing     soft green, gold and white with warm pink accents; gentle glowing light, leaves, drifting motes
+  Ice         icy white, pale blue and cyan; frost crystals, snow, icicles and glints
+  Light       white, gold and warm yellow; radiant beams, lens-flare rays and sparkles
+  Metal       steel grey, bronze, copper and orange-gold; polished plates, rivets, sparks and metal shards
+  None        dull beige and grey; plain and unglamorous, no magical effects at all
+  Plant       leaf and moss greens with flower accents; vines, leaves, petals and spores
+  Psychic     pink, violet and lilac; soft concentric ripples, floating orbs, dreamy swirls
+  Toxic       sickly green and purple; bubbling ooze, drifting spores and noxious haze
+  Unique      no single element; choose colors that suit the creature's own design
+  Water       blue and teal; water droplets, ripples, splashes and swirling currents
+
+RARITY GUIDE (each slug below lists its rarity tier; apply the matching treatment)
+------------
+Rarity runs 1 (common) to 10 (legendary). Use it to set how grand each slug looks:
+  Common    keep it small, simple and cute; modest, low-key effects.
+  Uncommon  a little more detail and personality; clearly visible but still modest effects.
+  Rare      more elaborate design and noticeably stronger effects.
+  Epic      impressive and detailed; bold, dramatic effects.
+  Legendary grand, majestic and highly detailed; spectacular, screen-filling effects.
+
+OUTPUT
+------
+Save each finished image with the exact filename shown in its section, into a folder of
+your choice, and hand the whole set back. In the game's project, they are placed in
+docs/Images/, replacing any older files of the same name. Keep names exactly as given,
+including capitalization. (Two older files are spelled unusually -- Freightgeist and Hypnogriff --
+and the game expects those exact spellings; they are already given correctly below.)
+
+SUGGESTION IF YOUR TOOL HAS A REQUEST LIMIT
+-------------------------------------------
+It is fine to generate a slug's two images in one request (side by side) or several slugs in
+one contact-sheet image (for example a 2x2 or 3x2 grid), then crop them apart afterwards --
+as long as every cropped image still meets the requirements above and the creature in each
+tile is complete. Four creatures per sheet is a good maximum for quality.
+
+========================================================================
+THE 201 SLUGS
+========================================================================
+
+[1] AQUABEEK
+  Element: Water    Rarity: 2/10 (Common)
+  EXISTING SLUG -- keep the creature from ./References/Aquabeek_Proto.png and Aquabeek_Velocity.png.
+  PROTOFORM IMAGE -> Aquabeek_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Shoots clean squirts of fresh water for drinking or washing away small debris.
+  VELOCITY IMAGE -> Aquabeek_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fires a high-pressure jet of water that blasts heavy objects aside and puts out fires.
+
+[2] ARACHNET
+  Element: Unique    Rarity: 4/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/Arachnet_Proto.png and Arachnet_Velocity.png.
+  PROTOFORM IMAGE -> Arachnet_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Spins strong silk strands useful for grappling lines, securing cargo, or tying knots.
+  VELOCITY IMAGE -> Arachnet_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Shoots sticky webbing that hooks a target and reels them in toward its slinger. Fired at a wall or bridge, it anchors a web line and hauls its slinger across the field. It can also be fired at the ground to spin a web wall or a web bridge.
+
+[3] ARMASHELT
+  Element: Metal    Rarity: 6/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Armashelt_Proto.png and Armashelt_Velocity.png.
+  PROTOFORM IMAGE -> Armashelt_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Deflects minor incoming projectiles off its tough outer shell or acts as a doorstop.
+  VELOCITY IMAGE -> Armashelt_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Curls up and rolls into the target like a wrecking ball, shoving them back hard, and can flatten a wall.
+
+[4] BLASTIPEDE
+  Element: Fire    Rarity: 5/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Blastipede_Proto.png and Blastipede_Velocity.png.
+  PROTOFORM IMAGE -> Blastipede_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Leaves small, benign glowing dots that can mark paths or serve as signal markers.
+  VELOCITY IMAGE -> Blastipede_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Leaves a patch of explosive mines where it lands that burns anyone who steps on them, and can blast walls open.
+
+[5] BOON DOC
+  Element: Healing    Rarity: 9/10 (Legendary)
+  EXISTING SLUG -- keep the creature from ./References/BoonDoc_Proto.png and BoonDoc_Velocity.png.
+  PROTOFORM IMAGE -> BoonDoc_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Emits a soothing light that heals minor cuts and relieves fatigue.
+  VELOCITY IMAGE -> BoonDoc_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Sends out a powerful healing light that mends serious injuries.
+
+[6] BUBBALEONE
+  Element: Water    Rarity: 3/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/Bubbaleone_Proto.png and Bubbaleone_Velocity.png.
+  PROTOFORM IMAGE -> Bubbaleone_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Blows durable, buoyant bubbles that act as soft cushions, floating rafts, or makeshift storage containers.
+  VELOCITY IMAGE -> Bubbaleone_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Launches a huge soap bubble that traps the target inside and stuns them (they lose 1 AP on their next turn), putting out any flames. It can instead be fired across a gap to build a floating bridge of bubbles.
+
+[7] CRYSTALYD
+  Element: Earth    Rarity: 4/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/Crystalyd_Proto.png and Crystalyd_Velocity.png.
+  PROTOFORM IMAGE -> Crystalyd_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Focuses ambient light into sharp crystalline beams to mark stone walls.
+  VELOCITY IMAGE -> Crystalyd_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Slams into the target with a heavy shove, and can drill through a wall to break it open.
+
+[8] DIGGRIX
+  Element: Earth    Rarity: 4/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/Diggrix_Proto.png and Diggrix_Velocity.png.
+  PROTOFORM IMAGE -> Diggrix_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Scoops away soft dirt quickly to create small trenches or shelters.
+  VELOCITY IMAGE -> Diggrix_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Throws a large boulder that shoves the target hard and hits everyone near the impact too, and can break walls.
+
+[9] DIRT URCHIN
+  Element: Earth    Rarity: 3/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/DirtUrchin_Proto.png and DirtUrchin_Velocity.png.
+  PROTOFORM IMAGE -> DirtUrchin_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Shoots tiny, soft quills that stick to surfaces, useful for marking trails or setting minor traps.
+  VELOCITY IMAGE -> DirtUrchin_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fires a volley of sharp quills that shove the target back and leave a patch of spikes that hurts anyone who steps in it.
+
+[10] ENIGMO
+  Element: Light    Rarity: 8/10 (Epic)
+  EXISTING SLUG -- keep the creature from ./References/Enigmo_Proto.png and Enigmo_Velocity.png.
+  PROTOFORM IMAGE -> Enigmo_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Produces a soft aura and aids in locating hidden paths or ancient slug lore.
+  VELOCITY IMAGE -> Enigmo_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fires a bright, steady flash that blinds the target. In a dual shot it greatly boosts its partner: the other slug's power is tripled.
+
+[11] FANDANGO
+  Element: Energy    Rarity: 7/10 (Epic)
+  EXISTING SLUG -- keep the creature from ./References/Fandango_Proto.png and Fandango_Velocity.png.
+  PROTOFORM IMAGE -> Fandango_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Keeps every slug in its slinger's blaster full of energy while it is equipped: they come back from a shot sooner and can keep fighting for longer before running dry.
+  VELOCITY IMAGE -> Fandango_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Whoever it hits is thrown off balance: for their next few turns, their shots have a real chance of flying completely backwards. Once it has been shot, every other slug fired in the same turn hits twice as hard.
+
+[12] FIRENZAR
+  Element: Fire    Rarity: 4/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/Firenzar_Proto.png and Firenzar_Velocity.png.
+  PROTOFORM IMAGE -> Firenzar_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Leaves glowing trail marks that stay hot for several minutes to track back through cold caverns.
+  VELOCITY IMAGE -> Firenzar_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Races across the field and hits the target with a fast strike that burns them and shoves them back, leaving a patch of fire on the ground. It can also be fired at the ground to raise a wall of fire.
+
+[13] FLARINGO
+  Element: Fire    Rarity: 5/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Flaringo_Proto.png and Flaringo_Velocity.png.
+  PROTOFORM IMAGE -> Flaringo_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Emits a bright, glowing flame from its head that can illuminate dark caverns, ignite campfires or fuses, and thaw frozen locks without expending energy pips.
+  VELOCITY IMAGE -> Flaringo_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Flies straight at a single target and burns it on impact, leaving a wall of flame along its whole path and a burning patch where it lands. It can also raise a wall of flame at a chosen spot.
+
+[14] FLATULORHINKUS
+  Element: Toxic    Rarity: 3/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/Flatulorhinkus_Proto.png and Flatulorhinkus_Velocity.png.
+  PROTOFORM IMAGE -> Flatulorhinkus_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Releases tiny, harmless puffs of foul-smelling gas to deter small creatures or clear personal space.
+  VELOCITY IMAGE -> Flatulorhinkus_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Sprays a wide cloud of foul gas that poisons and stuns everyone caught in it (they lose 1 AP on their next turn), and leaves a lingering patch of stink on the ground.
+
+[15] FLOPPER
+  Element: None    Rarity: 1/10 (Common)
+  EXISTING SLUG -- keep the creature from ./References/Flopper_Proto.png and Flopper_Velocity.png.
+  PROTOFORM IMAGE -> Flopper_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Squirts a harmless drop of water or flops around uselessly, offering mild moral support or serving as a distraction.
+  VELOCITY IMAGE -> Flopper_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Doesn't transform. It just flies through the air and bounces harmlessly off its target.
+
+[16] FORGESMELTER
+  Element: Fire    Rarity: 6/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Forgesmelter_Proto.png and Forgesmelter_Velocity.png.
+  PROTOFORM IMAGE -> Forgesmelter_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Generates extreme localized heat capable of welding broken metal or rapidly heating tools.
+  VELOCITY IMAGE -> Forgesmelter_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Sprays molten magma that burns the target and leaves a pool of burning slag. It can also break walls or raise a wall of slag.
+
+[17] FRIGHTGEIST
+  Element: Dark    Rarity: 5/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Freightgeist_Proto.png and Freightgeist_Velocity.png.
+  PROTOFORM IMAGE -> Freightgeist_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Distorts nearby light and shadows to spook wild animals or send eerie signals.
+  VELOCITY IMAGE -> Freightgeist_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Passes through solid objects and terrifies whoever it hits, who spends their whole next turn running away from where the shot came from.
+
+[18] FROSTCRAWLER
+  Element: Ice    Rarity: 4/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/Frostcrawler_Proto.png and Frostcrawler_Velocity.png.
+  PROTOFORM IMAGE -> Frostcrawler_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Instantly cools water, freezes small puddles into footholds, or chills rations.
+  VELOCITY IMAGE -> Frostcrawler_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fires sharp icicles that leave a slick sheet of ice where they land, and can build large ice walls.
+
+[19] GAZZER
+  Element: Air    Rarity: 3/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/Gazzer_Proto.png and Gazzer_Velocity.png.
+  PROTOFORM IMAGE -> Gazzer_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Emits tiny puffs of gas that cause mild giggling or lightheadedness.
+  VELOCITY IMAGE -> Gazzer_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fills the air around the target with laughing gas, leaving them too helpless with laughter to fight: they lose 1 AP on their next turn.
+
+[20] GEOSHARD
+  Element: Earth    Rarity: 5/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Geoshard_Proto.png and Geoshard_Velocity.png.
+  PROTOFORM IMAGE -> Geoshard_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Creates small decorative quartz-like crystals on surfaces to reflect light.
+  VELOCITY IMAGE -> Geoshard_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fires razor-sharp shards that shove the target back hard, and can build crystal walls.
+
+[21] GRENUKE
+  Element: Fire    Rarity: 5/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Grenuke_Proto.png and Grenuke_Velocity.png.
+  PROTOFORM IMAGE -> Grenuke_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Generates low-frequency ticking vibrations to signal danger or test structural stability.
+  VELOCITY IMAGE -> Grenuke_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Explodes on contact with enormous force, burning the target and shoving them back, and can blast walls apart.
+
+[22] HEXLET
+  Element: Dark    Rarity: 6/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Hexlet_Proto.png and Hexlet_Velocity.png.
+  PROTOFORM IMAGE -> Hexlet_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Causes minor unlucky glitches in nearby electronics, like flickering lights or faulty sensors.
+  VELOCITY IMAGE -> Hexlet_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Curses the target's blaster. Whether the shot hits or misses, their next shot misfires.
+
+[23] HOP ROCK
+  Element: Earth    Rarity: 4/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/HopRock_Proto.png and HopRock_Velocity.png.
+  PROTOFORM IMAGE -> HopRock_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Generates small, controlled micro-blasts useful for cracking nuts or starting small rockslides.
+  VELOCITY IMAGE -> HopRock_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Bounces unpredictably across the ground, then bursts into a spray of explosive fragments.
+
+[24] HOVERBUG
+  Element: Air    Rarity: 3/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/Hoverbug_Proto.png and Hoverbug_Velocity.png.
+  PROTOFORM IMAGE -> Hoverbug_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Creates light breezes to clear smoke, dust, or cool down companions while hovering in place.
+  VELOCITY IMAGE -> Hoverbug_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Whips up a strong gust that shoves the target back, and can instead be fired across a gap to build a bridge of wind for allies to cross.
+
+[25] HYPNOGRIF
+  Element: Psychic    Rarity: 5/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Hypnogriff_Proto.png and Hypnogriff_Velocity.png.
+  PROTOFORM IMAGE -> Hypnogriff_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Emits low-frequency waves that make nearby creatures feel calm or drowsy.
+  VELOCITY IMAGE -> Hypnogriff_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Hypnotizes the target into a trance: they're stunned and lose 1 AP on their next turn.
+
+[26] INFURNUS
+  Element: Fire    Rarity: 6/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Infurnus_Proto.png and Infurnus_Velocity.png.
+  PROTOFORM IMAGE -> Infurnus_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Produces small controlled flames for lighting torches, warming allies, or welding small metal objects.
+  VELOCITY IMAGE -> Infurnus_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Flies at extreme speed, burning the target and leaving a pool of lava where it lands. It can also raise a wall of fire.
+
+[27] JELLYISH
+  Element: Unique    Rarity: 4/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/Jellyish_Proto.png and Jellyish_Velocity.png.
+  PROTOFORM IMAGE -> Jellyish_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Produces small droplets of non-toxic adhesive, perfect for quick makeshift repairs.
+  VELOCITY IMAGE -> Jellyish_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Launches a glob of sticky slime that holds the target in place, stunning them: they lose 1 AP on their next turn.
+
+[28] LARIAT
+  Element: Unique    Rarity: 5/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Lariat_Proto.png and Lariat_Velocity.png.
+  PROTOFORM IMAGE -> Lariat_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Extends a sticky tongue to grab small objects from out-of-reach places like a quick grappling hook.
+  VELOCITY IMAGE -> Lariat_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Lassos the target and yanks them toward its slinger. Fired at a wall or bridge, it swings its slinger across the field. It can also be fired across a gap to build a bridge.
+
+[29] LAVALYNX
+  Element: Fire    Rarity: 5/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Lavalynx_Proto.png and Lavalynx_Velocity.png.
+  PROTOFORM IMAGE -> Lavalynx_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Radiates high ambient heat to melt ice or heat metal tools rapidly.
+  VELOCITY IMAGE -> Lavalynx_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Spits a river of lava that burns the target and leaves a pool of burning magma. It can also raise a wall of lava.
+
+[30] MAKOBREAKER
+  Element: Metal    Rarity: 6/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Makobreaker_Proto.png and Makobreaker_Velocity.png.
+  PROTOFORM IMAGE -> Makobreaker_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Uses its hardened, razor-sharp head-crest to slice through thin metals or score stone.
+  VELOCITY IMAGE -> Makobreaker_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Lunges at the target with a punishing blow that shoves them back hard, and can tunnel through walls.
+
+[31] MIMKEY
+  Element: Unique    Rarity: 10/10 (Legendary)
+  EXISTING SLUG -- keep the creature from ./References/Mimkey_Proto.png and Mimkey_Velocity.png.
+  PROTOFORM IMAGE -> Mimkey_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Intelligently mocks enemies.
+  VELOCITY IMAGE -> Mimkey_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Does almost no damage on its own. When shot as a counter, it transforms into the opposing slug, so the two always cancel each other out.
+
+[32] NARWHADDLE
+  Element: Ice    Rarity: 4/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/Narwhaddle_Proto.png and Narwhaddle_Velocity.png.
+  PROTOFORM IMAGE -> Narwhaddle_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Uses its small frozen horn to chip away at ice buildup or poke holes in soft materials.
+  VELOCITY IMAGE -> Narwhaddle_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Rams the target and sends a freezing shockwave out from the point of impact. It can also break walls or build an ice bridge.
+
+[33] NEGASHADE
+  Element: Dark    Rarity: 6/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Negashade_Proto.png and Negashade_Velocity.png.
+  PROTOFORM IMAGE -> Negashade_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Absorbs ambient light around itself, creating small pockets of pitch-black shadow for concealment.
+  VELOCITY IMAGE -> Negashade_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Smothers the target in darkness, blinding them so their next attack suffers, and leaves a patch of dark ground behind.
+
+[34] NEOTOX
+  Element: Toxic    Rarity: 4/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/Neotox_Proto.png and Neotox_Velocity.png.
+  PROTOFORM IMAGE -> Neotox_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Secretes tiny drops of corrosive fluid to dissolve rust or weaken small fasteners.
+  VELOCITY IMAGE -> Neotox_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Spits acid that poisons the target and a cloud of nerve gas that paralyzes them: they lose 1 AP on their next turn. Leaves a corrosive pool on the ground, and can dissolve walls.
+
+[35] PHOSPHORA
+  Element: Light    Rarity: 5/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Phosphora_Proto.png and Phosphora_Velocity.png.
+  PROTOFORM IMAGE -> Phosphora_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Glows intensely like a high-powered lantern to illuminate dark subterranean caverns.
+  VELOCITY IMAGE -> Phosphora_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fires intense laser beams and flashes that blind targets for a short while.
+
+[36] PIEPER
+  Element: Psychic    Rarity: 5/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Pieper_Proto.png and Pieper_Velocity.png.
+  PROTOFORM IMAGE -> Pieper_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Emits high-pitched chirps that can mimic simple sounds or distract small subterranean critters.
+  VELOCITY IMAGE -> Pieper_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Controls the target's slugs with a piercing mental chirp. The target is dazed, and every slug they own goes on cooldown for a turn, or stays out one turn longer if it was already cooling down.
+
+[37] POLERO
+  Element: Metal    Rarity: 4/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/Polero_Proto.png and Polero_Velocity.png.
+  PROTOFORM IMAGE -> Polero_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Wraps its split tail around small objects to carry them or hang from overhead beams.
+  VELOCITY IMAGE -> Polero_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Splits in two mid-flight and binds the target's limbs, holding them in place for two of their turns.
+
+[38] RAMMSTONE
+  Element: Earth    Rarity: 5/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Rammstone_Proto.png and Rammstone_Velocity.png.
+  PROTOFORM IMAGE -> Rammstone_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Crushes small stones, digs footholds into soft earth, or wedges small openings open.
+  VELOCITY IMAGE -> Rammstone_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Slams into the target and sends a shockwave through everyone near the impact, and can smash through walls.
+
+[39] SAND ANGLER
+  Element: Earth    Rarity: 4/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/SandAngler_Proto.png and SandAngler_Velocity.png.
+  PROTOFORM IMAGE -> SandAngler_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Softens small patches of soil or sand, making digging easier.
+  VELOCITY IMAGE -> SandAngler_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Blinds the target with a sandstorm so their next attack suffers, and traps their legs in quicksand so they can't move for two of their turns.
+
+[40] SLICKSILVER
+  Element: Metal    Rarity: 5/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Slicksilver_Proto.png and Slicksilver_Velocity.png.
+  PROTOFORM IMAGE -> Slicksilver_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Attracts small metallic items like keys or loose bolts with a low-grade magnetic field.
+  VELOCITY IMAGE -> Slicksilver_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fries the target's blaster with a magnetic pulse and shoves them back. Hit or miss, their next shot misfires. Its field also drags nearby metal walls and bridges slightly toward the impact point.
+
+[41] SLYREN
+  Element: Psychic    Rarity: 6/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Slyren_Proto.png and Slyren_Velocity.png.
+  PROTOFORM IMAGE -> Slyren_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Hums a quiet lullaby that induces mild drowsiness in small creatures.
+  VELOCITY IMAGE -> Slyren_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Puts everyone in the area into a deep sleep, so they all lose their next turn.
+
+[42] SPEEDSTINGER
+  Element: Metal    Rarity: 5/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Speedstinger_Proto.png and Speedstinger_Velocity.png.
+  PROTOFORM IMAGE -> Speedstinger_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Moves at incredible speeds over short distances to retrieve dropped tools or scout ahead unnoticed.
+  VELOCITY IMAGE -> Speedstinger_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Caroms off its target at high speed on to the next nearest enemy, up to four times, each leg as strong as the first and counterable on its own.
+
+[43] TAZERLING
+  Element: Electricity    Rarity: 4/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/Tazerling_Proto.png and Tazerling_Velocity.png.
+  PROTOFORM IMAGE -> Tazerling_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Acts as a portable battery to jumpstart machinery, charge power packs, or produce mild static sparks.
+  VELOCITY IMAGE -> Tazerling_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Shocks the target, who loses their next turn, and arcs chain lightning to a second target nearby.
+
+[44] THRESHER
+  Element: Metal    Rarity: 6/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Thresher_Proto.png and Thresher_Velocity.png.
+  PROTOFORM IMAGE -> Thresher_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Cuts through thin ropes or vines using its sharp head-fin.
+  VELOCITY IMAGE -> Thresher_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Slashes the target with a brutal cut for huge damage, and can cut through walls.
+
+[45] THUGGLET
+  Element: Psychic    Rarity: 4/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/Thugglet_Proto.png and Thugglet_Velocity.png.
+  PROTOFORM IMAGE -> Thugglet_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Uses faint telekinesis to nudge small objects or tug on loose gear to annoy opponents.
+  VELOCITY IMAGE -> Thugglet_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Jinxes an enemy's blaster so their next shot misfires. Shot at yourself instead, it makes you invisible to every other player for one turn, until you are hit.
+
+[46] TORMATO
+  Element: Air    Rarity: 4/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/Tormato_Proto.png and Tormato_Velocity.png.
+  PROTOFORM IMAGE -> Tormato_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Produces small, gentle whirlwinds that clear dust, blow away light debris, or fan flames.
+  VELOCITY IMAGE -> Tormato_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Creates a violent tornado at the impact point that hurls everyone nearby backwards.
+
+[47] VINEDRILL
+  Element: Plant    Rarity: 4/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/Vinedrill_Proto.png and Vinedrill_Velocity.png.
+  PROTOFORM IMAGE -> Vinedrill_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Sprouts fast-growing vines to weave temporary ropes, secure gear, or harvest hard-to-reach flora.
+  VELOCITY IMAGE -> Vinedrill_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Entangles the target and everyone near the impact in thorned vines, holding them in place for two of their turns. It can also grow vine walls and bridges.
+
+[48] XMITTER
+  Element: Electricity    Rarity: 5/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Xmitter_Proto.png and Xmitter_Velocity.png.
+  PROTOFORM IMAGE -> Xmitter_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Emits minor static pulses that clear radio static or briefly disrupt digital displays.
+  VELOCITY IMAGE -> Xmitter_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Short-circuits the target's blaster. Hit or miss, their next shot misfires.
+
+[49] EMBERBLADE
+  Element: Fire    Rarity: 7/10 (Epic)
+  EXISTING SLUG -- keep the creature from ./References/Emberblade_Proto.png and Emberblade_Velocity.png.
+  PROTOFORM IMAGE -> Emberblade_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): When cooking from a fire made by this slug, the food quality is increased.
+  VELOCITY IMAGE -> Emberblade_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Slashes at enemies, burning them, and leaves a wall of fire along its path. In a clash, its power and defense are tripled. It can also raise a wall of flame.
+
+[50] FROSTFIRE
+  Element: Fire    Rarity: 8/10 (Epic)
+  EXISTING SLUG -- keep the creature from ./References/Frostfire_Proto.png and Frostfire_Velocity.png.
+  PROTOFORM IMAGE -> Frostfire_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): The slug can freeze and defreeze objects in a cryo stasis.
+  VELOCITY IMAGE -> Frostfire_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Choose when you shoot it: burn the target with fire, or build an ice wall or an ice bridge.
+
+[51] SAGEBLOOM
+  Element: Plant    Rarity: 3/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/Sagebloom_Proto.png and Sagebloom_Velocity.png.
+  PROTOFORM IMAGE -> Sagebloom_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): This slug grows seeds on its head and hands that make for tasteful spices.
+  VELOCITY IMAGE -> Sagebloom_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fires seeds at the target for heavy damage.
+
+[52] ZEUS
+  Element: Electricity    Rarity: 9/10 (Legendary)
+  EXISTING SLUG -- keep the creature from ./References/Zeus_Proto.png and Zeus_Velocity.png.
+  PROTOFORM IMAGE -> Zeus_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): This slug can super charge equipment making htem function at 200% for an hour, but afterwards breaks the technology
+  VELOCITY IMAGE -> Zeus_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Moves at lightning speed, which makes it almost impossible to counter. Its own flight is too fast to follow.
+
+[53] BLADIER
+  Element: Metal    Rarity: 6/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Bladier_Proto.png and Bladier_Velocity.png.
+  PROTOFORM IMAGE -> Bladier_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Shifts and hardens it's body to form a strong dagger that can be thrown or used in Melee
+  VELOCITY IMAGE -> Bladier_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Punches straight through the first wall in its path, breaking it open, and keeps going to hit the target at full power. The dagger's cut leaves them bleeding: for the next 3 turns they lose 10% of their max Grit at the start of each of their turns.
+
+[54] CYBERCUT
+  Element: Electricity    Rarity: 6/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Cybercut_Proto.png and Cybercut_Velocity.png.
+  PROTOFORM IMAGE -> Cybercut_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): This slug can connect to electronics and hack them.
+  VELOCITY IMAGE -> Cybercut_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Hits the target with a heavy bolt of lightning, and a half-power arc jumps to the nearest enemy.
+
+[55] GRASPVINE
+  Element: Plant    Rarity: 5/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Graspvine_Proto.png and Graspvine_Velocity.png.
+  PROTOFORM IMAGE -> Graspvine_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): This slugs can manipulate the growth of plants to support beams or caverns to be safer
+  VELOCITY IMAGE -> Graspvine_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Burrows underground, passing beneath walls, then bursts out in a tangle of vines that grab everyone near the impact. They can't move for two of their turns, and lose their next turn entirely.
+
+[56] SAPHEART
+  Element: Healing    Rarity: 7/10 (Epic)
+  EXISTING SLUG -- keep the creature from ./References/Sapheart_Proto.png and Sapheart_Velocity.png.
+  PROTOFORM IMAGE -> Sapheart_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): This slug's feces is very commonly used in medicine for its healing properties.
+  VELOCITY IMAGE -> Sapheart_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Bathes whoever it hits in a healing mist that keeps mending them: they recover Grit at the start of each of their next three turns.
+
+[57] THORNLASH
+  Element: Plant    Rarity: 8/10 (Epic)
+  EXISTING SLUG -- keep the creature from ./References/Thornlash_Proto.png and Thornlash_Velocity.png.
+  PROTOFORM IMAGE -> Thornlash_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): This slug's thorns can be plucked and used as needles, it is stronger than steel.
+  VELOCITY IMAGE -> Thornlash_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fires a cone of spikes for reduced area damage, then still hits the target directly.
+
+[58] PRESSURE TICK
+  Element: Water    Rarity: 5/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/PressureTick_Proto.png and PressureTick_Velocity.png.
+  PROTOFORM IMAGE -> PressureTick_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): This slug can swallow water and shoot it out as steam.
+  VELOCITY IMAGE -> PressureTick_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Leaves three steam pods scattered around the impact point. Each one fires a scalding line of steam in a fixed direction every few turns, hurting anyone caught in it.
+
+[59] MIRAGE COIL
+  Element: Light    Rarity: 7/10 (Epic)
+  EXISTING SLUG -- keep the creature from ./References/MirageCoil_Proto.png and MirageCoil_Velocity.png.
+  PROTOFORM IMAGE -> MirageCoil_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): This slug can create mirrage copies of themselves to confuse predators
+  VELOCITY IMAGE -> MirageCoil_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Creates false copies of its slinger to confuse opponents.
+
+[60] REGULATOR
+  Element: Fire    Rarity: 9/10 (Legendary)
+  EXISTING SLUG -- keep the creature from ./References/Regulator_Proto.png and Regulator_Velocity.png.
+  PROTOFORM IMAGE -> Regulator_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): This slug on random occasions needs to blow off steam releasing heat waves to keep itself healthy.
+  VELOCITY IMAGE -> Regulator_Velocity.png
+    Battle form, dynamic action pose, shown doing this: On impact, forms a star of fire walls. A slinger hit by one of the walls takes a lot of damage.
+
+[61] ANCHORAGE
+  Element: Metal    Rarity: 7/10 (Epic)
+  EXISTING SLUG -- keep the creature from ./References/Anchorage_Proto.png and Anchorage_Velocity.png.
+  PROTOFORM IMAGE -> Anchorage_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): This slug can make small objects remain in place for a short period of time, even if the object should be falling it stays in place.
+  VELOCITY IMAGE -> Anchorage_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Creates a zone where slingers can't be knocked back, and where the ground, walls and bridges can't be broken.
+
+[62] ECHO-ASH
+  Element: Fire    Rarity: 2/10 (Common)
+  EXISTING SLUG -- keep the creature from ./References/Echo-ash_Proto.png and Echo-ash_Velocity.png.
+  PROTOFORM IMAGE -> Echo-ash_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): This slug can manipulate ash to form shapes or pictures.
+  VELOCITY IMAGE -> Echo-ash_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Blinds opponents and leaves an ash cloud that burns anyone who steps into it.
+
+[63] KEYSTONE
+  Element: Energy    Rarity: 10/10 (Legendary)
+  EXISTING SLUG -- keep the creature from ./References/Keystone_Proto.png and Keystone_Velocity.png.
+  PROTOFORM IMAGE -> Keystone_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): This slug is able to detect structural weakness by touching structures and point it out to slingers.
+  VELOCITY IMAGE -> Keystone_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Hits for next to nothing, but can be fired at the ground to raise fortifications or lay a foundation bridge.
+
+[64] CALIGO
+  Element: Water    Rarity: 6/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Caligo_Proto.png and Caligo_Velocity.png.
+  PROTOFORM IMAGE -> Caligo_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Can sterilize surfaces, objects and people.
+  VELOCITY IMAGE -> Caligo_Velocity.png
+    Battle form, dynamic action pose, shown doing this: In a clash with a Fire-type slug, on either side, it turns to steam and both slugs fizzle out with no damage. Where it lands, it puts out the nearest fire wall, bridge or hazard, or, if there's nothing to put out, leaves a cloud of scalding steam.
+
+[65] CYNOSURE
+  Element: Metal    Rarity: 8/10 (Epic)
+  EXISTING SLUG -- keep the creature from ./References/Cynosure_Proto.png and Cynosure_Velocity.png.
+  PROTOFORM IMAGE -> Cynosure_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Can become slightly magnetic and thus is good for fixing or tightening small screws within mechanical equipment.
+  VELOCITY IMAGE -> Cynosure_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fries the target's blaster, hit or miss, so they can't shoot on their next turn. Where it lands, it leaves a magnetic field that keeps anyone inside disarmed for as long as they stay, plus one more turn after they leave.
+
+[66] PERPLEXUS
+  Element: Psychic    Rarity: 8/10 (Epic)
+  EXISTING SLUG -- keep the creature from ./References/Perplexus_Proto.png and Perplexus_Velocity.png.
+  PROTOFORM IMAGE -> Perplexus_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): When looking directly into its eyes it makes it difficult but not impossible to lie.
+  VELOCITY IMAGE -> Perplexus_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Replaces the usual Psychic stun with a chosen effect. On someone else: reverse their next move, blind them, or slow their reaction to the next shot. On yourself: sharpen your reaction, or gain keen vision for your next attack.
+
+[67] TESSER
+  Element: Energy    Rarity: 7/10 (Epic)
+  EXISTING SLUG -- keep the creature from ./References/Tesser_Proto.png and Tesser_Velocity.png.
+  PROTOFORM IMAGE -> Tesser_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Able to store an item less than 10cm x 10cm in a sort of pocket dimension.
+  VELOCITY IMAGE -> Tesser_Velocity.png
+    Battle form, dynamic action pose, shown doing this: On a hit, swaps places with the slinger it struck.
+
+[68] TREMOROCK
+  Element: Earth    Rarity: 2/10 (Common)
+  EXISTING SLUG -- keep the creature from ./References/Tremorock_Proto.png and Tremorock_Velocity.png.
+  PROTOFORM IMAGE -> Tremorock_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Although it has no discerning abilities, it has crazy endurance and is able to outlast most well trained slugs even when just caught.
+  VELOCITY IMAGE -> Tremorock_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Slams into the ground and sends out a shockwave that throws everyone nearby off balance, and can break walls.
+
+[69] VENTUS
+  Element: Air    Rarity: 3/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/Ventus_Proto.png and Ventus_Velocity.png.
+  PROTOFORM IMAGE -> Ventus_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Can whip up small, controlled gusts even without transforming, making it excellent for breaking small objects or playing pranks.
+  VELOCITY IMAGE -> Ventus_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Releases a burst of wind that knocks everyone nearby off their feet.
+
+[70] MANTIS
+  Element: Water    Rarity: 4/10 (Uncommon)
+  EXISTING SLUG -- keep the creature from ./References/Mantis_Proto.png and Mantis_Velocity.png.
+  PROTOFORM IMAGE -> Mantis_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Very good at finding places to hide from rain, wind, or currents -- following one will always lead you out of a disaster.
+  VELOCITY IMAGE -> Mantis_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Shoves the target back with a shockwave, and can break through walls.
+
+[71] PSI
+  Element: Energy    Rarity: 6/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Psi_Proto.png and Psi_Velocity.png.
+  PROTOFORM IMAGE -> Psi_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Able to reduce the friction of objects it touches, making it common among mechanics and assemblers.
+  VELOCITY IMAGE -> Psi_Velocity.png
+    Battle form, dynamic action pose, shown doing this: On a hit, changes the target's friction. Either they are stuck in place, or they slip and might end their next move early.
+
+[72] LENTUS
+  Element: Energy    Rarity: 7/10 (Epic)
+  EXISTING SLUG -- keep the creature from ./References/Lentus_Proto.png and Lentus_Velocity.png.
+  PROTOFORM IMAGE -> Lentus_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Can be trained to enter blasters all by itself, no manual reloading needed once it truly trusts its slinger.
+  VELOCITY IMAGE -> Lentus_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Creates a lasting crosswind that bends the path of any shot passing through it, friend or foe.
+
+[73] ZEPHUR
+  Element: Energy    Rarity: 5/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Zephur_Proto.png and Zephur_Velocity.png.
+  PROTOFORM IMAGE -> Zephur_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Famously territorial, often used as home defense systems.
+  VELOCITY IMAGE -> Zephur_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Attacks with tail whips, slashes, punches and headbutts. It is weaker than most in a straight fight, but its power and defense triple when caught in a clash.
+
+[74] EUNOA
+  Element: Psychic    Rarity: 7/10 (Epic)
+  EXISTING SLUG -- keep the creature from ./References/Eunoa_Proto.png and Eunoa_Velocity.png.
+  PROTOFORM IMAGE -> Eunoa_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Able to greatly reduce a slinger's own emotions in times of danger, letting them focus purely on the fight.
+  VELOCITY IMAGE -> Eunoa_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Floods whoever it hits with overwhelming emotion. Shot at yourself, it sharpens your focus: advantage and no range penalty on your next attack, and a longer window to counter. At someone else, it leaves them confused and unable to see.
+
+[75] MEDUSLUG
+  Element: Psychic    Rarity: 9/10 (Legendary)
+  EXISTING SLUG -- keep the creature from ./References/Meduslug_Proto.png and Meduslug_Velocity.png.
+  PROTOFORM IMAGE -> Meduslug_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): This slug does not need water to survive and gets all its nutrition from its diet -- the only slug that's omnivorous.
+  VELOCITY IMAGE -> Meduslug_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Can't be countered and always hits for triple damage, leaving the target completely stunned and unable to shoot, move or act for their whole next turn.
+
+[76] ARCLING
+  Element: Electricity    Rarity: 6/10 (Rare)
+  EXISTING SLUG -- keep the creature from ./References/Arcling_Proto.png and Arcling_Velocity.png.
+  PROTOFORM IMAGE -> Arcling_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): When interacting with an electrical item, it can track where it was for the last 6 hours.
+  VELOCITY IMAGE -> Arcling_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Marks whoever it hits with a lingering static charge. Whenever this slug later damages anyone, a quarter of that damage also hits every marked slinger.
+
+[77] DRIPLET
+  Element: Water    Rarity: 1/10 (Common)
+  EXISTING SLUG -- keep the creature from ./References/Driplet_Proto.png and Driplet_Velocity.png.
+  PROTOFORM IMAGE -> Driplet_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Leaks a thin trickle of water, just enough to fill a cup or dampen a rag.
+  VELOCITY IMAGE -> Driplet_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Splashes the target weakly, barely enough to startle them.
+
+[78] PUFFSHROOM
+  Element: Plant    Rarity: 1/10 (Common)
+  EXISTING SLUG -- keep the creature from ./References/Puffshroom_Proto.png and Puffshroom_Velocity.png.
+  PROTOFORM IMAGE -> Puffshroom_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Releases a light cloud of harmless spores when squeezed, good for marking a trail.
+  VELOCITY IMAGE -> Puffshroom_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Puffs out a small spore cloud that stings the eyes for a moment.
+
+[79] CHILLNIP
+  Element: Ice    Rarity: 2/10 (Common)
+  EXISTING SLUG -- keep the creature from ./References/Chillnip_Proto.png and Chillnip_Velocity.png.
+  PROTOFORM IMAGE -> Chillnip_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Cools a drink or numbs a small bruise with a light frosty touch.
+  VELOCITY IMAGE -> Chillnip_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fires a small ice pellet that leaves a slippery patch of frost where it lands and a thin wall of ice along its path.
+
+[80] SOOT PUP
+  Element: Toxic    Rarity: 1/10 (Common)
+  EXISTING SLUG -- keep the creature from ./References/SootPup_Proto.png and SootPup_Velocity.png.
+  PROTOFORM IMAGE -> SootPup_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Leaves faint sooty pawprints that fade quickly.
+  VELOCITY IMAGE -> SootPup_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Coughs up a weak puff of soot that briefly clouds vision.
+
+[81] DRIFTMOTH
+  Element: Air    Rarity: 1/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): small fuzzy pale-blue moth-slug with soft feathery antennae and dusty wing-flaps, sleepy round eyes.
+  PROTOFORM IMAGE -> Driftmoth_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Flutters gently, useful for testing wind direction.
+  VELOCITY IMAGE -> Driftmoth_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Kicks up a light gust, just enough to nudge a target off balance.
+
+[82] GLOWDAB
+  Element: Light    Rarity: 1/10 (Common)
+  EXISTING SLUG -- keep the creature from ./References/Glowdab_Proto.png and Glowdab_Velocity.png.
+  PROTOFORM IMAGE -> Glowdab_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Gives off a faint, comforting nightlight glow.
+  VELOCITY IMAGE -> Glowdab_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Gives off a brief flash that makes the target flinch and blink.
+
+[83] MURKLING
+  Element: Dark    Rarity: 2/10 (Common)
+  EXISTING SLUG -- keep the creature from ./References/Murkling_Proto.png and Murkling_Velocity.png.
+  PROTOFORM IMAGE -> Murkling_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Casts a small, harmless shadow puppet shape on nearby walls.
+  VELOCITY IMAGE -> Murkling_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Wraps the target in a veil of shadow that terrifies them: they spend their whole next turn running away from where the shot came from.
+
+[84] DUSTKIN
+  Element: Earth    Rarity: 1/10 (Common)
+  EXISTING SLUG -- keep the creature from ./References/Dustkin_Proto.png and Dustkin_Velocity.png.
+  PROTOFORM IMAGE -> Dustkin_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Kicks up a small dust cloud, handy for covering tracks.
+  VELOCITY IMAGE -> Dustkin_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Throws a weak spray of pebbles and grit at the target.
+
+[85] FERNWICK
+  Element: Plant    Rarity: 2/10 (Common)
+  EXISTING SLUG -- keep the creature from ./References/Fernwick_Proto.png and Fernwick_Velocity.png.
+  PROTOFORM IMAGE -> Fernwick_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Weaves a couple of thin leaves into a small basket or wrap.
+  VELOCITY IMAGE -> Fernwick_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Flicks a leaf-dart that tangles the target's feet, and can instead be fired at the ground to raise a short, low screen of leaves for cover.
+
+[86] SPARK MITE
+  Element: Electricity    Rarity: 1/10 (Common)
+  EXISTING SLUG -- keep the creature from ./References/SparkMite_Proto.png and SparkMite_Velocity.png.
+  PROTOFORM IMAGE -> SparkMite_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Produces a tiny static tingle, enough to fluff up hair.
+  VELOCITY IMAGE -> SparkMite_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Gives the target a weak jolt that makes them flinch but does little else.
+
+[87] TIDBIT
+  Element: Healing    Rarity: 2/10 (Common)
+  EXISTING SLUG -- keep the creature from ./References/Tidbit_Proto.png and Tidbit_Velocity.png.
+  PROTOFORM IMAGE -> Tidbit_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Licks a small scrape clean, more comforting than medicinal.
+  VELOCITY IMAGE -> Tidbit_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Takes the edge off minor pain.
+
+[88] COBBLET
+  Element: Metal    Rarity: 2/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): tiny stout grey slug shaped like a cobblestone, dull metallic plates and small bolt-like studs, mildly grumpy eyes.
+  PROTOFORM IMAGE -> Cobblet_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Taps out a dull clink, useful for testing if metal is hollow.
+  VELOCITY IMAGE -> Cobblet_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Bonks the target with a small, dull knock. Mostly just annoying.
+
+[89] WISPLET
+  Element: Unique    Rarity: 1/10 (Common)
+  EXISTING SLUG -- keep the creature from ./References/Wisplet_Proto.png and Wisplet_Velocity.png.
+  PROTOFORM IMAGE -> Wisplet_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Drifts lazily and glows faintly when it's calm.
+  VELOCITY IMAGE -> Wisplet_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Bumps the target with a soft, harmless pulse.
+
+[90] CINDERMITE
+  Element: Fire    Rarity: 2/10 (Common)
+  EXISTING SLUG -- keep the creature from ./References/Cindermite_Proto.png and Cindermite_Velocity.png.
+  PROTOFORM IMAGE -> Cindermite_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Keeps a single ember alive, just enough to relight a torch.
+  VELOCITY IMAGE -> Cindermite_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Flicks out a tiny spark that burns the target a little.
+
+[91] RIPPLET
+  Element: Water    Rarity: 1/10 (Common)
+  EXISTING SLUG -- keep the creature from ./References/Ripplet_Proto.png and Ripplet_Velocity.png.
+  PROTOFORM IMAGE -> Ripplet_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Sends small ripples across still water to signal from a distance.
+  VELOCITY IMAGE -> Ripplet_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Sends a short-range ripple across the ground that gently rocks the target's footing.
+
+[92] GUSTLET
+  Element: Air    Rarity: 2/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): small round white-and-sky-blue slug with swirl-patterned cheeks and a little tuft of fur like a puff of wind.
+  PROTOFORM IMAGE -> Gustlet_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Puffs out a steady little breeze, good for fanning embers, drying laundry or cooling a hot cup.
+  VELOCITY IMAGE -> Gustlet_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Snaps off a tight, fast pellet of compressed air that hits cleanly and is hard to see coming.
+
+[93] CUMULONID
+  Element: Air    Rarity: 7/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): plump grey-white slug shaped like a storm cloud, darker underside, tiny lightning-bolt markings, grumbly eyes.
+  PROTOFORM IMAGE -> Cumulonid_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Gathers moisture from the air into a small rain cloud that hovers overhead, enough to fill canteens or water a patch of crops.
+  VELOCITY IMAGE -> Cumulonid_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Hits with a hard gust that shoves the target back, then a bolt of lightning leaps from them to the nearest enemy for half damage.
+
+[94] MAELSTRIX
+  Element: Air    Rarity: 9/10 (Legendary)
+  NEW SLUG -- DESIGN BRIEF (use for both images): sleek slate-blue slug with spiral shell-like swirls along its body and long whisker-fins that coil like cyclones.
+  PROTOFORM IMAGE -> Maelstrix_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Whips up controlled air currents that can lift light cargo, steer a sail-skiff or clear a ship's deck of fog and fumes.
+  VELOCITY IMAGE -> Maelstrix_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Spins up a cyclone where it lands that hurls everyone nearby backwards, and leaves a lasting crosswind that bends the path of any shot passing through it, friend or foe.
+
+[95] GLOAMLING
+  Element: Dark    Rarity: 3/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): small dusk-violet slug with wispy smoky edges and half-lidded glowing pale eyes, its tail dissolving into shadow.
+  PROTOFORM IMAGE -> Gloamling_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Soaks up stray light to make a small patch of cool shade, handy for resting through a bright afternoon or hiding a lantern. It can also melt its owner into a gloopy, slime-like shadow for a few seconds, letting them slip under or through secure doors and other tight gaps.
+  VELOCITY IMAGE -> Gloamling_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Slips through walls and other solid cover as a shadow, then strikes the target on the other side.
+
+[96] VOIDMAW
+  Element: Dark    Rarity: 8/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): large dark-navy slug with an oversized gaping mouth ringed by pale fangs and faint starry specks inside its body.
+  PROTOFORM IMAGE -> Voidmaw_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Swallows light and sound in a small sphere around its slinger, so a quiet conversation can't be overheard and a sleeper isn't woken.
+  VELOCITY IMAGE -> Voidmaw_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Passes through walls and bursts into a wave of dread on impact: everyone caught in it spends their whole next turn running away from where the shot came from.
+
+[97] NIGHTVEIL
+  Element: Dark    Rarity: 9/10 (Legendary)
+  NEW SLUG -- DESIGN BRIEF (use for both images): sleek black-violet slug draped in a translucent cloak-like flap, glowing lavender eyes, moon-pale markings.
+  PROTOFORM IMAGE -> Nightveil_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Drapes a cloak of deep shadow over its slinger, letting them slip past watchful eyes in dim light.
+  VELOCITY IMAGE -> Nightveil_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Passes through walls. Shot at an enemy, it fills them with dread and they spend their whole next turn running away from where the shot came from. Shot at yourself, it wraps you in shadow, making you invisible to every other player for one turn, until you are hit.
+
+[98] TECTONYX
+  Element: Earth    Rarity: 9/10 (Legendary)
+  NEW SLUG -- DESIGN BRIEF (use for both images): broad heavy brown-grey slug with cracked rocky plates like tectonic slabs, glowing amber seams and two stubby horn ridges.
+  PROTOFORM IMAGE -> Tectonyx_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Senses faint tremors through the ground and warns of quakes, landslides or unstable footing long before they strike.
+  VELOCITY IMAGE -> Tectonyx_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Slams down a seismic shock that throws everyone nearby off balance and leaves a fissure of broken ground that hurts anyone who steps in it. It can also break walls.
+
+[99] SLEETLE
+  Element: Ice    Rarity: 3/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): round pale-blue slug with frosted bumpy skin like hailstones and tiny icicle spikes along its back.
+  PROTOFORM IMAGE -> Sleetle_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Frosts the inside of a flask or storage crate so food stays chilled through a long trip.
+  VELOCITY IMAGE -> Sleetle_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fires a hard-packed ball of sleet that leaves a slick patch of ice where it lands.
+
+[100] RIMEJAW
+  Element: Ice    Rarity: 5/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): icy teal slug with a jutting jaw lined with frost crystals and a white frosty brow.
+  PROTOFORM IMAGE -> Rimejaw_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Exhales a fine frost that seals leaks, glazes cracked pipes and freezes a stuck door shut or open.
+  VELOCITY IMAGE -> Rimejaw_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Clamps the target's feet in ice so they can't move for two of their turns, and leaves the ground around them slick.
+
+[101] CRYOSTAG
+  Element: Ice    Rarity: 6/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): elegant pale-blue slug with antler-like branches of ice on its head and a glossy frosty coat.
+  PROTOFORM IMAGE -> Cryostag_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Chills a whole room or cargo hold to near freezing without a pip of power, keeping medicine and perishables fresh for days.
+  VELOCITY IMAGE -> Cryostag_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Flash-freezes the target in a block of ice. They lose their next turn, and the ground around them turns slick.
+
+[102] BLIZZURN
+  Element: Ice    Rarity: 8/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): bulky white-blue slug like a snow mound with a swirling scarf of snow and deep-set cold eyes.
+  PROTOFORM IMAGE -> Blizzurn_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Drops the air around it to a bone-chilling cold, hardening mud into a firm road and freezing shallow water into a walkable crossing.
+  VELOCITY IMAGE -> Blizzurn_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Breathes a cone of blizzard that chills everything in front of it for reduced damage, then hits the target directly and freezes their feet in place for two of their turns.
+
+[103] TORRENTAIL
+  Element: Water    Rarity: 7/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): sleek aqua slug with a long ribbon-like tail shaped like a waterfall, wet shine, sharp bright eyes.
+  PROTOFORM IMAGE -> Torrentail_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Tows a steady current behind it, pulling floating cargo, rafts or stranded swimmers toward shore.
+  VELOCITY IMAGE -> Torrentail_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Blasts the target back with a hard torrent, and can instead be fired across a gap to build a bridge of rushing water for allies to cross.
+
+[104] LEVIATHOR
+  Element: Water    Rarity: 10/10 (Legendary)
+  NEW SLUG -- DESIGN BRIEF (use for both images): huge dark-teal whale-like slug with barnacle-like bumps, great side fins and calm, deep glowing eyes.
+  PROTOFORM IMAGE -> Leviathor_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Draws and purifies huge volumes of water from the air or ground, enough to fill a cistern or supply a whole crew for a day.
+  VELOCITY IMAGE -> Leviathor_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Surges forward as a crashing tidal wave that hurls everyone near the impact backwards. It can instead be fired at the ground to raise a standing wall of water.
+
+[105] PRISMITE
+  Element: Light    Rarity: 3/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): small clear-crystal slug with rainbow facets that split the light and a tiny prism horn.
+  PROTOFORM IMAGE -> Prismite_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Splits ordinary light into bright colored beams, useful for signalling across a distance or cheering up a dark room.
+  VELOCITY IMAGE -> Prismite_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Refracts into a fan of colored light that dazzles everyone in front of it for reduced damage, then still hits the target directly.
+
+[106] BEACONEL
+  Element: Light    Rarity: 6/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): tall slim white-gold slug with a glowing lantern-like bulb on its head and lighthouse-style stripes.
+  PROTOFORM IMAGE -> Beaconel_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Shines a long, steady beam that works as a lighthouse, marking a safe landing or a path through fog and dust.
+  VELOCITY IMAGE -> Beaconel_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fires a focused beam that punches through the first wall in its path, breaking it open, and keeps going to hit the target at full power.
+
+[107] SOLARIS
+  Element: Light    Rarity: 10/10 (Legendary)
+  NEW SLUG -- DESIGN BRIEF (use for both images): radiant gold-white slug with a sun-like corona of rays around its head, blazing yet serene eyes.
+  PROTOFORM IMAGE -> Solaris_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Radiates warm, sun-bright light that can grow plants in the dark, power a small lantern for a week or light a whole hall.
+  VELOCITY IMAGE -> Solaris_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Moves at the speed of light, which makes it almost impossible to counter, and blinds the target so their next attack suffers.
+
+[109] VENOMAW
+  Element: Toxic    Rarity: 5/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): purple-green slug with a wide fanged snake-like mouth dripping venom and slitted yellow eyes.
+  PROTOFORM IMAGE -> Venomaw_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Produces a numbing venom that medics dilute into a local anesthetic for stitches and setting bones.
+  VELOCITY IMAGE -> Venomaw_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Bites in with a paralytic venom that poisons the target and leaves them frozen: they lose their next turn.
+
+[110] PLAGUEBELL
+  Element: Toxic    Rarity: 7/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): stout sickly-green slug with a bell-shaped drooping flower for a head and spores puffing from its edges.
+  PROTOFORM IMAGE -> Plaguebell_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Exhales a faint, bell-shaped cloud that scours mold and vermin out of grain stores and cargo holds.
+  VELOCITY IMAGE -> Plaguebell_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Bursts into a wide cloud of toxic spores that poisons everyone caught in it twice as hard as normal (double the poison stacks per hit), and leaves a patch of foul, lingering miasma on the ground that poisons twice as hard too.
+
+[111] NECROBLOOM
+  Element: Toxic    Rarity: 9/10 (Legendary)
+  NEW SLUG -- DESIGN BRIEF (use for both images): pale grey-green slug with dark thorny petals around its head like a black rose and glowing toxic-green veins.
+  PROTOFORM IMAGE -> Necrobloom_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Breathes new life into dead flowers and withered plants, making them bloom and work again for a short while before they wilt.
+  VELOCITY IMAGE -> Necrobloom_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Erupts in a spore storm that poisons everyone caught in the blast. Shot at the ground instead (Summon a Plant), it roots a carnivorous bloom there with 50 Grit. The bloom bites every enemy in melee reach as it sprouts, then bites anyone who moves into, out of or through that reach. It can be shot down.
+
+[112] SALVEKIN
+  Element: Healing    Rarity: 3/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): round soft peach-green slug with a leaf tuft, kind round eyes and a little blob of salve on its belly.
+  PROTOFORM IMAGE -> Salvekin_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Secretes a mild antiseptic salve that cleans and closes small cuts and scrapes.
+  VELOCITY IMAGE -> Salvekin_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Heals whoever it hits, mending a modest wound.
+
+[113] MENDLARK
+  Element: Healing    Rarity: 5/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): small plump gold-green songbird-like slug with a tiny beak-like mouth and feathery crest, glowing musical notes.
+  PROTOFORM IMAGE -> Mendlark_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Sings a gentle trill that soothes frightened animals and helps tired travellers fall asleep.
+  VELOCITY IMAGE -> Mendlark_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Bursts into a warm, healing glow that mends everyone caught in it.
+
+[114] LIFELINE
+  Element: Healing    Rarity: 6/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): slender coral-green slug with a glowing thread-like cord trailing from its back and gentle eyes.
+  PROTOFORM IMAGE -> Lifeline_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Grows a soft, glowing cord that works as stitching thread, a splint wrap or a climbing line.
+  VELOCITY IMAGE -> Lifeline_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Grows a glowing cord into whoever it hits that mends them a little at the start of each of their next three turns, and can instead be fired across a gap to build a bridge of living cord for allies to cross.
+
+[115] PANACEON
+  Element: Healing    Rarity: 9/10 (Legendary)
+  NEW SLUG -- DESIGN BRIEF (use for both images): scholarly white-and-gold slug with a gem-like green heart-shaped marking, ring-like markings round its eyes like spectacles, and little glass vials of colored liquid dangling at its sides, curious wise eyes.
+  PROTOFORM IMAGE -> Panaceon_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Expert at biology and brewing, if only someone could translate slugs.
+  VELOCITY IMAGE -> Panaceon_Velocity.png
+    Battle form, dynamic action pose, shown doing this: On a hit, applies 3 random, different status effects. Shot at an enemy, they are all harmful (burn, poison, blind, fear, jam, shock...). Shot at an ally, they are all helpful (regeneration, invisibility, keen vision, sharper reactions) and it does no damage. Shot at yourself, you get just 2 helpful effects.
+
+[116] FLICKERBIT
+  Element: Energy    Rarity: 2/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): tiny bright-cyan slug that looks like a spark, jagged little tail, always mid-fizz.
+  PROTOFORM IMAGE -> Flickerbit_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Tops up small batteries and lamps with a quick pulse of loose energy.
+  VELOCITY IMAGE -> Flickerbit_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Zaps the target and feeds a little energy back, recharging another slug in the slinger's blaster by one pip.
+
+[117] WHISPERLING
+  Element: Psychic    Rarity: 2/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): small lilac slug with large ear-like frills and half-closed dreamy eyes, faint musical swirls.
+  PROTOFORM IMAGE -> Whisperling_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Murmurs a soothing hum that settles a nervous pet, a crying child or a spooked crowd.
+  VELOCITY IMAGE -> Whisperling_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Sends a faint mental nudge that leaves the target briefly dazed.
+
+[118] SNAPTRAP
+  Element: Unique    Rarity: 6/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): stocky brown-orange slug with a bear-trap-shaped mouth lined with metallic teeth and wary eyes.
+  PROTOFORM IMAGE -> Snaptrap_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Clamps its jaws shut on anything with a viselike grip until told to let go, handy as a third hand for lashing cargo.
+  VELOCITY IMAGE -> Snaptrap_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Snaps shut on the target's legs, holding them in place for two of their turns, and leaves a spring trap on the ground that hurts anyone who steps on it.
+
+[120] BRAMBLEBACK
+  Element: Plant    Rarity: 6/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): sturdy green-brown slug with a hedge of thorny brambles along its back and patches of moss.
+  PROTOFORM IMAGE -> Brambleback_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Grows a tough, thorny hedge along its back that can be shaped into a fence, a windbreak or a palisade around camp.
+  VELOCITY IMAGE -> Brambleback_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Entangles the target in thorns and leaves a bramble patch that hurts anyone who steps in it. It can instead be fired at the ground to raise a hedge wall.
+
+[121] FLUFFWING
+  Element: Air    Rarity: 1/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): tiny round cream slug covered in fluffy down with small stubby wings and a sleepy smile.
+  PROTOFORM IMAGE -> Fluffwing_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Sheds soft down that's good for stuffing pillows and padding crates.
+  VELOCITY IMAGE -> Fluffwing_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Flutters at the target and showers them in down. Startling, nothing more.
+
+[122] WHIRLET
+  Element: Air    Rarity: 3/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): small teal-white slug with a spiral swirl pattern on its belly and a pinwheel-like tuft on its head.
+  PROTOFORM IMAGE -> Whirlet_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Spins a tiny whirlwind that sweeps dust out of corners and cargo bays.
+  VELOCITY IMAGE -> Whirlet_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Spins into a tight whirlwind that slams the target and shoves them back.
+
+[123] TIDEHOOK
+  Element: Water    Rarity: 4/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): a grizzled pirate slug, eyepatch, tricorn hat with skull-and-crossbones, trailing a coil of rope and a gaff hook, ambient sea spray and bleeding scratches.
+  PROTOFORM IMAGE -> Tidehook_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Throws out a thin, strong thread that anchors to rafters and ceilings, a climbing rope in a pinch.
+  VELOCITY IMAGE -> Tidehook_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fires a hooked line. Shot at a slinger, it reels them in toward you. Shot at a wall or bridge, it hauls you across the field to it.
+
+[124] WHIRLCAP
+  Element: Air    Rarity: 5/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): cream-brown slug with a mushroom-cap-like head swirled with dust and scruffy bandana-like frills.
+  PROTOFORM IMAGE -> Whirlcap_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Stirs up a harmless dust devil that clears litter from a deck or yard.
+  VELOCITY IMAGE -> Whirlcap_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Whips up a dust devil that flings grit in the target's eyes, so their next attack suffers, and shoves them back.
+
+[125] GALECROW
+  Element: Air    Rarity: 6/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): dark blue-grey slug with a glossy crow-like feather crest and wing-like side fins.
+  PROTOFORM IMAGE -> Galecrow_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Rides updrafts and can carry a light message or a small tool across a gorge.
+  VELOCITY IMAGE -> Galecrow_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Slams the target with a crosswind that shoves them back, and can instead be fired across a gap to build a bridge of rushing air for allies to cross.
+
+[126] STORMPETREL
+  Element: Air    Rarity: 8/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): sleek charcoal-and-white slug with long seabird-like wings, a storm-grey mantle and lightning flashes in its eyes.
+  PROTOFORM IMAGE -> Stormpetrel_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Senses pressure drops and warns of storms hours before they arrive.
+  VELOCITY IMAGE -> Stormpetrel_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Cracks like a thunderclap. The target loses their next turn, and a bolt leaps from them to the nearest enemy for half damage.
+
+[127] DIMMITE
+  Element: Dark    Rarity: 1/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): tiny dull grey-violet slug that looks like a burnt-out lamp, droopy eyes.
+  PROTOFORM IMAGE -> Dimmite_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Dims a lamp's glow just a little, handy for sleeping in a lit room.
+  VELOCITY IMAGE -> Dimmite_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Slips through walls as a small shadow and startles the target.
+
+[128] DUSKLET
+  Element: Dark    Rarity: 2/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): small plum-purple slug with a half-faded outline and a trail of dark footprints behind it.
+  PROTOFORM IMAGE -> Dusklet_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Leaves a trail of cool, dark footprints that fade in a few minutes, marking a path.
+  VELOCITY IMAGE -> Dusklet_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Slips through walls as a shadow and nips at the target on the other side.
+
+[129] WRAITHLET
+  Element: Dark    Rarity: 3/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): pale lavender ghostly slug with a trailing wisp for a tail and hollow glowing eyes, shy.
+  PROTOFORM IMAGE -> Wraithlet_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Hums a thin, eerie note that keeps wild animals away from camp.
+  VELOCITY IMAGE -> Wraithlet_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Slips through walls and gives the target a ghostly scare: they spend their whole next turn running away from where the shot came from.
+
+[130] GLOOMSTALK
+  Element: Dark    Rarity: 6/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): dark-indigo many-legged prowling slug with glowing violet spots, slinking low to the ground with a hunter's narrow gaze.
+  PROTOFORM IMAGE -> Gloomstalk_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Slinks into places on its own, squeezing through gaps and shadows to scout ahead. After a short delay, its owner can teleport to wherever it has crept to.
+  VELOCITY IMAGE -> Gloomstalk_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Shot at yourself, it cloaks you in shadow, making you invisible to every other player for one turn, until you are hit. Fired at an enemy while you are invisible, it ambushes them from the dark for triple damage. It passes through walls.
+
+[131] ECLIPSLING
+  Element: Dark    Rarity: 5/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): black slug with a ring of golden light around its head like a solar eclipse and calm eyes.
+  PROTOFORM IMAGE -> Eclipsling_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Casts a brief shadow like a passing eclipse, cooling a sunbaked patch of ground.
+  VELOCITY IMAGE -> Eclipsling_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Passes through walls and smothers the target's blaster in darkness, so they can't shoot on their next turn.
+
+[132] DREADMOTH
+  Element: Dark    Rarity: 7/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): ashen-purple moth-like slug with pale ghostly wing-flaps patterned with eye spots and glowing eyes.
+  PROTOFORM IMAGE -> Dreadmoth_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Flutters through a dark hold, its pale wings marking a safe path by their faint glow.
+  VELOCITY IMAGE -> Dreadmoth_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Passes through walls and unleashes a hollow shriek. The target is blinded and spends their whole next turn running away from where the shot came from.
+
+[133] SINKMAW
+  Element: Earth    Rarity: 5/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): broad sandy-brown slug with a wide round maw like a sinkhole ringed by crumbling dirt.
+  PROTOFORM IMAGE -> Sinkmaw_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Softens and firms the ground on request, packing a muddy path into a hard road.
+  VELOCITY IMAGE -> Sinkmaw_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Opens a sinkhole under the target that traps their legs for two of their turns, and leaves a crumbling pit that hurts anyone who steps in it.
+
+[134] CAIRNBACK
+  Element: Earth    Rarity: 6/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): grey-brown slug with a stack of balanced stones on its back, mossy, steady eyes.
+  PROTOFORM IMAGE -> Cairnback_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Stacks small stones into cairns that mark trails and hold their shape for days.
+  VELOCITY IMAGE -> Cairnback_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Slams down and anchors the ground where it lands, so nothing inside can be knocked back or broken. It can instead be fired at the ground to raise a stone wall.
+
+[135] RUBBLERUNT
+  Element: Earth    Rarity: 7/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): round rubbly rust-grey slug built like a boulder with clusters of pebbles and a small tough face.
+  PROTOFORM IMAGE -> Rubblerunt_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Rolls into a tight ball and trundles along a tunnel to test whether it's clear of loose rock.
+  VELOCITY IMAGE -> Rubblerunt_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Rolls into the target and caroms off to the next nearest enemy, up to four times, each leg as strong as the first and counterable on its own.
+
+[136] TITANITE
+  Element: Earth    Rarity: 8/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): massive blue-grey slug with rock-like titanium plates and a mountain-peak ridge along its back.
+  PROTOFORM IMAGE -> Titanite_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Hardens into a boulder-like mass that can hold a door or a hatch against a crowd.
+  VELOCITY IMAGE -> Titanite_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Hits with the weight of a mountain. In a clash its power and defense triple, and it can break through walls.
+
+[137] ZAPLET
+  Element: Electricity    Rarity: 2/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): tiny yellow slug with static-fluffed hair, a little zigzag tail and a startled grin.
+  PROTOFORM IMAGE -> Zaplet_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Charges a pocket lamp or lights a spark for a stove.
+  VELOCITY IMAGE -> Zaplet_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Gives the target a sharp zap, and a half-power arc jumps to the nearest enemy.
+
+[138] JOULET
+  Element: Electricity    Rarity: 3/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): compact bright-yellow slug with battery-cell markings on its sides and sparks at its fingertips.
+  PROTOFORM IMAGE -> Joulet_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Acts as a spare cell for a power pack, good for a few hours of light.
+  VELOCITY IMAGE -> Joulet_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Hits hard with a crackling bolt, and a half-power arc jumps to the nearest enemy.
+
+[139] CAPACITRON
+  Element: Electricity    Rarity: 3/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): round yellow-blue slug with twin coil-like antennae, copper rings around its body and glowing charge dials.
+  PROTOFORM IMAGE -> Capacitron_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Stores energy slowly and gives it back in one burst, topping up a drained battery.
+  VELOCITY IMAGE -> Capacitron_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Releases a stored charge in a shocking jolt. The target loses their next turn, and a half-power arc jumps to the nearest enemy.
+
+[140] ARCWHIP
+  Element: Electricity    Rarity: 4/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): slim electric-yellow slug with a long whip-like tail that crackles with static, cocky grin.
+  PROTOFORM IMAGE -> Arcwhip_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Snaps a whip of static along a cable to trace a break in the line.
+  VELOCITY IMAGE -> Arcwhip_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Cracks a whip of lightning. Shot at a slinger, it yanks them toward you. Shot at a wall or bridge, it hauls you across the field to it.
+
+[141] THUNDERCOIL
+  Element: Electricity    Rarity: 7/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): stout storm-blue slug with copper coil rings spiraling around its body and an electric halo.
+  PROTOFORM IMAGE -> Thundercoil_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Winds itself into a coil that hums along a ship's wiring and warns of a failing circuit.
+  VELOCITY IMAGE -> Thundercoil_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Detonates in a ring of lightning. Everyone caught in the blast takes the hit and loses their next turn.
+
+[142] RAILSPARK
+  Element: Electricity    Rarity: 8/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): long sleek silver-blue slug shaped like a bullet train with glowing rail-line stripes and sparks along its sides.
+  PROTOFORM IMAGE -> Railspark_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Hums along metal rails and cables, tracing a break in a power line.
+  VELOCITY IMAGE -> Railspark_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Streaks at the target as a bolt of rail-driven lightning that fries their blaster, so their next shot misfires. A half-power arc also jumps to the nearest enemy.
+
+[143] VOLTARCH
+  Element: Electricity    Rarity: 10/10 (Legendary)
+  NEW SLUG -- DESIGN BRIEF (use for both images): imposing dark-blue slug wearing a crown of lightning bolts above its head, white-hot eyes.
+  PROTOFORM IMAGE -> Voltarch_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Pours stored lightning into a dead engine and brings it humming back to life.
+  VELOCITY IMAGE -> Voltarch_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Slams down in a crown of lightning. Everyone near the impact is shoved back and loses their next turn.
+
+[144] FIZZLET
+  Element: Energy    Rarity: 1/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): tiny bubbly magenta-and-cyan slug with fizzing sparks on its back, cheerful.
+  PROTOFORM IMAGE -> Fizzlet_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Fizzes harmlessly, topping up a candle's glow for a few minutes.
+  VELOCITY IMAGE -> Fizzlet_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Pops against the target with a fizz and recharges another slug in the blaster by one pip.
+
+[146] CARTRIDGELING
+  Element: Energy    Rarity: 3/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): compact brass-and-blue slug shaped like a bullet cartridge, neat and loyal-looking.
+  PROTOFORM IMAGE -> Cartridgeling_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Can be trained to enter blasters all by itself, no manual reloading needed once it truly trusts its slinger.
+  VELOCITY IMAGE -> Cartridgeling_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Zaps the target and feeds a little energy back, recharging another slug in the blaster by one pip.
+
+[147] SURGELING
+  Element: Energy    Rarity: 4/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): wiry violet slug with a lightning-bolt-shaped tail, charged-up spiky hair and eager eyes.
+  PROTOFORM IMAGE -> Surgeling_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Gives machines a short burst of speed, so a winch hauls twice as fast for a minute.
+  VELOCITY IMAGE -> Surgeling_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Once it has been shot, every other slug fired in the same turn hits twice as hard.
+
+[148] PULSAR
+  Element: Energy    Rarity: 8/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): round dark-magenta slug with glowing ring pulses spreading across its body and one bright star-like eye.
+  PROTOFORM IMAGE -> Pulsar_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Sends out a regular, far-reaching pulse that works as a beacon between ships.
+  VELOCITY IMAGE -> Pulsar_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Bursts in a pulse of raw energy that fries blasters. Everyone caught in it has their next shot misfire.
+
+[149] NOVAFLARE
+  Element: Energy    Rarity: 9/10 (Legendary)
+  NEW SLUG -- DESIGN BRIEF (use for both images): brilliant white-magenta slug wreathed in a starburst flare, bright and intense eyes.
+  PROTOFORM IMAGE -> Novaflare_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Flares briefly with the light of a small sun, enough to signal across a system's worth of dark.
+  VELOCITY IMAGE -> Novaflare_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Detonates in a massive blast of searing light, twice the size of a normal area blast. Everyone caught in it is blinded and set on fire.
+
+[150] EMBERTICK
+  Element: Fire    Rarity: 1/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): tiny orange slug with a smoldering ember at the tip of its tail and a freckling of sparks.
+  PROTOFORM IMAGE -> Embertick_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Lights tinder with a single tick-tick of its tail.
+  VELOCITY IMAGE -> Embertick_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Flicks a hot spark that burns the target a little.
+
+[151] COALPUP
+  Element: Fire    Rarity: 3/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): black-and-orange puppy-like slug with glowing coal cracks across its coat and a wagging ember tail.
+  PROTOFORM IMAGE -> Coalpup_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Keeps a pocket of coals alive for hours, a portable stove for a cold camp.
+  VELOCITY IMAGE -> Coalpup_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Streaks in, burning the target, and leaves a smoldering patch of coals that hurts anyone who steps in it.
+
+[152] CINDERWYRM
+  Element: Fire    Rarity: 7/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): long red-black wyrm-like slug with dragon horns, ember scales and a smoldering mane.
+  PROTOFORM IMAGE -> Cinderwyrm_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Coils around a cold pipe or hull and warms a whole crew's quarters through a freezing night.
+  VELOCITY IMAGE -> Cinderwyrm_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Roars out a gout of flame that burns the target and terrifies them, so they spend their whole next turn fleeing. Smoldering ground is left behind.
+
+[153] INFERNOX
+  Element: Fire    Rarity: 10/10 (Legendary)
+  NEW SLUG -- DESIGN BRIEF (use for both images): huge bull-like crimson-black slug with a molten-lava mane and horns wreathed in fire.
+  PROTOFORM IMAGE -> Infernox_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Lights a furnace or forge with a single breath, no fuel needed.
+  VELOCITY IMAGE -> Infernox_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Erupts in a firestorm that burns everyone caught in the blast, and leaves a lake of burning ground. It can also raise a wall of flame.
+
+[154] MENDLET
+  Element: Healing    Rarity: 1/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): tiny pale-green slug with a small leaf bandage on its head and a sweet face.
+  PROTOFORM IMAGE -> Mendlet_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Licks a scrape clean and soothes small hurts.
+  VELOCITY IMAGE -> Mendlet_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Dabs a little relief on whoever it hits, mending a small wound.
+
+[155] RESTORIL
+  Element: Healing    Rarity: 4/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): soft-green slug with a steaming herbal tuft like a tea leaf on its head and drowsy, calm eyes.
+  PROTOFORM IMAGE -> Restoril_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Brews a calming herbal steam that eases coughs and headaches.
+  VELOCITY IMAGE -> Restoril_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Wreathes the target in a gentle glow that heals them a little at the start of each of their next three turns.
+
+[156] CURELEAF
+  Element: Healing    Rarity: 4/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): leafy green slug with big broad leaves along its sides and a clover marking, friendly.
+  PROTOFORM IMAGE -> Cureleaf_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Its leaves make a soothing poultice for burns and stings.
+  VELOCITY IMAGE -> Cureleaf_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Heals whoever it hits in a single warm burst of light.
+
+[157] VITALIS
+  Element: Healing    Rarity: 6/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): radiant jade slug with glowing mist pores along its back and lively bright eyes.
+  PROTOFORM IMAGE -> Vitalis_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Blooms a faint, warm mist that helps tired crews recover between shifts.
+  VELOCITY IMAGE -> Vitalis_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Bursts into a regenerative mist. Everyone caught in it recovers Grit at the start of each of their next three turns.
+
+[158] LIFEBLOOM
+  Element: Healing    Rarity: 7/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): slim white-pink slug with a luminous flower blooming on its head and petal-like fins.
+  PROTOFORM IMAGE -> Lifebloom_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Grows a small glowing flower that keeps a sickroom's air fresh and calm.
+  VELOCITY IMAGE -> Lifebloom_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Blooms into a flower of regenerating light on whoever it hits, healing them at the start of each of their next three turns.
+
+[159] FROSTBIT
+  Element: Ice    Rarity: 1/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): tiny white slug with a snowflake on its forehead and frosty breath, shy.
+  PROTOFORM IMAGE -> Frostbit_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Chills a spoonful of anything stone cold.
+  VELOCITY IMAGE -> Frostbit_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Pelts the target with a little hail and leaves a faint slick of frost.
+
+[160] FLOELING
+  Element: Ice    Rarity: 3/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): pale-blue slug with a flat body of ice plates like a floe and a penguin-like waddle.
+  PROTOFORM IMAGE -> Floeling_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Freezes puddles into walkable stepping stones.
+  VELOCITY IMAGE -> Floeling_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fires a bolt of cold and can instead freeze a plank of ice across a gap for allies to cross.
+
+[161] HAILSTRIKE
+  Element: Ice    Rarity: 4/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): round icy slug covered in hailstone nubs with an aggressive scowl.
+  PROTOFORM IMAGE -> Hailstrike_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Rattles out a shower of tiny hailstones that tidy frost from a windowpane.
+  VELOCITY IMAGE -> Hailstrike_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Cracks open into a burst of hail that hits everyone in range and leaves a slick sheet of ice.
+
+[162] GLACIOR
+  Element: Ice    Rarity: 7/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): stocky glacial-blue slug with a wall-like ridge of ice slabs on its back and steady eyes.
+  PROTOFORM IMAGE -> Glacior_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Raises a smooth sheet of ice that makes a skating floor or a cold-storage lid.
+  VELOCITY IMAGE -> Glacior_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fires a freezing bolt that roots the target in place for two of their turns, and can instead be fired at the ground to raise a wall of ice.
+
+[163] CRYOLITH
+  Element: Ice    Rarity: 9/10 (Legendary)
+  NEW SLUG -- DESIGN BRIEF (use for both images): deep-blue translucent slug partly encased in a crystal of ice, frozen and preserved looking.
+  PROTOFORM IMAGE -> Cryolith_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Slows the passage of heat so completely that a thawed meal stays fresh for a month.
+  VELOCITY IMAGE -> Cryolith_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Entombs the target in solid ice. They lose their whole next turn. It can instead be fired at the ground to raise an ice wall.
+
+[164] BOREAS
+  Element: Ice    Rarity: 10/10 (Legendary)
+  NEW SLUG -- DESIGN BRIEF (use for both images): grand white-silver slug with a flowing mane of ice, aurora-light patterns and a regal glare.
+  PROTOFORM IMAGE -> Boreas_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Breathes a frigid wind that turns a whole cargo bay into a cold store in an hour.
+  VELOCITY IMAGE -> Boreas_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Freezes everything near the impact solid. Everyone caught in the blast loses their next turn.
+
+[165] LUMEBUG
+  Element: Light    Rarity: 2/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): tiny round slug with a glowing lamp-like belly, firefly-like soft yellow light.
+  PROTOFORM IMAGE -> Lumebug_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Glows like a tiny lamp, perfect for reading in a bunk.
+  VELOCITY IMAGE -> Lumebug_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Flashes brightly in the target's face.
+
+[166] GLINTMOTH
+  Element: Light    Rarity: 2/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): small silver-white moth-like slug with sparkly dust-wings that catch the light.
+  PROTOFORM IMAGE -> Glintmoth_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Flutters through a dark corridor, its wings catching and scattering what little light there is.
+  VELOCITY IMAGE -> Glintmoth_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Throws a quick, bright glint at the target and blinds them for their next attack.
+
+[167] RADIANCE
+  Element: Light    Rarity: 4/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): warm white-orange slug glowing like a lamp with soft sun-rays around its head.
+  PROTOFORM IMAGE -> Radiance_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Glows hot and white, enough to cook a meal or dry a drenched coat.
+  VELOCITY IMAGE -> Radiance_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fires a glare so intense it dazzles the target and fries the optics on their blaster, so their next shot misfires.
+
+[168] SUNSHARD
+  Element: Light    Rarity: 4/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): gold-white slug with sharp crystalline shard facets and a sun-yellow gleam.
+  PROTOFORM IMAGE -> Sunshard_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Hardens light into a bright, solid pane that makes a window or a lamp shade.
+  VELOCITY IMAGE -> Sunshard_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fires a flash that blinds the target, and can instead be fired at the ground to harden light into a barrier.
+
+[169] LANTERNIX
+  Element: Light    Rarity: 5/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): slim teal-gold slug with a hanging lantern-like bulb on a stalk and a mystical smile.
+  PROTOFORM IMAGE -> Lanternix_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Bends light around a spot to hide a lamp, a package or a sleeping patch.
+  VELOCITY IMAGE -> Lanternix_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Shot at an enemy it dazzles them. Shot at yourself, it bends light around you, making you invisible to every other player for one turn, until you are hit.
+
+[170] HELIARCH
+  Element: Light    Rarity: 9/10 (Legendary)
+  NEW SLUG -- DESIGN BRIEF (use for both images): majestic white-gold slug with a solar crown of rays and flowing radiant ribbons.
+  PROTOFORM IMAGE -> Heliarch_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Brightens a whole hold as if by daylight, even in the dark between stars.
+  VELOCITY IMAGE -> Heliarch_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Detonates in a blinding burst of radiant light that dazzles everyone caught in it.
+
+[171] RIVETLING
+  Element: Metal    Rarity: 1/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): tiny grey slug with rivet studs along its sides, a bolt-head crest and a stubborn grin.
+  PROTOFORM IMAGE -> Rivetling_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Holds two plates together as a living rivet.
+  VELOCITY IMAGE -> Rivetling_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Bonks the target with a hard little knock.
+
+[172] CLINKER
+  Element: Metal    Rarity: 3/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): dense dark-grey slug with lumpy clinker-like iron plates and a heavy brow.
+  PROTOFORM IMAGE -> Clinker_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Rattles loose a stuck nut or bolt.
+  VELOCITY IMAGE -> Clinker_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Clangs into the target, a dense, dull hit that shoves them back a little.
+
+[173] BOLTLING
+  Element: Metal    Rarity: 3/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): small silver slug shaped like a screw or bolt, a threaded spiral around its body and a slotted head crest.
+  PROTOFORM IMAGE -> Boltling_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Drives itself into a seam like a screw to tighten a loose panel.
+  VELOCITY IMAGE -> Boltling_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Rams the target hard enough to shove them back, and can corkscrew into a wall to break it open.
+
+[174] MAGNETIS
+  Element: Metal    Rarity: 5/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): steel-blue and red slug with horseshoe-magnet shaped horns and small iron filings clinging to it.
+  PROTOFORM IMAGE -> Magnetis_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Clamps onto iron beams and hangs on, a living grapple for riggers and hull-walkers.
+  VELOCITY IMAGE -> Magnetis_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fires a magnetic grapple. Shot at a slinger, it drags them toward you. Shot at a wall or bridge, it hauls you across the field to it.
+
+[175] ADAMANTOR
+  Element: Metal    Rarity: 9/10 (Legendary)
+  NEW SLUG -- DESIGN BRIEF (use for both images): heavy dark-blue steel slug with faceted adamantine plating, polished glinting edges and a stern look.
+  PROTOFORM IMAGE -> Adamantor_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Hardens into a plate that nothing short of a drill can scratch, patching a breached hull.
+  VELOCITY IMAGE -> Adamantor_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Hits like a falling plate of adamantine, shoving the target far back, and can break through walls.
+
+[176] BUMBLOB
+  Element: None    Rarity: 1/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): plain beige-grey formless blob of a slug with two dot eyes and a lazy grin, no frills at all.
+  PROTOFORM IMAGE -> Bumblob_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Wobbles contentedly and is wonderful at being cuddled.
+  VELOCITY IMAGE -> Bumblob_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Doesn't transform. It plops against the target and slides off.
+
+[178] THISTLEPUP
+  Element: Plant    Rarity: 3/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): purple-green slug with a thistle bloom crest and a burr-covered coat, scrappy.
+  PROTOFORM IMAGE -> Thistlepup_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Grows tough burrs that cling to fabric, a living fastener for patching coats.
+  VELOCITY IMAGE -> Thistlepup_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Fires a cluster of burrs and leaves a patch of thorns on the ground that hurts anyone who steps in it.
+
+[179] VINEHOOK
+  Element: Plant    Rarity: 4/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): lean green slug with a barbed vine tail and curling tendril whiskers, adventurous.
+  PROTOFORM IMAGE -> Vinehook_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Grows a strong vine rope that can be tied to cargo or swung from.
+  VELOCITY IMAGE -> Vinehook_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Lashes out a barbed vine. Shot at a slinger, it reels them in toward you. Shot at a wall or bridge, it hauls you across the field to it.
+
+[180] HEARTWOOD
+  Element: Plant    Rarity: 7/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): sturdy brown slug with bark-like skin and small tree branches growing from its back, gentle eyes.
+  PROTOFORM IMAGE -> Heartwood_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Grows living beams and planks, quickly shoring up a sagging roof or hull.
+  VELOCITY IMAGE -> Heartwood_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Slams the target with a knotted bough and can instead grow a living wall, or a bridge of woven roots across a gap.
+
+[181] OVERGROWTH
+  Element: Plant    Rarity: 9/10 (Legendary)
+  NEW SLUG -- DESIGN BRIEF (use for both images): lush green slug nearly covered in moss, flowers and creeping vines, serene.
+  PROTOFORM IMAGE -> Overgrowth_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Spreads a green carpet over bare ground in minutes, hiding scorch marks and softening landings.
+  VELOCITY IMAGE -> Overgrowth_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Erupts in a thicket that entangles everyone caught in the blast, holding them in place for two of their turns, and can raise a wall of thorns.
+
+[182] ELDEROOT
+  Element: Plant    Rarity: 10/10 (Legendary)
+  NEW SLUG -- DESIGN BRIEF (use for both images): ancient tree-like slug with gnarled roots for feet, a leafy canopy crown and wise glowing eyes.
+  PROTOFORM IMAGE -> Elderoot_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Grows into a shaded grove in minutes, giving shelter, fruit and clean air.
+  VELOCITY IMAGE -> Elderoot_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Roots into the ground and anchors the area where it lands, so nothing inside can be knocked back or broken. It can instead raise great walls or build bridges.
+
+[183] MINDMOTE
+  Element: Psychic    Rarity: 1/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): tiny pink-violet slug with a small orb floating above its head, dreamy.
+  PROTOFORM IMAGE -> Mindmote_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Hums a tune only its slinger can hear, calming a little.
+  VELOCITY IMAGE -> Mindmote_Velocity.png
+    Battle form, dynamic action pose, shown doing this: A faint mental tap that leaves the target briefly dazed.
+
+[184] DREAMWISP
+  Element: Psychic    Rarity: 3/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): pastel-purple slug with cloud-like fluff, sleepy half-closed eyes and small stars floating around it.
+  PROTOFORM IMAGE -> Dreamwisp_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Brings gentle dreams to whoever sleeps near it.
+  VELOCITY IMAGE -> Dreamwisp_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Lulls the target into a daze that costs them AP on their next turn.
+
+[185] ECHOLING
+  Element: Psychic    Rarity: 3/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): lilac slug with ripple-ring patterns on its skin and a faint twin echo outline of itself, curious.
+  PROTOFORM IMAGE -> Echoling_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Echoes back faint snatches of conversation from nearby rooms.
+  VELOCITY IMAGE -> Echoling_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Echoes the target's own thoughts back at them until they're rattled. For a few turns their shots may fire wildly in the wrong direction.
+
+[186] SAGEPAW
+  Element: Psychic    Rarity: 5/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): wise violet slug with a long sage-like beard of whiskers and a third-eye mark on its forehead.
+  PROTOFORM IMAGE -> Sagepaw_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Senses the mood of a room, flagging who is nervous or hiding something.
+  VELOCITY IMAGE -> Sagepaw_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Locks up the target's mind so they can't fire their blaster on their next turn.
+
+[187] PHANTASMO
+  Element: Psychic    Rarity: 6/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): ghostly magenta-violet slug with a fading ghost-trail tail and glowing hollow eyes, playful.
+  PROTOFORM IMAGE -> Phantasmo_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Projects a harmless, friendly ghost that guides lost children home.
+  VELOCITY IMAGE -> Phantasmo_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Plants a waking nightmare. On a hit, a ghost manifests right beside the target and the target is terrified, spending their whole next turn fleeing, and their next shot misfires. The ghost has 50 Grit, haunts every enemy in melee reach as it appears (the target included), then again whenever anyone moves into, out of or through that reach, such as the terrified target running away. It can be shot down, and can't be fired at the ground.
+
+[188] GURGLET
+  Element: Toxic    Rarity: 2/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): small olive-green slug with a bubbly belly and a burbling mouth, goofy.
+  PROTOFORM IMAGE -> Gurglet_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Burbles up harmless bubbles of swamp gas that light a lamp.
+  VELOCITY IMAGE -> Gurglet_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Spits a gobbet of poisonous slime at the target.
+
+[189] MILDEWMITE
+  Element: Toxic    Rarity: 2/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): tiny grey-green slug dotted with mold spots and fuzzy mildew, sleepy.
+  PROTOFORM IMAGE -> Mildewmite_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Grows a mild mold on food, ripening cheese and curing sausage.
+  VELOCITY IMAGE -> Mildewmite_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Smears sticky mildew on the target that poisons them lightly.
+
+[190] SPITVIPER
+  Element: Toxic    Rarity: 3/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): sleek purple-green snake-like slug with a flared hood and a dripping fang, sly.
+  PROTOFORM IMAGE -> Spitviper_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Spits a stream of foul-tasting water, handy for washing windows.
+  VELOCITY IMAGE -> Spitviper_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Spits venom into the target's eyes. They're poisoned, and their next attack suffers.
+
+[191] BOGBELCHER
+  Element: Toxic    Rarity: 4/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): round swamp-green slug with a huge gassy belly and a belching mouth, bubbles all around.
+  PROTOFORM IMAGE -> Bogbelcher_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Belches a puff of methane that lights a lamp when sparked.
+  VELOCITY IMAGE -> Bogbelcher_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Belches a wide cloud of toxic gas that poisons everyone caught in it.
+
+[192] ROTSPAWN
+  Element: Toxic    Rarity: 6/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): gaunt brown-green slug with decaying patches and maggot-like frills, hollow glowing eyes.
+  PROTOFORM IMAGE -> Rotspawn_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Breaks down spoiled waste into compost, turning a rubbish heap into rich soil.
+  VELOCITY IMAGE -> Rotspawn_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Terrifies the target with its stench, so they spend their whole next turn fleeing, and leaves a patch of foul decay on the ground.
+
+[193] MIASMARA
+  Element: Toxic    Rarity: 8/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): large purple-green slug with a billowing cloak of toxic haze and many glowing eyes.
+  PROTOFORM IMAGE -> Miasmara_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Exhales a faint haze that purifies a stale hold of bad air over a few hours.
+  VELOCITY IMAGE -> Miasmara_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Erupts in a cloud of paralytic spores. Everyone caught in it is poisoned and loses their next turn, and a lingering miasma is left behind.
+
+[194] NIBBLET
+  Element: Unique    Rarity: 2/10 (Common)
+  NEW SLUG -- DESIGN BRIEF (use for both images): tiny tan slug with large buck teeth and a crumb-covered mouth, mischievous.
+  PROTOFORM IMAGE -> Nibblet_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Gnaws through rope, rust and stale bread.
+  VELOCITY IMAGE -> Nibblet_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Chomps at the target for a small, annoying bite.
+
+[195] TETHERLING
+  Element: Unique    Rarity: 3/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): small yellow-grey slug with a long spooled sticky thread coiled around its body and bright eyes.
+  PROTOFORM IMAGE -> Tetherling_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Spits a sticky tether that anchors lanterns and gear to walls.
+  VELOCITY IMAGE -> Tetherling_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Spits a tether line. Shot at a slinger, it drags them toward you. Shot at a wall or bridge, it hauls you across the field to it.
+
+[196] GANTRIX
+  Element: Unique    Rarity: 7/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): lean orange-grey slug with scaffold-like girder ridges on its back and riveted joints, a builder's grit.
+  PROTOFORM IMAGE -> Gantrix_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Spins quick scaffolds of girders so workers can reach a high hull plate.
+  VELOCITY IMAGE -> Gantrix_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Spins a scaffold of girders along the whole path of the shot, leaving a wall behind it. It can also raise walls and build bridges.
+
+[198] BROOKLING
+  Element: Water    Rarity: 3/10 (Uncommon)
+  NEW SLUG -- DESIGN BRIEF (use for both images): small blue-green slug with a bubbling brook-like stream flowing down its back, friendly.
+  PROTOFORM IMAGE -> Brookling_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Trickles pure water, enough to fill a flask every minute.
+  VELOCITY IMAGE -> Brookling_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Shoots a hard stream of water that douses flames.
+
+[199] TIDEWARDEN
+  Element: Water    Rarity: 8/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): tall blue-silver slug with a wave-shaped crest and shell-like pauldrons, a calm guardian look.
+  PROTOFORM IMAGE -> Tidewarden_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Holds back a leak or flood with a smooth curtain of water until help arrives.
+  VELOCITY IMAGE -> Tidewarden_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Can raise a wall of water. In a clash with a Fire-type slug, on either side, it turns to steam and both slugs fizzle out with no damage.
+
+[200] BREAKWATER
+  Element: Water    Rarity: 9/10 (Legendary)
+  NEW SLUG -- DESIGN BRIEF (use for both images): heavy deep-blue slug with a cresting wave-shaped back and stone-like barnacle armor, powerful.
+  PROTOFORM IMAGE -> Breakwater_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Calms a rough surface, flattening waves enough for a small craft to land.
+  VELOCITY IMAGE -> Breakwater_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Crashes down as a breaker wave that hurls everyone nearby backwards. It can instead be fired across a gap to build a bridge of water for allies to cross.
+
+[201] NIGHTSTREAK
+  Element: Dark    Rarity: 8/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): sleek jet-black slug with a streamlined, aerodynamic dart-like body, thin violet racing stripes and narrow glowing violet eyes, built for speed.
+  PROTOFORM IMAGE -> Nightstreak_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Moves in short, silent blurs through the dark, scouting ahead and fetching dropped tools before anyone notices it has gone.
+  VELOCITY IMAGE -> Nightstreak_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Slips through walls as a black streak and hits the target faster than the eye can follow. Its flight is so fast it is almost impossible to counter.
+
+[202] PENTALUX
+  Element: Light    Rarity: 10/10 (Legendary)
+  NEW SLUG -- DESIGN BRIEF (use for both images): elegant white-gold slug ringed by five small floating crystal shards that orbit it, calm and focused eyes.
+  PROTOFORM IMAGE -> Pentalux_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Splits its glow into five tiny motes that circle its slinger like a constellation, lighting a camp from every side.
+  VELOCITY IMAGE -> Pentalux_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Just before impact it splits into five shards of light that circle the target and strike from five different directions at once. It can't be countered: the target never gets a counter window.
+
+[203] LUXBISON
+  Element: Light    Rarity: 6/10 (Rare)
+  NEW SLUG -- DESIGN BRIEF (use for both images): stocky golden-white buffalo-shaped slug with a heavy shoulder hump, short curved glowing horns, a mane of soft light-rays and a warm lantern glow in its chest, patient but powerful.
+  PROTOFORM IMAGE -> Luxbison_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Glows like a lantern at dusk and plods ahead of a group, its warm golden light showing the way across dark ground.
+  VELOCITY IMAGE -> Luxbison_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Lowers its horns and charges as a blazing stampede of light, slamming into the target with a heavy blow that blinds them for their next attack and sends them flying back.
+
+[204] MADICUS
+  Element: Psychic    Rarity: 7/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): quirky cartoon mad-doctor slug: pale pink, oversized round glasses with a round head-mirror, a tiny surgical cap, a mask pulled down under its chin, a stethoscope, mismatched googly eyes and a lopsided toothy grin, clutching a little reflex hammer and rolls of bandage; a bit unhinged but goofy and friendly-looking, not scary or gory.
+  PROTOFORM IMAGE -> Madicus_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): A goofy mad doctor tinkering happily with its little tools, wearing its glasses and head-mirror.
+  VELOCITY IMAGE -> Madicus_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Leaps at the target in a frantic, cartoonish whirlwind of flying bandage ribbons, a reflex hammer and clipboards, trailing streaks of red energy swirls. Excited, slightly unhinged grin. Keep it comic and bloodless.
+
+[205] DUSKFANG
+  Element: Dark    Rarity: 7/10 (Epic)
+  NEW SLUG -- DESIGN BRIEF (use for both images): a small vampiric slug with a short cape of leathery bat-wing membrane, slicked-back widow's peak, sharp twin fangs, pale skin with a faint violet-red glow, pointed bat ears, sly aristocratic grin.
+  PROTOFORM IMAGE -> Duskfang_Proto.png
+    Calm, cute form, with the element's ambient accents. Everyday use (show only as a subtle hint): Hangs batlike from rafters for hours at a stretch without complaint -- handy for scouting high shelves or silently eavesdropping in the dark.
+  VELOCITY IMAGE -> Duskfang_Velocity.png
+    Battle form, dynamic action pose, shown doing this: Sinks twin fangs into the target and drains their blood -- the stolen vitality flows straight back to heal its own slinger for the bite's full clash power.

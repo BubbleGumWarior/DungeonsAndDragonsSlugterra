@@ -387,6 +387,21 @@
   cursor: help;
 }
 
+.slug-card-loyalty-meter {
+  width: 100%;
+  padding: 4px 10px 0;
+  box-sizing: border-box;
+}
+
+.slug-card-loyalty-legend-note {
+  margin: 8px 0 0;
+  max-width: 150px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--ink-dim);
+  white-space: normal;
+}
+
 .slug-card-loyalty-legend {
   position: absolute;
   bottom: calc(100% + 10px);

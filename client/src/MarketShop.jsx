@@ -1,44 +1,73 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  BatteryChargingIcon,
+  BowlFoodIcon,
   CoinsIcon,
   CubeIcon,
   EyeIcon,
   EyeSlashIcon,
+  FirstAidKitIcon,
+  FlaskIcon,
   HandshakeIcon,
   PawPrintIcon,
   PlusIcon,
+  SwordIcon,
   TargetIcon,
   TrashIcon,
   WrenchIcon,
-  CircleDashedIcon,
   PackageIcon,
+  ToolboxIcon,
 } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import { useToast } from "./Toast.jsx";
 import { PLANETS } from "./planetData.js";
+import { SUPPLIES } from "./careData.js";
 import BarterModal from "./BarterModal.jsx";
 import DMMarketControls from "./DMMarketControls.jsx";
+import SlugIcon from "./SlugIcon.jsx";
+import { EQUIPMENT_ICONS } from "./EquipmentCard.jsx";
 import "./Panel.css";
 import "./MarketShop.css";
 
 const CATEGORIES = [
-  { key: "pods", label: "Supplies", icon: <PackageIcon weight="bold" /> },
+  { key: "supply", label: "Supplies", icon: <PackageIcon weight="bold" /> },
   { key: "mod", label: "Blaster Mods", icon: <WrenchIcon weight="bold" /> },
   { key: "mecha_mod", label: "Mecha Mods", icon: <CubeIcon weight="bold" /> },
   { key: "blaster", label: "Blasters", icon: <TargetIcon weight="bold" /> },
+  { key: "equipment", label: "Equipment", icon: <SwordIcon weight="bold" /> },
   { key: "mecha", label: "Mecha-Beasts", icon: <PawPrintIcon weight="bold" /> },
-  { key: "slug", label: "Slugs", icon: <CircleDashedIcon weight="bold" /> },
+  { key: "slug", label: "Slugs", icon: <SlugIcon size={19} /> },
 ];
 
+// Supplies are bought by the handful and each has its own picture.
+const SUPPLY_ICONS = {
+  pods: <PackageIcon weight="duotone" />,
+  kibble: <BowlFoodIcon weight="duotone" />,
+  "repair-kit": <ToolboxIcon weight="duotone" />,
+  "energy-cell": <BatteryChargingIcon weight="duotone" />,
+  medpack: <FirstAidKitIcon weight="duotone" />,
+  "revival-tonic": <FlaskIcon weight="duotone" />,
+};
+
+// Supply key -> the field on the player's `me` counts.
+const SUPPLY_FIELD = Object.fromEntries(SUPPLIES.map((s) => [s.key, s.field]));
+
 const KIND_LABELS = {
-  pods: "Supply",
+  supply: "Supply",
   mod: "Blaster Mod",
   mecha_mod: "Mecha Mod",
   blaster: "Blaster",
+  equipment: "Equipment",
   mecha: "Mecha-Beast",
   slug: "Slug",
 };
+
+// Equipment shows its own kind's icon (shield, armor, belt, sword) -- no pictures.
+function equipmentIcon(item) {
+  const Icon = item.kind === "equipment" ? EQUIPMENT_ICONS[item.equipKind] : null;
+  return Icon ? <Icon weight="bold" /> : null;
+}
 
 function kindIcon(kind) {
   return CATEGORIES.find((c) => c.key === kind)?.icon ?? <CubeIcon weight="bold" />;
@@ -55,10 +84,10 @@ export default function MarketShop() {
   const isDM = user?.role === "Dungeon Master";
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
-  const [category, setCategory] = useState("pods");
+  const [category, setCategory] = useState("supply");
   const [barterOpen, setBarterOpen] = useState(false);
   const [busyKey, setBusyKey] = useState(null);
-  const [podQty, setPodQty] = useState(1);
+  const [qtyByKey, setQtyByKey] = useState({});
 
   const load = useCallback(() => {
     fetch("/api/market", { headers: { Authorization: `Bearer ${token}` } })
@@ -92,6 +121,8 @@ export default function MarketShop() {
       if (first) setCategory(first.key);
     }
   }, [data, grouped, category]);
+
+  const qtyOf = (item) => qtyByKey[item.key] ?? 1;
 
   async function buy(item, quantity = 1) {
     setBusyKey(item.key);
@@ -140,6 +171,9 @@ export default function MarketShop() {
   const markup = data.barterPct;
   const discount = data.barter?.discountPct ?? 0;
   const barterRoll = data.barter?.roll;
+  const moodPct = data.moodPct ?? 0;
+  const closed = !data.open;
+  const moodLabel = data.mood ? data.mood[0].toUpperCase() + data.mood.slice(1) : "";
 
   return (
     <div className="market-shop">
@@ -151,22 +185,30 @@ export default function MarketShop() {
             <span className={`market-chip ${planetPct < 100 ? "market-chip--good" : planetPct > 100 ? "market-chip--bad" : ""}`}>
               Local prices {planetPct}%
             </span>
-            {markup > 0 && <span className="market-chip market-chip--bad">Sour mood +{markup}%</span>}
+            {closed ? (
+              <span className="market-chip market-chip--bad">Closed</span>
+            ) : (
+              <span className="market-chip market-chip--good">Open</span>
+            )}
+            {moodPct !== 0 && (
+              <span className={`market-chip ${moodPct < 0 ? "market-chip--good" : "market-chip--bad"}`}>
+                {moodLabel} mood {moodPct > 0 ? "+" : "−"}
+                {Math.abs(moodPct)}%
+              </span>
+            )}
+            {markup > 0 && <span className="market-chip market-chip--bad">Poor haggle +{markup}%</span>}
             {discount > 0 && <span className="market-chip market-chip--good">Your haggle −{discount}%</span>}
           </div>
         </div>
 
-        {!isDM && (
+        {!isDM && !closed && (
           <div className="market-banner-side">
             <div className="market-purse">
               <span className="market-purse-row">
                 <CoinsIcon weight="fill" />
                 <strong className="num-tabular">{data.me?.credits ?? 0}</strong> credits
               </span>
-              <span className="market-purse-row">
-                <PackageIcon weight="fill" />
-                <strong className="num-tabular">{data.me?.pods ?? 0}</strong> spare pods
-              </span>
+
             </div>
             {data.barter ? (
               <p className="market-barter-done">
@@ -186,6 +228,11 @@ export default function MarketShop() {
 
       {isDM && <DMMarketControls data={data} planetName={planetName} dmCall={dmCall} token={token} />}
 
+      {closed && !isDM ? (
+        <p className="market-empty market-closed">The market on {planetName} is closed. Wait for the shopkeepers to open up.</p>
+      ) : (
+        <>
+      {closed && <p className="market-empty market-closed">Closed to players — open the market above when you're ready.</p>}
       <div className="market-tabs" role="tablist">
         {CATEGORIES.map((c) => {
           const count = grouped[c.key]?.length ?? 0;
@@ -217,7 +264,7 @@ export default function MarketShop() {
             return (
               <article key={item.key} className={`market-item${item.hidden ? " market-item--hidden" : ""}`}>
                 <div className="market-item-art">
-                  {item.image ? <img src={item.image} alt="" loading="lazy" /> : kindIcon(item.kind)}
+                  {item.image ? <img src={item.image} alt="" loading="lazy" /> : SUPPLY_ICONS[item.key] ?? equipmentIcon(item) ?? kindIcon(item.kind)}
                 </div>
                 <div className="market-item-body">
                   <div className="market-item-top">
@@ -225,6 +272,11 @@ export default function MarketShop() {
                     <span className="market-item-kind">{KIND_LABELS[item.kind]}</span>
                   </div>
                   {item.description && <p className="market-item-desc">{item.description}</p>}
+                  {item.kind === "supply" && !isDM && (
+                    <p className="market-owned">
+                      In your pack <strong className="num-tabular">×{data.me?.[SUPPLY_FIELD[item.key]] ?? 0}</strong>
+                    </p>
+                  )}
                   {item.tags?.length > 0 && (
                     <div className="market-item-tags">
                       {item.tags.map((t) => (
@@ -239,7 +291,7 @@ export default function MarketShop() {
                   <div className="market-price">
                     <CoinsIcon weight="fill" />
                     <span className={`market-price-now num-tabular${reduced ? " market-price-now--good" : dearer ? " market-price-now--bad" : ""}`}>
-                      {item.key === "pods" && !isDM ? item.price * podQty : item.price}
+                      {item.kind === "supply" && !isDM ? item.price * qtyOf(item) : item.price}
                     </span>
                     {(reduced || dearer) && <s className="market-price-was num-tabular">{item.basePrice}</s>}
                     {item.quantity != null && <span className="market-stock">{item.quantity} left</span>}
@@ -247,22 +299,24 @@ export default function MarketShop() {
 
                   {!isDM && (
                     <div className="market-buy">
-                      {item.key === "pods" && (
+                      {item.kind === "supply" && (
                         <input
                           type="number"
                           className="market-qty"
                           min={1}
                           max={20}
-                          value={podQty}
-                          onChange={(e) => setPodQty(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
-                          aria-label="Quantity"
+                          value={qtyOf(item)}
+                          onChange={(e) =>
+                            setQtyByKey((prev) => ({ ...prev, [item.key]: Math.max(1, Math.min(20, Number(e.target.value) || 1)) }))
+                          }
+                          aria-label={`Quantity of ${item.name}`}
                         />
                       )}
                       <button
                         type="button"
                         className="panel-btn"
                         disabled={busyKey === item.key}
-                        onClick={() => buy(item, item.key === "pods" ? podQty : 1)}
+                        onClick={() => buy(item, item.kind === "supply" ? qtyOf(item) : 1)}
                       >
                         Buy
                       </button>
@@ -289,6 +343,9 @@ export default function MarketShop() {
             );
           })}
         </div>
+      )}
+
+        </>
       )}
 
       {barterOpen && <BarterModal planetName={planetName} onClose={() => setBarterOpen(false)} onResolved={() => load()} />}

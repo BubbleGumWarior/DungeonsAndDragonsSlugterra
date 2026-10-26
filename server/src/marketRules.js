@@ -23,11 +23,31 @@ export function barterPctForTotal(total) {
 export const PLANET_PCT_MIN = 10;
 export const PLANET_PCT_MAX = 500;
 
+// The merchants' mood on a planet, set by hand by the DM. Each mood nudges
+// every price there (pct: + = dearer, - = cheaper) and stacks with the planet
+// modifier and any barter result. "neutral" is the default.
+export const MARKET_MOODS = [
+  { key: "furious", label: "Furious", pct: 25 },
+  { key: "hostile", label: "Hostile", pct: 15 },
+  { key: "sour", label: "Sour", pct: 10 },
+  { key: "wary", label: "Wary", pct: 5 },
+  { key: "neutral", label: "Neutral", pct: 0 },
+  { key: "friendly", label: "Friendly", pct: -5 },
+  { key: "cheerful", label: "Cheerful", pct: -10 },
+  { key: "generous", label: "Generous", pct: -15 },
+];
+export const DEFAULT_MOOD = "neutral";
+
+export function moodPctFor(key) {
+  return MARKET_MOODS.find((m) => m.key === key)?.pct ?? 0;
+}
+
 // `planetPct` e.g. 85; `personalDiscountPct` is the rolling player's barter
 // discount (0-20); `planetBarterPct` is the planet-wide barter markup (0-20)
-// left behind by a poor roll.
-export function finalPrice(basePrice, planetPct = 100, { personalDiscountPct = 0, planetBarterPct = 0 } = {}) {
-  const mult = (planetPct / 100) * (1 + planetBarterPct / 100) * (1 - personalDiscountPct / 100);
+// left behind by a poor roll; `moodPct` is the DM-set mood adjustment.
+export function finalPrice(basePrice, planetPct = 100, { personalDiscountPct = 0, planetBarterPct = 0, moodPct = 0 } = {}) {
+  const mult =
+    (planetPct / 100) * (1 + planetBarterPct / 100) * (1 + moodPct / 100) * (1 - personalDiscountPct / 100);
   const raw = Math.max(1, basePrice * mult);
   return raw >= 100 ? Math.round(raw / 5) * 5 : Math.max(1, Math.round(raw));
 }
@@ -77,7 +97,16 @@ export function defaultSlugPrice(t) {
   return Math.round(100 + (t.rarity ?? 5) * 60);
 }
 
-export const LISTING_KINDS = ["blaster", "mod", "mecha", "mecha_mod", "slug"];
+// Melee weapons are priced on damage + reach + accuracy, belts on the slots they add,
+// shields on what they absorb and armor on the Grit it adds.
+export function defaultEquipmentPrice(t) {
+  if (t.kind === "ammo_belt") return Math.round(80 + 45 * (t.extra_slots ?? 0));
+  if (t.kind === "shield") return Math.round(60 + 14 * (t.absorb ?? 0));
+  if (t.kind === "armor") return Math.round(60 + 12 * (t.grit_bonus ?? 0));
+  return Math.round(60 + 25 * (t.damage ?? 0) + 10 * Math.max(0, t.accuracy ?? 0) + Math.max(0, (t.reach ?? 80) - 80) / 4);
+}
+
+export const LISTING_KINDS = ["blaster", "mod", "mecha", "mecha_mod", "slug", "equipment"];
 
 // Template table + the base-price default per listing kind.
 export const KIND_TABLES = {
@@ -86,6 +115,7 @@ export const KIND_TABLES = {
   mecha: { table: "mecha_templates", price: defaultMechaPrice },
   mecha_mod: { table: "mecha_mod_templates", price: defaultMechaModPrice },
   slug: { table: "slug_templates", price: defaultSlugPrice },
+  equipment: { table: "equipment_templates", price: defaultEquipmentPrice },
 };
 
 export function templateBasePrice(kind, row) {

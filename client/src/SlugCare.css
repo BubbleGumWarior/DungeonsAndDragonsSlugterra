@@ -1,0 +1,295 @@
+/* Slug Care: a working ledger of who is fed and charged. The surface matches
+   the other Loadout panels; the only colour that carries meaning here is the
+   food state (good / warn / bad), always paired with a word. */
+.slug-care {
+  --care-good: var(--success);
+  --care-warn: #dd7a4a;
+  --care-bad: var(--danger);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 75%);
+  border: 1px solid var(--charcoal-600);
+  border-top-color: var(--charcoal-700);
+  border-radius: 16px;
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.5),
+    0 2px 0 rgba(255, 255, 255, 0.03) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.6) inset;
+}
+
+.slug-care-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.slug-care-heading h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--gold-soft);
+  text-wrap: balance;
+}
+
+.slug-care-heading p {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+
+.slug-care-buy {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--gold-soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--gold-dim);
+}
+
+.slug-care-buy:hover {
+  color: var(--gold);
+}
+
+.slug-care-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.slug-care-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(0, 2.2fr);
+  align-items: center;
+  column-gap: 20px;
+  row-gap: 8px;
+  padding: 14px 0;
+  border-top: 1px solid var(--charcoal-700);
+}
+
+.slug-care-row:first-child {
+  border-top: 0;
+  padding-top: 2px;
+}
+
+.slug-care-id {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.slug-care-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  color: var(--gold-dim);
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-600);
+  border-radius: 50%;
+}
+
+.slug-care-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.slug-care-thumb svg {
+  width: 55%;
+  height: 55%;
+}
+
+.slug-care-who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.slug-care-name {
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slug-care-loyalty {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.slug-care-loyalty-meter {
+  display: block;
+  width: 110px;
+  max-width: 100%;
+  margin-top: 5px;
+}
+
+.slug-care-lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* One lane per upkeep: label, the meter, then what you can do about it. */
+.slug-care-lane {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr) 150px;
+  align-items: center;
+  column-gap: 12px;
+}
+
+.slug-care-lane-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.slug-care-lane-label svg {
+  width: 15px;
+  height: 15px;
+  color: var(--gold-dim);
+}
+
+.slug-care-lane-hint {
+  display: flex;
+  width: 100%;
+}
+
+.slug-care-food {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.slug-care-meter {
+  position: relative;
+  height: 10px;
+  overflow: hidden;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-600);
+  border-radius: 999px;
+}
+
+.slug-care-meter-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--care-good);
+  border-radius: 999px;
+  transform-origin: left center;
+  transition: transform 0.5s var(--ease-out), background 0.3s var(--ease-out);
+}
+
+/* One notch per scoop of kibble: four notches, four meals. */
+.slug-care-meter::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent calc(25% - 1px), var(--charcoal-950) calc(25% - 1px) 25%, transparent 25%),
+    linear-gradient(90deg, transparent calc(50% - 1px), var(--charcoal-950) calc(50% - 1px) 50%, transparent 50%),
+    linear-gradient(90deg, transparent calc(75% - 1px), var(--charcoal-950) calc(75% - 1px) 75%, transparent 75%);
+  pointer-events: none;
+}
+
+.slug-care-row--warn .slug-care-meter-fill {
+  background: var(--care-warn);
+}
+
+.slug-care-row--bad .slug-care-meter-fill {
+  background: var(--care-bad);
+}
+
+.slug-care-state {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-dim);
+}
+
+.slug-care-state strong {
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+.slug-care-row--warn .slug-care-lane:first-child .slug-care-state {
+  color: var(--care-warn);
+}
+
+.slug-care-row--bad .slug-care-lane:first-child .slug-care-state {
+  color: var(--care-bad);
+}
+
+.slug-care-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.slug-care-btn {
+  padding: 7px 14px;
+  font-size: 12.5px;
+}
+
+.slug-care-warning {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--care-bad);
+}
+
+.slug-care-warning svg {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+}
+
+@media (max-width: 760px) {
+  .slug-care {
+    padding: 16px;
+  }
+
+  .slug-care-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .slug-care-lane {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 6px;
+  }
+
+  .slug-care-lane-label {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slug-care-meter-fill {
+    transition: none;
+  }
+}

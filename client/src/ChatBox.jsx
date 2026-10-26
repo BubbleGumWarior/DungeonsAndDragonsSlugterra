@@ -178,7 +178,7 @@ export default function ChatBox() {
                 }${freshIdsRef.current.has(msg.id) ? " chatbox-message--enter" : ""}`}
               >
                 <div className="chatbox-message-meta">
-                  <span className="chatbox-message-author">{msg.username}</span>
+                  <span className="chatbox-message-author">{msg.author ?? msg.username}</span>
                   <span className="chatbox-message-time">{formatTime(msg.createdAt)}</span>
                 </div>
                 <p className="chatbox-message-text">{msg.body}</p>

@@ -13,6 +13,7 @@ import {
 import { useTypewriter } from "./useTypewriter.js";
 import SlugImage from "./SlugImage.jsx";
 import EnergyPips from "./EnergyPips.jsx";
+import LoyaltyMeter from "./LoyaltyMeter.jsx";
 import "./SlugCard.css";
 
 export default function SlugCard({
@@ -177,6 +178,11 @@ export default function SlugCard({
               {accuracyMod !== 0 && <span className={accuracyModClass}>{accuracyModLabel} ACC</span>}
             </span>
             <span className="slug-card-stat-label">Loyalty</span>
+            {typeof slug.loyaltyFill === "number" && (
+              <div className="slug-card-loyalty-meter">
+                <LoyaltyMeter fill={slug.loyaltyFill} tier={slug.loyaltyTier} shots={slug.loyaltyShots ?? null} compact />
+              </div>
+            )}
 
             <div className="slug-card-loyalty-legend" role="tooltip">
               <p className="slug-card-loyalty-legend-title">Loyalty Tiers</p>
@@ -188,6 +194,7 @@ export default function SlugCard({
                   </span>
                 </div>
               ))}
+              <p className="slug-card-loyalty-legend-note">Fire a slug to earn its trust. A good Slug Handler earns it faster.</p>
             </div>
           </div>
         </div>

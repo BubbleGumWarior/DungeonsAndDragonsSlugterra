@@ -154,10 +154,9 @@ router.post("/voice-peer-volume", async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT slugterra_revealed, slug_hunt_area, active_ship_id FROM campaign_settings WHERE id = 1"
+      "SELECT slug_hunt_area, active_ship_id FROM campaign_settings WHERE id = 1"
     );
     res.json({
-      slugterraRevealed: rows[0]?.slugterra_revealed ?? false,
       slugHuntArea: rows[0]?.slug_hunt_area ?? 0,
       activeShipId: rows[0]?.active_ship_id ?? null,
     });
@@ -176,24 +175,19 @@ router.post("/slug-hunt-area", requireDungeonMaster, async (req, res) => {
     return res.status(400).json({ error: "Area must be a whole number between 0 and 16." });
   }
   try {
+    const { rows: prev } = await pool.query("SELECT slug_hunt_area FROM campaign_settings WHERE id = 1");
     await pool.query("UPDATE campaign_settings SET slug_hunt_area = $1 WHERE id = 1", [area]);
+    // Setting off for a new world shuts every market; the DM reopens the one
+    // they want (market.js PUT /open).
+    if (prev[0]?.slug_hunt_area !== area) {
+      await pool.query("UPDATE planet_markets SET market_open = false WHERE market_open");
+      broadcastAll({ type: "market-changed", at: Date.now() });
+    }
     broadcastAll({ type: "slug-hunt-area", area });
     res.json({ slugHuntArea: area });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not update the party's location." });
-  }
-});
-
-router.post("/slugterra", requireDungeonMaster, async (req, res) => {
-  const revealed = Boolean(req.body?.revealed);
-  try {
-    await pool.query("UPDATE campaign_settings SET slugterra_revealed = $1 WHERE id = 1", [revealed]);
-    broadcastAll({ type: "slugterra-revealed", revealed });
-    res.json({ slugterraRevealed: revealed });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Could not update settings." });
   }
 });
 

@@ -1,6 +1,7 @@
 import { WebSocketServer } from "ws";
 import jwt from "jsonwebtoken";
 import { imagifyPayload } from "./imageStore.js";
+import { loadCharacterNames } from "./displayNames.js";
 
 const userSockets = new Map();
 
@@ -14,11 +15,13 @@ const voiceRoom = new Map();
 function voiceRosterPayload() {
   return {
     type: "voice-roster",
-    participants: [...voiceRoom.entries()].map(([userId, state]) => ({
-      userId,
-      username: state.username,
-      muted: state.muted,
-    })),
+    participants: [...voiceRoom.entries()]
+      .filter(([, state]) => state.name)
+      .map(([userId, state]) => ({
+        userId,
+        name: state.name,
+        muted: state.muted,
+      })),
   };
 }
 
@@ -75,10 +78,12 @@ export function setupWebSocket(server) {
 
     let userId;
     let username;
+    let role;
     try {
       const payload = jwt.verify(token, process.env.JWT_SECRET);
       userId = payload.sub;
       username = payload.username;
+      role = payload.role;
     } catch (err) {
       console.warn(`[ws] rejected connection from ${req.socket.remoteAddress}: invalid token (${err.message})`);
       ws.close(4001, "Unauthorized");
@@ -109,8 +114,22 @@ export function setupWebSocket(server) {
       }
 
       if (data.type === "voice-join") {
-        voiceRoom.set(userId, { username, muted: false });
-        broadcastVoiceRoster();
+        // Shown to the table by character name, not login username. The
+        // entry is registered immediately (so a mute-state sent right behind
+        // this isn't dropped) but stays out of the roster until the name
+        // lookup finishes, so a username never flashes up first.
+        voiceRoom.set(userId, { name: null, muted: false });
+        loadCharacterNames([userId])
+          .catch((err) => {
+            console.warn(`[ws] could not load character name for user ${userId}: ${err.message}`);
+            return new Map();
+          })
+          .then((names) => {
+            const entry = voiceRoom.get(userId);
+            if (!entry) return;
+            entry.name = names.get(userId) || (role === "Dungeon Master" ? "Dungeon Master" : username);
+            broadcastVoiceRoster();
+          });
         return;
       }
 

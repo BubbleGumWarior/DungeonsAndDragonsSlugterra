@@ -57,7 +57,7 @@ function HuntCard({ hunt, token, queueCount, onResolvedLocally }) {
       </div>
 
       <p className="slughunt-prompt-roll">
-        Survival check <strong>{hunt.total}</strong>{" "}
+        Slug Handling check <strong>{hunt.total}</strong>{" "}
         <span className="slughunt-prompt-rollsub">
           (d20 {hunt.roll} {formatModifier(hunt.modifier)})
         </span>

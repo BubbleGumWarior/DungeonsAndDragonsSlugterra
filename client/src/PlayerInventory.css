@@ -187,3 +187,15 @@
 .player-inventory-pods--low .player-inventory-pods-hint {
   color: #e0a13c;
 }
+
+/* A line under the slotted item: what it adds (belt slots, melee damage). */
+.weapon-loadout-slot-weapon {
+  flex-wrap: wrap;
+}
+
+.weapon-loadout-slot-bonus {
+  flex-basis: 100%;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--success);
+}

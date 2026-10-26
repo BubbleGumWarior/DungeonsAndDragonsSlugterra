@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ShieldWarningIcon, XIcon } from "@phosphor-icons/react";
+import { LightningIcon, PersonSimpleRunIcon, ShieldIcon, ShieldWarningIcon, SwordIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import { typeColor } from "./slugData.js";
@@ -8,11 +8,20 @@ import { useSlugImage } from "./useSlugImage.js";
 import "./Panel.css";
 import "./CounterClashPrompt.css";
 
-function CounterCard({ offer, onDone }) {
+// `primary` marks the one card the keyboard shortcuts answer: with several
+// shooters firing at once there can be a few prompts up together, and a key
+// press should only ever answer one of them.
+function CounterCard({ offer, onDone, primary = true }) {
   const { token } = useAuth();
-  const [remaining, setRemaining] = useState(offer.windowMs);
+  // The offer arrives already `elapsedMs` into the window (the server's clock
+  // at send time), so the bar starts there and the reaction time reported back
+  // is measured on that same clock: elapsedMs + time since receipt. That keeps
+  // network delay out of the player's window -- the server judges the click by
+  // when it was made, not by when the request got there.
+  const elapsedAtReceipt = offer.elapsedMs > 0 ? offer.elapsedMs : 0;
+  const [remaining, setRemaining] = useState(offer.windowMs - elapsedAtReceipt);
   const [resolving, setResolving] = useState(false);
-  const startRef = useRef(Date.now());
+  const startRef = useRef(performance.now());
   // The prompt only appears once the shot's windup is over -- until the slug
   // has left the barrel and transformed there's nothing to identify yet. The
   // countdown below still runs from the moment the offer arrived (the real
@@ -33,7 +42,7 @@ function CounterCard({ offer, onDone }) {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      const left = offer.windowMs - (Date.now() - startRef.current);
+      const left = offer.windowMs - elapsedAtReceipt - (performance.now() - startRef.current);
       if (left <= 0) {
         clearInterval(interval);
         setRemaining(0);
@@ -43,16 +52,17 @@ function CounterCard({ offer, onDone }) {
       }
     }, 50);
     return () => clearInterval(interval);
-  }, [offer, onDone]);
+  }, [offer, onDone, elapsedAtReceipt]);
 
   async function respond(slugId, { dodge = false } = {}) {
     if (resolving) return;
     setResolving(true);
+    const reactedAtMs = Math.round(elapsedAtReceipt + (performance.now() - startRef.current));
     try {
       await fetch(`/api/combat/counters/${offer.id}/resolve`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(dodge ? { dodge: true } : { slugId }),
+        body: JSON.stringify(dodge ? { dodge: true, reactedAtMs } : { slugId, reactedAtMs }),
       });
     } catch {
       // server auto-resolves on timeout regardless
@@ -69,7 +79,7 @@ function CounterCard({ offer, onDone }) {
   const respondRef = useRef(respond);
   respondRef.current = respond;
   useEffect(() => {
-    if (!revealed) return undefined; // no responding to a prompt nobody can see yet
+    if (!revealed || !primary) return undefined; // no responding to a prompt nobody can see yet
     // Flags the prompt as open on the body so VoiceChatContext's push-to-talk
     // spacebar handler can back off -- Dodge's own hotkey is Space too.
     document.body.dataset.counterPromptOpen = "true";
@@ -94,83 +104,89 @@ function CounterCard({ offer, onDone }) {
       window.removeEventListener("keydown", onKeyDown);
       delete document.body.dataset.counterPromptOpen;
     };
-  }, [offer, revealed]);
+  }, [offer, revealed, primary]);
 
   const percent = Math.max(0, Math.min(100, (remaining / offer.windowMs) * 100));
 
   if (!revealed) return null;
 
+  // Seen for a few seconds at a time, so it's built to be read at a glance:
+  // what's coming (art + name), how long is left, then big one-key answers
+  // with numbers and icons instead of sentences.
+  const target = offer.forNpc && offer.defenderName ? offer.defenderName : null;
+  const urgent = percent <= 35;
+  const title = offer.slugName || offer.primarySlugName;
+
   return (
-    <div className="counter-prompt-card">
-      <div className="counter-prompt-head">
+    <section
+      className={`counter-card ${primary ? "" : "counter-card--queued"} ${urgent ? "counter-card--urgent" : ""}`}
+      role="alertdialog"
+      aria-label={`${offer.attackerName} fires ${title}`}
+    >
+      <div className="counter-timer" aria-hidden="true">
+        <div className="counter-timer-fill" style={{ transform: `scaleX(${percent / 100})` }} />
+      </div>
+
+      <header className="counter-head">
         {incomingImage ? (
-          <span className={isDual ? "counter-prompt-portraits" : undefined}>
-            <span
-              className={`counter-prompt-portrait ${isDual ? "counter-prompt-portrait--dual" : ""}`}
-              style={{ "--type-color": typeColor(offer.slugType) }}
-            >
-              <img src={incomingImage} alt={offer.primarySlugName || offer.slugName} />
-              <span className="counter-prompt-portrait-type">{offer.slugType}</span>
+          <span className="counter-portraits">
+            <span className="counter-portrait" style={{ "--type-color": typeColor(offer.slugType) }}>
+              <img src={incomingImage} alt="" />
             </span>
             {isDual && partnerImage && (
-              <span
-                className="counter-prompt-portrait counter-prompt-portrait--dual counter-prompt-portrait--second"
-                style={{ "--type-color": typeColor(offer.secondaryType) }}
-              >
-                <img src={partnerImage} alt={offer.partnerSlugName} />
-                <span className="counter-prompt-portrait-type">{offer.secondaryType}</span>
+              <span className="counter-portrait counter-portrait--second" style={{ "--type-color": typeColor(offer.secondaryType) }}>
+                <img src={partnerImage} alt="" />
               </span>
             )}
           </span>
         ) : (
-          <span className="counter-prompt-icon">
+          <span className="counter-portrait counter-portrait--empty">
             <ShieldWarningIcon weight="duotone" />
           </span>
         )}
-        <div>
-          <p className="counter-prompt-kicker">
-            {offer.attackerName} fires {offer.slugName}
-            {offer.forNpc && offer.defenderName ? ` at ${offer.defenderName}` : ""}!
+
+        <div className="counter-incoming">
+          <h3 className="counter-title">{title}</h3>
+          <p className="counter-from">
+            <span className="counter-type" style={{ "--type-color": typeColor(offer.slugType) }}>
+              {offer.slugType}
+            </span>
+            <span className="counter-from-name">
+              {offer.attackerName}
+              {target ? ` → ${target}` : ""}
+            </span>
           </p>
-          {offer.comboName && (
-            <p className="counter-prompt-combo">
-              <strong>{offer.comboName}</strong>
-              {offer.comboSummary ? ` -- ${offer.comboSummary}` : ""}
+          {(offer.mega || offer.comboName || (isDual && offer.comboSummary)) && (
+            <p className="counter-tags">
+              {offer.mega && <span className="counter-tag counter-tag--mega">Mega</span>}
+              {(offer.comboName || (isDual && offer.comboSummary)) && (
+                <span className="counter-tag counter-tag--combo" title={offer.comboSummary || undefined}>
+                  {offer.comboName || "Dual shot"}
+                </span>
+              )}
             </p>
           )}
-          {isDual && !offer.comboName && offer.comboSummary && <p className="counter-prompt-combo">{offer.comboSummary}</p>}
-          {offer.mega && <p className="counter-prompt-mega">MEGA MORPH -- double power, double speed</p>}
-          <h3 className="counter-prompt-title">
-            {offer.forNpc
-              ? `Counter for ${offer.defenderName || "the NPC"}?`
-              : offer.eligibleSlugs.length > 0
-                ? "Counter with a slug?"
-                : "Dodge?"}
-          </h3>
-          {offer.availableAp != null && (
-            <p className="counter-prompt-ap">{offer.availableAp} AP left to spend on a counter</p>
-          )}
         </div>
-        <button type="button" className="counter-prompt-close" onClick={() => respond(null)} aria-label="No counter">
-          <XIcon weight="bold" />
-        </button>
-      </div>
 
-      <div className="counter-prompt-timer">
-        <div className="counter-prompt-timer-fill" style={{ transform: `scaleX(${percent / 100})` }} />
-      </div>
+        <span className="counter-clock num-tabular" aria-hidden="true">
+          {(Math.max(0, remaining) / 1000).toFixed(1)}
+        </span>
+      </header>
 
-      <div className="counter-prompt-slugs">
+      <div className="counter-options">
         {offer.canDodge && (
-          <button
-            type="button"
-            className="counter-prompt-slug counter-prompt-dodge"
-            disabled={resolving}
-            onClick={() => respond(null, { dodge: true })}
-          >
-            <span className="counter-prompt-slug-key">Spc</span>
-            <span className="counter-prompt-slug-name">Dodge</span>
-            <span className="counter-prompt-slug-stats">{offer.dodgeApCost} AP</span>
+          <button type="button" className="counter-option counter-option--dodge" disabled={resolving} onClick={() => respond(null, { dodge: true })}>
+            <span className="counter-key counter-key--wide">Space</span>
+            <span className="counter-option-name">
+              <PersonSimpleRunIcon weight="bold" aria-hidden="true" />
+              Dodge
+            </span>
+            <span className="counter-option-meta">
+              <span className="counter-stat" title="AP cost">
+                <LightningIcon weight="fill" aria-label="AP" />
+                {offer.dodgeApCost}
+              </span>
+            </span>
           </button>
         )}
         {offer.eligibleSlugs.map((s, i) => {
@@ -179,34 +195,53 @@ function CounterCard({ offer, onDone }) {
             <button
               key={s.id}
               type="button"
-              className="counter-prompt-slug"
+              className="counter-option"
               style={{ "--type-color": typeColor(s.type) }}
               disabled={resolving}
               onClick={() => respond(s.id)}
+              title={s.type}
             >
-              {hotkey <= 9 && <span className="counter-prompt-slug-key">{hotkey}</span>}
-              <span className="counter-prompt-slug-name">{s.name}</span>
-              <span className="counter-prompt-slug-type">{s.type}</span>
-              <span className="counter-prompt-slug-stats">
-                PWR {s.clashPower} / DEF {s.clashDefense}
-                {s.apCost != null && ` · ${s.apCost} AP`}
+              {hotkey <= 9 && <span className="counter-key">{hotkey}</span>}
+              <span className="counter-option-name">
+                <span className="counter-dot" aria-hidden="true" />
+                {s.name}
+              </span>
+              <span className="counter-option-meta">
+                <span className="counter-stat" title="Clash power">
+                  <SwordIcon weight="fill" aria-label="Power" />
+                  {s.clashPower}
+                </span>
+                <span className="counter-stat" title="Clash defense">
+                  <ShieldIcon weight="fill" aria-label="Defense" />
+                  {s.clashDefense}
+                </span>
+                {s.apCost != null && (
+                  <span className="counter-stat" title="AP cost">
+                    <LightningIcon weight="fill" aria-label="AP" />
+                    {s.apCost}
+                  </span>
+                )}
               </span>
             </button>
           );
         })}
       </div>
 
-      <button type="button" className="panel-btn panel-btn--ghost counter-prompt-skip" disabled={resolving} onClick={() => respond(null)}>
-        Take the hit <span className="counter-prompt-slug-key">Esc</span>
+      <button type="button" className="counter-skip" disabled={resolving} onClick={() => respond(null)}>
+        Skip <span className="counter-key counter-key--wide">Esc</span>
       </button>
-    </div>
+    </section>
   );
 }
 
 export default function CounterClashPrompt() {
   const { token } = useAuth();
-  const { counterOffered, slugArmed, shotFx } = useLiveState();
-  const [offer, setOffer] = useState(null);
+  const { counterOffers, slugArmed, shotFx } = useLiveState();
+  // Teammates acting at the same time can all fire on one defender, so there
+  // may be several offers open together. They stack, oldest on top, and the
+  // defender answers whichever they can -- the rest run out and land.
+  const [offers, setOffers] = useState([]);
+  const shownIds = useRef(new Set());
 
   // Warm the incoming slug's art as early as possible so the counter window
   // never waits on it: when a shooter merely picks a slug (before choosing a
@@ -222,15 +257,59 @@ export default function CounterClashPrompt() {
   }, [shotFx, token]);
 
   useEffect(() => {
-    if (!counterOffered) return;
-    setOffer(counterOffered);
-  }, [counterOffered]);
+    if (!counterOffers?.length) return;
+    const fresh = counterOffers.filter((o) => !shownIds.current.has(o.id));
+    if (fresh.length === 0) return;
+    fresh.forEach((o) => shownIds.current.add(o.id));
+    setOffers((prev) => [...prev, ...fresh]);
+  }, [counterOffers]);
 
-  if (!offer) return null;
+  // Space is Dodge's hotkey, and the browser's own Space scrolls the page to the
+  // bottom. The card only swallows it once its windup reveal is over, and not
+  // at all after it closes -- so a press before the reveal, or a held key still
+  // repeating just after Dodge, would scroll. Cover the whole offer instead,
+  // plus a short grace after it ends. (Text fields keep their spaces.)
+  const spaceGuardUntil = useRef(0);
+  const offerOpen = useRef(false);
+  useEffect(() => {
+    if (offers.length > 0) {
+      offerOpen.current = true;
+      return undefined;
+    }
+    if (offerOpen.current) {
+      offerOpen.current = false;
+      spaceGuardUntil.current = Date.now() + 1500;
+    }
+    return undefined;
+  }, [offers.length]);
+  useEffect(() => {
+    function guard(e) {
+      if (e.key !== " " && e.code !== "Space") return;
+      if (!offerOpen.current && Date.now() > spaceGuardUntil.current) return;
+      const el = e.target;
+      if (el instanceof HTMLElement && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))) return;
+      e.preventDefault();
+    }
+    window.addEventListener("keydown", guard);
+    window.addEventListener("keyup", guard);
+    return () => {
+      window.removeEventListener("keydown", guard);
+      window.removeEventListener("keyup", guard);
+    };
+  }, []);
+
+  if (offers.length === 0) return null;
 
   return (
-    <div className="counter-prompt-stack">
-      <CounterCard offer={offer} onDone={() => setOffer((prev) => (prev?.id === offer.id ? null : prev))} />
+    <div className="counter-stack">
+      {offers.map((offer, i) => (
+        <CounterCard
+          key={offer.id}
+          offer={offer}
+          primary={i === 0}
+          onDone={() => setOffers((prev) => prev.filter((o) => o.id !== offer.id))}
+        />
+      ))}
     </div>
   );
 }

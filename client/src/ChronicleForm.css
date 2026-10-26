@@ -363,6 +363,41 @@
   color: var(--ink-dim);
   opacity: 0.8;
 }
+.slugpick-library-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.slugpick-bulk {
+  display: flex;
+  gap: 6px;
+}
+.slugpick-bulk-btn {
+  appearance: none;
+  border: 1px solid var(--charcoal-600);
+  background: transparent;
+  color: var(--gold-soft);
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+.slugpick-bulk-btn:hover:not(:disabled) {
+  background: var(--charcoal-600);
+  color: #fff;
+}
+.slugpick-bulk-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.slugpick-bulk-btn:focus-visible {
+  outline: 2px solid var(--gold-soft);
+  outline-offset: 2px;
+}
 .slugpick-section {
   display: flex;
   flex-direction: column;

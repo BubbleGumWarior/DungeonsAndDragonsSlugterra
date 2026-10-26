@@ -2,7 +2,7 @@ import { WrenchIcon } from "@phosphor-icons/react";
 import { formatSigned, qualityInfo } from "./itemData.js";
 import "./ModCard.css";
 
-export default function ModCard({ mod, blasters = [], editable = false, draggable = false, onUnequip, onClick, onDragEnd, actions }) {
+export default function ModCard({ mod, blasters = [], editable = false, draggable = false, onUnequip, onClick, onDragStart, onDragEnd, actions }) {
   const equippedBlaster = blasters.find((b) => b.id === mod.equippedBlasterId);
   const isDraggable = draggable && !equippedBlaster;
   const quality = qualityInfo(mod.quality);
@@ -17,6 +17,7 @@ export default function ModCard({ mod, blasters = [], editable = false, draggabl
           ? (e) => {
               e.dataTransfer.setData("text/plain", String(mod.id));
               e.dataTransfer.effectAllowed = "move";
+              onDragStart?.(mod);
             }
           : undefined
       }

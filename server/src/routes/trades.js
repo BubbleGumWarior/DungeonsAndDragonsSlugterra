@@ -3,7 +3,9 @@ import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { broadcastAll, notifyUser } from "../ws.js";
 import { syncTempoAura } from "../slugAura.js";
+import { syncAmmoBelt } from "../ammoBelt.js";
 import { syncMechaModeFlags } from "./mechaMods.js";
+import { TRADEABLE_SUPPLIES } from "../careRules.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -23,9 +25,12 @@ const KINDS = {
   slug: { table: "slugs" },
   mecha: { table: "mechas" },
   mecha_mod: { table: "mecha_mods" },
+  equipment: { table: "equipment" },
 };
 
 const MAX_ITEMS_PER_SIDE = 12;
+const SUPPLY_COLUMNS = Object.values(TRADEABLE_SUPPLIES);
+const sumSupplies = (map) => Object.values(map).reduce((a, b) => a + b, 0);
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -42,6 +47,29 @@ function parseItems(raw, label) {
     seen.add(k);
     return { kind: it.kind, id: it.id };
   });
+}
+
+// Consumables in a trade: { clientField: n } -> { characters column: n }, positive
+// whole counts only. The column names come from the fixed TRADEABLE_SUPPLIES
+// table, never from the request.
+function parseSupplies(raw, label) {
+  if (raw == null) return {};
+  if (typeof raw !== "object" || Array.isArray(raw)) throw new TradeError(`${label}: invalid supplies.`);
+  const out = {};
+  for (const [field, column] of Object.entries(TRADEABLE_SUPPLIES)) {
+    const n = parseAmount(raw[field], `${label}: ${field}`, 999);
+    if (n > 0) out[column] = n;
+  }
+  return out;
+}
+
+// { column: n } -> { clientField: n } for the client.
+function suppliesToClient(map) {
+  const out = {};
+  for (const [field, column] of Object.entries(TRADEABLE_SUPPLIES)) {
+    if (map?.[column] > 0) out[field] = map[column];
+  }
+  return out;
 }
 
 function parseAmount(raw, label, max) {
@@ -76,7 +104,7 @@ async function assertNotInCombat(db, userIds) {
 // One-line summary of an item for the toast/panel.
 async function describeItem(item) {
   const def = KINDS[item.kind];
-  const cols = item.kind === "slug" ? "name, protoform_image AS image" : item.kind === "mecha_mod" ? "name, NULL AS image" : "name, image";
+  const cols = item.kind === "slug" ? "name, protoform_image AS image" : item.kind === "mecha_mod" || item.kind === "equipment" ? "name, NULL AS image" : "name, image";
   const { rows } = await pool.query(`SELECT ${cols} FROM ${def.table} WHERE id = $1`, [item.id]);
   return { kind: item.kind, id: item.id, name: rows[0]?.name ?? "(item gone)", image: rows[0]?.image ?? null };
 }
@@ -94,6 +122,8 @@ async function toClientTrade(row, names) {
     askCredits: row.ask_credits,
     givePods: row.give_pods,
     askPods: row.ask_pods,
+    giveSupplies: suppliesToClient(row.give_supplies),
+    askSupplies: suppliesToClient(row.ask_supplies),
     status: row.status,
     counterOf: row.counter_of,
     createdAt: row.created_at,
@@ -154,9 +184,10 @@ router.get("/inventory/:userId", async (req, res) => {
   try {
     const { rows: pending } = await pool.query("SELECT give FROM trades WHERE from_user_id = $1 AND status = 'pending'", [userId]);
     const locked = new Set(pending.flatMap((t) => t.give.map((g) => `${g.kind}:${g.id}`)));
-    const out = { items: [], credits: 0, pods: 0 };
+    const out = { items: [], credits: 0, pods: 0, supplies: {} };
     const specs = [
       ["blaster", "SELECT id, name, image, base_type AS hint, equip_slot IS NOT NULL AS equipped FROM blasters WHERE user_id = $1 AND owner_combatant_id IS NULL ORDER BY name"],
+      ["equipment", "SELECT id, name, NULL AS image, CASE kind WHEN 'melee' THEN 'Melee' WHEN 'shield' THEN 'Shield' WHEN 'armor' THEN 'Armor' ELSE 'Ammo Belt' END AS hint, equip_slot IS NOT NULL AS equipped FROM equipment WHERE user_id = $1 ORDER BY name"],
       ["mod", "SELECT id, name, image, NULL AS hint, equipped_blaster_id IS NOT NULL AS equipped FROM mods WHERE user_id = $1 ORDER BY name"],
       ["slug", "SELECT id, name, protoform_image AS image, type AS hint, equipped_blaster_id IS NOT NULL AS equipped FROM slugs WHERE user_id = $1 ORDER BY name"],
       ["mecha", "SELECT id, name, image, frame_type AS hint, false AS equipped FROM mechas WHERE user_id = $1 ORDER BY name"],
@@ -176,9 +207,10 @@ router.get("/inventory/:userId", async (req, res) => {
         });
       }
     }
-    const { rows: ch } = await pool.query("SELECT credits, pods FROM characters WHERE user_id = $1", [userId]);
+    const { rows: ch } = await pool.query(`SELECT credits, pods, ${SUPPLY_COLUMNS.join(", ")} FROM characters WHERE user_id = $1`, [userId]);
     out.credits = ch[0]?.credits ?? 0;
     out.pods = ch[0]?.pods ?? 0;
+    out.supplies = suppliesToClient(ch[0] ?? {});
     res.json(out);
   } catch (err) {
     console.error(err);
@@ -200,8 +232,13 @@ async function insertTrade(db, fromUserId, body, counterOf = null) {
   const askCredits = parseAmount(body.askCredits, "Credits requested", 100000000);
   const givePods = parseAmount(body.givePods, "Pods offered", 999);
   const askPods = parseAmount(body.askPods, "Pods requested", 999);
+  const giveSupplies = parseSupplies(body.giveSupplies, "Your offer");
+  const askSupplies = parseSupplies(body.askSupplies, "Your request");
 
-  if (give.length + ask.length + giveCredits + askCredits + givePods + askPods === 0) {
+  if (
+    give.length + ask.length + giveCredits + askCredits + givePods + askPods + sumSupplies(giveSupplies) + sumSupplies(askSupplies) ===
+    0
+  ) {
     throw new TradeError("A trade needs something in it.");
   }
   await assertNotInCombat(db, [fromUserId, toUserId]);
@@ -217,15 +254,30 @@ async function insertTrade(db, fromUserId, body, counterOf = null) {
   if (give.some((g) => locked.has(`${g.kind}:${g.id}`))) {
     throw new TradeError("One of those items is already offered in another pending trade.");
   }
-  const { rows: me } = await db.query("SELECT credits, pods FROM characters WHERE user_id = $1", [fromUserId]);
+  const { rows: me } = await db.query(`SELECT credits, pods, ${SUPPLY_COLUMNS.join(", ")} FROM characters WHERE user_id = $1`, [fromUserId]);
   if (!me[0]) throw new TradeError("You don't have a character sheet yet.");
   if (me[0].credits < giveCredits) throw new TradeError("You don't have that many credits.");
   if (me[0].pods < givePods) throw new TradeError("You don't have that many pods.");
+  for (const [column, n] of Object.entries(giveSupplies)) {
+    if (me[0][column] < n) throw new TradeError("You don't have that many consumables to offer.");
+  }
 
   const { rows } = await db.query(
-    `INSERT INTO trades (from_user_id, to_user_id, give, ask, give_credits, ask_credits, give_pods, ask_pods, counter_of)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-    [fromUserId, toUserId, JSON.stringify(give), JSON.stringify(ask), giveCredits, askCredits, givePods, askPods, counterOf]
+    `INSERT INTO trades (from_user_id, to_user_id, give, ask, give_credits, ask_credits, give_pods, ask_pods, give_supplies, ask_supplies, counter_of)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+    [
+      fromUserId,
+      toUserId,
+      JSON.stringify(give),
+      JSON.stringify(ask),
+      giveCredits,
+      askCredits,
+      givePods,
+      askPods,
+      JSON.stringify(giveSupplies),
+      JSON.stringify(askSupplies),
+      counterOf,
+    ]
   );
   return rows[0];
 }
@@ -314,10 +366,12 @@ router.post("/:id/cancel", (req, res) => closeTrade(req, res, { who: "from", sta
 // Moves one item to a new owner, first stripping it of every equip
 // relationship so nothing in anyone's loadout silently loses a piece:
 //   blaster   -> unequipped, its slugs unloaded, its mods detached
-//   slug      -> unloaded from its blaster
+//   slug      -> unloaded from its blaster, loyalty reset to Wild
 //   mod       -> detached from its blaster
 //   mecha_mod -> detached from its mecha
 //   mecha     -> its mods detached
+//   equipment -> unequipped (the ammo belt's slots are re-synced for both
+//                players after the trade -- see syncAmmoBelt)
 // Mods/slugs attached to a traded blaster stay with the original owner unless
 // they were put in the trade themselves. Returns mecha ids needing a
 // terrain-flag resync after commit.
@@ -326,16 +380,22 @@ export async function transferItem(client, item, newOwnerId, resync) {
     case "blaster":
       await client.query("UPDATE slugs SET equipped_blaster_id = NULL, magazine_slot = NULL WHERE equipped_blaster_id = $1", [item.id]);
       await client.query("UPDATE mods SET equipped_blaster_id = NULL WHERE equipped_blaster_id = $1", [item.id]);
-      await client.query("UPDATE blasters SET equip_slot = NULL, user_id = $2 WHERE id = $1", [item.id, newOwnerId]);
+      await client.query("UPDATE blasters SET equip_slot = NULL, magazine_bonus = 0, user_id = $2 WHERE id = $1", [item.id, newOwnerId]);
       break;
     case "slug":
+      // A slug's trust is with its slinger, not with slingers in general: it
+      // starts over as Wild (and from empty) for whoever it's traded to.
       await client.query(
-        "UPDATE slugs SET equipped_blaster_id = NULL, magazine_slot = NULL, user_id = $2 WHERE id = $1",
+        `UPDATE slugs SET equipped_blaster_id = NULL, magazine_slot = NULL, user_id = $2,
+           loyalty_tier = 0, loyalty_progress = 0 WHERE id = $1`,
         [item.id, newOwnerId]
       );
       break;
     case "mod":
       await client.query("UPDATE mods SET equipped_blaster_id = NULL, user_id = $2 WHERE id = $1", [item.id, newOwnerId]);
+      break;
+    case "equipment":
+      await client.query("UPDATE equipment SET equip_slot = NULL, user_id = $2 WHERE id = $1", [item.id, newOwnerId]);
       break;
     case "mecha_mod": {
       const { rows } = await client.query("SELECT equipped_mecha_id FROM mecha_mods WHERE id = $1", [item.id]);
@@ -365,7 +425,10 @@ router.post("/:id/accept", async (req, res) => {
 
       // Lock both purses in a stable order so two trades can't deadlock.
       const lockIds = [t.from_user_id, t.to_user_id].sort((a, b) => a - b);
-      const { rows: chars } = await client.query("SELECT user_id, credits, pods FROM characters WHERE user_id = ANY($1::int[]) ORDER BY user_id FOR UPDATE", [lockIds]);
+      const { rows: chars } = await client.query(
+        `SELECT user_id, credits, pods, ${SUPPLY_COLUMNS.join(", ")} FROM characters WHERE user_id = ANY($1::int[]) ORDER BY user_id FOR UPDATE`,
+        [lockIds]
+      );
       const byId = new Map(chars.map((c) => [c.user_id, c]));
       const from = byId.get(t.from_user_id);
       const to = byId.get(t.to_user_id);
@@ -378,17 +441,27 @@ router.post("/:id/accept", async (req, res) => {
       if (to.credits < t.ask_credits) throw new TradeError("You don't have enough credits for this trade.");
       if (from.pods < t.give_pods) throw new TradeError("The sender doesn't have enough pods any more.");
       if (to.pods < t.ask_pods) throw new TradeError("You don't have enough pods for this trade.");
+      for (const column of SUPPLY_COLUMNS) {
+        if (from[column] < (t.give_supplies?.[column] ?? 0)) throw new TradeError("The sender doesn't have enough supplies any more.");
+        if (to[column] < (t.ask_supplies?.[column] ?? 0)) throw new TradeError("You don't have enough supplies for this trade.");
+      }
 
       for (const it of t.give) await transferItem(client, it, t.to_user_id, resync);
       for (const it of t.ask) await transferItem(client, it, t.from_user_id, resync);
+      // A traded blaster or belt changes who has which magazine slots.
+      await syncAmmoBelt(client, t.from_user_id);
+      await syncAmmoBelt(client, t.to_user_id);
 
+      // Column names come from the fixed SUPPLY_COLUMNS list above.
+      const supplySets = SUPPLY_COLUMNS.map((c, i) => `${c} = ${c} - $${6 + i * 2} + $${7 + i * 2}`).join(", ");
+      const supplyArgs = (out, back) => SUPPLY_COLUMNS.flatMap((c) => [out?.[c] ?? 0, back?.[c] ?? 0]);
       await client.query(
-        "UPDATE characters SET credits = credits - $2 + $3, pods = pods - $4 + $5 WHERE user_id = $1",
-        [t.from_user_id, t.give_credits, t.ask_credits, t.give_pods, t.ask_pods]
+        `UPDATE characters SET credits = credits - $2 + $3, pods = pods - $4 + $5, ${supplySets} WHERE user_id = $1`,
+        [t.from_user_id, t.give_credits, t.ask_credits, t.give_pods, t.ask_pods, ...supplyArgs(t.give_supplies, t.ask_supplies)]
       );
       await client.query(
-        "UPDATE characters SET credits = credits - $2 + $3, pods = pods - $4 + $5 WHERE user_id = $1",
-        [t.to_user_id, t.ask_credits, t.give_credits, t.ask_pods, t.give_pods]
+        `UPDATE characters SET credits = credits - $2 + $3, pods = pods - $4 + $5, ${supplySets} WHERE user_id = $1`,
+        [t.to_user_id, t.ask_credits, t.give_credits, t.ask_pods, t.give_pods, ...supplyArgs(t.ask_supplies, t.give_supplies)]
       );
       const { rows: upd } = await client.query("UPDATE trades SET status = 'accepted', resolved_at = now() WHERE id = $1 RETURNING *", [id]);
       // Any other pending proposal that promised an item that just moved is

@@ -115,3 +115,80 @@ export function defaultModFields() {
     grantsRangeFinder: false,
   };
 }
+
+// How many slugs a blaster holds: its own magazine plus any slots an equipped
+// ammo belt adds (the server sends totalMagazineSize; see ammoBelt.js).
+export function magazineCapacity(blaster) {
+  return blaster?.totalMagazineSize ?? blaster?.magazineSize ?? 0;
+}
+
+// ---- Equipment (the Secondary slot's non-blaster occupants) ----------------
+
+export const EQUIPMENT_KINDS = {
+  melee: { label: "Melee Weapon", short: "Melee" },
+  ammo_belt: { label: "Ammo Belt", short: "Ammo Belt" },
+  shield: { label: "Shield", short: "Shield" },
+  armor: { label: "Armor", short: "Armor" },
+};
+// Mirrors server/src/equipmentRules.js: melee, belts and shields share the
+// Secondary slot (1); armor has its own (2).
+export const SECONDARY_SLOT = 1;
+export const ARMOR_SLOT = 2;
+export function slotForKind(kind) {
+  return kind === "armor" ? ARMOR_SLOT : SECONDARY_SLOT;
+}
+export const SHIELD_MAX_ABSORB = 100;
+export const ARMOR_MAX_GRIT = 100;
+export const MELEE_TYPES = {
+  bludgeon: { label: "Bludgeon", note: "Knocks the target back" },
+  slash: { label: "Slash", note: "Leaves the target bleeding" },
+  pierce: { label: "Pierce", note: "Ignores shields" },
+};
+export const MELEE_TYPE_KEYS = Object.keys(MELEE_TYPES);
+export const EQUIPMENT_KIND_KEYS = Object.keys(EQUIPMENT_KINDS);
+export const MELEE_MAX_DAMAGE = 30;
+export const MELEE_MAX_AP_COST = 8;
+export const MELEE_MAX_REACH = 400;
+export const BELT_MAX_EXTRA_SLOTS = 12;
+// Mirrors server/src/equipmentRules.js (MELEE_DEFAULT_REACH = one Move's worth).
+export const MELEE_DEFAULT_REACH = 80;
+
+export function defaultEquipmentFields(kind = "melee") {
+  return {
+    kind,
+    name: "",
+    image: null,
+    damage: 4,
+    accuracy: 0,
+    apCost: 2,
+    reach: MELEE_DEFAULT_REACH,
+    extraSlots: 4,
+    meleeType: "slash",
+    absorb: 10,
+    gritBonus: 10,
+  };
+}
+
+// What one swing does for a given STR modifier -- mirrors meleeDamageFor on the server.
+export function meleeDamageFor(weaponDamage, strMod) {
+  const damage = weaponDamage ?? 0;
+  return Math.max(1, strMod < 1 ? damage + strMod : damage * strMod);
+}
+
+// How STR shapes a swing, for descriptions: a positive modifier multiplies the
+// weapon's damage, anything lower is added to it.
+export const MELEE_STR_NOTE = "x STR modifier if it is positive, otherwise + STR modifier (min 1)";
+
+// One line on what a piece of equipment does -- shared by the card and the loadout slot.
+export function equipmentSummary(item) {
+  switch (item.kind) {
+    case "melee":
+      return `${MELEE_TYPES[item.meleeType]?.label ?? "Melee"} -- ${item.damage} damage, x STR if positive`;
+    case "shield":
+      return `Absorbs ${item.absorb} damage, then breaks until the fight ends`;
+    case "armor":
+      return `+${item.gritBonus} max Grit`;
+    default:
+      return `+${item.extraSlots} slug slots for your Primary`;
+  }
+}

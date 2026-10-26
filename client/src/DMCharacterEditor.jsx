@@ -135,7 +135,7 @@ export default function DMCharacterEditor({ userId, onSaved }) {
     <div className="dm-editor-card">
       <div className="dm-editor-header">
         <div className="dm-editor-portrait">
-          <GritRing current={character.currentGrit} max={maxGrit(stats)} />
+          <GritRing current={character.currentGrit} max={maxGrit(stats, character.gritBonus)} />
           {portrait ? <img src={portrait} alt={name} /> : <UserCircleIcon weight="duotone" />}
           <KnockoutPips size="lg" pips={character.knockoutPips} editable onToggle={togglePip} />
         </div>
@@ -166,6 +166,7 @@ export default function DMCharacterEditor({ userId, onSaved }) {
       <CharacterVitals
         stats={stats}
         currentGrit={character.currentGrit}
+        gritBonus={character.gritBonus}
         editable
         onChangeCurrentGrit={changeCurrentGrit}
       />

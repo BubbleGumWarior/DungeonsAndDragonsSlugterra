@@ -5,6 +5,10 @@ import { validateBlasterFields } from "../itemRules.js";
 import { broadcastAll } from "../ws.js";
 import { toClientSlug } from "./slugs.js";
 import { syncTempoAura } from "../slugAura.js";
+import { syncAmmoBelt, announceEquipmentChange } from "../ammoBelt.js";
+import { EQUIPMENT_SLOT } from "../equipmentRules.js";
+import { skillModifier } from "../characterRules.js";
+import { DURABILITY_MAX, REPAIR_DC, REPAIR_FAIL_DAMAGE } from "../careRules.js";
 
 const router = Router();
 
@@ -30,8 +34,15 @@ export function toClientBlaster(row) {
     range: row.range,
     speed: row.speed,
     modSlots: row.mod_slots,
+    // magazineSize is the blaster's own (DM-edited) size; an equipped ammo belt
+    // adds magazineBonus on top of it (see ammoBelt.js). Combat and the slug
+    // loader read totalMagazineSize.
     magazineSize: row.magazine_size,
+    magazineBonus: row.magazine_bonus ?? 0,
+    totalMagazineSize: row.magazine_size + (row.magazine_bonus ?? 0),
     quality: row.quality,
+    durability: row.durability ?? DURABILITY_MAX,
+    broken: (row.durability ?? DURABILITY_MAX) <= 0,
     equipSlot: row.equip_slot,
     equipped: row.equip_slot !== null,
     ownerCombatantId: row.owner_combatant_id,
@@ -39,7 +50,7 @@ export function toClientBlaster(row) {
   };
 }
 
-async function unequipBlasterRow(client, blasterId) {
+export async function unequipBlasterRow(client, blasterId) {
   const { rows } = await client.query("UPDATE blasters SET equip_slot = NULL WHERE id = $1 RETURNING *", [blasterId]);
   const blaster = rows[0];
   if (!blaster) return null;
@@ -186,13 +197,23 @@ router.patch("/:id/equip", async (req, res) => {
       }
     }
 
+    // The Secondary slot also holds melee weapons / ammo belts (equipment.js) --
+    // a blaster dropped there sends whatever was in it back to the pack.
+    if (slot === EQUIPMENT_SLOT) {
+      await client.query("UPDATE equipment SET equip_slot = NULL WHERE user_id = $1 AND equip_slot = $2", [blaster.user_id, slot]);
+    }
+
     const { rows } = await client.query("UPDATE blasters SET equip_slot = $1 WHERE id = $2 RETURNING *", [slot, id]);
-    const updated = toClientBlaster(rows[0]);
+    // The ammo belt's extra slots follow whichever blaster is primary.
+    const sync = await syncAmmoBelt(client, blaster.user_id);
+    const { rows: fresh } = await client.query("SELECT * FROM blasters WHERE id = $1", [id]);
+    const updated = toClientBlaster(fresh[0] ?? rows[0]);
 
     await client.query("COMMIT");
 
     broadcastAll({ type: "blaster-updated", userId: updated.userId, blaster: updated });
     for (const payload of broadcasts) broadcastAll(payload);
+    await announceEquipmentChange(updated.userId, sync);
     // Bumping another weapon out of the slot unloads its slugs -- which may
     // have included a Tempo Aura carrier (see slugAura.js).
     if (occupant) await syncTempoAura({ userId: updated.userId });
@@ -226,14 +247,18 @@ router.patch("/:id/unequip", async (req, res) => {
     }
 
     const result = await unequipBlasterRow(client, id);
+    // A blaster leaving the primary slot takes the belt's extra slots with it.
+    const sync = await syncAmmoBelt(client, result.blaster.user_id);
+    const { rows: fresh } = await client.query("SELECT * FROM blasters WHERE id = $1", [id]);
     await client.query("COMMIT");
 
-    const updated = toClientBlaster(result.blaster);
+    const updated = toClientBlaster(fresh[0] ?? result.blaster);
     broadcastAll({ type: "blaster-updated", userId: updated.userId, blaster: updated });
     for (const slugRow of result.unloadedSlugRows) {
       const slug = toClientSlug(slugRow);
       broadcastAll({ type: "slug-updated", userId: slug.userId, slug });
     }
+    await announceEquipmentChange(updated.userId, sync);
     // Unloading the whole magazine may have dropped a Tempo Aura carrier (see slugAura.js).
     await syncTempoAura({ userId: updated.userId });
     res.json({ blaster: updated });
@@ -246,6 +271,88 @@ router.patch("/:id/unequip", async (req, res) => {
   }
 });
 
+// A player patches up their own blaster with a Repair Kit: d20 + Survival has
+// to beat REPAIR_DC. Success restores it fully; failure still burns the kit and
+// wears the weapon down further. A blaster at 0% is beyond a player's tools --
+// only the DM can restore it (see /restore below).
+router.post("/:id/repair", async (req, res) => {
+  const id = Number(req.params.id);
+  if (req.user.role === "Dungeon Master") {
+    return res.status(403).json({ error: "Only players repair with a kit -- use Restore instead." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows: chars } = await client.query(
+      "SELECT stats, proficiencies, repair_kits FROM characters WHERE user_id = $1 FOR UPDATE",
+      [req.user.sub]
+    );
+    const character = chars[0];
+    const { rows: found } = await client.query("SELECT * FROM blasters WHERE id = $1 FOR UPDATE", [id]);
+    const blaster = found[0];
+    if (!character || !blaster || blaster.user_id !== req.user.sub) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Blaster not found." });
+    }
+    const durability = blaster.durability ?? DURABILITY_MAX;
+    if (durability <= 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "This blaster is beyond what a kit can fix -- it needs an expert's workshop." });
+    }
+    if (durability >= DURABILITY_MAX) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "This blaster is already in perfect condition." });
+    }
+    if (character.repair_kits < 1) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "You don't have a Repair Kit -- buy one at the Market." });
+    }
+
+    const die = 1 + Math.floor(Math.random() * 20);
+    const modifier = skillModifier(character.stats, character.proficiencies, "survival");
+    const total = die + modifier;
+    const success = total > REPAIR_DC;
+    const next = success ? DURABILITY_MAX : Math.max(0, durability - REPAIR_FAIL_DAMAGE);
+
+    const { rows } = await client.query("UPDATE blasters SET durability = $1 WHERE id = $2 RETURNING *", [next, id]);
+    const { rows: left } = await client.query(
+      "UPDATE characters SET repair_kits = repair_kits - 1 WHERE user_id = $1 RETURNING repair_kits",
+      [req.user.sub]
+    );
+    await client.query("COMMIT");
+
+    const updated = toClientBlaster(rows[0]);
+    broadcastAll({ type: "blaster-updated", userId: updated.userId, blaster: updated });
+    res.json({
+      blaster: updated,
+      repairKits: left[0].repair_kits,
+      roll: { die, modifier, total, dc: REPAIR_DC, success, before: durability, after: next },
+    });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error(err);
+    res.status(500).json({ error: "Could not repair that blaster." });
+  } finally {
+    client.release();
+  }
+});
+
+// DM only: restore a blaster to full durability -- the party visited an expert.
+router.post("/:id/restore", requireDungeonMaster, async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    const { rows } = await pool.query("UPDATE blasters SET durability = $1 WHERE id = $2 RETURNING *", [DURABILITY_MAX, id]);
+    if (!rows[0]) return res.status(404).json({ error: "Blaster not found." });
+    const blaster = toClientBlaster(rows[0]);
+    broadcastAll({ type: "blaster-updated", userId: blaster.userId, blaster });
+    res.json({ blaster });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not restore that blaster." });
+  }
+});
+
 router.delete("/:id", requireDungeonMaster, async (req, res) => {
   const id = Number(req.params.id);
   try {
@@ -253,6 +360,8 @@ router.delete("/:id", requireDungeonMaster, async (req, res) => {
     if (!rows[0]) {
       return res.status(404).json({ error: "Blaster not found." });
     }
+    // Losing the primary hands the belt's slots to nobody until a new one is equipped.
+    if (rows[0].user_id != null) await syncAmmoBelt(pool, rows[0].user_id);
     broadcastAll({ type: "blaster-updated", userId: rows[0].user_id, blaster: null, blasterId: id });
     // Deleting the weapon unloads every slug in it (see slugAura.js).
     await syncTempoAura({ userId: rows[0].user_id });

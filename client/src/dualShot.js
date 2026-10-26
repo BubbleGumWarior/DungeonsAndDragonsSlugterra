@@ -80,10 +80,13 @@ export function dualPreview(a, b, { mega = false } = {}) {
   const combo = dualCombo(a.type, b.type);
   const powerOf = (s) => s.clashPower + loyaltyClashModifier(s.loyaltyTier);
   const defenseOf = (s) => s.clashDefense + loyaltyClashModifier(s.loyaltyTier);
+  // Enigmo-style amplifier: the OTHER slug's power is tripled (AMPLIFY_PARTNER_MULTIPLIER on the server).
+  const amp = a.amplifiesPartner ? a : b.amplifiesPartner ? b : null;
+  const ampMult = (s, other) => (other.amplifiesPartner ? 3 : 1) * powerOf(s);
   return {
     comboName: combo.name,
-    comboSummary: combo.summary,
-    power: (powerOf(a) + powerOf(b)) * (mega ? 2 : 1),
+    comboSummary: combo.summary + (amp ? ` ${amp.name} triples its partner's power.` : ""),
+    power: (ampMult(a, b) + ampMult(b, a)) * (mega ? 2 : 1),
     defense: Math.max(defenseOf(a), defenseOf(b)),
     apCost: Math.max(a.apCost || 0, b.apCost || 0) + 1,
   };

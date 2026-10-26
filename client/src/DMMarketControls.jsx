@@ -1,11 +1,16 @@
 import { useEffect, useState } from "react";
-import { CheckIcon, CoinsIcon, MinusIcon, PlusIcon, TagIcon } from "@phosphor-icons/react";
+import { CheckIcon, CoinsIcon, LockKeyIcon, LockKeyOpenIcon, MinusIcon, PlusIcon, TagIcon } from "@phosphor-icons/react";
+import { SUPPLIES } from "./careData.js";
 import "./Panel.css";
 import "./DMMarketControls.css";
 
 // The DM's market tools: one slim toolbar (planet price stepper + two
 // toggles) with the listing form and the purses table opening on demand,
 // instead of permanently stacked blocks.
+// The purses table edits credits plus one supply at a time (picked from the
+// header), so it stays two columns wide however many consumables there are.
+const PURSE_LABELS = { credits: "Credits", ...Object.fromEntries(SUPPLIES.map((s) => [s.field, s.name])) };
+
 export default function DMMarketControls({ data, planetName, dmCall, token }) {
   const [open, setOpen] = useState(null); // null | "listing" | "purses"
   const [pct, setPct] = useState(data.pricePct);
@@ -15,6 +20,7 @@ export default function DMMarketControls({ data, planetName, dmCall, token }) {
   const [price, setPrice] = useState("");
   const [quantity, setQuantity] = useState("");
   const [purses, setPurses] = useState({});
+  const [supply, setSupply] = useState("pods");
 
   useEffect(() => {
     setPct(data.pricePct);
@@ -70,6 +76,9 @@ export default function DMMarketControls({ data, planetName, dmCall, token }) {
     });
   }
 
+  const saveMood = (mood) => dmCall("/mood", "PUT", { mood });
+  const toggleOpen = () => dmCall("/open", "PUT", { open: !data.open });
+
   return (
     <div className="dmm">
       <div className="dmm-bar">
@@ -101,7 +110,28 @@ export default function DMMarketControls({ data, planetName, dmCall, token }) {
           {data.barterPct > 0 && <span className="dmm-note">+{data.barterPct}% from a poor haggle</span>}
         </div>
 
+        <label className="dmm-group">
+          <span className="dmm-label">Mood</span>
+          <select className="dmm-select" value={data.mood} onChange={(e) => saveMood(e.target.value)} aria-label="Merchants' mood">
+            {(data.moods ?? []).map((m) => (
+              <option key={m.key} value={m.key}>
+                {m.label} ({m.pct > 0 ? "+" : m.pct < 0 ? "−" : ""}
+                {Math.abs(m.pct)}%)
+              </option>
+            ))}
+          </select>
+        </label>
+
         <div className="dmm-toggles">
+          <button
+            type="button"
+            className={`dmm-toggle dmm-toggle--open${data.open ? " dmm-toggle--on" : ""}`}
+            aria-pressed={data.open}
+            onClick={toggleOpen}
+          >
+            {data.open ? <LockKeyOpenIcon weight="bold" /> : <LockKeyIcon weight="bold" />}
+            {data.open ? "Market open" : "Market closed"}
+          </button>
           <button
             type="button"
             className={`dmm-toggle${open === "listing" ? " dmm-toggle--on" : ""}`}
@@ -131,6 +161,7 @@ export default function DMMarketControls({ data, planetName, dmCall, token }) {
               <option value="mod">Blaster Mod</option>
               <option value="mecha_mod">Mecha Mod</option>
               <option value="blaster">Blaster</option>
+              <option value="equipment">Equipment</option>
               <option value="mecha">Mecha-Beast</option>
               <option value="slug">Slug</option>
             </select>
@@ -172,13 +203,25 @@ export default function DMMarketControls({ data, planetName, dmCall, token }) {
           <div className="dmm-purses-head">
             <span>Character</span>
             <span>Credits</span>
-            <span>Pods</span>
+            <select
+              className="dmm-select dmm-purses-supply"
+              value={supply}
+              onChange={(e) => setSupply(e.target.value)}
+              aria-label="Supply to edit"
+            >
+              {SUPPLIES.map((s) => (
+                <option key={s.field} value={s.field}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
           </div>
           {(data.purses ?? []).map((p) => (
             <div key={p.userId} className="dmm-purses-row">
               <span className="dmm-purses-name">{p.name}</span>
-              {["credits", "pods"].map((field) => (
+              {["credits", supply].map((field) => (
                 <div key={field} className="dmm-purses-cell">
+                  <span className="dmm-purses-field">{PURSE_LABELS[field]}</span>
                   <span className="dmm-purses-value num-tabular">{p[field]}</span>
                   <input
                     type="number"

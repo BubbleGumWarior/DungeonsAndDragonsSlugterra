@@ -50,7 +50,7 @@ export default function TradeToasts() {
         };
         push({
           title: t.counterOf ? `${t.fromName} counter-offers` : `${t.fromName} wants to trade`,
-          body: `Offers: ${describeSide(t.give, t.giveCredits, t.givePods)}. Wants: ${describeSide(t.ask, t.askCredits, t.askPods)}.`,
+          body: `Offers: ${describeSide(t.give, t.giveCredits, t.givePods, t.giveSupplies)}. Wants: ${describeSide(t.ask, t.askCredits, t.askPods, t.askSupplies)}.`,
           icon: <HandshakeIcon weight="bold" />,
           duration: 0,
           actions: [

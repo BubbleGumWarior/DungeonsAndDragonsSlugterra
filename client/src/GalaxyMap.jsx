@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { RocketLaunchIcon, XIcon } from "@phosphor-icons/react";
+import { createPortal } from "react-dom";
+import { ArrowsOutIcon, RocketLaunchIcon, XIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
-import { CLUSTERS, UNCLAIMED, PLANETS } from "./planetData.js";
+import { CLUSTERS, UNCLAIMED, PLANETS, planetImageUrl, starImageUrl } from "./planetData.js";
 import "./GalaxyMap.css";
 
 const VIEW_W = 1000;
@@ -185,6 +186,62 @@ function ClusterStar({ starType, tSec }) {
   );
 }
 
+// Illustration at the top of the detail panel; clicking it opens a full-screen
+// view. Keyed on src by the caller so a failed load for one world doesn't hide
+// the next world's image; a missing file just renders nothing.
+function DetailImage({ src, alt }) {
+  const [failed, setFailed] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+
+  useEffect(() => {
+    if (!fullscreen) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") setFullscreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
+
+  if (failed) return null;
+  return (
+    <>
+      <button
+        type="button"
+        className="galaxy-detail-image-btn"
+        aria-label={`View ${alt} full screen`}
+        onClick={() => setFullscreen(true)}
+      >
+        <img className="galaxy-detail-image" src={src} alt={alt} onError={() => setFailed(true)} />
+        <span className="galaxy-detail-image-hint" aria-hidden="true">
+          <ArrowsOutIcon weight="bold" />
+        </span>
+      </button>
+      {fullscreen &&
+        createPortal(
+          <div
+            className="galaxy-lightbox"
+            role="dialog"
+            aria-modal="true"
+            aria-label={alt}
+            onClick={() => setFullscreen(false)}
+          >
+            <button
+              type="button"
+              className="galaxy-lightbox-close"
+              aria-label="Close full screen"
+              onClick={() => setFullscreen(false)}
+            >
+              <XIcon weight="bold" />
+            </button>
+            <img className="galaxy-lightbox-image" src={src} alt={alt} />
+            <p className="galaxy-lightbox-caption">{alt}</p>
+          </div>,
+          document.body
+        )}
+    </>
+  );
+}
+
 export default function GalaxyMap({ isDungeonMaster = false }) {
   const { token } = useAuth();
   const { slugHuntArea } = useLiveState();
@@ -295,6 +352,7 @@ export default function GalaxyMap({ isDungeonMaster = false }) {
       name: p.name,
       color: p.color,
       body: p.blurb,
+      image: planetImageUrl(p.name),
       canSend: true,
       flatIndex: selected.flatIndex,
     };
@@ -305,6 +363,7 @@ export default function GalaxyMap({ isDungeonMaster = false }) {
       name: c.name,
       color: null,
       body: c.blurb,
+      image: starImageUrl(c.key),
       canSend: false,
     };
   }
@@ -610,6 +669,7 @@ export default function GalaxyMap({ isDungeonMaster = false }) {
           >
             <XIcon weight="bold" />
           </button>
+          <DetailImage key={selectedDetail.image} src={selectedDetail.image} alt={selectedDetail.name} />
           <p className="galaxy-detail-kicker">{selectedDetail.kicker}</p>
           <h2 className="galaxy-detail-name" style={selectedDetail.color ? { color: selectedDetail.color } : undefined}>
             {selectedDetail.name}

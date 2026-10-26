@@ -10,6 +10,20 @@ import { toClientMod as toClientMechaMod } from "./mechaMods.js";
 import { toClientSlug } from "./slugs.js";
 import { syncTempoAura } from "../slugAura.js";
 import {
+  KIBBLE_FOOD_MIN,
+  KIBBLE_FOOD_MAX,
+  KIBBLE_PRICE,
+  REPAIR_KIT_PRICE,
+  REPAIR_DC,
+  REPAIR_FAIL_DAMAGE,
+  ENERGY_CELL_PIPS,
+  ENERGY_CELL_PRICE,
+  MEDPACK_HEAL_FRACTION,
+  MEDPACK_PRICE,
+  TONIC_PIPS,
+  TONIC_PRICE,
+} from "../careRules.js";
+import {
   POD_PRICE,
   PLANET_PCT_MIN,
   PLANET_PCT_MAX,
@@ -23,6 +37,8 @@ import {
   defaultBlasterModPrice,
   defaultMechaModPrice,
   templateBasePrice,
+  MARKET_MOODS,
+  moodPctFor,
 } from "../marketRules.js";
 
 const router = Router();
@@ -54,9 +70,25 @@ async function currentPlanet(db = pool) {
 }
 
 async function planetRow(planet, db = pool) {
-  const { rows } = await db.query("SELECT price_pct, barter_pct FROM planet_markets WHERE planet_index = $1", [planet]);
-  return { pricePct: rows[0]?.price_pct ?? 100, barterPct: rows[0]?.barter_pct ?? 0 };
+  const { rows } = await db.query(
+    "SELECT price_pct, barter_pct, market_open, mood FROM planet_markets WHERE planet_index = $1",
+    [planet]
+  );
+  const mood = rows[0]?.mood ?? "neutral";
+  return {
+    pricePct: rows[0]?.price_pct ?? 100,
+    barterPct: rows[0]?.barter_pct ?? 0,
+    open: rows[0]?.market_open ?? false,
+    mood,
+    moodPct: moodPctFor(mood),
+  };
 }
+
+const priceOpts = (pm, personalDiscountPct = 0) => ({
+  personalDiscountPct,
+  planetBarterPct: pm.barterPct,
+  moodPct: pm.moodPct,
+});
 
 async function personalDiscount(userId, planet, db = pool) {
   const { rows } = await db.query("SELECT discount_pct, roll FROM market_barters WHERE user_id = $1 AND planet_index = $2", [
@@ -112,6 +144,21 @@ function describeTemplate(kind, t) {
       };
     case "mecha_mod":
       return { name: t.name, image: null, description: t.effect, tags: mechaModTags(t) };
+    case "equipment":
+      return {
+        name: t.name,
+        image: null,
+        equipKind: t.kind,
+        description: { melee: `Melee weapon (${t.melee_type})`, ammo_belt: "Ammo belt", shield: "Shield", armor: "Armor" }[t.kind] ?? "Equipment",
+        tags:
+          t.kind === "melee"
+            ? [`${t.damage} dmg, x STR if positive`, `${signed(t.accuracy)} Accuracy`, `${t.ap_cost} AP`, `Reach ${t.reach}`, { bludgeon: "Knocks back", slash: "Bleeds", pierce: "Ignores shields" }[t.melee_type]].filter(Boolean)
+            : t.kind === "shield"
+              ? [`Absorbs ${t.absorb} damage`, "Breaks for the rest of a fight", "Secondary slot"]
+              : t.kind === "armor"
+                ? [`+${t.grit_bonus} max Grit`, "Armor slot"]
+                : [`+${t.extra_slots} slug slots`, "Secondary slot"],
+      };
     case "slug":
       return {
         name: t.name,
@@ -124,23 +171,102 @@ function describeTemplate(kind, t) {
   }
 }
 
-const PODS_ITEM = {
-  key: "pods",
-  kind: "pods",
-  name: "Slug Pod",
-  image: null,
-  description:
-    "The cradle a slug rides in inside a blaster's magazine. A misfire shatters the pod, and a reload needs a spare to take its place.",
-  tags: ["Reload supply"],
-  basePrice: POD_PRICE,
-  quantity: null,
-  standing: true,
-};
+// Consumable supplies, sold in bulk on every shelf. `column` is the
+// characters.* counter each purchase tops up.
+const SUPPLY_ITEMS = [
+  {
+    key: "pods",
+    kind: "supply",
+    column: "pods",
+    name: "Slug Pod",
+    image: null,
+    description:
+      "The cradle a slug rides in inside a blaster's magazine. A misfire shatters the pod, and a reload needs a spare to take its place.",
+    tags: ["Reload supply"],
+    basePrice: POD_PRICE,
+    quantity: null,
+    standing: true,
+  },
+  {
+    key: "kibble",
+    kind: "supply",
+    column: "kibble",
+    name: "Slug Kibble",
+    image: null,
+    description: `A scoop of slug feed. Each one restores ${KIBBLE_FOOD_MIN}% of a slug's food, up to ${KIBBLE_FOOD_MAX}% in the hands of a skilled Slug Handler. Every long rest drains food, and a slug left at 0% when the party sleeps loses a loyalty tier -- or leaves for good if it has none left to lose.`,
+    tags: [`+${KIBBLE_FOOD_MIN}-${KIBBLE_FOOD_MAX}% food`, "Feed from the Consumables page"],
+    basePrice: KIBBLE_PRICE,
+    quantity: null,
+    standing: true,
+  },
+  {
+    key: "repair-kit",
+    kind: "supply",
+    column: "repair_kits",
+    name: "Repair Kit",
+    image: null,
+    description: `Patches up a worn blaster: roll a d20 + Survival, and above ${REPAIR_DC} it is restored to 100%. On a failure the kit is still used up and the blaster loses a further ${REPAIR_FAIL_DAMAGE}%. A blaster at 0% is past a kit's help and needs an expert.`,
+    tags: [`DC ${REPAIR_DC}`, "d20 + Survival"],
+    basePrice: REPAIR_KIT_PRICE,
+    quantity: null,
+    standing: true,
+  },
+  {
+    key: "energy-cell",
+    kind: "supply",
+    column: "energy_cells",
+    name: "Energy Cell",
+    image: null,
+    description: `A sealed charge for a slug. Restores ${ENERGY_CELL_PIPS} spent energy pips on any slug of yours. Use it from the Consumables page, out of combat.`,
+    tags: [`+${ENERGY_CELL_PIPS} slug energy`],
+    basePrice: ENERGY_CELL_PRICE,
+    quantity: null,
+    standing: true,
+  },
+  {
+    key: "medpack",
+    kind: "supply",
+    column: "medpacks",
+    name: "Medpack",
+    image: null,
+    description: `Field dressings and stims. Heals ${Math.round(MEDPACK_HEAL_FRACTION * 100)}% of your maximum Grit. Use it from the Consumables page, out of combat.`,
+    tags: [`Heals ${Math.round(MEDPACK_HEAL_FRACTION * 100)}% Grit`],
+    basePrice: MEDPACK_PRICE,
+    quantity: null,
+    standing: true,
+  },
+  {
+    key: "revival-tonic",
+    kind: "supply",
+    column: "revival_tonics",
+    name: "Revival Tonic",
+    image: null,
+    description: `A bitter restorative that pulls you back from the brink. Clears ${TONIC_PIPS} knockout pip. Use it from the Consumables page, out of combat.`,
+    tags: [`Clears ${TONIC_PIPS} knockout pip`],
+    basePrice: TONIC_PRICE,
+    quantity: null,
+    standing: true,
+  },
+];
+
+// characters.* counters the market and the DM purse can read/write.
+const SUPPLY_FIELDS = SUPPLY_ITEMS.map((s) => s.column);
+const supplyCounts = (row) => ({
+  credits: row.credits,
+  pods: row.pods,
+  kibble: row.kibble,
+  repairKits: row.repair_kits,
+  energyCells: row.energy_cells,
+  medpacks: row.medpacks,
+  revivalTonics: row.revival_tonics,
+});
+const SUPPLY_SELECT = `credits, ${SUPPLY_FIELDS.join(", ")}`;
+const SUPPLY_KEYS = SUPPLY_ITEMS.map((s) => s.key);
 
 async function standingItems(planet) {
   const { rows: hiddenRows } = await pool.query("SELECT item_key FROM market_hidden WHERE planet_index = $1", [planet]);
   const hidden = new Set(hiddenRows.map((r) => r.item_key));
-  const items = [{ ...PODS_ITEM }];
+  const items = SUPPLY_ITEMS.map(({ column, ...item }) => ({ ...item }));
   const { rows: mods } = await pool.query("SELECT * FROM mod_templates ORDER BY name");
   for (const t of mods) {
     if (!isStandingBlasterMod(t)) continue;
@@ -203,16 +329,21 @@ router.get("/", async (req, res) => {
     const barter = dm ? null : await personalDiscount(req.user.sub, planet);
     const discountPct = barter?.discountPct ?? 0;
 
-    const all = [...(await standingItems(planet)), ...(await listingItems(planet))];
+    // A closed market shows players nothing; the DM still sees (and stocks) it.
+    const visible = dm || pm.open;
+    const all = visible ? [...(await standingItems(planet)), ...(await listingItems(planet))] : [];
     const items = all
       .filter((it) => dm || !it.hidden)
       .map((it) => ({
         ...it,
-        price: finalPrice(it.basePrice, pm.pricePct, { personalDiscountPct: discountPct, planetBarterPct: pm.barterPct }),
+        price: finalPrice(it.basePrice, pm.pricePct, priceOpts(pm, discountPct)),
       }));
 
     const out = {
       planetIndex: planet,
+      open: pm.open,
+      mood: pm.mood,
+      moodPct: pm.moodPct,
       pricePct: pm.pricePct,
       barterPct: pm.barterPct,
       barter: barter ? { discountPct: barter.discountPct, roll: barter.roll } : null,
@@ -221,14 +352,15 @@ router.get("/", async (req, res) => {
 
     if (dm) {
       const { rows: planets } = await pool.query("SELECT planet_index, price_pct, barter_pct FROM planet_markets");
+      out.moods = MARKET_MOODS;
       out.planets = planets.map((r) => ({ planetIndex: r.planet_index, pricePct: r.price_pct, barterPct: r.barter_pct }));
       const { rows: purses } = await pool.query(
-        "SELECT user_id, name, credits, pods FROM characters ORDER BY created_at ASC"
+        `SELECT user_id, name, ${SUPPLY_SELECT} FROM characters ORDER BY created_at ASC`
       );
-      out.purses = purses.map((r) => ({ userId: r.user_id, name: r.name, credits: r.credits, pods: r.pods }));
+      out.purses = purses.map((r) => ({ userId: r.user_id, name: r.name, ...supplyCounts(r) }));
     } else {
-      const { rows } = await pool.query("SELECT credits, pods FROM characters WHERE user_id = $1", [req.user.sub]);
-      out.me = rows[0] ? { credits: rows[0].credits, pods: rows[0].pods } : null;
+      const { rows } = await pool.query(`SELECT ${SUPPLY_SELECT} FROM characters WHERE user_id = $1`, [req.user.sub]);
+      out.me = rows[0] ? supplyCounts(rows[0]) : null;
     }
     res.json(out);
   } catch (err) {
@@ -277,6 +409,16 @@ export async function cloneTemplateToUser(client, kind, templateId, userId) {
       );
       return rows[0] && { type: "mecha-mod-updated", payload: { mod: toClientMechaMod(rows[0]) }, userId };
     }
+    case "equipment": {
+      const { rows } = await client.query(
+        `INSERT INTO equipment (template_id, user_id, kind, name, image, damage, accuracy, ap_cost, reach, extra_slots, melee_type, absorb, grit_bonus)
+         SELECT id, $2, kind, name, image, damage, accuracy, ap_cost, reach, extra_slots, melee_type, absorb, grit_bonus
+         FROM equipment_templates WHERE id = $1 RETURNING *`,
+        [templateId, userId]
+      );
+      // Same single "refetch" signal the equip routes send (see ammoBelt.js).
+      return rows[0] && { type: "equipment-changed", payload: { at: Date.now() }, userId };
+    }
     case "slug": {
       // slug_templates and slugs share ~50 columns (all the ability flags);
       // copy the intersection instead of hand-listing every one.
@@ -305,7 +447,7 @@ export async function cloneTemplateToUser(client, kind, templateId, userId) {
 router.post("/buy", async (req, res) => {
   if (isDM(req)) return res.status(403).json({ error: "Only players can buy from the market." });
   const key = String(req.body?.key ?? "");
-  const qty = key === "pods" ? Number(req.body?.quantity ?? 1) : 1;
+  const qty = SUPPLY_KEYS.includes(key) ? Number(req.body?.quantity ?? 1) : 1;
   if (!Number.isInteger(qty) || qty < 1 || qty > 20) {
     return res.status(400).json({ error: "Quantity must be between 1 and 20." });
   }
@@ -320,9 +462,9 @@ router.post("/buy", async (req, res) => {
 
     const planet = await currentPlanet(client);
     const pm = await planetRow(planet, client);
+    if (!pm.open) throw new MarketError("The market here is closed.");
     const barter = await personalDiscount(req.user.sub, planet, client);
-    const priceOf = (basePrice) =>
-      finalPrice(basePrice, pm.pricePct, { personalDiscountPct: barter?.discountPct ?? 0, planetBarterPct: pm.barterPct });
+    const priceOf = (basePrice) => finalPrice(basePrice, pm.pricePct, priceOpts(pm, barter?.discountPct ?? 0));
 
     const { rows: hiddenRows } = await client.query("SELECT 1 FROM market_hidden WHERE planet_index = $1 AND item_key = $2", [
       planet,
@@ -332,12 +474,14 @@ router.post("/buy", async (req, res) => {
     let give; // async (client) => delivered descriptor
     let label;
 
-    if (key === "pods") {
+    const supply = SUPPLY_ITEMS.find((it) => it.key === key);
+    if (supply) {
       if (hiddenRows[0]) throw new MarketError("That isn't for sale here.");
-      unitPrice = priceOf(POD_PRICE);
-      label = "Slug Pod";
+      unitPrice = priceOf(supply.basePrice);
+      label = supply.name;
       give = async () => {
-        await client.query("UPDATE characters SET pods = pods + $1 WHERE user_id = $2", [qty, req.user.sub]);
+        // `column` comes from the fixed SUPPLY_ITEMS table above, never from the request.
+        await client.query(`UPDATE characters SET ${supply.column} = ${supply.column} + $1 WHERE user_id = $2`, [qty, req.user.sub]);
         return null;
       };
     } else if (key.startsWith("mod:") || key.startsWith("mecha_mod:")) {
@@ -375,13 +519,19 @@ router.post("/buy", async (req, res) => {
     if (character.credits < total) throw new MarketError(`Not enough credits -- that costs ${total}.`);
     await client.query("UPDATE characters SET credits = credits - $1 WHERE user_id = $2", [total, req.user.sub]);
     delivered = await give();
-    const { rows: after } = await client.query("SELECT credits, pods FROM characters WHERE user_id = $1", [req.user.sub]);
+    const { rows: after } = await client.query(`SELECT ${SUPPLY_SELECT} FROM characters WHERE user_id = $1`, [req.user.sub]);
     await client.query("COMMIT");
 
     if (delivered?.slug) await syncTempoAura({ userId: req.user.sub }, { fill: true });
     if (delivered) broadcastAll({ type: delivered.type, userId: delivered.userId, ...delivered.payload });
     signalMarketChanged();
-    res.json({ ok: true, label, quantity: qty, total, me: { credits: after[0].credits, pods: after[0].pods } });
+    res.json({
+      ok: true,
+      label,
+      quantity: qty,
+      total,
+      me: supplyCounts(after[0]),
+    });
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
     if (err instanceof MarketError) return res.status(err.status).json({ error: err.message });
@@ -413,6 +563,7 @@ router.post("/barter", async (req, res) => {
     const character = chars[0];
     if (!character) throw new MarketError("You don't have a character sheet yet.");
     const planet = await currentPlanet(client);
+    if (!(await planetRow(planet, client)).open) throw new MarketError("The market here is closed.");
     if (await personalDiscount(req.user.sub, planet, client)) {
       throw new MarketError("You've already haggled here -- try again after the party rests.");
     }
@@ -467,6 +618,43 @@ router.put("/planets/:index", requireDungeonMaster, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not save the price modifier." });
+  }
+});
+
+// The DM opens or closes the market on the planet the party is docked at.
+router.put("/open", requireDungeonMaster, async (req, res) => {
+  const open = Boolean(req.body?.open);
+  try {
+    const planet = await currentPlanet();
+    await pool.query(
+      `INSERT INTO planet_markets (planet_index, market_open) VALUES ($1, $2)
+       ON CONFLICT (planet_index) DO UPDATE SET market_open = $2`,
+      [planet, open]
+    );
+    signalMarketChanged();
+    res.json({ ok: true, open });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not update the market." });
+  }
+});
+
+// The DM sets the merchants' mood on the current planet.
+router.put("/mood", requireDungeonMaster, async (req, res) => {
+  const mood = String(req.body?.mood ?? "");
+  if (!MARKET_MOODS.some((m) => m.key === mood)) return res.status(400).json({ error: "Unknown mood." });
+  try {
+    const planet = await currentPlanet();
+    await pool.query(
+      `INSERT INTO planet_markets (planet_index, mood) VALUES ($1, $2)
+       ON CONFLICT (planet_index) DO UPDATE SET mood = $2`,
+      [planet, mood]
+    );
+    signalMarketChanged();
+    res.json({ ok: true, mood });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not set the mood." });
   }
 });
 
@@ -536,7 +724,7 @@ router.delete("/listings/:id", requireDungeonMaster, async (req, res) => {
 router.post("/hidden", requireDungeonMaster, async (req, res) => {
   const key = String(req.body?.key ?? "");
   const hidden = Boolean(req.body?.hidden);
-  if (!/^(pods|mod:\d+|mecha_mod:\d+)$/.test(key)) return res.status(400).json({ error: "Invalid item." });
+  if (!SUPPLY_KEYS.includes(key) && !/^(mod:\d+|mecha_mod:\d+)$/.test(key)) return res.status(400).json({ error: "Invalid item." });
   try {
     const planet = await currentPlanet();
     if (hidden) {
@@ -555,7 +743,7 @@ router.post("/hidden", requireDungeonMaster, async (req, res) => {
 // Absolute credits/pods for one character's purse.
 router.patch("/purse/:userId", requireDungeonMaster, async (req, res) => {
   const userId = Number(req.params.userId);
-  const { credits, pods } = req.body || {};
+  const { credits, pods, kibble, repairKits, energyCells, medpacks, revivalTonics } = req.body || {};
   const sets = [];
   const values = [];
   if (credits !== undefined) {
@@ -572,16 +760,30 @@ router.patch("/purse/:userId", requireDungeonMaster, async (req, res) => {
     values.push(pods);
     sets.push(`pods = $${values.length}`);
   }
+  for (const [value, column, label] of [
+    [kibble, "kibble", "Kibble"],
+    [repairKits, "repair_kits", "Repair kits"],
+    [energyCells, "energy_cells", "Energy cells"],
+    [medpacks, "medpacks", "Medpacks"],
+    [revivalTonics, "revival_tonics", "Revival tonics"],
+  ]) {
+    if (value === undefined) continue;
+    if (!Number.isInteger(value) || value < 0 || value > 999) {
+      return res.status(400).json({ error: `${label} must be between 0 and 999.` });
+    }
+    values.push(value);
+    sets.push(`${column} = $${values.length}`);
+  }
   if (sets.length === 0) return res.status(400).json({ error: "Nothing to update." });
   try {
     values.push(userId);
     const { rows } = await pool.query(
-      `UPDATE characters SET ${sets.join(", ")} WHERE user_id = $${values.length} RETURNING user_id, credits, pods`,
+      `UPDATE characters SET ${sets.join(", ")} WHERE user_id = $${values.length} RETURNING user_id, ${SUPPLY_SELECT}`,
       values
     );
     if (!rows[0]) return res.status(404).json({ error: "Character not found." });
     signalMarketChanged();
-    res.json({ credits: rows[0].credits, pods: rows[0].pods });
+    res.json(supplyCounts(rows[0]));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not update the purse." });

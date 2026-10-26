@@ -2,14 +2,121 @@
   align-items: center;
 }
 
-.roster-heal-all {
+.roster-rest {
   flex-shrink: 0;
   padding: 6px 12px;
   font-size: 12px;
 }
 
-.roster-heal-all svg {
-  color: var(--success);
+.roster-rest svg {
+  color: var(--gold);
+}
+
+/* The party-is-asleep indicator takes the button's place for a few seconds. */
+.roster-asleep {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gold-soft);
+  background: rgba(201, 162, 75, 0.1);
+  border: 1px solid var(--gold-dim);
+  border-radius: 8px;
+  animation: roster-asleep-in 0.4s var(--ease-out);
+}
+
+.roster-asleep svg {
+  width: 15px;
+  height: 15px;
+  color: var(--gold);
+}
+
+@keyframes roster-asleep-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Confirm strip: what the rest costs, before the DM commits. */
+.roster-confirm {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px 20px;
+  padding: 14px 20px;
+  background: var(--charcoal-950);
+  border-bottom: 1px solid var(--charcoal-700);
+}
+
+.roster-confirm-text {
+  flex: 1;
+  min-width: 240px;
+  max-width: 62ch;
+}
+
+.roster-confirm-text p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.roster-confirm-text .roster-confirm-title {
+  margin-bottom: 4px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--gold-soft);
+}
+
+.roster-confirm-text .roster-confirm-note {
+  margin-top: 6px;
+  color: var(--ink);
+}
+
+.roster-confirm-starving {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.roster-confirm-starving li {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--danger);
+}
+
+.roster-confirm-starving svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+}
+
+.roster-confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .roster-asleep {
+    animation: none;
+  }
 }
 
 .roster-grid {

@@ -640,12 +640,18 @@ export default function VoiceChatProvider({ children }) {
         .filter((p) => p.userId !== selfId)
         .map((p) => ({
           userId: p.userId,
-          username: p.username,
+          name: p.name,
           muted: p.muted,
           speaking: speakingIds.has(p.userId),
           volume: peerVolumes[p.userId] ?? 1,
         })),
     [voiceRoster, selfId, speakingIds, peerVolumes]
+  );
+
+  // Own character name as the server resolved it, for the avatar initial.
+  const selfName = useMemo(
+    () => voiceRoster.find((p) => p.userId === selfId)?.name ?? null,
+    [voiceRoster, selfId]
   );
 
   const contextValue = useMemo(
@@ -655,6 +661,7 @@ export default function VoiceChatProvider({ children }) {
       error,
       voiceInputMode,
       participants,
+      selfName,
       rosterCount: voiceRoster.length,
       selfMuted,
       selfSpeaking: speakingIds.has("self"),
@@ -671,6 +678,7 @@ export default function VoiceChatProvider({ children }) {
       error,
       voiceInputMode,
       participants,
+      selfName,
       voiceRoster.length,
       selfMuted,
       speakingIds,

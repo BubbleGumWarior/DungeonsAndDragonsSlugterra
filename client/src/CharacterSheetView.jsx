@@ -4,6 +4,7 @@ import { useLiveState } from "./AccessSocket.jsx";
 import CharacterVitals from "./CharacterVitals.jsx";
 import FameHeatStepper from "./FameHeatStepper.jsx";
 import SkillList from "./SkillList.jsx";
+import StatGuide from "./StatGuide.jsx";
 import KnockoutPips from "./KnockoutPips.jsx";
 import GritRing from "./GritRing.jsx";
 import "./CharacterSheet.css";
@@ -22,7 +23,7 @@ export default function CharacterSheetView({ character, onChangeFame, onChangeHe
         <div className="sheet-column sheet-column-main">
           <div className="sheet-header">
             <div className="sheet-portrait">
-              <GritRing current={character.currentGrit} max={maxGrit(character.stats)} />
+              <GritRing current={character.currentGrit} max={maxGrit(character.stats, character.gritBonus)} />
               {character.portrait ? (
                 <img src={character.portrait} alt={character.name} />
               ) : (
@@ -36,7 +37,7 @@ export default function CharacterSheetView({ character, onChangeFame, onChangeHe
             </div>
           </div>
 
-          <CharacterVitals stats={character.stats} currentGrit={character.currentGrit} />
+          <CharacterVitals stats={character.stats} currentGrit={character.currentGrit} gritBonus={character.gritBonus} />
 
           {editableByDm ? (
             <div className="sheet-fame sheet-fame--editable">
@@ -99,6 +100,8 @@ export default function CharacterSheetView({ character, onChangeFame, onChangeHe
           </div>
         </div>
       </div>
+
+      <StatGuide proficiencies={character.proficiencies ?? []} revealed={slugterraRevealed} />
     </div>
   );
 }

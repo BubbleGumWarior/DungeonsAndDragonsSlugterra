@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { UploadSimpleIcon, ArrowsOutCardinalIcon, XIcon } from "@phosphor-icons/react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { UploadSimpleIcon, XIcon, RulerIcon, MagnifyingGlassPlusIcon, MagnifyingGlassMinusIcon, CornersInIcon } from "@phosphor-icons/react";
+import { UNITS_PER_METER, markerScale, niceScaleLength, formatMeters, mapMeters, RANGE_REFERENCES, DEFAULT_SHOWN_REFERENCES } from "./mapScale.js";
 import { typeColor } from "./slugData.js";
 import { combatantNameColor } from "./combatDisplay.js";
 import { WATER_CELL, makeWaterSet, isBurrowed, combatSide } from "./combatSkills.js";
@@ -98,6 +99,37 @@ function styleArcGeometry(from, to) {
   const dy = to.y - from.y;
   const len = Math.hypot(dx, dy) || 1;
   return { len, nx: -dy / len, ny: dx / len, peak: Math.min(STYLE_ARC_MAX, len * STYLE_ARC_FRACTION) };
+}
+
+// Pentalux's surround strike: on a hit the bolt flies straight until
+// SPLIT_START_FRACTION of its flight, then splits into SPLIT_COUNT bolts that
+// fan out to a ring around the target (SPLIT_RING_RADIUS, shrunk for short
+// shots), and from SPLIT_CONVERGE_FRACTION converge on it from all sides.
+// Like the style shot it only changes how the hit is drawn -- the server
+// still resolves a single shot.
+const SPLIT_COUNT = 5;
+const SPLIT_START_FRACTION = 0.58;
+const SPLIT_CONVERGE_FRACTION = 0.8;
+const SPLIT_RING_RADIUS = 70;
+function surroundBolts(from, to, f) {
+  const len = Math.hypot(to.x - from.x, to.y - from.y) || 1;
+  const radius = Math.min(SPLIT_RING_RADIUS, len * 0.4);
+  const splitPoint = lerp(from, to, SPLIT_START_FRACTION);
+  // One bolt always lands from the shooter's side; the other four fill out the pentagon.
+  const base = Math.atan2(from.y - to.y, from.x - to.x);
+  const out = [];
+  for (let k = 0; k < SPLIT_COUNT; k++) {
+    const a = base + (k * 2 * Math.PI) / SPLIT_COUNT;
+    const ring = { x: to.x + Math.cos(a) * radius, y: to.y + Math.sin(a) * radius };
+    if (f < SPLIT_CONVERGE_FRACTION) {
+      const t = (f - SPLIT_START_FRACTION) / (SPLIT_CONVERGE_FRACTION - SPLIT_START_FRACTION);
+      out.push({ pos: lerp(splitPoint, ring, 1 - Math.pow(1 - t, 2)), angle: headingDeg(splitPoint, ring) });
+    } else {
+      const t = Math.min(1, (f - SPLIT_CONVERGE_FRACTION) / (1 - SPLIT_CONVERGE_FRACTION));
+      out.push({ pos: lerp(ring, to, t * t), angle: headingDeg(ring, to) });
+    }
+  }
+  return out;
 }
 
 function lerp(a, b, t) {
@@ -220,7 +252,9 @@ function phasedFraction(elapsedMs, legMs, windupFraction = SLOW_PHASE_DISTANCE_F
   return windupFraction + (1 - windupFraction) * (fastElapsed / fastMs);
 }
 
-function ShotEffect({ fx, onDone }) {
+// `vs` resizes the bolts/bursts for the map's size (see markerScale) -- the
+// AOE burst is a true blast radius and is never scaled.
+function ShotEffect({ fx, vs = 1, onDone }) {
   const [elapsed, setElapsed] = useState(0);
   const startRef = useRef(null);
   const rafRef = useRef(null);
@@ -333,7 +367,7 @@ function ShotEffect({ fx, onDone }) {
         className="shot-fx-spark"
         cx={fx.attackerPos.x}
         cy={fx.attackerPos.y}
-        r={10 + (elapsed / lifetimeMs) * 10}
+        r={(10 + (elapsed / lifetimeMs) * 10) * vs}
         style={{ "--fx-color": color, opacity }}
       />
     );
@@ -353,14 +387,14 @@ function ShotEffect({ fx, onDone }) {
     const chainColor = "#ffe066";
     if (elapsed < totalMs) {
       const pos = lerp(fx.attackerPos, fx.impactPoint, Math.min(1, elapsed / totalMs));
-      return <circle className="shot-fx-bolt shot-fx-bolt--chain" cx={pos.x} cy={pos.y} r={5} style={{ "--fx-color": chainColor }} />;
+      return <circle className="shot-fx-bolt shot-fx-bolt--chain" cx={pos.x} cy={pos.y} r={5 * vs} style={{ "--fx-color": chainColor }} />;
     }
     return (
       <circle
         className="shot-fx-burst shot-fx-burst--hit"
         cx={fx.impactPoint.x}
         cy={fx.impactPoint.y}
-        r={MISS_BURST_RADIUS + 4}
+        r={(MISS_BURST_RADIUS + 4) * vs}
         style={{ "--fx-color": chainColor, opacity: fadeAfter(totalMs) }}
       />
     );
@@ -426,7 +460,7 @@ function ShotEffect({ fx, onDone }) {
       // stopped, ease-out, then burst on arrival.
       const t = Math.min(1, (elapsed - revealElapsed) / settleMs);
       boltPos = lerp(settleFrom, fx.impactPoint, 1 - Math.pow(1 - t, 3));
-    } else if (fx.outcome === "miss" && revealElapsed != null && fx.targetPos && elapsed < burstAt) {
+    } else if (fx.outcome === "miss" && !fx.preMissed && revealElapsed != null && fx.targetPos && elapsed < burstAt) {
       // A miss's deflected impact point differs from where the bolt was
       // aimed. Keep the bolt's natural forward progress along the flight,
       // but bend its aim from the target toward the wide point over the rest
@@ -438,7 +472,7 @@ function ShotEffect({ fx, onDone }) {
     } else if (elapsed < burstAt) {
       boltPos = lerp(fx.attackerPos, fx.impactPoint, phasedFraction(elapsed, totalMs, fx.windupFraction));
     } else {
-      bursts.push({ pos: fx.impactPoint, color, kind: fx.outcome, opacity: fadeAfter(burstAt), aoe: fx.aoe && fx.outcome !== "out-of-range", growAt: burstAt, style: fx.style && fx.outcome === "hit" });
+      bursts.push({ pos: fx.impactPoint, color, kind: fx.outcome, opacity: fadeAfter(burstAt), aoe: fx.aoe && fx.outcome !== "out-of-range", aoeScale: fx.aoeScale ?? 1, growAt: burstAt, style: fx.style && fx.outcome === "hit" });
     }
     if (boltPos) {
       lastBoltPosRef.current = boltPos;
@@ -459,7 +493,14 @@ function ShotEffect({ fx, onDone }) {
         angle = base + angle;
         styleBolt = true;
       }
-      bolts.push({ pos: boltPos, color: boltColor, color2: boltColor2, mega: fx.mega, angle, style: styleBolt });
+      const splitF = fx.split && fx.outcome === "hit" && !skidMode ? phasedFraction(elapsed, totalMs, fx.windupFraction) : 0;
+      if (splitF >= SPLIT_START_FRACTION) {
+        for (const sb of surroundBolts(fx.attackerPos, fx.impactPoint, splitF)) {
+          bolts.push({ pos: sb.pos, color: boltColor, color2: null, mega: false, angle: sb.angle, style: false });
+        }
+      } else {
+        bolts.push({ pos: boltPos, color: boltColor, color2: boltColor2, mega: fx.mega, angle, style: styleBolt });
+      }
     }
   } else {
     // The counter doesn't launch until the defender reacts -- until then the
@@ -510,6 +551,7 @@ function ShotEffect({ fx, onDone }) {
             kind: "hit",
             opacity: fadeAfter(clashAt + aftermathMs),
             aoe: fx.aoe,
+            aoeScale: fx.aoeScale ?? 1,
             growAt: clashAt + aftermathMs,
           });
         }
@@ -524,6 +566,7 @@ function ShotEffect({ fx, onDone }) {
             kind: "hit",
             opacity: fadeAfter(clashAt + aftermathMs),
             aoe: fx.aoe,
+            aoeScale: fx.aoeScale ?? 1,
             growAt: clashAt + aftermathMs,
           });
         }
@@ -558,8 +601,8 @@ function ShotEffect({ fx, onDone }) {
         // teardrops instead of circles (both can combine).
         const shapes = b.color2
           ? [
-              { color: b.color, offset: -8 },
-              { color: b.color2, offset: 8 },
+              { color: b.color, offset: -8 * vs },
+              { color: b.color2, offset: 8 * vs },
             ]
           : [{ color: b.color, offset: 0 }];
         return shapes.map((shape, j) => {
@@ -571,7 +614,7 @@ function ShotEffect({ fx, onDone }) {
                 key={key}
                 className="shot-fx-bolt shot-fx-bolt--mega"
                 d={MEGA_BOLT_PATH}
-                transform={`translate(${b.pos.x} ${b.pos.y}) rotate(${b.angle}) translate(0 ${shape.offset}) scale(${b.color2 ? 0.75 : 1})`}
+                transform={`translate(${b.pos.x} ${b.pos.y}) rotate(${b.angle}) translate(0 ${shape.offset}) scale(${(b.color2 ? 0.75 : 1) * vs})`}
                 style={style}
               />
             );
@@ -583,13 +626,13 @@ function ShotEffect({ fx, onDone }) {
                 className="shot-fx-bolt"
                 cx={0}
                 cy={0}
-                r={6}
+                r={6 * vs}
                 transform={`translate(${b.pos.x} ${b.pos.y}) rotate(${b.angle}) translate(0 ${shape.offset})`}
                 style={style}
               />
             );
           }
-          return <circle key={key} className={`shot-fx-bolt ${b.style ? "shot-fx-bolt--style" : ""}`} cx={b.pos.x} cy={b.pos.y} r={b.style ? 9 : 7} style={style} />;
+          return <circle key={key} className={`shot-fx-bolt ${b.style ? "shot-fx-bolt--style" : ""}`} cx={b.pos.x} cy={b.pos.y} r={(b.style ? 9 : 7) * vs} style={style} />;
         });
       })}
       {bursts.map((b, i) =>
@@ -600,8 +643,8 @@ function ShotEffect({ fx, onDone }) {
           // `isolation: isolate` keeps the blending contained to this pair,
           // not the whole map.
           <g key={`burst-${i}`} className="shot-fx-clash" style={{ opacity: b.opacity }}>
-            <circle className="shot-fx-burst shot-fx-burst--clash" cx={b.pos.x} cy={b.pos.y} r={20} style={{ "--fx-color": b.color }} />
-            <circle className="shot-fx-burst shot-fx-burst--clash" cx={b.pos.x} cy={b.pos.y} r={20} style={{ "--fx-color": b.mixColor }} />
+            <circle className="shot-fx-burst shot-fx-burst--clash" cx={b.pos.x} cy={b.pos.y} r={20 * vs} style={{ "--fx-color": b.color }} />
+            <circle className="shot-fx-burst shot-fx-burst--clash" cx={b.pos.x} cy={b.pos.y} r={20 * vs} style={{ "--fx-color": b.mixColor }} />
           </g>
         ) : (
           <circle
@@ -611,10 +654,10 @@ function ShotEffect({ fx, onDone }) {
             cy={b.pos.y}
             r={
               b.aoe
-                ? AOE_BURST_RADIUS * burstGrowScale(elapsed, b.growAt)
+                ? AOE_BURST_RADIUS * (b.aoeScale ?? 1) * burstGrowScale(elapsed, b.growAt)
                 : b.kind === "hit"
-                  ? HIT_BURST_RADIUS
-                  : MISS_BURST_RADIUS
+                  ? HIT_BURST_RADIUS * vs
+                  : MISS_BURST_RADIUS * vs
             }
             style={{ "--fx-color": b.color, opacity: b.opacity }}
           />
@@ -624,19 +667,105 @@ function ShotEffect({ fx, onDone }) {
         .filter((b) => b.style)
         .map((b, i) => (
           <g key={`style-burst-${i}`} className="shot-fx-style-burst" style={{ opacity: b.opacity }}>
-            <circle cx={b.pos.x} cy={b.pos.y} r={HIT_BURST_RADIUS + 14 * (1 - b.opacity)} />
-            <circle cx={b.pos.x} cy={b.pos.y} r={HIT_BURST_RADIUS * 0.6 + 26 * (1 - b.opacity)} />
+            <circle cx={b.pos.x} cy={b.pos.y} r={(HIT_BURST_RADIUS + 14 * (1 - b.opacity)) * vs} />
+            <circle cx={b.pos.x} cy={b.pos.y} r={(HIT_BURST_RADIUS * 0.6 + 26 * (1 - b.opacity)) * vs} />
           </g>
         ))}
     </>
   );
 }
 
-function mapPoint(svgEl, evt, mapWidth, mapHeight) {
+// Water is drawn by outlining an area: every WATER_CELL cell whose centre lies
+// inside the outline (even-odd rule) is flooded -- or drained -- when the
+// outline is released. Returns the cell ids (see waterCellId).
+function cellsInOutline(points, mapWidth, mapHeight) {
+  if (points.length < 3) return [];
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const p of points) {
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x);
+    maxY = Math.max(maxY, p.y);
+  }
+  const cx0 = Math.max(0, Math.floor(minX / WATER_CELL));
+  const cy0 = Math.max(0, Math.floor(minY / WATER_CELL));
+  const cx1 = Math.min(Math.floor(mapWidth / WATER_CELL), Math.floor(maxX / WATER_CELL));
+  const cy1 = Math.min(Math.floor(mapHeight / WATER_CELL), Math.floor(maxY / WATER_CELL));
+  const out = [];
+  for (let cy = cy0; cy <= cy1; cy++) {
+    const y = (cy + 0.5) * WATER_CELL;
+    // x of every edge crossing this row, then fill between pairs.
+    const xs = [];
+    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+      const a = points[i];
+      const b = points[j];
+      if (a.y > y !== b.y > y) xs.push(a.x + ((y - a.y) / (b.y - a.y)) * (b.x - a.x));
+    }
+    xs.sort((m, n) => m - n);
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      const from = Math.max(cx0, Math.ceil(xs[k] / WATER_CELL - 0.5));
+      const to = Math.min(cx1, Math.floor(xs[k + 1] / WATER_CELL - 0.5));
+      for (let cx = from; cx <= to; cx++) out.push(cy * 1000 + cx);
+    }
+  }
+  return out;
+}
+
+// Flooded cells -> horizontal runs {x, y, w} (in map units), so a big lake is a
+// few hundred rectangles instead of thousands.
+function waterRuns(cellIds) {
+  const rows = new Map();
+  for (const id of cellIds) {
+    const row = Math.floor(id / 1000);
+    if (!rows.has(row)) rows.set(row, []);
+    rows.get(row).push(id % 1000);
+  }
+  const runs = [];
+  for (const [row, xs] of rows) {
+    xs.sort((a, b) => a - b);
+    let start = xs[0];
+    let prev = xs[0];
+    for (let i = 1; i <= xs.length; i++) {
+      if (i < xs.length && xs[i] === prev + 1) {
+        prev = xs[i];
+        continue;
+      }
+      runs.push({ key: `${row}:${start}`, x: start * WATER_CELL, y: row * WATER_CELL, w: (prev - start + 1) * WATER_CELL });
+      start = xs[i];
+      prev = xs[i];
+    }
+  }
+  return runs;
+}
+
+// Per-viewer zoom/pan of the map. `view` is the window onto the map in map
+// units ({ x, y } its top-left corner, `zoom` how many times closer than the
+// whole map) -- it becomes the SVG's viewBox, so zooming moves the *entire* map
+// (picture, tokens, walls, rings) together and never touches the shared state.
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 8;
+const ZOOM_STEP = 1.25;
+const WHEEL_ZOOM_STEP = 1.15;
+
+function clampView(zoom, x, y, mapWidth, mapHeight) {
+  const z = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
+  return {
+    zoom: z,
+    x: Math.min(mapWidth - mapWidth / z, Math.max(0, x)),
+    y: Math.min(mapHeight - mapHeight / z, Math.max(0, y)),
+  };
+}
+
+// Screen position -> map units, through the current zoom window.
+function mapPoint(svgEl, evt, view, mapWidth, mapHeight) {
   const rect = svgEl.getBoundingClientRect();
-  const scaleX = mapWidth / rect.width;
-  const scaleY = mapHeight / rect.height;
-  return { x: (evt.clientX - rect.left) * scaleX, y: (evt.clientY - rect.top) * scaleY };
+  return {
+    x: view.x + ((evt.clientX - rect.left) / rect.width) * (mapWidth / view.zoom),
+    y: view.y + ((evt.clientY - rect.top) / rect.height) * (mapHeight / view.zoom),
+  };
 }
 
 function gritColor(fraction) {
@@ -644,8 +773,47 @@ function gritColor(fraction) {
   return `hsl(${hue}, 72%, 46%)`;
 }
 
+// A carnivorous bloom's bite reach -- mirrors PLANT_BITE_RANGE (= MOUNT_RANGE) in
+// server/src/combatRules.js; keep the number in sync.
+const PLANT_BITE_RANGE = 80;
+// A little ghost silhouette (domed head, scalloped hem) for Phantasmo's haunter.
+function ghostPath(r) {
+  const w = r * 0.7;
+  const h = r * 0.75;
+  return `M ${-w} ${h} L ${-w} ${-0.1 * h} A ${w} ${0.9 * h} 0 0 1 ${w} ${-0.1 * h} L ${w} ${h} q ${-w / 3} ${-0.5 * w} ${(-2 * w) / 3} 0 q ${-w / 3} ${0.5 * w} ${(-2 * w) / 3} 0 q ${-w / 3} ${-0.5 * w} ${(-2 * w) / 3} 0 Z`;
+}
+// Toothy star drawn on a bloom's token, so it never reads as a person.
+function plantStarPoints(r) {
+  const spikes = 8;
+  const pts = [];
+  for (let i = 0; i < spikes * 2; i++) {
+    const rad = i % 2 === 0 ? r * 0.95 : r * 0.5;
+    const a = (i * Math.PI) / spikes - Math.PI / 2;
+    pts.push(`${(Math.cos(a) * rad).toFixed(1)},${(Math.sin(a) * rad).toFixed(1)}`);
+  }
+  return pts.join(" ");
+}
+
 function tokenRadius(kind) {
   return kind === "mecha" ? 24 : 16;
+}
+
+// Hover text for a hazard patch. Mirrors ICE_SLIP_CHANCE / HAZARD_DAMAGE_FRACTION
+// in server/src/combatRules.js -- display only, the server decides what really happens.
+const ICE_SLIP_PERCENT = 75;
+const HAZARD_DAMAGE_FRACTION = 0.5;
+function hazardDescription(hz) {
+  const fades = hz.turnsLeft != null ? ` Fades in ${hz.turnsLeft} round${hz.turnsLeft === 1 ? "" : "s"}.` : "";
+  if (hz.type === "ice") {
+    return `Ice patch -- ending a Move on it has a ${ICE_SLIP_PERCENT}% chance to slip and lose the rest of that turn's AP.${fades}`;
+  }
+  if (hz.type === "damage") {
+    const dmg = Math.max(1, Math.floor((hz.clashPower || 0) * HAZARD_DAMAGE_FRACTION));
+    const dot = hz.slugType === "Fire" ? ", and sets them ablaze" : hz.slugType === "Toxic" ? ", and poisons them" : "";
+    const source = hz.slugName ? ` left by ${hz.slugName}` : "";
+    return `${hz.slugType || ""} hazard${source} -- anyone moving through it takes ${dmg} damage${dot} (a mecha takes it as Structure damage).${fades}`.trim();
+  }
+  return `Hazard.${fades}`;
 }
 
 // Small colored dots hovering above a token's active ring, one per active
@@ -665,7 +833,10 @@ function statusEffectBadges(statusEffects) {
   if (statusEffects.slippery?.turnsLeft > 0) {
     badges.push({ key: "slippery", label: "Slippery -- risks their turn ending on any Move" });
   }
-  if (statusEffects.stunned) badges.push({ key: "stun", label: "Stunned" });
+  if (statusEffects.stunned) {
+    const stunAp = Number(statusEffects.stunned.ap) > 0 ? Math.round(statusEffects.stunned.ap) : 1;
+    badges.push({ key: "stun", label: `Stunned -- loses ${stunAp} AP next turn` });
+  }
   if (statusEffects.blinded) badges.push({ key: "blind", label: "Blinded" });
   if (statusEffects.confused) badges.push({ key: "confused", label: "Confused -- shots may fire wildly off target" });
   if (statusEffects.disarmed?.turnsLeft > 0) badges.push({ key: "disarm", label: "Disarmed -- can't Shoot Slug" });
@@ -680,19 +851,27 @@ function statusEffectBadges(statusEffects) {
   }
   if (statusEffects.intimidated) badges.push({ key: "intimidated", label: `Intimidated -- starts next turn ${statusEffects.intimidated.apPenalty} AP short` });
   if (statusEffects.keenVision) badges.push({ key: "keen-vision", label: "Keen vision -- next attack has advantage" });
+  if (statusEffects.bleeding) {
+    badges.push({ key: "bleeding", label: `Bleeding -- loses 10% of max Grit at the start of each of their next ${statusEffects.bleeding.turnsLeft} turns` });
+  }
+  if (statusEffects.regen?.turnsLeft > 0) {
+    badges.push({ key: "regen", label: `Regenerating -- heals ${statusEffects.regen.amount} Grit at the start of each of their next ${statusEffects.regen.turnsLeft} turns` });
+  }
   if (statusEffects.marked) badges.push({ key: "marked", label: "Marked -- takes splash damage from Arcling's static arcs" });
   if (statusEffects.powerSurge) badges.push({ key: "power-surge", label: "Power surge -- every other shot this turn has its power doubled" });
   return badges;
 }
 
-function Token({ combatant, isActive, isSelected, isActing, draggable, isDragging, pos, onMouseDown, dimmed, mountTarget, wallRunning }) {
+function Token({ combatant, label, isActive, isSelected, isActing, draggable, isDragging, pos, onMouseDown, dimmed, mountTarget, wallRunning, scale = 1 }) {
   // A mounted rider rides small, tucked onto the upper-right of the mecha's
   // token so the two read as one entity (the server keeps their positions in
   // lockstep -- see /actions/move).
   const mountedRider = combatant.kind === "character" && combatant.mountedOn != null;
   const r = mountedRider ? 11 : tokenRadius(combatant.kind);
-  const offX = mountedRider ? 15 : 0;
-  const offY = mountedRider ? -15 : 0;
+  // `scale` keeps the marker readable on very large/small maps -- it only
+  // resizes the drawing, never any range (see the bite-range ring below).
+  const offX = (mountedRider ? 15 : 0) * scale;
+  const offY = (mountedRider ? -15 : 0) * scale;
   const badges = statusEffectBadges(combatant.statusEffects);
   const fraction =
     combatant.kind === "mecha"
@@ -708,13 +887,16 @@ function Token({ combatant, isActive, isSelected, isActing, draggable, isDraggin
   return (
     <g
       className={`combat-token combat-token--${combatant.mimic?.kind ?? combatant.kind} ${downed ? "combat-token--down" : ""} ${isActing ? "combat-token--acting" : ""} ${draggable ? "combat-token--draggable" : ""} ${dimmed ? "combat-token--invisible" : ""} ${isDragging ? "combat-token--dragging" : ""} ${wallRunning ? "combat-token--wallrun" : ""}`}
-      transform={`translate(${pos.x + offX}, ${pos.y + offY})`}
+      transform={`translate(${pos.x + offX}, ${pos.y + offY}) scale(${scale})`}
       style={{ "--team-color": teamById(combatSide(combatant)).token }}
       onMouseDown={(e) => {
         e.stopPropagation();
         onMouseDown?.(combatant, e);
       }}
     >
+      {(combatant.kind === "plant" || combatant.kind === "ghost") && (
+        <circle className="combat-token-plant-range" r={(combatant.data?.biteRange ?? PLANT_BITE_RANGE) / scale} />
+      )}
       {mountTarget && <circle className="combat-token-mount-target" r={r + 10} />}
       {isActive && <circle className="combat-token-active-ring" r={r + 7} />}
       {isSelected && <circle className="combat-token-selected-ring" r={r + 4} />}
@@ -738,6 +920,14 @@ function Token({ combatant, isActive, isSelected, isActing, draggable, isDraggin
         <circle className="combat-token-fill" r={r} />
       )}
       <circle className="combat-token-border" r={r} />
+      {combatant.kind === "plant" && <polygon className="combat-token-plant-star" points={plantStarPoints(r)} />}
+      {combatant.kind === "ghost" && (
+        <g className="combat-token-ghost-glyph">
+          <path d={ghostPath(r)} />
+          <circle cx={-r * 0.25} cy={-r * 0.2} r={r * 0.12} />
+          <circle cx={r * 0.25} cy={-r * 0.2} r={r * 0.12} />
+        </g>
+      )}
       {combatant.mountedOn != null && <circle className="combat-token-mounted-dot" r={4} cx={r - 4} cy={r - 4} />}
       {badges.length > 0 && (
         <g className="combat-token-effects" transform={`translate(0, ${-(r + 14)})`}>
@@ -750,7 +940,7 @@ function Token({ combatant, isActive, isSelected, isActing, draggable, isDraggin
         </g>
       )}
       <text className="combat-token-label" y={r + 16} style={{ fill: combatantNameColor(combatant) || undefined }}>
-        {combatant.name}
+        {label ?? combatant.name}
       </text>
       {downed && (
         <text className="combat-token-down-mark" y={5}>
@@ -765,13 +955,12 @@ export default function CombatMap({
   encounter,
   drawMode = false,
   waterMode = null,
-  waterBrush = 1,
   onPaintWater,
   onAddWall,
   onRemoveWall,
   onBackgroundClick,
   onTokenClick,
-  activeCombatantId,
+  activeCombatantIds,
   actingCombatantId,
   rangeRing,
   mountRing,
@@ -890,18 +1079,11 @@ export default function CombatMap({
     knownHazardIds.current = currentIds;
   }, [encounter.hazards]);
 
-  // DM-only battle-map background: upload, pan ("move" mode drags the
-  // background instead of drawing/selecting), and zoom.
-  const [mapEditMode, setMapEditMode] = useState(false);
-  const [mapDrag, setMapDrag] = useState(null); // {startClientX, startClientY, startOffsetX, startOffsetY, offsetX, offsetY, moved}
-  const [zoomDraft, setZoomDraft] = useState(null); // live slider value while dragging, committed on release
+  // DM-only battle-map background upload.
   const [mapUploadError, setMapUploadError] = useState(null);
   const [mapImgSize, setMapImgSize] = useState(null); // natural {w,h} of the loaded map image
 
   const mapImage = encounter.mapImage;
-  const mapScale = encounter.mapImageScale ?? 1;
-  const mapOffsetX = encounter.mapImageOffsetX ?? 0;
-  const mapOffsetY = encounter.mapImageOffsetY ?? 0;
 
   useEffect(() => {
     if (!mapImage) {
@@ -1065,71 +1247,126 @@ export default function CombatMap({
 
   const mapWidth = encounter.mapWidth;
   const mapHeight = encounter.mapHeight;
-  const dragLocked = drawMode || mapEditMode || Boolean(waterMode);
+  const dragLocked = drawMode || Boolean(waterMode);
+
+  // This viewer's own zoom/pan (never sent anywhere) and the map's on-screen
+  // width, which the scale bar needs to turn map units into pixels.
+  // Planning aid (DM, setup only): reference rings for blasters, walls, hazards
+  // etc. at the map's real scale, so resizing the map shows them grow/shrink.
+  const [previewOn, setPreviewOn] = useState(true);
+  const [previewShown, setPreviewShown] = useState(() => new Set(DEFAULT_SHOWN_REFERENCES));
+  const [previewOrigin, setPreviewOrigin] = useState(null); // null = map centre
+  const showPreview = isDM && encounter.status === "setup" && previewOn;
+  const previewAt = previewOrigin ?? { x: mapWidth / 2, y: mapHeight / 2 };
+  const [view, setView] = useState({ zoom: 1, x: 0, y: 0 });
+  const [panDrag, setPanDrag] = useState(null); // {startClientX, startClientY, startX, startY, moved}
+  const [screenW, setScreenW] = useState(0);
+  const suppressClickRef = useRef(false); // a pan-drag's mouseup must not also count as a click on the map
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const viewW = mapWidth / view.zoom;
+  const viewH = mapHeight / view.zoom;
+  const markerS = markerScale(mapWidth);
+  const viewerCombatant = encounter.combatants.find((c) => c.kind === "character" && c.refUserId === viewerUserId);
+
+  // A different map size (or a new encounter) means the old window is
+  // meaningless -- start over from the whole map.
+  useEffect(() => {
+    setView({ zoom: 1, x: 0, y: 0 });
+  }, [encounter.id, mapWidth, mapHeight]);
+
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return undefined;
+    const measure = () => setScreenW(el.getBoundingClientRect().width);
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Zoom by `factor`, keeping the map point at (fx, fy) -- fractions of the
+  // visible window -- fixed on screen. Defaults to the centre of the window.
+  function zoomBy(factor, fx = 0.5, fy = 0.5) {
+    setView((v) => {
+      const z = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.zoom * factor));
+      const anchorX = v.x + fx * (mapWidth / v.zoom);
+      const anchorY = v.y + fy * (mapHeight / v.zoom);
+      return clampView(z, anchorX - fx * (mapWidth / z), anchorY - fy * (mapHeight / z), mapWidth, mapHeight);
+    });
+  }
+
+  // Wheel zooms toward the cursor. A native (non-passive) listener, since
+  // React's onWheel is passive and can't stop the page scrolling underneath.
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return undefined;
+    function onWheel(e) {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const fx = (e.clientX - rect.left) / rect.width;
+      const fy = (e.clientY - rect.top) / rect.height;
+      zoomBy(e.deltaY < 0 ? WHEEL_ZOOM_STEP : 1 / WHEEL_ZOOM_STEP, fx, fy);
+    }
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+    // zoomBy only reads map dimensions
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapWidth, mapHeight]);
+
+  const pxPerMeter = screenW > 0 ? (screenW / viewW) * UNITS_PER_METER : 0;
+  const scaleBar = niceScaleLength(pxPerMeter);
 
   // Water the DM paints during setup. Hidden from everyone once the fight is
   // on (the map art shows the water), and never shown to players.
-  const [waterStroke, setWaterStroke] = useState(null); // { paint, cells:Set<number> } while dragging
+  // The DM outlines an area (the outline is { paint, points } while dragging)
+  // and its inside floods/drains on release.
+  const [waterOutline, setWaterOutline] = useState(null);
   const showWater = isDM && encounter.status !== "active";
-  const waterCells = (() => {
-    const set = makeWaterSet(encounter.water);
-    if (waterStroke) for (const c of waterStroke.cells) (waterStroke.paint ? set.add(c) : set.delete(c));
-    return [...set];
-  })();
-  function brushCells(pt) {
-    const half = Math.floor(waterBrush / 2);
-    const cx = Math.floor(pt.x / WATER_CELL);
-    const cy = Math.floor(pt.y / WATER_CELL);
-    const maxX = Math.floor(mapWidth / WATER_CELL);
-    const maxY = Math.floor(mapHeight / WATER_CELL);
-    const out = [];
-    for (let dy = -half; dy <= half; dy++) {
-      for (let dx = -half; dx <= half; dx++) {
-        const x = cx + dx;
-        const y = cy + dy;
-        if (x >= 0 && y >= 0 && x <= maxX && y <= maxY) out.push(y * 1000 + x);
-      }
-    }
-    return out;
+  const waterRunList = useMemo(() => waterRuns([...makeWaterSet(encounter.water)]), [encounter.water]);
+  const clampToMap = (pt) => ({ x: Math.min(mapWidth, Math.max(0, pt.x)), y: Math.min(mapHeight, Math.max(0, pt.y)) });
+  function finishWaterOutline() {
+    if (!waterOutline) return;
+    const cells = cellsInOutline(waterOutline.points, mapWidth, mapHeight);
+    if (cells.length > 0) onPaintWater?.(cells, waterOutline.paint);
+    setWaterOutline(null);
   }
 
-  // Cover-fit the uploaded image to the map (like CSS background-size:
-  // cover), then layer the DM's own zoom multiplier and pan offset on top.
+  // Cover-fit the uploaded image to the map (like CSS background-size: cover),
+  // centred. Zooming/panning is the viewer's own window onto this, not a
+  // property of the picture.
   const mapCoverScale = mapImgSize ? Math.max(mapWidth / mapImgSize.w, mapHeight / mapImgSize.h) : 1;
-  const effectiveMapScale = zoomDraft ?? mapScale;
-  const effectiveOffsetX = mapDrag ? mapDrag.offsetX : mapOffsetX;
-  const effectiveOffsetY = mapDrag ? mapDrag.offsetY : mapOffsetY;
-  const mapDisplayScale = mapCoverScale * effectiveMapScale;
-  const mapDisplayW = mapImgSize ? mapImgSize.w * mapDisplayScale : mapWidth;
-  const mapDisplayH = mapImgSize ? mapImgSize.h * mapDisplayScale : mapHeight;
-  const mapImgX = mapWidth / 2 - mapDisplayW / 2 + effectiveOffsetX;
-  const mapImgY = mapHeight / 2 - mapDisplayH / 2 + effectiveOffsetY;
+  const mapDisplayW = mapImgSize ? mapImgSize.w * mapCoverScale : mapWidth;
+  const mapDisplayH = mapImgSize ? mapImgSize.h * mapCoverScale : mapHeight;
+  const mapImgX = (mapWidth - mapDisplayW) / 2;
+  const mapImgY = (mapHeight - mapDisplayH) / 2;
+
+  const pointFor = (e) => mapPoint(svgRef.current, e, viewRef.current, mapWidth, mapHeight);
 
   function handleBackgroundMouseDown(e) {
-    if (mapEditMode) {
-      setMapDrag({
-        startClientX: e.clientX,
-        startClientY: e.clientY,
-        startOffsetX: mapOffsetX,
-        startOffsetY: mapOffsetY,
-        offsetX: mapOffsetX,
-        offsetY: mapOffsetY,
-        moved: false,
-      });
+    // Middle button always pans; the left button pans an empty spot of the map
+    // once zoomed in, unless a DM tool (walls/water) owns the left button.
+    const leftPans = e.button === 0 && view.zoom > 1 && !drawMode && !waterMode;
+    if (e.button === 1 || leftPans) {
+      if (e.button === 1) e.preventDefault();
+      suppressClickRef.current = false;
+      setPanDrag({ button: e.button, startClientX: e.clientX, startClientY: e.clientY, startX: view.x, startY: view.y, moved: false });
       return;
     }
+    suppressClickRef.current = false;
+    if (e.button !== 0) return;
     if (waterMode) {
-      const pt = mapPoint(svgRef.current, e, mapWidth, mapHeight);
-      setWaterStroke({ paint: waterMode === "paint", cells: new Set(brushCells(pt)) });
+      setWaterOutline({ paint: waterMode === "paint", points: [clampToMap(pointFor(e))] });
       return;
     }
     if (!drawMode) return;
-    const pt = mapPoint(svgRef.current, e, mapWidth, mapHeight);
+    const pt = pointFor(e);
     setDrawing({ x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y });
   }
 
   function handleTokenMouseDown(combatant, e) {
-    if (mapEditMode) return;
+    if (e.button !== 0) return;
     if (dragLocked || !isDraggable?.(combatant)) {
       onTokenClick?.(combatant);
       return;
@@ -1147,43 +1384,50 @@ export default function CombatMap({
   }
 
   function handleMouseMove(e) {
-    if (mapDrag) {
+    if (panDrag) {
       const rect = svgRef.current.getBoundingClientRect();
-      const scaleX = mapWidth / rect.width;
-      const scaleY = mapHeight / rect.height;
-      const dx = (e.clientX - mapDrag.startClientX) * scaleX;
-      const dy = (e.clientY - mapDrag.startClientY) * scaleY;
-      setMapDrag((prev) =>
-        prev ? { ...prev, offsetX: prev.startOffsetX + dx, offsetY: prev.startOffsetY + dy, moved: true } : prev
-      );
+      const dxPx = e.clientX - panDrag.startClientX;
+      const dyPx = e.clientY - panDrag.startClientY;
+      const moved = panDrag.moved || Math.hypot(dxPx, dyPx) > DRAG_THRESHOLD;
+      if (moved) {
+        // Dragging the map: it follows the cursor, so the window moves the other way.
+        setView((v) => clampView(v.zoom, panDrag.startX - (dxPx / rect.width) * viewW, panDrag.startY - (dyPx / rect.height) * viewH, mapWidth, mapHeight));
+        if (!panDrag.moved) setPanDrag((prev) => (prev ? { ...prev, moved: true } : prev));
+      }
       return;
     }
-    if (waterStroke) {
-      const pt = mapPoint(svgRef.current, e, mapWidth, mapHeight);
-      setWaterStroke((prev) => (prev ? { ...prev, cells: new Set([...prev.cells, ...brushCells(pt)]) } : prev));
+    if (waterOutline) {
+      const pt = clampToMap(pointFor(e));
+      // Skip points closer than ~3 screen pixels -- plenty for a smooth outline.
+      const minStep = (3 * viewW) / (svgRef.current.getBoundingClientRect().width || 1);
+      setWaterOutline((prev) => {
+        if (!prev) return prev;
+        const last = prev.points[prev.points.length - 1];
+        return Math.hypot(pt.x - last.x, pt.y - last.y) < minStep ? prev : { ...prev, points: [...prev.points, pt] };
+      });
       return;
     }
     if (drawing) {
-      const pt = mapPoint(svgRef.current, e, mapWidth, mapHeight);
+      const pt = pointFor(e);
       setDrawing((prev) => (prev ? { ...prev, x2: pt.x, y2: pt.y } : prev));
       return;
     }
     if (drag) {
       const screenDist = Math.hypot(e.clientX - drag.startClientX, e.clientY - drag.startClientY);
-      const pt = mapPoint(svgRef.current, e, mapWidth, mapHeight);
+      const pt = pointFor(e);
       setDrag((prev) => (prev ? { ...prev, x: pt.x, y: pt.y, moved: prev.moved || screenDist > DRAG_THRESHOLD } : prev));
     }
   }
 
-  function handleMouseUp() {
-    if (mapDrag) {
-      if (mapDrag.moved) onMapUpdate?.({ offsetX: mapDrag.offsetX, offsetY: mapDrag.offsetY });
-      setMapDrag(null);
+  function handleMouseUp(e) {
+    if (panDrag) {
+      // The click that follows this mouseup belongs to the pan, not the map.
+      if (panDrag.moved && panDrag.button === 0) suppressClickRef.current = true;
+      setPanDrag(null);
       return;
     }
-    if (waterStroke) {
-      onPaintWater?.([...waterStroke.cells], waterStroke.paint);
-      setWaterStroke(null);
+    if (waterOutline) {
+      finishWaterOutline();
       return;
     }
     if (drawing) {
@@ -1216,7 +1460,8 @@ export default function CombatMap({
             });
           }, 4000);
         });
-        onTokenDragEnd?.(drag.combatant, point);
+        // Shift held on drop = the DM's free reposition (see handleTokenDragEnd).
+        onTokenDragEnd?.(drag.combatant, point, Boolean(e?.shiftKey));
       } else {
         onTokenClick?.(drag.combatant);
       }
@@ -1225,8 +1470,13 @@ export default function CombatMap({
   }
 
   function handleBackgroundClick(e) {
-    if (drawMode || drag || mapEditMode || waterMode) return;
-    const pt = mapPoint(svgRef.current, e, mapWidth, mapHeight);
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+    if (e.button !== 0 || drawMode || drag || waterMode) return;
+    const pt = pointFor(e);
+    if (showPreview) setPreviewOrigin(pt);
     onBackgroundClick?.(pt);
   }
 
@@ -1246,15 +1496,6 @@ export default function CombatMap({
     }
   }
 
-  function handleZoomInput(e) {
-    setZoomDraft(Number(e.target.value));
-  }
-
-  function commitZoom(e) {
-    onMapUpdate?.({ scale: Number(e.target.value) });
-    setZoomDraft(null);
-  }
-
   return (
     <div
       className={`combat-map-wrap ${misfireFlash ? "combat-map-wrap--misfire" : ""} ${missFlash ? "combat-map-wrap--miss" : ""}`}
@@ -1269,15 +1510,16 @@ export default function CombatMap({
     >
       <svg
         ref={svgRef}
-        className={`combat-map ${drawMode || waterMode ? "combat-map--drawing" : ""} ${mapEditMode ? "combat-map--map-edit" : ""}`}
-        viewBox={`0 0 ${mapWidth} ${mapHeight}`}
+        className={`combat-map ${drawMode || waterMode ? "combat-map--drawing" : ""} ${view.zoom > 1 && !drawMode && !waterMode ? "combat-map--pannable" : ""} ${panDrag?.moved ? "combat-map--panning" : ""}`}
+        viewBox={`${view.x} ${view.y} ${viewW} ${viewH}`}
         onMouseDown={handleBackgroundMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={() => {
           setDrawing(null);
           setDrag(null);
-          setMapDrag(null);
+          setPanDrag(null);
+          finishWaterOutline();
         }}
         onClick={handleBackgroundClick}
       >
@@ -1302,7 +1544,9 @@ export default function CombatMap({
             cy={hz.y}
             r={hz.radius}
             style={hz.type === "damage" ? { "--hazard-color": typeColor(hz.slugType) } : undefined}
-          />
+          >
+            <title>{hazardDescription(hz)}</title>
+          </circle>
         ))}
 
         {(encounter.bridges || []).map((b) => (
@@ -1336,7 +1580,7 @@ export default function CombatMap({
                   <g className="combat-map-pod-arrow" transform={`translate(${end.x} ${end.y}) rotate(${pod.angle})`}>
                     <path d="M -7 -5 L 5 0 L -7 5 Z" />
                   </g>
-                  <text className="combat-map-pod-counter" x={pod.x} y={pod.y - 16}>
+                  <text className="combat-map-pod-counter" x={pod.x} y={pod.y - 16 * markerS} style={{ fontSize: 24 * markerS }}>
                     {pod.counter}
                   </text>
                 </g>
@@ -1354,6 +1598,27 @@ export default function CombatMap({
           )
         )}
 
+        {showPreview && (
+          <g className="combat-map-preview">
+            {RANGE_REFERENCES.filter((ref) => previewShown.has(ref.id)).map((ref) =>
+              ref.kind === "line" ? (
+                <line
+                  key={ref.id}
+                  className="combat-map-preview-line"
+                  x1={previewAt.x - ref.length / 2}
+                  y1={previewAt.y}
+                  x2={previewAt.x + ref.length / 2}
+                  y2={previewAt.y}
+                  style={{ stroke: ref.color }}
+                />
+              ) : (
+                <circle key={ref.id} className="combat-map-preview-ring" cx={previewAt.x} cy={previewAt.y} r={ref.r} style={{ stroke: ref.color, fill: ref.color }} />
+              )
+            )}
+            <circle className="combat-map-preview-origin" cx={previewAt.x} cy={previewAt.y} r={4 * markerS} />
+          </g>
+        )}
+
         {rangeRing && (
           <circle className="combat-map-range-ring" cx={rangeRing.x} cy={rangeRing.y} r={rangeRing.r} />
         )}
@@ -1362,12 +1627,20 @@ export default function CombatMap({
           <circle className="combat-map-mount-ring" cx={mountRing.x} cy={mountRing.y} r={mountRing.r} />
         )}
 
-        {showWater && waterCells.length > 0 && (
+        {showWater && waterRunList.length > 0 && (
           <g className="combat-map-water" pointerEvents="none">
-            {waterCells.map((id) => (
-              <rect key={id} x={(id % 1000) * WATER_CELL} y={Math.floor(id / 1000) * WATER_CELL} width={WATER_CELL} height={WATER_CELL} />
+            {waterRunList.map((r) => (
+              <rect key={r.key} x={r.x} y={r.y} width={r.w} height={WATER_CELL} />
             ))}
           </g>
+        )}
+
+        {waterOutline && waterOutline.points.length > 1 && (
+          <polygon
+            className={`combat-map-water-outline ${waterOutline.paint ? "" : "combat-map-water-outline--drain"}`}
+            points={waterOutline.points.map((p) => `${p.x},${p.y}`).join(" ")}
+            pointerEvents="none"
+          />
         )}
 
         {encounter.walls.map((w) => {
@@ -1399,8 +1672,12 @@ export default function CombatMap({
           <g className="combat-drag-preview">
             <line x1={drag.originX} y1={drag.originY} x2={drag.x} y2={drag.y} />
             {dragApCost != null && (
-              <text x={(drag.originX + drag.x) / 2} y={(drag.originY + drag.y) / 2 - 10}>
-                {dragApCost} AP
+              <text
+                x={(drag.originX + drag.x) / 2}
+                y={(drag.originY + drag.y) / 2 - 10 * markerS}
+                style={{ fontSize: 13 * markerS, strokeWidth: 4 * markerS }}
+              >
+                {dragApCost} AP · {formatMeters(dragDist / UNITS_PER_METER)}
               </text>
             )}
           </g>
@@ -1430,12 +1707,18 @@ export default function CombatMap({
               c.kind === "mecha" &&
               !c.disabled &&
               Math.hypot(c.x - mountRing.x, c.y - mountRing.y) <= mountRing.r;
+            // A Mirage Coil decoy only gives itself away to the DM and the
+            // owner's own side. Everyone else sees the owner's name on it and
+            // the same active-turn ring, so neither tells it from the real one.
+            const hidesAsOwner = c.kind === "decoy" && !isDM && !(viewerCombatant && combatSide(viewerCombatant) === combatSide(c));
+            const decoyOwner = hidesAsOwner ? encounter.combatants.find((o) => o.id === c.data?.decoyOwnerId) : null;
             return (
               <Token
                 key={c.id}
                 combatant={c}
+                label={decoyOwner?.name}
                 pos={pos}
-                isActive={c.id === activeCombatantId}
+                isActive={Boolean(activeCombatantIds?.includes(hidesAsOwner ? c.data?.decoyOwnerId : c.id))}
                 isActing={c.id === actingCombatantId}
                 draggable={!dragLocked && Boolean(isDraggable?.(c))}
                 isDragging={Boolean(followsDrag)}
@@ -1443,12 +1726,13 @@ export default function CombatMap({
                 dimmed={Boolean(c.statusEffects?.invisible) || isBurrowed(c)}
                 mountTarget={Boolean(inMountRange)}
                 wallRunning={c.id === wallRunId}
+                scale={markerS}
               />
             );
           })}
 
         {activeShots.map((fx) => (
-          <ShotEffect key={fx.id} fx={fx} onDone={() => removeShot(fx.id)} />
+          <ShotEffect key={fx.id} fx={fx} vs={markerS} onDone={() => removeShot(fx.id)} />
         ))}
       </svg>
 
@@ -1466,42 +1750,25 @@ export default function CombatMap({
               <UploadSimpleIcon weight="bold" />
               {mapImage ? "Change Map" : "Upload Map"}
             </button>
+            {encounter.status === "setup" && (
+              <button
+                type="button"
+                className={`combat-map-toolbar-btn ${previewOn ? "combat-map-toolbar-btn--on" : ""}`}
+                onClick={() => setPreviewOn((v) => !v)}
+              >
+                <RulerIcon weight="bold" />
+                Range preview
+              </button>
+            )}
             {mapImage && (
-              <>
-                <button
-                  type="button"
-                  className={`combat-map-toolbar-btn ${mapEditMode ? "combat-map-toolbar-btn--on" : ""}`}
-                  onClick={() => setMapEditMode((v) => !v)}
-                >
-                  <ArrowsOutCardinalIcon weight="bold" />
-                  {mapEditMode ? "Done" : "Move / Zoom"}
-                </button>
-                {mapEditMode && (
-                  <label className="combat-map-toolbar-zoom">
-                    Zoom
-                    <input
-                      type="range"
-                      min="1"
-                      max="4"
-                      step="0.02"
-                      value={effectiveMapScale}
-                      onInput={handleZoomInput}
-                      onChange={commitZoom}
-                    />
-                  </label>
-                )}
-                <button
-                  type="button"
-                  className="combat-map-toolbar-btn combat-map-toolbar-btn--danger"
-                  onClick={() => {
-                    setMapEditMode(false);
-                    onMapUpdate?.({ image: null });
-                  }}
-                >
-                  <XIcon weight="bold" />
-                  Remove
-                </button>
-              </>
+              <button
+                type="button"
+                className="combat-map-toolbar-btn combat-map-toolbar-btn--danger"
+                onClick={() => onMapUpdate?.({ image: null })}
+              >
+                <XIcon weight="bold" />
+                Remove
+              </button>
             )}
           </div>
           {mapUploadError && <p className="combat-map-upload-error">{mapUploadError}</p>}
@@ -1514,11 +1781,81 @@ export default function CombatMap({
         </>
       )}
 
-      {mapEditMode && <p className="combat-map-hint">Drag the map to reposition it. Use the slider to zoom.</p>}
-      {!mapEditMode && waterMode && (
-        <p className="combat-map-hint">Drag to {waterMode === "paint" ? "paint water" : "erase water"}. Only you can see it, and only before combat starts.</p>
+      {showPreview && (
+        <div className="combat-map-preview-legend">
+          <h4>Range preview</h4>
+          <ul>
+            {RANGE_REFERENCES.map((ref) => (
+              <li key={ref.id}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={previewShown.has(ref.id)}
+                    onChange={() =>
+                      setPreviewShown((prev) => {
+                        const next = new Set(prev);
+                        if (!next.delete(ref.id)) next.add(ref.id);
+                        return next;
+                      })
+                    }
+                  />
+                  <i style={{ background: ref.color }} />
+                  <span>{ref.label}</span>
+                  <b>{formatMeters(ref.meters)}</b>
+                </label>
+              </li>
+            ))}
+          </ul>
+          <p>Stock blaster reach, before a slug's element adds its own. Click the map to move the origin.</p>
+        </div>
       )}
-      {!mapEditMode && drawMode && <p className="combat-map-hint">Drag to draw a wall. Right-click a wall to erase it.</p>}
+      {waterMode && (
+        <p className="combat-map-hint">
+          {waterMode === "paint" ? "Drag around an area -- the inside floods when you let go." : "Drag around water -- the inside drains when you let go."} Only you can see it, and only before combat starts.
+        </p>
+      )}
+      {drawMode && <p className="combat-map-hint">Drag to draw a wall. Right-click a wall to erase it.</p>}
+
+      {/* Your own view of the map: scroll to zoom, drag (or middle-drag) to
+          pan. Moves the whole map together -- picture, tokens, rings -- and is
+          never shared with anyone else. */}
+      <div className="combat-map-zoom" role="group" aria-label="Map zoom">
+        <button type="button" onClick={() => zoomBy(1 / ZOOM_STEP)} disabled={view.zoom <= MIN_ZOOM} title="Zoom out" aria-label="Zoom out">
+          <MagnifyingGlassMinusIcon weight="bold" />
+        </button>
+        <span className="combat-map-zoom-level">{Math.round(view.zoom * 100)}%</span>
+        <button type="button" onClick={() => zoomBy(ZOOM_STEP)} disabled={view.zoom >= MAX_ZOOM} title="Zoom in (or scroll over the map)" aria-label="Zoom in">
+          <MagnifyingGlassPlusIcon weight="bold" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setView({ zoom: 1, x: 0, y: 0 })}
+          disabled={view.zoom === 1}
+          title="Show the whole map"
+          aria-label="Reset view"
+        >
+          <CornersInIcon weight="bold" />
+        </button>
+      </div>
+
+      {/* Distance scale for everyone: how far a real distance is on screen,
+          at the current zoom -- so ranges can be judged by eye. */}
+      {scaleBar.px > 0 && (
+        <div className="combat-map-scale" aria-label={`Map scale: ${formatMeters(scaleBar.meters)}`}>
+          <div className="combat-map-scale-bar" style={{ width: scaleBar.px }}>
+            <i />
+            <i />
+            <i />
+            <i />
+          </div>
+          <div className="combat-map-scale-labels" style={{ width: scaleBar.px }}>
+            <span>0</span>
+            <span>{formatMeters(scaleBar.meters / 2)}</span>
+            <span>{formatMeters(scaleBar.meters)}</span>
+          </div>
+          <div className="combat-map-scale-note">Map {formatMeters(mapMeters(mapWidth))} across</div>
+        </div>
+      )}
     </div>
   );
 }

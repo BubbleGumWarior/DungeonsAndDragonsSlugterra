@@ -8,7 +8,6 @@ import {
   HandPalmIcon,
   SpeakerXIcon,
 } from "@phosphor-icons/react";
-import { useAuth } from "./AuthContext.jsx";
 import { useVoiceChat } from "./VoiceChatContext.jsx";
 import "./Panel.css";
 import "./VoicePanel.css";
@@ -17,17 +16,17 @@ function initial(name) {
   return (name || "?").trim().charAt(0).toUpperCase() || "?";
 }
 
-function ParticipantRow({ username, speaking, muted, volume, onVolumeChange }) {
+function ParticipantRow({ name, speaking, muted, volume, onVolumeChange }) {
   const percent = Math.round(volume * 100);
   return (
     <div className={`voice-row${speaking ? " voice-row--speaking" : ""}`}>
       <span className="voice-row-avatar">
-        {initial(username)}
+        {initial(name)}
         <span className="voice-row-ring" aria-hidden="true" />
       </span>
       <div className="voice-row-main">
         <span className="voice-row-name">
-          {username}
+          {name}
           {muted && (
             <span className="voice-row-muted-tag">
               <MicrophoneSlashIcon weight="bold" /> muted
@@ -43,7 +42,7 @@ function ParticipantRow({ username, speaking, muted, volume, onVolumeChange }) {
             step="1"
             value={percent}
             onChange={(e) => onVolumeChange(Number(e.target.value) / 100)}
-            aria-label={`Volume for ${username}`}
+            aria-label={`Volume for ${name}`}
             className="voice-slider"
             style={{ "--volume-fill": `${percent}%` }}
           />
@@ -55,13 +54,13 @@ function ParticipantRow({ username, speaking, muted, volume, onVolumeChange }) {
 }
 
 export default function VoicePanel({ onClose }) {
-  const { user } = useAuth();
   const {
     inCall,
     joining,
     error,
     voiceInputMode,
     participants,
+    selfName,
     rosterCount,
     selfMuted,
     selfSpeaking,
@@ -99,7 +98,7 @@ export default function VoicePanel({ onClose }) {
                 {participants.map((p) => (
                   <span key={p.userId} className="voice-preview-chip">
                     {p.muted ? <MicrophoneSlashIcon weight="bold" /> : <MicrophoneIcon weight="bold" />}
-                    {p.username}
+                    {p.name}
                   </span>
                 ))}
               </div>
@@ -118,7 +117,7 @@ export default function VoicePanel({ onClose }) {
           <>
             <div className={`voice-row voice-row--self${selfSpeaking && canTransmit ? " voice-row--speaking" : ""}`}>
               <span className="voice-row-avatar voice-row-avatar--self">
-                {initial(user?.username)}
+                {initial(selfName)}
                 <span className="voice-row-ring" aria-hidden="true" />
               </span>
               <div className="voice-row-main">
@@ -157,7 +156,7 @@ export default function VoicePanel({ onClose }) {
                 {participants.map((p) => (
                   <ParticipantRow
                     key={p.userId}
-                    username={p.username}
+                    name={p.name}
                     speaking={p.speaking}
                     muted={p.muted}
                     volume={p.volume}

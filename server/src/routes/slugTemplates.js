@@ -82,6 +82,24 @@ export function toClientTemplate(row) {
     staticMark: row.static_mark,
     tempoAura: row.tempo_aura,
     powerSurge: row.power_surge,
+    healOverTime: row.heal_over_time,
+    grapple: row.grapple,
+    causesStun: row.causes_stun,
+    stallsSlugs: row.stalls_slugs,
+    amplifiesPartner: row.amplifies_partner,
+    pullsMetal: row.pulls_metal,
+    phasesWalls: row.phases_walls,
+    mirrorsClash: row.mirrors_clash,
+    surroundsTarget: row.surrounds_target,
+    ambushTripled: row.ambush_tripled,
+    summonsPlant: row.summons_plant,
+    causesBurn: row.causes_burn,
+    massiveAoe: row.massive_aoe,
+    randomStatuses: row.random_statuses,
+    summonsGhost: row.summons_ghost,
+    potentPoison: row.potent_poison,
+    causesBleed: row.causes_bleed,
+    lifeDrain: row.life_drain,
     createdAt: row.created_at,
   };
 }
@@ -121,20 +139,42 @@ router.post("/import-defaults", async (req, res) => {
   }
 });
 
+// NPC and grunt templates keep their slug loadouts as a plain id array (no FK),
+// so deleting slug templates leaves dangling ids that silently spawn nothing
+// when the NPC/grunt is pulled into a fight. Drop every id that no longer
+// resolves to a slug template.
+async function pruneDeletedSlugTemplateIds() {
+  for (const table of ["npc_templates", "grunt_templates"]) {
+    await pool.query(
+      `UPDATE ${table} t
+          SET slug_template_ids = COALESCE(
+            (SELECT jsonb_agg(e) FROM jsonb_array_elements(t.slug_template_ids) e
+              WHERE (e #>> '{}')::int IN (SELECT id FROM slug_templates)),
+            '[]'::jsonb)
+        WHERE jsonb_array_length(t.slug_template_ids) > 0`
+    );
+  }
+}
+
 // Bulk-delete every template -- e.g. before re-importing a freshly
-// regenerated default set. Doesn't touch slugs already assigned to players:
-// slugs.template_id just goes null (ON DELETE SET NULL), the instances
-// themselves are untouched. Wiping the whole roster like this is treated as
-// a hard reset, though, so the party's slugpedia -- which is otherwise
-// permanent, surviving individual template/slug deletes -- gets cleared
-// with it rather than accumulating entries for a slug catalogue that no
+// regenerated default set. Wiping the whole roster like this is treated as
+// a hard reset: every slug assigned to a player goes too (NPC/combat-owned
+// slugs, which have no user_id, are left alone), and the party's slugpedia --
+// otherwise permanent, surviving individual template/slug deletes -- is
+// cleared so it doesn't accumulate entries for a slug catalogue that no
 // longer exists.
 router.delete("/", async (req, res) => {
   try {
     const { rowCount } = await pool.query("DELETE FROM slug_templates");
+    await pruneDeletedSlugTemplateIds();
+    const { rowCount: slugsDeleted } = await pool.query("DELETE FROM slugs WHERE user_id IS NOT NULL");
     await pool.query("DELETE FROM slugpedia_entries");
     broadcastAll({ type: "slugpedia-updated" });
-    res.json({ ok: true, deletedCount: rowCount });
+    // One "everyone re-sync" signal rather than a slug-updated per row: those
+    // arrive as a burst and get coalesced client-side (single-slot signals).
+    // Slug views already refetch on party-healed.
+    broadcastAll({ type: "party-healed", at: Date.now() });
+    res.json({ ok: true, deletedCount: rowCount, slugsDeletedCount: slugsDeleted });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not remove templates." });
@@ -194,6 +234,24 @@ router.post("/", async (req, res) => {
     staticMark,
     tempoAura,
     powerSurge,
+    healOverTime,
+    grapple,
+    causesStun,
+    stallsSlugs,
+    amplifiesPartner,
+    pullsMetal,
+    phasesWalls,
+    mirrorsClash,
+    surroundsTarget,
+    ambushTripled,
+    summonsPlant,
+    causesBurn,
+    massiveAoe,
+    randomStatuses,
+    summonsGhost,
+    potentPoison,
+    causesBleed,
+    lifeDrain,
   } = req.body || {};
 
   const validation = validateSlugFields({
@@ -241,8 +299,8 @@ router.post("/", async (req, res) => {
          pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion, trail_wall, clash_tripled,
          cone_blast, spawns_pods, mirage_decoy, star_wall, anchor_zone, voids_fire_clash, clears_fire_terrain,
          causes_disarm, disarm_zone, mind_scramble, swaps_position, friction_shift, crosswind_zone, skips_reload,
-         emotion_surge, uncounterable, damage_tripled, static_mark, tempo_aura, power_surge, rarity)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51)
+         emotion_surge, uncounterable, damage_tripled, static_mark, tempo_aura, power_surge, heal_over_time, grapple, causes_stun, stalls_slugs, amplifies_partner, pulls_metal, phases_walls, mirrors_clash, surrounds_target, ambush_tripled, summons_plant, causes_burn, massive_aoe, random_statuses, summons_ghost, potent_poison, causes_bleed, life_drain, rarity)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69)
        RETURNING *`,
       [
         name.trim(),
@@ -295,6 +353,24 @@ router.post("/", async (req, res) => {
         Boolean(staticMark),
         Boolean(tempoAura),
         Boolean(powerSurge),
+        Boolean(healOverTime),
+        Boolean(grapple),
+        Boolean(causesStun),
+        Boolean(stallsSlugs),
+        Boolean(amplifiesPartner),
+        Boolean(pullsMetal),
+        Boolean(phasesWalls),
+        Boolean(mirrorsClash),
+        Boolean(surroundsTarget),
+        Boolean(ambushTripled),
+        Boolean(summonsPlant),
+        Boolean(causesBurn),
+        Boolean(massiveAoe),
+        Boolean(randomStatuses),
+        Boolean(summonsGhost),
+        Boolean(potentPoison),
+        Boolean(causesBleed),
+        Boolean(lifeDrain),
         rarity ?? null,
       ]
     );
@@ -359,6 +435,24 @@ router.patch("/:id", async (req, res) => {
     staticMark,
     tempoAura,
     powerSurge,
+    healOverTime,
+    grapple,
+    causesStun,
+    stallsSlugs,
+    amplifiesPartner,
+    pullsMetal,
+    phasesWalls,
+    mirrorsClash,
+    surroundsTarget,
+    ambushTripled,
+    summonsPlant,
+    causesBurn,
+    massiveAoe,
+    randomStatuses,
+    summonsGhost,
+    potentPoison,
+    causesBleed,
+    lifeDrain,
   } = req.body || {};
 
   const validation = validateSlugFields({
@@ -411,8 +505,10 @@ router.patch("/:id", async (req, res) => {
         cone_blast = $31, spawns_pods = $32, mirage_decoy = $33, star_wall = $34, anchor_zone = $35,
         voids_fire_clash = $36, clears_fire_terrain = $37, causes_disarm = $38, disarm_zone = $39,
         mind_scramble = $40, swaps_position = $41, friction_shift = $42, crosswind_zone = $43, skips_reload = $44,
-        emotion_surge = $45, uncounterable = $46, damage_tripled = $47, static_mark = $48, tempo_aura = $49, power_surge = $50, rarity = $51
-       WHERE id = $52
+        emotion_surge = $45, uncounterable = $46, damage_tripled = $47, static_mark = $48, tempo_aura = $49, power_surge = $50,
+        heal_over_time = $51, grapple = $52,
+        causes_stun = $53, stalls_slugs = $54, amplifies_partner = $55, pulls_metal = $56, phases_walls = $57, mirrors_clash = $58, surrounds_target = $59, ambush_tripled = $60, summons_plant = $61, causes_burn = $62, massive_aoe = $63, random_statuses = $64, summons_ghost = $65, potent_poison = $66, causes_bleed = $67, life_drain = $68, rarity = $69
+       WHERE id = $70
        RETURNING *`,
       [
         name.trim(),
@@ -465,6 +561,24 @@ router.patch("/:id", async (req, res) => {
         Boolean(staticMark),
         Boolean(tempoAura),
         Boolean(powerSurge),
+        Boolean(healOverTime),
+        Boolean(grapple),
+        Boolean(causesStun),
+        Boolean(stallsSlugs),
+        Boolean(amplifiesPartner),
+        Boolean(pullsMetal),
+        Boolean(phasesWalls),
+        Boolean(mirrorsClash),
+        Boolean(surroundsTarget),
+        Boolean(ambushTripled),
+        Boolean(summonsPlant),
+        Boolean(causesBurn),
+        Boolean(massiveAoe),
+        Boolean(randomStatuses),
+        Boolean(summonsGhost),
+        Boolean(potentPoison),
+        Boolean(causesBleed),
+        Boolean(lifeDrain),
         rarity ?? null,
         id,
       ]
@@ -486,6 +600,7 @@ router.delete("/:id", async (req, res) => {
     if (!rows[0]) {
       return res.status(404).json({ error: "Template not found." });
     }
+    await pruneDeletedSlugTemplateIds();
     res.json({ ok: true });
   } catch (err) {
     console.error(err);

@@ -345,3 +345,10 @@
   justify-content: flex-end;
 }
 
+
+/* Slots an equipped ammo belt adds on top of the blaster's own magazine. */
+.blaster-card-stat-bonus {
+  color: var(--success, #7fd99a);
+  font-size: 0.75em;
+  font-weight: 700;
+}

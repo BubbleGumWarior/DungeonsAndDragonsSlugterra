@@ -1,0 +1,99 @@
+.hint {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  cursor: help;
+  border-radius: 6px;
+}
+
+.hint:focus-visible {
+  outline: 2px solid var(--gold-dim);
+  outline-offset: 3px;
+}
+
+.hint-pop {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: max-content;
+  max-width: min(300px, 82vw);
+  padding: 11px 13px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-align: left;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: normal;
+  color: var(--ink-dim);
+  background: var(--charcoal-900);
+  border: 1px solid var(--gold-dim);
+  border-radius: 10px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: opacity 0.14s var(--ease-out), transform 0.14s var(--ease-out), visibility 0s linear 0.14s;
+  pointer-events: none;
+}
+
+.hint--start .hint-pop {
+  left: 0;
+}
+
+.hint--end .hint-pop {
+  right: 0;
+}
+
+.hint--center .hint-pop {
+  left: 50%;
+  margin-left: calc(min(300px, 82vw) / -2);
+}
+
+.hint:hover .hint-pop,
+.hint:focus .hint-pop,
+.hint:focus-within .hint-pop {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition-delay: 0s;
+}
+
+.hint-title {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gold-soft);
+}
+
+.hint-pop p {
+  margin: 0;
+}
+
+.hint-pop b {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.hint-pop .hint-warn {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.hint-pop ul {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hint-pop {
+    transition: none;
+    transform: none;
+  }
+}

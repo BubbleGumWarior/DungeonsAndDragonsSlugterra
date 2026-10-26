@@ -2,8 +2,8 @@ import { MinusIcon, PlusIcon } from "@phosphor-icons/react";
 import { actionPoints, initiativeBonus, maxGrit } from "./characterData.js";
 import "./CharacterVitals.css";
 
-export default function CharacterVitals({ stats, currentGrit, editable = false, onChangeCurrentGrit }) {
-  const grit = maxGrit(stats);
+export default function CharacterVitals({ stats, currentGrit, gritBonus = 0, editable = false, onChangeCurrentGrit }) {
+  const grit = maxGrit(stats, gritBonus);
   const current = currentGrit ?? grit;
   const percent = grit > 0 ? Math.max(0, Math.min(100, (current / grit) * 100)) : 0;
   const initiative = initiativeBonus(stats);

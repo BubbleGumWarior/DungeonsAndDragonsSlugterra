@@ -71,8 +71,12 @@
   cursor: cell;
 }
 
-.combat-map--map-edit {
-  cursor: move;
+.combat-map--pannable {
+  cursor: grab;
+}
+
+.combat-map--panning {
+  cursor: grabbing;
 }
 
 .combat-map-bg {
@@ -131,17 +135,182 @@
   background: rgba(197, 66, 66, 0.18);
 }
 
-.combat-map-toolbar-zoom {
-  display: inline-flex;
+/* DM planning aid: reference rings for blasters/walls/hazards at real scale. */
+.combat-map-preview {
+  pointer-events: none;
+}
+
+.combat-map-preview-ring {
+  vector-effect: non-scaling-stroke;
+  fill-opacity: 0.05;
+  stroke-width: 2;
+  stroke-dasharray: 8 5;
+}
+
+.combat-map-preview-line {
+  vector-effect: non-scaling-stroke;
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+
+.combat-map-preview-origin {
+  fill: var(--gold-soft);
+  stroke: var(--charcoal-950);
+  stroke-width: 1.5;
+}
+
+.combat-map-preview-legend {
+  position: absolute;
+  top: 52px;
+  right: 10px;
+  width: 230px;
+  max-height: calc(100% - 130px);
+  overflow-y: auto;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(12, 13, 15, 0.88);
+  border: 1px solid var(--gold-dim);
+  color: var(--gold-soft);
+  font-size: 12px;
+}
+
+.combat-map-preview-legend h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+}
+
+.combat-map-preview-legend ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.combat-map-preview-legend label {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 7px;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+.combat-map-preview-legend label span {
+  flex: 1;
+}
+
+.combat-map-preview-legend label b {
+  font-variant-numeric: tabular-nums;
+}
+
+.combat-map-preview-legend i {
+  width: 14px;
+  height: 4px;
+  border-radius: 2px;
+}
+
+.combat-map-preview-legend p {
+  margin: 6px 0 0;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+/* Each viewer's own zoom controls (bottom-right). */
+.combat-map-zoom {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
   border-radius: 999px;
   background: rgba(12, 13, 15, 0.85);
   border: 1px solid var(--gold-dim);
   color: var(--gold-soft);
   font-size: 12px;
   font-weight: 600;
+}
+
+.combat-map-zoom button {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out);
+}
+
+.combat-map-zoom button:hover:not(:disabled) {
+  background: rgba(201, 162, 75, 0.2);
+}
+
+.combat-map-zoom button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.combat-map-zoom-level {
+  min-width: 42px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Distance scale (bottom-left), the same for everyone: a bar whose length is a
+   round number of metres at the current zoom. */
+.combat-map-scale {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  padding: 6px 10px 5px;
+  border-radius: 10px;
+  background: rgba(12, 13, 15, 0.85);
+  border: 1px solid var(--gold-dim);
+  color: var(--gold-soft);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  pointer-events: none;
+}
+
+.combat-map-scale-bar {
+  display: flex;
+  height: 6px;
+  border: 1px solid var(--gold-soft);
+  box-sizing: content-box;
+}
+
+.combat-map-scale-bar i {
+  flex: 1;
+  background: var(--gold-soft);
+}
+
+.combat-map-scale-bar i:nth-child(even) {
+  background: transparent;
+}
+
+.combat-map-scale-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.combat-map-scale-labels span:first-child {
+  transform: translateX(-35%);
+}
+
+.combat-map-scale-labels span:last-child {
+  transform: translateX(35%);
+}
+
+.combat-map-scale-note {
+  margin-top: 3px;
+  font-weight: 500;
+  opacity: 0.7;
 }
 
 .combat-map-upload-error {
@@ -189,6 +358,7 @@
 }
 
 .combat-map-wall {
+  vector-effect: non-scaling-stroke;
   stroke: var(--ink);
   stroke-width: 4;
   stroke-linecap: round;
@@ -216,6 +386,7 @@
    CombatMap.jsx) normalizes the dash math regardless of the wall's actual
    length or angle. */
 .combat-map-wall--growing {
+  vector-effect: none; /* the grow animation dashes by pathLength, not pixels */
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
   animation: combat-wall-grow 0.5s ease-out forwards;
@@ -227,8 +398,15 @@
   }
 }
 
+/* Hoverable (for the <title> tooltip) -- hazards sit under walls and tokens,
+   and clicks still bubble up to the map. */
 .combat-map-hazard {
-  pointer-events: none;
+  pointer-events: visiblePainted;
+}
+
+.combat-map-hazard--ice,
+.combat-map-hazard--damage {
+  vector-effect: non-scaling-stroke;
 }
 
 .combat-map-hazard--ice {
@@ -359,6 +537,7 @@
 }
 
 .combat-map-range-ring {
+  vector-effect: non-scaling-stroke;
   fill: rgba(201, 162, 75, 0.1);
   stroke: var(--gold);
   stroke-width: 3;
@@ -379,6 +558,7 @@
 
 /* "Mount" is armed -- how close you must be to board a mecha. */
 .combat-map-mount-ring {
+  vector-effect: non-scaling-stroke;
   fill: rgba(74, 165, 110, 0.06);
   stroke: var(--success);
   stroke-width: 2;
@@ -454,6 +634,53 @@
 
 .combat-token-fill {
   fill: var(--charcoal-700);
+}
+
+.combat-token--plant .combat-token-fill {
+  fill: #2f6b2a;
+}
+
+.combat-token--plant .combat-token-border {
+  stroke: #7fbf5f;
+}
+
+.combat-token--ghost .combat-token-fill {
+  fill: #3b3560;
+}
+
+.combat-token--ghost .combat-token-border {
+  stroke: #b9b0ff;
+}
+
+.combat-token-ghost-glyph path {
+  fill: #e9e6ff;
+  stroke: #8a80d6;
+  stroke-width: 1;
+  opacity: 0.92;
+}
+
+.combat-token-ghost-glyph circle {
+  fill: #2a2450;
+}
+
+.combat-token-ghost-glyph {
+  pointer-events: none;
+}
+
+.combat-token-plant-star {
+  fill: #b9e08a;
+  stroke: #1f4a1c;
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+/* How close an enemy has to walk to get bitten -- see PLANT_BITE_RANGE. */
+.combat-token-plant-range {
+  fill: rgba(127, 191, 95, 0.1);
+  stroke: #7fbf5f;
+  stroke-width: 1.5;
+  stroke-dasharray: 6 5;
+  pointer-events: none;
 }
 
 .combat-token--character .combat-token-fill {
@@ -584,6 +811,14 @@
   fill: #8fd0e0;
 }
 
+.combat-token-effect-dot--bleeding {
+  fill: #c0213a;
+}
+
+.combat-token-effect-dot--regen {
+  fill: #5fc78a;
+}
+
 .combat-token-effect-dot--marked {
   fill: #e0c53f;
 }
@@ -679,7 +914,7 @@
 
 .combat-map-hint {
   position: absolute;
-  bottom: 10px;
+  bottom: 70px;
   left: 50%;
   transform: translateX(-50%);
   margin: 0;
@@ -717,4 +952,20 @@
 /* DM-only water paint (setup view). */
 .combat-map-water rect {
   fill: rgba(64, 140, 255, 0.45);
+  shape-rendering: crispEdges;
+}
+
+/* The outline being drawn -- closes itself back to the start while you drag. */
+.combat-map-water-outline {
+  fill: rgba(64, 140, 255, 0.22);
+  stroke: #6fb0ff;
+  stroke-width: 2.5;
+  stroke-dasharray: 8 5;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.combat-map-water-outline--drain {
+  fill: rgba(255, 255, 255, 0.1);
+  stroke: #ffd6a0;
 }

@@ -83,6 +83,15 @@
   text-align: center;
 }
 
+.slughunt-hunt-tally {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-faint, var(--ink-dim));
+  text-align: center;
+  text-wrap: balance;
+}
+
 .slughunt-hunt-result strong {
   color: var(--gold-soft);
 }

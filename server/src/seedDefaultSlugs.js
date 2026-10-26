@@ -50,8 +50,8 @@ export async function seedDefaultSlugTemplates() {
            pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion, trail_wall, clash_tripled,
            cone_blast, spawns_pods, mirage_decoy, star_wall, anchor_zone, voids_fire_clash, clears_fire_terrain,
            causes_disarm, disarm_zone, mind_scramble, swaps_position, friction_shift, crosswind_zone, skips_reload,
-           emotion_surge, uncounterable, damage_tripled, static_mark, tempo_aura, power_surge, rarity)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51)`,
+           emotion_surge, uncounterable, damage_tripled, static_mark, tempo_aura, power_surge, heal_over_time, grapple, causes_stun, stalls_slugs, amplifies_partner, pulls_metal, phases_walls, mirrors_clash, surrounds_target, ambush_tripled, summons_plant, causes_burn, massive_aoe, random_statuses, summons_ghost, potent_poison, causes_bleed, life_drain, rarity)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62,$63,$64,$65,$66,$67,$68,$69)`,
         [
           t.name,
           t.type,
@@ -103,6 +103,24 @@ export async function seedDefaultSlugTemplates() {
           Boolean(t.staticMark),
           Boolean(t.tempoAura),
           Boolean(t.powerSurge),
+          Boolean(t.healOverTime),
+          Boolean(t.grapple),
+          Boolean(t.causesStun),
+          Boolean(t.stallsSlugs),
+          Boolean(t.amplifiesPartner),
+          Boolean(t.pullsMetal),
+          Boolean(t.phasesWalls),
+          Boolean(t.mirrorsClash),
+          Boolean(t.surroundsTarget),
+          Boolean(t.ambushTripled),
+          Boolean(t.summonsPlant),
+          Boolean(t.causesBurn),
+          Boolean(t.massiveAoe),
+          Boolean(t.randomStatuses),
+          Boolean(t.summonsGhost),
+          Boolean(t.potentPoison),
+          Boolean(t.causesBleed),
+          Boolean(t.lifeDrain),
           t.rarity ?? null,
         ]
       );
@@ -226,5 +244,62 @@ export async function backfillFandangoTempo() {
   }
   for (const owner of owners.values()) await syncTempoAura(owner);
   if (updated > 0) console.log(`Upgraded Fandango on ${updated} template/slug row(s).`);
+  return { updated };
+}
+
+// `heal_over_time`, `grapple`, the stun/stall/amplify/metal-pull/phase flags (and Emberblade's `trail_wall`) were added after the OG roster was seeded, and
+// seedDefaultSlugTemplates() only ever INSERTs names it hasn't seen -- so an
+// already-seeded Arachnet (grapple) or Lifeline (heal over time) template, and
+// every slug minted from one, is still missing its flag. Turns each flag on for
+// the default roster's matching rows (by name, templates and instances alike),
+// only where it's still FALSE. Same one-way, no-op-once-applied shape as
+// backfillSpeedstingerRicochet above -- which also means a DM who deliberately
+// switches one of these off by hand will see it come back on at the next
+// startup.
+export async function backfillMechanicFlags() {
+  if (!existsSync(DATA_PATH)) return { updated: 0 };
+  let defaults;
+  try {
+    defaults = JSON.parse(readFileSync(DATA_PATH, "utf8"));
+  } catch {
+    return { updated: 0 };
+  }
+  if (!Array.isArray(defaults)) return { updated: 0 };
+
+  let updated = 0;
+  for (const [jsonKey, column] of [
+    ["healOverTime", "heal_over_time"],
+    ["grapple", "grapple"],
+    ["trailWall", "trail_wall"], // Emberblade's was missing from the original CSV
+    ["causesStun", "causes_stun"],
+    ["stallsSlugs", "stalls_slugs"],
+    ["amplifiesPartner", "amplifies_partner"],
+    ["pullsMetal", "pulls_metal"],
+    ["phasesWalls", "phases_walls"],
+    ["mirrorsClash", "mirrors_clash"],
+    ["surroundsTarget", "surrounds_target"],
+    ["ambushTripled", "ambush_tripled"],
+    ["summonsPlant", "summons_plant"],
+    ["causesBurn", "causes_burn"],
+    ["massiveAoe", "massive_aoe"],
+    ["randomStatuses", "random_statuses"],
+    ["summonsGhost", "summons_ghost"],
+    ["potentPoison", "potent_poison"],
+    ["causesBleed", "causes_bleed"],
+    ["causesBlind", "causes_blind"], // Novaflare gained it
+    ["causesInvisible", "causes_invisible"], // Gloomstalk gained it
+    ["lifeDrain", "life_drain"], // Duskfang's lifesteal -- missing on rows seeded before the flag existed
+  ]) {
+    const names = defaults.filter((t) => t[jsonKey]).map((t) => t.name);
+    if (names.length === 0) continue;
+    for (const table of ["slug_templates", "slugs"]) {
+      const { rowCount } = await pool.query(
+        `UPDATE ${table} SET ${column} = true WHERE ${column} = false AND name = ANY($1::text[])`,
+        [names]
+      );
+      updated += rowCount;
+    }
+  }
+  if (updated > 0) console.log(`Backfilled heal-over-time/grapple flags on ${updated} template/slug row(s).`);
   return { updated };
 }

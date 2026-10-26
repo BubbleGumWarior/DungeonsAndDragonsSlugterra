@@ -256,7 +256,7 @@ export default function MechaManagement() {
           <div className="slug-management-players">
             {inventoryByPlayer.map(({ player, mechas: playerMechas, mods: playerMods }) => (
               <div className="slug-management-player" key={player.id}>
-                <h3>{player.username}</h3>
+                <h3>{player.characterName || player.username}</h3>
                 {playerMechas.length === 0 && playerMods.length === 0 ? (
                   <p className="slug-management-empty">No mecha-beasts assigned.</p>
                 ) : (

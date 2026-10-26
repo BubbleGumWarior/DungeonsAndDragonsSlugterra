@@ -155,6 +155,67 @@
   color: var(--danger);
 }
 
+/* A foe's slugs as the viewer knows them: the read or already-fired ones by
+   name (a dot in the slug's element colour), the rest as empty dashed slots. */
+.combat-roster-foeslugs {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  color: var(--ink-dim);
+}
+
+.combat-roster-foeslugs > svg {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.combat-roster-foeslugs-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 4px;
+  min-width: 0;
+}
+
+.combat-roster-foeslug {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 1px 7px 1px 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--type-color) 14%, transparent);
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.combat-roster-foeslug::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--type-color);
+}
+
+.combat-roster-foeslug--hidden {
+  padding: 1px 8px;
+  background: transparent;
+  border: 1px dashed var(--ink-dim);
+  color: var(--ink-dim);
+  font-weight: 700;
+}
+
+.combat-roster-foeslug--hidden::before {
+  content: none;
+}
+
 .combat-roster-status {
   font-size: 10px;
   font-weight: 700;
@@ -182,6 +243,14 @@
 
 .combat-roster-effect--burn {
   color: #e08a3c;
+}
+
+.combat-roster-effect--bleed {
+  color: #d9374f;
+}
+
+.combat-roster-effect--regen {
+  color: #5fc78a;
 }
 
 .combat-roster-effect--poison {
@@ -241,4 +310,87 @@
 .combat-roster-icon-btn:hover {
   border-color: var(--gold);
   color: var(--ink);
+}
+
+/* Auto-counter: the DM hands an NPC's/grunt's counter prompts to the server. */
+.combat-roster-icon-btn--on {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: rgba(201, 162, 75, 0.12);
+}
+
+.combat-roster-auto {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--gold);
+  white-space: nowrap;
+}
+
+.combat-roster-auto-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px dashed var(--charcoal-600);
+  color: var(--ink-dim);
+  font-size: 11px;
+}
+
+.combat-roster-auto-bar svg {
+  width: 14px;
+  height: 14px;
+}
+
+.combat-roster-auto-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--charcoal-600);
+  background: transparent;
+  color: var(--ink-dim);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+
+.combat-roster-auto-chip:hover {
+  border-color: var(--gold);
+  color: var(--ink);
+}
+
+.combat-roster-auto-chip--on {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: rgba(201, 162, 75, 0.12);
+}
+
+/* A fighter's shield: what it has left to soak this fight. */
+.combat-roster-shield {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--gold-soft);
+}
+
+.combat-roster-shield svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.combat-roster-shield-value {
+  margin-left: auto;
+  font-weight: 700;
+}
+
+.combat-roster-shield--broken {
+  color: var(--danger);
+}
+
+.combat-roster-shield--broken span:not(.combat-roster-shield-value) {
+  text-decoration: line-through;
 }

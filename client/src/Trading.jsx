@@ -3,14 +3,25 @@ import { ArrowsLeftRightIcon, CheckIcon, HandshakeIcon, PackageIcon, CoinsIcon, 
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import { useToast } from "./Toast.jsx";
-import { ITEM_KIND_LABELS, describeSide, tradeAction } from "./tradeUtils.js";
+import { ITEM_KIND_LABELS, TRADEABLE_SUPPLIES, describeSide, tradeAction } from "./tradeUtils.js";
 import "./Panel.css";
 import "./Trading.css";
 
 const keyOf = (it) => `${it.kind}:${it.id}`;
 
 function emptyComposer() {
-  return { toUserId: "", give: new Set(), ask: new Set(), giveCredits: "", askCredits: "", givePods: "", askPods: "", counterOf: null };
+  return {
+    toUserId: "",
+    give: new Set(),
+    ask: new Set(),
+    giveCredits: "",
+    askCredits: "",
+    givePods: "",
+    askPods: "",
+    giveSupplies: {},
+    askSupplies: {},
+    counterOf: null,
+  };
 }
 
 export default function Trading() {
@@ -19,8 +30,8 @@ export default function Trading() {
   const { push } = useToast();
   const [trades, setTrades] = useState([]);
   const [players, setPlayers] = useState([]);
-  const [mine, setMine] = useState({ items: [], credits: 0, pods: 0 });
-  const [theirs, setTheirs] = useState({ items: [], credits: 0, pods: 0 });
+  const [mine, setMine] = useState({ items: [], credits: 0, pods: 0, supplies: {} });
+  const [theirs, setTheirs] = useState({ items: [], credits: 0, pods: 0, supplies: {} });
   const [composer, setComposer] = useState(emptyComposer);
   const [sending, setSending] = useState(false);
   const composerRef = useRef(null);
@@ -36,7 +47,7 @@ export default function Trading() {
   const loadMine = useCallback(() => {
     fetch("/api/trades/inventory/me", { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
-      .then((b) => setMine({ items: b.items || [], credits: b.credits ?? 0, pods: b.pods ?? 0 }))
+      .then((b) => setMine({ items: b.items || [], credits: b.credits ?? 0, pods: b.pods ?? 0, supplies: b.supplies || {} }))
       .catch(() => {});
   }, [token]);
 
@@ -54,12 +65,12 @@ export default function Trading() {
 
   useEffect(() => {
     if (!composer.toUserId) {
-      setTheirs({ items: [], credits: 0, pods: 0 });
+      setTheirs({ items: [], credits: 0, pods: 0, supplies: {} });
       return;
     }
     fetch(`/api/trades/inventory/${composer.toUserId}`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
-      .then((b) => setTheirs({ items: b.items || [], credits: b.credits ?? 0, pods: b.pods ?? 0 }))
+      .then((b) => setTheirs({ items: b.items || [], credits: b.credits ?? 0, pods: b.pods ?? 0, supplies: b.supplies || {} }))
       .catch(() => {});
   }, [composer.toUserId, token, tradeCompleted]);
 
@@ -92,6 +103,8 @@ export default function Trading() {
           askCredits: num(composer.askCredits),
           givePods: num(composer.givePods),
           askPods: num(composer.askPods),
+          giveSupplies: composer.giveSupplies,
+          askSupplies: composer.askSupplies,
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -127,6 +140,8 @@ export default function Trading() {
       askCredits: t.giveCredits ? String(t.giveCredits) : "",
       givePods: t.askPods ? String(t.askPods) : "",
       askPods: t.givePods ? String(t.givePods) : "",
+      giveSupplies: { ...(t.askSupplies || {}) },
+      askSupplies: { ...(t.giveSupplies || {}) },
       counterOf: t.id,
     });
     composerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -208,6 +223,8 @@ export default function Trading() {
                 pods={composer.givePods}
                 onCredits={(v) => setComposer((c) => ({ ...c, giveCredits: v }))}
                 onPods={(v) => setComposer((c) => ({ ...c, givePods: v }))}
+                supplies={composer.giveSupplies}
+                onSupply={(field, v) => setComposer((c) => ({ ...c, giveSupplies: { ...c.giveSupplies, [field]: num(v) } }))}
                 lockInTrade
               />
               <TradeSide
@@ -219,6 +236,8 @@ export default function Trading() {
                 pods={composer.askPods}
                 onCredits={(v) => setComposer((c) => ({ ...c, askCredits: v }))}
                 onPods={(v) => setComposer((c) => ({ ...c, askPods: v }))}
+                supplies={composer.askSupplies}
+                onSupply={(field, v) => setComposer((c) => ({ ...c, askSupplies: { ...c.askSupplies, [field]: num(v) } }))}
               />
             </div>
           )}
@@ -256,8 +275,10 @@ function TradeCard({ trade, perspective, compact = false, children }) {
   const incoming = perspective === "incoming";
   const otherName = incoming ? trade.fromName : trade.toName;
   // From the viewer's side: incoming = they give / you give back.
-  const theyGive = incoming ? describeSide(trade.give, trade.giveCredits, trade.givePods) : describeSide(trade.ask, trade.askCredits, trade.askPods);
-  const youGive = incoming ? describeSide(trade.ask, trade.askCredits, trade.askPods) : describeSide(trade.give, trade.giveCredits, trade.givePods);
+  const giveText = describeSide(trade.give, trade.giveCredits, trade.givePods, trade.giveSupplies);
+  const askText = describeSide(trade.ask, trade.askCredits, trade.askPods, trade.askSupplies);
+  const theyGive = incoming ? giveText : askText;
+  const youGive = incoming ? askText : giveText;
   return (
     <article className={`trade-card trade-card--${trade.status}`}>
       <header className="trade-card-head">
@@ -283,7 +304,7 @@ function TradeCard({ trade, perspective, compact = false, children }) {
   );
 }
 
-function TradeSide({ title, inv, selected, onToggle, credits, pods, onCredits, onPods, lockInTrade = false }) {
+function TradeSide({ title, inv, selected, onToggle, credits, pods, onCredits, onPods, supplies, onSupply, lockInTrade = false }) {
   const groups = {};
   for (const it of inv.items) (groups[it.kind] ??= []).push(it);
   return (
@@ -329,6 +350,22 @@ function TradeSide({ title, inv, selected, onToggle, credits, pods, onCredits, o
           <input type="number" min={0} max={inv.pods} placeholder="0" value={pods} onChange={(e) => onPods(e.target.value)} />
           <span>/ {inv.pods} pods</span>
         </label>
+        {TRADEABLE_SUPPLIES.filter((s) => (inv.supplies?.[s.field] ?? 0) > 0).map((s) => (
+          <label key={s.field}>
+            <input
+              type="number"
+              min={0}
+              max={inv.supplies[s.field]}
+              placeholder="0"
+              value={supplies?.[s.field] ? supplies[s.field] : ""}
+              onChange={(e) => onSupply(s.field, e.target.value)}
+              aria-label={`${s.name} to trade`}
+            />
+            <span>
+              / {inv.supplies[s.field]} {s.name}
+            </span>
+          </label>
+        ))}
       </div>
     </div>
   );

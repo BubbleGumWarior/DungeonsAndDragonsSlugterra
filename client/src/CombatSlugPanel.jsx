@@ -1,7 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ArrowsCounterClockwiseIcon, LightningIcon, LightningSlashIcon, PackageIcon, TargetIcon } from "@phosphor-icons/react";
 import { typeColor, loyaltyClashModifier } from "./slugData.js";
 import EnergyPips from "./EnergyPips.jsx";
+import LoyaltyMeter from "./LoyaltyMeter.jsx";
 import "./Panel.css";
 import "./CombatSlugPanel.css";
 
@@ -25,6 +27,76 @@ const COOLDOWN_RING_CIRCUMFERENCE = 2 * Math.PI * COOLDOWN_RING_RADIUS;
 // past 9 have no key.
 function slugHotkey(slug) {
   return Number.isInteger(slug.magazineSlot) ? slug.magazineSlot + 1 : null;
+}
+
+const SLUG_TIP_WIDTH = 270;
+
+// Hover tooltip for a slug in the combat panels: its Velocity Ability, so a
+// slinger can see what the slug does without leaving the fight. Rendered in a
+// portal at fixed coordinates so no panel's overflow can clip it. `note` is an
+// optional extra line (why the slug can't be used right now).
+function useSlugTip(slug, note) {
+  const [pos, setPos] = useState(null);
+  const bind = {
+    onMouseEnter: (e) => {
+      const r = e.currentTarget.getBoundingClientRect();
+      const left = r.right + 10 + SLUG_TIP_WIDTH <= window.innerWidth ? r.right + 10 : Math.max(8, r.left - SLUG_TIP_WIDTH - 10);
+      const top = Math.max(8, Math.min(r.top, window.innerHeight - 220));
+      setPos({ left, top });
+    },
+    onMouseLeave: () => setPos(null),
+  };
+  const tip = pos
+    ? createPortal(
+        <div
+          className="combat-slug-tip"
+          style={{ left: pos.left, top: pos.top, width: SLUG_TIP_WIDTH, "--type-color": typeColor(slug.type) }}
+          role="tooltip"
+        >
+          <div className="combat-slug-tip-head">
+            <span className="combat-slug-tip-name">{slug.name}</span>
+            <span className="combat-slug-tip-type">{slug.type}</span>
+          </div>
+          <div className="combat-slug-tip-label">Velocity Ability</div>
+          <p className="combat-slug-tip-text">{slug.velocityAbility || "No velocity ability recorded."}</p>
+          {note && <p className="combat-slug-tip-note">{note}</p>}
+        </div>,
+        document.body
+      )
+    : null;
+  return { bind, tip };
+}
+
+// The panel card, wrapped so the hover also works while the card is disabled.
+function SlugCardHover({ slug, note, children }) {
+  const { bind, tip } = useSlugTip(slug, note);
+  return (
+    <div className="combat-slug-panel-card-wrap" {...bind}>
+      {children}
+      {tip}
+    </div>
+  );
+}
+
+function HolsteredSlug({ slug: s }) {
+  const cooldown = s.cooldownTurnsLeft || 0;
+  const charged = Array.isArray(s.energyPips) && s.energyPips.some(Boolean);
+  let state = { key: "ready", label: "Ready" };
+  if (cooldown > 0) state = { key: "cooldown", label: `${cooldown} turn${cooldown === 1 ? "" : "s"}` };
+  else if (s.loaded === false) state = { key: "unloaded", label: s.podBroken ? "Pod broken" : "Not loaded" };
+  else if (!charged) state = { key: "exhausted", label: "Exhausted" };
+  const { bind, tip } = useSlugTip(s);
+  return (
+    <li className="combat-holstered-slug" style={{ "--type-color": typeColor(s.type) }} {...bind}>
+      <span className="combat-holstered-dot" aria-hidden="true" />
+      <span className="combat-holstered-text">
+        <span className="combat-holstered-name">{s.name}</span>
+        <span className="combat-holstered-type">{s.type}</span>
+      </span>
+      <span className={`combat-holstered-state combat-holstered-state--${state.key}`}>{state.label}</span>
+      {tip}
+    </li>
+  );
 }
 
 export default function CombatSlugPanel({
@@ -129,26 +201,24 @@ export default function CombatSlugPanel({
             const loyaltyMod = loyaltyClashModifier(s.loyaltyTier);
             const loyaltyModLabel = loyaltyMod > 0 ? `+${loyaltyMod}` : `${loyaltyMod}`;
             const loyaltyModClass = `combat-slug-panel-card-loyalty-mod combat-slug-panel-card-loyalty-mod--${loyaltyMod > 0 ? "positive" : "negative"}`;
+            const stateNote = onCooldown
+              ? `Returns to hand in ${cooldown} more turn${cooldown === 1 ? "" : "s"}`
+              : noPods
+                ? "Its pod was shattered and there are no spare pods left to reload it"
+                : notLoaded
+                  ? s.podBroken
+                    ? "Pod shattered -- a Reload will put it in a spare pod"
+                    : "Back in hand but not loaded -- spend a Reload action to chamber it"
+                  : exhausted
+                    ? "Out of energy -- needs to recharge"
+                    : null;
             return (
+              <SlugCardHover key={s.id} slug={s} note={stateNote}>
               <button
-                key={s.id}
                 type="button"
                 className={`combat-slug-panel-card ${armedSlugId === s.id ? "combat-slug-panel-card--armed" : ""} ${unusable ? "combat-slug-panel-card--unusable" : ""}`}
                 style={{ "--type-color": typeColor(s.type) }}
                 disabled={unusable}
-                title={
-                  onCooldown
-                    ? `Returns to hand in ${cooldown} more turn${cooldown === 1 ? "" : "s"}`
-                    : noPods
-                      ? "Its pod was shattered and there are no spare pods left to reload it"
-                      : notLoaded
-                      ? s.podBroken
-                        ? "Pod shattered -- a Reload will put it in a spare pod"
-                        : "Back in hand but not loaded -- spend a Reload action to chamber it"
-                      : exhausted
-                        ? "Out of energy -- needs to recharge"
-                        : undefined
-                }
                 onClick={() => onPickSlug(armedSlugId === s.id ? null : s)}
               >
                 <div className="combat-slug-panel-card-head">
@@ -180,6 +250,11 @@ export default function CombatSlugPanel({
                   </span>
                 </div>
                 <EnergyPips pips={s.energyPips} size="sm" />
+                {typeof s.loyaltyFill === "number" && s.userId != null && (
+                  <div className="combat-slug-panel-card-loyalty">
+                    <LoyaltyMeter fill={s.loyaltyFill} tier={s.loyaltyTier} compact />
+                  </div>
+                )}
                 {onCooldown && (
                   <div className="combat-slug-cooldown-glass">
                     <svg className="combat-slug-cooldown-ring" viewBox="0 0 64 64">
@@ -217,6 +292,7 @@ export default function CombatSlugPanel({
                   </div>
                 )}
               </button>
+              </SlugCardHover>
             );
           })
         )}
@@ -242,24 +318,9 @@ export function HolsteredSlugs({ blaster, slugs }) {
         <p className="combat-slug-panel-empty">No slugs loaded.</p>
       ) : (
         <ul className="combat-holstered-list">
-          {slugs.map((s) => {
-            const cooldown = s.cooldownTurnsLeft || 0;
-            const charged = Array.isArray(s.energyPips) && s.energyPips.some(Boolean);
-            let state = { key: "ready", label: "Ready" };
-            if (cooldown > 0) state = { key: "cooldown", label: `${cooldown} turn${cooldown === 1 ? "" : "s"}` };
-            else if (s.loaded === false) state = { key: "unloaded", label: s.podBroken ? "Pod broken" : "Not loaded" };
-            else if (!charged) state = { key: "exhausted", label: "Exhausted" };
-            return (
-              <li key={s.id} className="combat-holstered-slug" style={{ "--type-color": typeColor(s.type) }}>
-                <span className="combat-holstered-dot" aria-hidden="true" />
-                <span className="combat-holstered-text">
-                  <span className="combat-holstered-name">{s.name}</span>
-                  <span className="combat-holstered-type">{s.type}</span>
-                </span>
-                <span className={`combat-holstered-state combat-holstered-state--${state.key}`}>{state.label}</span>
-              </li>
-            );
-          })}
+          {slugs.map((s) => (
+            <HolsteredSlug key={s.id} slug={s} />
+          ))}
         </ul>
       )}
     </div>

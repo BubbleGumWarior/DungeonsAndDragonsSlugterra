@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import "dotenv/config";
 import { initSchema, pool } from "./db.js";
-import { seedDefaultSlugTemplates, backfillSlugTemplateRarity, backfillSpeedstingerRicochet, backfillFandangoTempo } from "./seedDefaultSlugs.js";
+import { seedDefaultSlugTemplates, backfillSlugTemplateRarity, backfillSpeedstingerRicochet, backfillFandangoTempo, backfillMechanicFlags } from "./seedDefaultSlugs.js";
 import authRouter from "./routes/auth.js";
 import adminRouter from "./routes/admin.js";
 import charactersRouter from "./routes/characters.js";
@@ -12,6 +12,8 @@ import slugTemplatesRouter from "./routes/slugTemplates.js";
 import slugsRouter from "./routes/slugs.js";
 import blasterTemplatesRouter from "./routes/blasterTemplates.js";
 import blastersRouter from "./routes/blasters.js";
+import equipmentRouter from "./routes/equipment.js";
+import equipmentTemplatesRouter from "./routes/equipmentTemplates.js";
 import modTemplatesRouter from "./routes/modTemplates.js";
 import modsRouter from "./routes/mods.js";
 import mechaTemplatesRouter from "./routes/mechaTemplates.js";
@@ -31,6 +33,7 @@ import shipsRouter from "./routes/ships.js";
 import voiceRouter from "./routes/voice.js";
 import marketRouter from "./routes/market.js";
 import tradesRouter from "./routes/trades.js";
+import consumablesRouter from "./routes/consumables.js";
 import imagesRouter from "./routes/images.js";
 import { imageMiddleware } from "./imageStore.js";
 import { requireAuth } from "./middleware/auth.js";
@@ -54,6 +57,8 @@ app.use("/api/slug-templates", slugTemplatesRouter);
 app.use("/api/slugs", slugsRouter);
 app.use("/api/blaster-templates", blasterTemplatesRouter);
 app.use("/api/blasters", blastersRouter);
+app.use("/api/equipment", equipmentRouter);
+app.use("/api/equipment-templates", equipmentTemplatesRouter);
 app.use("/api/mod-templates", modTemplatesRouter);
 app.use("/api/mods", modsRouter);
 app.use("/api/mecha-templates", mechaTemplatesRouter);
@@ -73,6 +78,7 @@ app.use("/api/ships", shipsRouter);
 app.use("/api/voice", voiceRouter);
 app.use("/api/market", marketRouter);
 app.use("/api/trades", tradesRouter);
+app.use("/api/consumables", consumablesRouter);
 
 app.get("/api/presence/online", requireAuth, (req, res) => {
   res.json({ onlineUserIds: getOnlineUserIds() });
@@ -119,6 +125,7 @@ initSchema()
   .then(() => backfillSlugTemplateRarity())
   .then(() => backfillSpeedstingerRicochet())
   .then(() => backfillFandangoTempo())
+  .then(() => backfillMechanicFlags())
   .then(() => {
     server.listen(port, () => console.log(`Server listening on port ${port}`));
   })

@@ -3,6 +3,7 @@ import { ArrowClockwiseIcon, BookOpenIcon, TargetIcon } from "@phosphor-icons/re
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import { useDragScrollRestore } from "./useDragScrollRestore.js";
+import { magazineCapacity } from "./itemData.js";
 import SlugCard from "./SlugCard.jsx";
 import Slugpedia from "./Slugpedia.jsx";
 import "./Panel.css";
@@ -12,7 +13,9 @@ const SLOT_LABELS = ["Primary", "Secondary"];
 
 export default function PlayerSlugs() {
   const { token, user } = useAuth();
-  const { slugUpdate, blasterUpdate, partyHealed, tradeCompleted, marketChanged } = useLiveState();
+  const { slugUpdate, blasterUpdate, partyHealed, tradeCompleted, marketChanged, equipmentChanged, slugLoyaltyChanged } = useLiveState();
+  // An ammo belt resizes the primary's magazine and may unload slugs in one go.
+  const myEquipmentChange = equipmentChanged && equipmentChanged.userId === user?.id ? equipmentChanged.at : null;
   const [slugs, setSlugs] = useState([]);
   const [blasters, setBlasters] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -37,7 +40,7 @@ export default function PlayerSlugs() {
       })
       .catch(() => setLoaded(true));
     // Trades/purchases move items in bulk -- refetch rather than patch.
-  }, [token, tradeCompleted, marketChanged]);
+  }, [token, tradeCompleted, marketChanged, myEquipmentChange]);
 
   useEffect(() => {
     if (!slugUpdate || slugUpdate.userId !== user?.id) return;
@@ -56,13 +59,15 @@ export default function PlayerSlugs() {
   // Heal All recharges every slug's energy and fires a per-slug broadcast
   // burst that can be coalesced away (see AccessSocket's single-slot note);
   // re-sync this player's slugs from the server when it happens.
+  // A fired slug earning loyalty does the same for a dual shot's pair.
+  const myLoyaltyChange = slugLoyaltyChanged?.userId === user?.id ? slugLoyaltyChanged.at : null;
   useEffect(() => {
-    if (!partyHealed) return;
+    if (!partyHealed && !myLoyaltyChange) return;
     fetch("/api/slugs/me", { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => res.json())
       .then((data) => setSlugs(data.slugs || []))
       .catch(() => {});
-  }, [partyHealed, token]);
+  }, [partyHealed, myLoyaltyChange, token]);
 
   useEffect(() => {
     if (!blasterUpdate || blasterUpdate.userId !== user?.id) return;
@@ -100,7 +105,7 @@ export default function PlayerSlugs() {
       if (!Number.isInteger(num) || num < 1 || num > 9) return;
       if (!activeWeapon) return;
       const index = num - 1;
-      if (index >= activeWeapon.magazineSize) return;
+      if (index >= magazineCapacity(activeWeapon)) return;
       setSelectedSlot(index);
     }
     function onKeyUp(e) {
@@ -264,14 +269,16 @@ export default function PlayerSlugs() {
           </div>
 
           <div className="slug-loadout-slots">
-            {Array.from({ length: activeWeapon?.magazineSize || 0 }, (_, i) => {
+            {Array.from({ length: (activeWeapon && magazineCapacity(activeWeapon)) || 0 }, (_, i) => {
               const occupant = slugs.find((s) => s.equippedBlasterId === activeWeapon.id && s.magazineSlot === i);
               const isSelected = selectedSlot === i;
               const isDragOver = dragOverSlot === i;
+              // Slots past the blaster's own magazine come from the equipped ammo belt.
+              const isBelt = i >= activeWeapon.magazineSize;
               return (
                 <div
                   key={i}
-                  className={`slug-loadout-slot ${occupant ? "slug-loadout-slot--filled" : "slug-loadout-slot--empty"} ${isSelected ? "slug-loadout-slot--selected" : ""} ${isDragOver ? "slug-loadout-slot--dragover" : ""}`}
+                  className={`slug-loadout-slot ${occupant ? "slug-loadout-slot--filled" : "slug-loadout-slot--empty"} ${isBelt ? "slug-loadout-slot--belt" : ""} ${isSelected ? "slug-loadout-slot--selected" : ""} ${isDragOver ? "slug-loadout-slot--dragover" : ""}`}
                   onClick={() => handleSlotClick(i)}
                   onDragOver={(e) => {
                     e.preventDefault();
@@ -280,8 +287,9 @@ export default function PlayerSlugs() {
                   }}
                   onDragLeave={() => setDragOverSlot((prev) => (prev === i ? null : prev))}
                   onDrop={(e) => handleSlotDrop(i, e)}
-                  title={occupant ? `Unload ${occupant.name} (${i + 1})` : `Slot ${i + 1}`}
+                  title={occupant ? `Unload ${occupant.name} (${i + 1})` : `${isBelt ? "Ammo belt slot" : "Slot"} ${i + 1}`}
                 >
+                  {isBelt && <span className="slug-loadout-slot-belt-tag">Belt</span>}
                   <span className="slug-loadout-slot-number">{i + 1}</span>
                   <span className="slug-loadout-slot-name">{occupant ? occupant.name : "Empty"}</span>
                 </div>

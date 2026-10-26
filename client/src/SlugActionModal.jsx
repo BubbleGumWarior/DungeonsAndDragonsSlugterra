@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { TargetIcon, HammerIcon, WallIcon, BridgeIcon, SparkleIcon, GitMergeIcon } from "@phosphor-icons/react";
+import { TargetIcon, HammerIcon, WallIcon, BridgeIcon, SparkleIcon, GitMergeIcon, LassoIcon, PlantIcon } from "@phosphor-icons/react";
 import { typeColor } from "./slugData.js";
 import { canJoinDualShot, dualShotPairError, dualPreview } from "./dualShot.js";
 import "./SlugManagement.css";
@@ -10,6 +10,8 @@ const ACTIONS = [
   { type: "break-wall", label: "Break a Wall", icon: HammerIcon, flag: "breaksWalls" },
   { type: "make-wall", label: "Make a Wall", icon: WallIcon, flag: "wallMaker" },
   { type: "build-bridge", label: "Build a Bridge", icon: BridgeIcon, flag: "bridgeMaker" },
+  { type: "grapple", label: "Grapple to a Spot", icon: LassoIcon, flag: "grapple" },
+  { type: "summon-plant", label: "Summon a Plant", icon: PlantIcon, flag: "summonsPlant" },
 ];
 
 // Mirrors server/src/combatRules.js's MEGA_MORPH_* -- keep the numbers in sync.

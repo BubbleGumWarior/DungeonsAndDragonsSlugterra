@@ -565,14 +565,17 @@ export async function initSchema() {
     ALTER TABLE campaign_settings ADD COLUMN IF NOT EXISTS active_ship_id INTEGER REFERENCES ships(id) ON DELETE SET NULL;
   `);
 
-  // One "Try Hunt" attempt per player per rest -- a row here means that user
-  // has already hunted and the button stays disabled for them until the DM's
-  // next "Heal All" (characters.js POST /heal-all) clears the whole table.
+  // A player's "Try Hunt" tally for this rest: `attempts` used so far (their
+  // Nature skill sets how many a rest allows, see huntRules.js) and `found`,
+  // set by a successful roll -- one find ends the day's hunting. A row clears
+  // on the next Long Rest (characters.js clears the whole table).
   await pool.query(`
     CREATE TABLE IF NOT EXISTS slug_hunt_locks (
       user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       locked_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    ALTER TABLE slug_hunt_locks ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE slug_hunt_locks ADD COLUMN IF NOT EXISTS found BOOLEAN NOT NULL DEFAULT FALSE;
   `);
 
   // Consecutive slug-hunt misses per player, tracked across rests (unlike
@@ -783,6 +786,24 @@ export async function initSchema() {
     "static_mark", // Arcling -- tags whoever it hits as `marked`, and splashes 25% of any hit this slug lands onto every other marked combatant, global
     "tempo_aura", // Fandango -- while loaded, all its owner's slugs cool down in 2 turns instead of 3 and carry 50% more max energy pips (cap 16)
     "power_surge", // Fandango -- once shot, every other shot its owner fires that turn has its power doubled, after all other modifiers
+    "heal_over_time", // Healing-over-time: a hit leaves a `regen` status that heals the target at the start of each of their next few turns
+    "grapple", // Arachnet -- Attack pulls the target slinger toward the shooter; the Grapple action pulls the shooter to a wall/bridge instead
+    "causes_stun", // Bubbaleone, Jellyish, Gazzer, Flatulorhinkus, Neotox -- the hit target is stunned (Psychic's -1 AP next turn) regardless of element
+    "stalls_slugs", // Pieper -- every slug the hit target owns goes on cooldown (or its cooldown grows by a turn if it already is)
+    "amplifies_partner", // Enigmo -- in a dual shot, the OTHER slug's power is tripled
+    "pulls_metal", // Slicksilver -- on landing, Metal-made walls/bridges nearby shift slightly toward the impact point
+    "phases_walls", // Graspvine -- burrows under walls like Dark's phase trait, whatever the slug's own element
+    "mirrors_clash", // Mimkey -- as a counter, transforms into the opposing slug so the two always cancel out (a guaranteed bounce)
+    "surrounds_target", // Pentalux -- visual only: on a hit the bolt splits into five that circle the target and strike from five directions (like a style shot, but five bolts)
+    "ambush_tripled", // Gloomstalk -- triples this slug's damage whenever its shooter is invisible when it hits
+    "summons_plant", // Necrobloom -- the Summon a Plant action plants a 50-Grit carnivorous bloom that bites enemies who walk up to it
+    "causes_burn", // Novaflare -- sets the target on fire (Fire's burn status) whatever the slug's own element
+    "massive_aoe", // Novaflare -- with aoe_blast, the blast is twice the normal radius
+    "summons_ghost", // Phantasmo -- on a hit, a ghost manifests next to the target (a 50-Grit stationary haunter, like a carnivorous bloom)
+    "potent_poison", // Plaguebell -- every poisoning hit (and its hazard patch) adds twice the poison stacks, so the poison is twice as effective
+    "causes_bleed", // Madicus -- a hit leaves a bleeding status: 10% of the target's max Grit per turn for 3 turns
+    "life_drain", // Duskfang -- a vampiric hit heals its own shooter by this slug's flat clash_power, same moment the damage lands
+    "random_statuses", // Panaceon -- a hit applies 3 random distinct status effects: harmful ones (burn, fear, jam, blind...) at an enemy, helpful ones (regeneration, invisibility...) at an ally (3) or yourself (2); it attacks instead of healing
   ];
   for (const col of bespokeFlags) {
     await pool.query(`ALTER TABLE slug_templates ADD COLUMN IF NOT EXISTS ${col} BOOLEAN NOT NULL DEFAULT false;`);
@@ -1058,6 +1079,76 @@ export async function initSchema() {
   // unloaded until a Reload spends a spare pod on it (routes/combat.js).
   await pool.query(`ALTER TABLE slugs ADD COLUMN IF NOT EXISTS pod_broken BOOLEAN NOT NULL DEFAULT false;`);
 
+  // ---- Upkeep: slug food and blaster durability (careRules.js) -------------
+  // Slug Kibble and Repair Kits are carried supplies, like pods.
+  await pool.query(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS kibble INTEGER NOT NULL DEFAULT 0;`);
+  await pool.query(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS repair_kits INTEGER NOT NULL DEFAULT 0;`);
+  await pool.query(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS energy_cells INTEGER NOT NULL DEFAULT 0;`);
+  await pool.query(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS medpacks INTEGER NOT NULL DEFAULT 0;`);
+  await pool.query(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS revival_tonics INTEGER NOT NULL DEFAULT 0;`);
+  // 0-100. A long rest drains it; an empty meter at rest time costs loyalty.
+  await pool.query(`ALTER TABLE slugs ADD COLUMN IF NOT EXISTS food INTEGER NOT NULL DEFAULT 100;`);
+  // 0-1: how far a slug is through its current loyalty tier. Every shot it
+  // fires adds a sliver (see loyaltyRules.js). Not on slug_templates, so a
+  // market purchase starts at 0.
+  await pool.query(`ALTER TABLE slugs ADD COLUMN IF NOT EXISTS loyalty_progress REAL NOT NULL DEFAULT 0;`);
+  // Percentage, worn down by every shot. It lives on the weapon row, so it
+  // travels with the blaster through trades.
+  await pool.query(`ALTER TABLE blasters ADD COLUMN IF NOT EXISTS durability DOUBLE PRECISION NOT NULL DEFAULT 100;`);
+
+  // ---- Equipment: what the Secondary slot can hold besides a blaster --------
+  // A player's slot 1 holds EITHER a second blaster OR one piece of equipment
+  // (equipmentRules.js): a melee weapon (STR-based swing in combat) or an ammo
+  // belt (extra magazine slots for the primary blaster). `equip_slot` mirrors
+  // blasters.equip_slot, so at most one thing per player sits in a given slot.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS equipment (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      name TEXT NOT NULL,
+      image TEXT,
+      damage INTEGER NOT NULL DEFAULT 0,
+      accuracy INTEGER NOT NULL DEFAULT 0,
+      ap_cost INTEGER NOT NULL DEFAULT 2,
+      reach INTEGER NOT NULL DEFAULT 80,
+      extra_slots INTEGER NOT NULL DEFAULT 0,
+      equip_slot SMALLINT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  // Catalog entries for the Market and the DM's "assign" shortcut; buying one
+  // clones it into an `equipment` row. base_price null = derived default
+  // (marketRules.js defaultEquipmentPrice).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS equipment_templates (
+      id SERIAL PRIMARY KEY,
+      kind TEXT NOT NULL,
+      name TEXT NOT NULL,
+      image TEXT,
+      damage INTEGER NOT NULL DEFAULT 0,
+      accuracy INTEGER NOT NULL DEFAULT 0,
+      ap_cost INTEGER NOT NULL DEFAULT 2,
+      reach INTEGER NOT NULL DEFAULT 80,
+      extra_slots INTEGER NOT NULL DEFAULT 0,
+      base_price INTEGER,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`ALTER TABLE equipment ADD COLUMN IF NOT EXISTS template_id INTEGER REFERENCES equipment_templates(id) ON DELETE SET NULL;`);
+  // Melee weapons pick an on-hit effect (bludgeon/slash/pierce), shields a damage pool, armor a flat max-Grit bonus.
+  for (const table of ["equipment", "equipment_templates"]) {
+    await pool.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS melee_type TEXT NOT NULL DEFAULT 'slash';`);
+    await pool.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS absorb INTEGER NOT NULL DEFAULT 0;`);
+    await pool.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS grit_bonus INTEGER NOT NULL DEFAULT 0;`);
+  }
+  // Flat max Grit from worn armor, kept in step by syncAmmoBelt (ammoBelt.js).
+  await pool.query(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS grit_bonus INTEGER NOT NULL DEFAULT 0;`);
+  // The primary blaster's extra magazine slots from an equipped ammo belt,
+  // kept in step by syncAmmoBelt (equipment.js). The blaster's own
+  // magazine_size stays the DM-edited base value.
+  await pool.query(`ALTER TABLE blasters ADD COLUMN IF NOT EXISTS magazine_bonus INTEGER NOT NULL DEFAULT 0;`);
+
   // Optional DM-set price per template; null = derived default (marketRules.js).
   for (const table of ["blaster_templates", "mod_templates", "mecha_templates", "mecha_mod_templates", "slug_templates"]) {
     await pool.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS base_price INTEGER;`);
@@ -1073,6 +1164,11 @@ export async function initSchema() {
       barter_pct INTEGER NOT NULL DEFAULT 0
     );
   `);
+  // The DM opens a planet's market by hand (closed by default, and every
+  // market closes again when the party moves) and sets the merchants' mood
+  // (marketRules.js MARKET_MOODS).
+  await pool.query(`ALTER TABLE planet_markets ADD COLUMN IF NOT EXISTS market_open BOOLEAN NOT NULL DEFAULT false;`);
+  await pool.query(`ALTER TABLE planet_markets ADD COLUMN IF NOT EXISTS mood TEXT NOT NULL DEFAULT 'neutral';`);
 
   // One barter attempt per player per planet per rest (cleared on Heal All).
   // discount_pct is that player's own discount (0..20); the roll is kept so
@@ -1110,6 +1206,8 @@ export async function initSchema() {
     );
   `);
 
+  // Consumables (kibble, kits, cells, medpacks, tonics) ride along in a trade as
+  // {characters column: count} maps -- pods keep their own columns below.
   // Player-to-player trades. `give`/`ask` are [{kind, id}] item refs;
   // counter_of links a counter-offer to the trade it answers.
   await pool.query(`
@@ -1123,12 +1221,17 @@ export async function initSchema() {
       ask_credits INTEGER NOT NULL DEFAULT 0,
       give_pods INTEGER NOT NULL DEFAULT 0,
       ask_pods INTEGER NOT NULL DEFAULT 0,
+      give_supplies JSONB NOT NULL DEFAULT '{}',
+      ask_supplies JSONB NOT NULL DEFAULT '{}',
       status TEXT NOT NULL DEFAULT 'pending',
       counter_of INTEGER REFERENCES trades(id) ON DELETE SET NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       resolved_at TIMESTAMPTZ
     );
   `);
+  // The CREATE above only runs on a fresh database -- existing ones need these.
+  await pool.query(`ALTER TABLE trades ADD COLUMN IF NOT EXISTS give_supplies JSONB NOT NULL DEFAULT '{}';`);
+  await pool.query(`ALTER TABLE trades ADD COLUMN IF NOT EXISTS ask_supplies JSONB NOT NULL DEFAULT '{}';`);
 
   await seedDefaultMechaTemplates();
   await seedDefaultMechaModTemplates();
@@ -1197,8 +1300,8 @@ export async function initSchema() {
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'setup',
-      map_width INTEGER NOT NULL DEFAULT 1600,
-      map_height INTEGER NOT NULL DEFAULT 900,
+      map_width INTEGER NOT NULL DEFAULT 3200,
+      map_height INTEGER NOT NULL DEFAULT 1800,
       walls JSONB NOT NULL DEFAULT '[]',
       next_wall_id INTEGER NOT NULL DEFAULT 1,
       turn_order JSONB NOT NULL DEFAULT '[]',
@@ -1266,6 +1369,8 @@ export async function initSchema() {
   // The DM's uploaded battle-map image, plus the pan/zoom transform applied
   // on top of a "cover" fit -- see CombatMap.jsx's mapImgSize/coverScale math
   // for how these two combine into the final placement.
+  // Teammates adjacent in the turn order act together; this is who in the current phase still has a turn to take.
+  await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS active_group JSONB NOT NULL DEFAULT '[]';`);
   await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS map_image TEXT;`);
   await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS map_image_scale DOUBLE PRECISION NOT NULL DEFAULT 1;`);
   await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS map_image_offset_x DOUBLE PRECISION NOT NULL DEFAULT 0;`);

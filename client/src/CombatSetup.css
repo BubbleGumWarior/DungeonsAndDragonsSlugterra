@@ -52,6 +52,18 @@
   max-width: 280px;
 }
 
+.setup-start-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.setup-cancel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .setup-start-btn {
   padding: 12px 24px;
   font-size: 14.5px;
@@ -599,6 +611,44 @@
 .setup-member-remove:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
+}
+
+/* Map size (metres across) */
+.setup-mapsize {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+.setup-mapsize-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-700);
+  color: var(--ink-dim);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.setup-mapsize-field input {
+  width: 72px;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--charcoal-800, var(--charcoal-700));
+  color: var(--ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.setup-mapsize .setup-tools button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* ---- Responsive ---------------------------------------------------- */

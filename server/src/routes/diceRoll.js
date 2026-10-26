@@ -84,7 +84,7 @@ router.post("/", requireDungeonMaster, async (req, res) => {
     const { rows: charRows } = await pool.query("SELECT name FROM characters WHERE user_id = $1", [targetUserId]);
     const character = charRows[0];
     if (!character) {
-      return res.status(400).json({ error: `${target.username} doesn't have a character sheet yet.` });
+      return res.status(400).json({ error: "That player doesn't have a character sheet yet." });
     }
 
     cleanupExpired();
@@ -95,7 +95,7 @@ router.post("/", requireDungeonMaster, async (req, res) => {
       diceCount,
       skill,
       rollType,
-      calledBy: req.user.username,
+      calledBy: "Dungeon Master",
       createdAt: Date.now(),
     });
 
@@ -107,7 +107,7 @@ router.post("/", requireDungeonMaster, async (req, res) => {
         skill,
         skillLabel: PROFICIENCY_LABELS[skill],
         rollType,
-        calledBy: req.user.username,
+        calledBy: "Dungeon Master",
         at: Date.now(),
       },
     });

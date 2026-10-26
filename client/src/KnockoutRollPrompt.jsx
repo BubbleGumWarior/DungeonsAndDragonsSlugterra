@@ -80,7 +80,8 @@ function KnockoutCard({ offer, onDone }) {
       </div>
 
       <div className="knockout-prompt-die-row">
-        <Die value={display} rolling={rolling} state={result ? (result.success ? "kept" : "discarded") : null} />
+        {/* Once resolved, always show the real roll: the spinner's interval can fire one last time after the result lands. */}
+        <Die value={result ? result.roll : display} rolling={rolling} state={result ? (result.success ? "kept" : "discarded") : null} />
         {result && (
           <div className="knockout-prompt-total">
             <span className="num-tabular">{result.total}</span>

@@ -73,7 +73,7 @@ export default function Dashboard() {
               character === undefined ? null : character ? (
                 <Link to="/character" className="character-card">
                   <span className="character-card-portrait">
-                    <GritRing current={character.currentGrit} max={maxGrit(character.stats)} />
+                    <GritRing current={character.currentGrit} max={maxGrit(character.stats, character.gritBonus)} />
                     {character.portrait ? (
                       <img src={character.portrait} alt={character.name} />
                     ) : (

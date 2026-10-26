@@ -20,6 +20,8 @@ export const MOVE_SPEED_PER_AP = 80; // map units moved per Move action -- walki
 // mecha's AP (see /actions/move). Was a flat 12 units/speed-point, wholly
 // disconnected from the walking scale.
 export const MECHA_SPEED_PER_AP = (speed) => MOVE_SPEED_PER_AP * Math.max(1, speed || 1);
+// How far a bludgeon (melee type) shoves its target -- half a step.
+export const MELEE_KNOCKBACK_DISTANCE = MOVE_SPEED_PER_AP / 2;
 export const MOUNT_RANGE = MOVE_SPEED_PER_AP; // 1 AP of walking -- how close you must be to mount/dismount, and how close a mecha must be to ram
 
 // ---- Action costs -----------------------------------------------------
@@ -71,10 +73,10 @@ export function gatlingShotApCost(blaster, baseApCost) {
 
 // Cannon: the slug it fires gets +CANNON_CLASH_BONUS clash power. Returns a
 // cloned slug (never mutates the caller's row) so the boost can flow through
-// both resolveClash and the eventual dealHit damage; a "None"-type dud stays
-// a dud. Any other base type returns the slug untouched.
+// both resolveClash and the eventual dealHit damage. Any other base type
+// returns the slug untouched.
 export function applyBlasterTypeToSlug(blaster, slug) {
-  if (!slug || blaster?.base_type !== "Cannon" || slug.type === "None") return slug;
+  if (!slug || blaster?.base_type !== "Cannon") return slug;
   return { ...slug, clash_power: slug.clash_power + CANNON_CLASH_BONUS };
 }
 
@@ -268,10 +270,103 @@ export function slugKnockbackDistance(type, causesKnockback) {
 // Move action (see /actions/move) for SNARE_DURATION_TURNS of the target's
 // own turns, ticking down the same way. See docs/combat-system-design.md §4.
 export const BURN_DURATION_TURNS = 3;
-export const BURN_DAMAGE_FRACTION = 0.5; // of the burning slug's own clashPower, per turn
+export const BURN_DAMAGE_FRACTION = 1; // of the burning slug's own clashPower, per turn
 export const POISON_DAMAGE_PER_STACK = 1;
+// Poison never wears off by itself -- tickStatusEffects leaves it alone until First Aid cures it
+// (it's one of NEGATIVE_STATUS_KEYS). turnsLeft is only kept on the status for older saved rows.
 export const POISON_DURATION_TURNS = 3;
+
+// Psychic's stun (and any causes_stun flag): the target loses STUN_AP_FRACTION of the damage the hit dealt
+// as AP off their next turn (at least 1). `stunned` is { ap }; an older boolean `true` means 1 AP.
+export const STUN_AP_FRACTION = 0.5;
+export function computeStunAp(damage) {
+  return Math.max(1, Math.round((damage || 0) * STUN_AP_FRACTION));
+}
+export function stunApOf(stunned) {
+  if (!stunned) return 0;
+  return Number(stunned.ap) > 0 ? Math.round(Number(stunned.ap)) : 1;
+}
+
+// Healing slugs restore this many times their clash power.
+export const HEAL_POWER_MULTIPLIER = 2;
+// Metal hits that nobody countered (no counter-clash, so a plain hit) deal this much extra damage.
+export const METAL_UNCOUNTERED_MULTIPLIER = 1.25;
+// Bleeding (a causes_bleed hit): the target loses BLEED_MAX_GRIT_FRACTION of their own MAX Grit at the
+// start of each of their next BLEED_DURATION_TURNS turns, whatever the slug's power. Doesn't stack: a
+// fresh bleed just resets the duration.
+export const BLEED_DURATION_TURNS = 3;
+export const BLEED_MAX_GRIT_FRACTION = 0.1;
+// Plaguebell's potent_poison: each poisoning hit adds this many times the usual stacks (and each stack
+// is a point of damage per turn), so the poison hurts this many times as much.
+export const POTENT_POISON_MULTIPLIER = 2;
 export const SNARE_DURATION_TURNS = 2;
+
+// -- Panaceon: random_statuses applies RANDOM_STATUS_COUNT distinct effects, drawn at
+// random from this pool, to whoever it hits (see applyRandomStatuses in routes/combat.js).
+export const RANDOM_STATUS_COUNT = 3;
+// A brew drunk by its own shooter is weaker: only this many helpful effects.
+export const RANDOM_STATUS_SELF_COUNT = 2;
+// Every status effect the game has. Thrown at an enemy a brew draws only from the harmful ones
+// (burn, poison, blind, snare, shock, stun, jam, fear, confusion, disarm, reversed direction,
+// slowed reaction, slippery, marked); thrown at an ally or yourself, only from the helpful ones
+// (regeneration, invisibility, keen vision, enhanced reaction).
+export const RANDOM_STATUS_NEGATIVE = [
+  "burn", "poison", "blind", "snare", "shock", "stun", "jam", "fear", "confusion", "disarm",
+  "reversedDirection", "slowedReaction", "slippery", "marked", "bleed",
+];
+export const RANDOM_STATUS_POSITIVE = ["regen", "invisible", "keenVision", "enhancedReaction"];
+export const RANDOM_STATUS_POOL = [...RANDOM_STATUS_NEGATIVE, ...RANDOM_STATUS_POSITIVE];
+export const RANDOM_STATUS_LABELS = {
+  burn: "set ablaze",
+  poison: "poisoned",
+  blind: "blinded",
+  snare: "snared",
+  shock: "shocked",
+  stun: "stunned",
+  jam: "has their blaster jammed",
+  fear: "terrified",
+  confusion: "confused",
+  disarm: "disarmed",
+  reversedDirection: "has their sense of direction reversed",
+  slowedReaction: "has slowed reactions",
+  slippery: "gets slippery footing",
+  marked: "is marked with static",
+  bleed: "starts bleeding",
+  regen: "starts regenerating",
+  invisible: "fades from sight",
+  keenVision: "gains keen vision",
+  enhancedReaction: "has sharper reactions",
+};
+
+// -- Pieper: stalls_slugs puts every slug the hit target owns on cooldown, or
+// stretches an existing cooldown by one more turn. A cooldown ticks down at the
+// very start of its owner's own turn (see tickSlugCooldowns), so a bare 1 would
+// be gone before they could act; STALL_COOLDOWN_TURNS is "one more than the
+// turns it actually costs them" (same convention as SNARE_DURATION_TURNS), i.e.
+// the slugs are out for exactly one of their turns.
+export const STALL_COOLDOWN_TURNS = 2;
+
+// -- Slicksilver: pulls_metal drags Metal-made walls and bridges (the ones a
+// Metal-type slug built, tagged with slugType "Metal") within METAL_PULL_RADIUS
+// of where its shot lands METAL_PULL_DISTANCE units toward that point -- never
+// past it.
+export const METAL_PULL_DISTANCE = 60;
+export const METAL_PULL_RADIUS = 480;
+
+// ---- Heal over time (regen) -----------------------------------------------
+// A `heal_over_time` slug that lands on an ally (a Healing-type slug) or on
+// its own shooter (any type, fired at yourself) leaves a persistent `regen`
+// status instead of healing everything up front: the target recovers Grit at
+// the start of each of their own next REGEN_DURATION_TURNS turns (see
+// tickStatusEffects, called from advanceTurn). In total it restores
+// REGEN_TOTAL_MULTIPLIER x the slug's clash power, so waiting is paid back
+// with a bonus. It doesn't stack -- a fresh hit refreshes the duration and
+// keeps whichever per-turn amount is stronger.
+export const REGEN_DURATION_TURNS = 3;
+export const REGEN_TOTAL_MULTIPLIER = 1.5;
+export function computeRegenAmount(clashPower) {
+  return Math.max(1, Math.round((clashPower * REGEN_TOTAL_MULTIPLIER) / REGEN_DURATION_TURNS));
+}
 
 // -- Cynosure: causes_disarm fries the target's blaster on hit or miss
 // alike (same "regardless of hit/miss" rule as causes_jam), blocking the
@@ -382,12 +477,16 @@ export function computeBurnDamage(clashPower) {
 // field -- is the one exception to "pure duration countdown": while true, it
 // re-pins `disarmed` to the full duration every call instead of decrementing
 // it, so the effect never lapses while they're still in the field.
-export function tickStatusEffects(statusEffects, insideDisarmZone = false) {
+export function tickStatusEffects(statusEffects, insideDisarmZone = false, maxGrit = null) {
   const next = { ...(statusEffects || {}) };
   let damage = 0;
   const notes = [];
   // Per-effect breakdown (kind/amount/who applied it) for the Battle Report.
   const sources = [];
+  // Regen heals the other way -- summed separately so the caller can apply the
+  // DoT first and only then top up whatever Grit is left.
+  let heal = 0;
+  const healSources = [];
 
   if (next.burning) {
     damage += next.burning.damage;
@@ -398,14 +497,33 @@ export function tickStatusEffects(statusEffects, insideDisarmZone = false) {
     else delete next.burning;
   }
 
+  if (next.bleeding) {
+    // Bleeding scales with the victim's own max Grit (see BLEED_MAX_GRIT_FRACTION); nothing to bleed with no Grit.
+    if (maxGrit) {
+      const bleedDamage = Math.max(1, Math.round(maxGrit * BLEED_MAX_GRIT_FRACTION));
+      damage += bleedDamage;
+      notes.push(`${bleedDamage} bleeding`);
+      sources.push({ kind: "bleed", amount: bleedDamage, by: next.bleeding.by ?? null });
+    }
+    const turnsLeft = next.bleeding.turnsLeft - 1;
+    if (turnsLeft > 0) next.bleeding = { ...next.bleeding, turnsLeft };
+    else delete next.bleeding;
+  }
+
   if (next.poison) {
     const poisonDamage = next.poison.stacks * POISON_DAMAGE_PER_STACK;
     damage += poisonDamage;
     notes.push(`${poisonDamage} poison`);
     sources.push({ kind: "poison", amount: poisonDamage, by: next.poison.by ?? null });
-    const turnsLeft = next.poison.turnsLeft - 1;
-    if (turnsLeft > 0) next.poison = { ...next.poison, turnsLeft };
-    else delete next.poison;
+    // No countdown: poison lasts until First Aid cures it.
+  }
+
+  if (next.regen) {
+    heal += next.regen.amount;
+    healSources.push({ kind: "regen", amount: next.regen.amount, by: next.regen.by ?? null });
+    const turnsLeft = next.regen.turnsLeft - 1;
+    if (turnsLeft > 0) next.regen = { ...next.regen, turnsLeft };
+    else delete next.regen;
   }
 
   if (next.snared) {
@@ -467,7 +585,7 @@ export function tickStatusEffects(statusEffects, insideDisarmZone = false) {
     else delete next.disarmed;
   }
 
-  return { damage, statusEffects: next, notes, sources };
+  return { damage, heal, healSources, statusEffects: next, notes, sources };
 }
 
 // ---- AOE blast ----------------------------------------------------------
@@ -483,6 +601,10 @@ export function tickStatusEffects(statusEffects, insideDisarmZone = false) {
 // number) so the visual always reads as the real blast radius -- keep them
 // in sync if this changes again.
 export const AOE_RADIUS = 120; // map units
+// A slug with `massive_aoe` (Novaflare) blasts this many times as wide -- both who it
+// catches (findAoeTargets) and how big the burst is drawn (CombatMap's aoeScale).
+export const MASSIVE_AOE_MULTIPLIER = 2;
+export const aoeRadiusMult = (slug) => (slug?.massive_aoe ? MASSIVE_AOE_MULTIPLIER : 1);
 
 // ---- Ice hazards ------------------------------------------------------
 
@@ -491,9 +613,11 @@ export const AOE_RADIUS = 120; // map units
 // docs/combat-system-design.md §4's Ice row. Persists on the encounter until
 // the fight ends. Any non-mecha combatant whose Move destination lands
 // inside one has a flat ICE_SLIP_CHANCE of slipping and immediately losing
-// the rest of their AP for the turn.
+// the rest of their AP for the turn. Fades after HAZARD_DURATION_ROUNDS.
 export const ICE_PATCH_RADIUS = 60; // map units
-export const ICE_SLIP_CHANCE = 0.5;
+export const ICE_SLIP_CHANCE = 0.75;
+// Psi's personal `slippery` status keeps the old coin-flip.
+export const SLIPPERY_SLIP_CHANCE = 0.5;
 
 // Returns the first hazard (optionally filtered by `type`) whose radius
 // contains `point`, or null.
@@ -503,6 +627,14 @@ export function findHazardAt(point, hazards, type) {
     if (distance(point, hz) <= (hz.radius ?? 0)) return hz;
   }
   return null;
+}
+
+// Every hazard (optionally of `type`) a straight move from `from` to `to`
+// touches -- not just where it ends. Walking through a patch counts even if
+// both endpoints are outside it. Used for walking and every forced move
+// (knockback, grapple pull, fear flee) so none can skip over terrain.
+export function hazardsAlongPath(from, to, hazards, type) {
+  return (hazards || []).filter((hz) => (!type || hz.type === type) && distanceToSegment(hz, from, to) <= (hz.radius ?? 0));
 }
 
 // ---- Damaging hazard terrain (Hazard Maker) --------------------------
@@ -519,9 +651,12 @@ export function findHazardAt(point, hazards, type) {
 // combatant whose Move destination lands inside one takes
 // HAZARD_DAMAGE_FRACTION of that slug's clashPower as Grit damage, plus that
 // type's Burn/Poison DoT if it has one (Fire/Toxic) -- see
-// applyHazardEffect in routes/combat.js. Persists for the rest of the
-// encounter, same as Ice's patches.
+// applyHazardEffect in routes/combat.js. Fades after HAZARD_DURATION_ROUNDS,
+// same as Ice's patches.
 export const HAZARD_RADIUS = 180; // map units
+// Every hazard patch (Ice and damaging alike) fades after this many full
+// rounds, counting the round it was laid -- see tickHazards in routes/combat.js.
+export const HAZARD_DURATION_ROUNDS = 4;
 export const HAZARD_DAMAGE_FRACTION = 0.5; // of the leaving slug's own clashPower
 
 // ---- Environment-shaping slug actions (Break Wall / Make Wall / Build Bridge) --
@@ -542,6 +677,15 @@ export const ENV_ACTION_DC = 12;
 export const WALL_MAKER_LENGTH = 140; // map units, total line length
 export const BRIDGE_WIDTH = 90; // map units, perpendicular to the shot
 export const BRIDGE_LENGTH = 160; // map units, extending away from the shooter
+
+// The three sizes above are the baseline (tier 1, "Indifferent"); a slug's
+// loyalty tier scales them -- a Wild slug builds smaller, a Bonded one bigger.
+// Indexes directly on the tier number, like LOYALTY_CLASH_MODIFIERS.
+export const LOYALTY_ENV_SCALES = [0.75, 1, 1.2, 1.4, 1.6];
+
+export function loyaltyEnvScale(tier) {
+  return LOYALTY_ENV_SCALES[tier] ?? 1;
+}
 
 // Direction from `from` to `to`, in degrees -- atan2 in SVG's own (y-down)
 // convention, so this can be handed straight to an SVG `rotate()` transform
@@ -596,9 +740,9 @@ export const TYPE_BALLISTICS = {
   Fire: { range: 9 * RANGE_SCALE, accuracyMod: 2, powerMod: 0, reactionSpeed: "Fast", trait: "burn" },
   Healing: { range: 9 * RANGE_SCALE, accuracyMod: 1, powerMod: 0, reactionSpeed: "Medium", trait: "heal" },
   Ice: { range: 10 * RANGE_SCALE, accuracyMod: 0, powerMod: 0, reactionSpeed: "Medium", trait: "ice" },
-  Light: { range: 14 * RANGE_SCALE, accuracyMod: 3, powerMod: -2, reactionSpeed: "Very fast", trait: "blind" },
+  Light: { range: 14 * RANGE_SCALE, accuracyMod: 3, powerMod: 0, reactionSpeed: "Very fast", trait: "blind" },
   Metal: { range: 9 * RANGE_SCALE, accuracyMod: 0, powerMod: 1, reactionSpeed: "Slow", trait: "knockback-short" },
-  None: { range: 5 * RANGE_SCALE, accuracyMod: -5, powerMod: -10, reactionSpeed: "Slow", trait: "dud" },
+  None: { range: 5 * RANGE_SCALE, accuracyMod: 0, powerMod: 0, reactionSpeed: "Slow", trait: null },
   Plant: { range: 9 * RANGE_SCALE, accuracyMod: -1, powerMod: 0, reactionSpeed: "Slow", trait: "snare" },
   Psychic: { range: 9 * RANGE_SCALE, accuracyMod: 0, powerMod: -2, reactionSpeed: "Medium", trait: "stun" },
   Toxic: { range: 10 * RANGE_SCALE, accuracyMod: 1, powerMod: -1, reactionSpeed: "Medium", trait: "poison" },
@@ -677,6 +821,9 @@ export const DUAL_COMBOS = {
   "Light+Psychic": { name: "Hallucination", summary: "Confusion -- the target's shots risk firing wildly off target.", traits: [], flags: { causes_confusion: true } },
 };
 
+// Enigmo: in a dual shot, the other slug's power is multiplied by this.
+export const AMPLIFY_PARTNER_MULTIPLIER = 3;
+
 const OVERCHARGE = { name: "Overcharge", summary: "The partner's effect plus a 2-pip refund instead of 1." };
 
 export function dualComboKey(typeA, typeB) {
@@ -699,6 +846,9 @@ export function slugTraits(slug) {
 }
 
 export function slugHasTrait(slug, trait) {
+  // `phases_walls` (Graspvine's burrowing) gives any slug Dark's wall-phasing,
+  // whatever its own element.
+  if (trait === "phase" && slug?.phases_walls) return true;
   return slugTraits(slug).includes(trait);
 }
 
@@ -724,6 +874,8 @@ export function slugBallistics(slug) {
 // doubling them the same way. A normal slug still goes through
 // slugKnockbackDistance directly (see shotKnockbackDistance).
 export function shotKnockbackDistance(slug) {
+  // A bludgeon's own shove (see /actions/melee) -- fixed, not an element's.
+  if (slug?.melee_knockback) return slug.melee_knockback;
   if (!slug?.dual) return slugKnockbackDistance(slug.type, slug.causes_knockback);
   if (slug.dual.traits.includes("knockback-large")) {
     return slug.causes_knockback ? KNOCKBACK_LARGE_DISTANCE * 2 : KNOCKBACK_LARGE_DISTANCE;
@@ -764,6 +916,11 @@ export function dualShotPairError(a, b) {
 // and traits come from the combo table (or both elements', if unlisted).
 export function buildDualShotSlug(a, b) {
   const combo = DUAL_COMBOS[dualComboKey(a.type, b.type)] ?? null;
+  // Enigmo's `amplifies_partner`: the OTHER slug of the pair has its power
+  // tripled before the two are added together.
+  const powerA = a.clash_power * (b.amplifies_partner ? AMPLIFY_PARTNER_MULTIPLIER : 1);
+  const powerB = b.clash_power * (a.amplifies_partner ? AMPLIFY_PARTNER_MULTIPLIER : 1);
+  const amplifier = a.amplifies_partner ? a : b.amplifies_partner ? b : null;
   const isOvercharge = !combo && (a.type === "Energy" || b.type === "Energy");
 
   const baseTraits = [...new Set([ELEMENT_TRAITS[a.type], ELEMENT_TRAITS[b.type]].filter(Boolean))];
@@ -781,7 +938,7 @@ export function buildDualShotSlug(a, b) {
     ...flags,
     name: `${a.name} + ${b.name}`,
     secondary_type: b.type,
-    clash_power: a.clash_power + b.clash_power,
+    clash_power: powerA + powerB,
     clash_defense: Math.max(a.clash_defense, b.clash_defense),
     ap_cost: Math.max(a.ap_cost || 0, b.ap_cost || 0) + 1,
     dual_slug_ids: [a.id, b.id],
@@ -792,7 +949,9 @@ export function buildDualShotSlug(a, b) {
       primaryType: a.type,
       partnerType: b.type,
       comboName: combo?.name ?? (isOvercharge ? OVERCHARGE.name : null),
-      comboSummary: combo?.summary ?? (isOvercharge ? OVERCHARGE.summary : "Both elements' effects apply."),
+      comboSummary:
+        (combo?.summary ?? (isOvercharge ? OVERCHARGE.summary : "Both elements' effects apply.")) +
+        (amplifier ? ` ${amplifier.name} triples its partner's power.` : ""),
       traits,
       damageMult: combo?.damageMult ?? 1,
       burnMult: combo?.burnMult ?? 1,
@@ -941,12 +1100,31 @@ export function lerpPoint(a, b, t) {
 }
 
 // A supportive shot helps whoever it lands on rather than hurting them -- a
-// Healing slug, or an inert None slug. Fired at an ally (or yourself) it's a
+// Healing slug. Fired at an ally (or yourself) it's a
 // boon, not an attack: it never offers the target a counter-clash and never
 // lands a type's negative trait effects, whoever it hits. Keyed on type
 // alone so it holds for custom slugs too.
 export function isSupportiveSlug(slug) {
-  return slug?.type === "Healing" || slug?.type === "None";
+  // Panaceon's random_statuses makes a Healing-type slug a thrown potion instead.
+  if (slug?.random_statuses) return false;
+  return slug?.type === "Healing";
+}
+
+// The raw Grit a slug's hit carries before any target-side reduction: its
+// clash power plus its type's power modifier (doubled by a Power Surge),
+// then the x3 damage flags and a dual-shot combo's multiplier, halved for a
+// chain arc. Shared by dealHit and the auto-counter's damage forecast
+// (autoCounter.js) so the forecast can never drift from what really lands.
+// `ambushed`: Gloomstalk's triple-from-invisibility, decided by the caller
+// (it depends on the shooter's live status).
+export function slugBaseHitAmount(slug, { ambushed = false, half = false } = {}) {
+  const tb = slugBallistics(slug);
+  let amount = Math.max(0, slug.clash_power + tb.powerMod * (slug.power_doubled ? POWER_SURGE_MULTIPLIER : 1));
+  if (slug.damage_tripled) amount *= CLASH_TRIPLE_MULTIPLIER;
+  if (ambushed) amount *= CLASH_TRIPLE_MULTIPLIER;
+  if (slug.dual?.damageMult > 1) amount = Math.floor(amount * slug.dual.damageMult);
+  if (half) amount = Math.floor(amount / 2);
+  return amount;
 }
 
 // Mutual clash resolution. Returns one of:
@@ -1083,7 +1261,9 @@ export function firstWallHit(from, to, walls, ignoreWallIds = []) {
     // spot you're already standing on, or a combatant on that exact point
     // gets permanently walled in with no way to move. Only a wall actually
     // crossed partway along the path blocks it.
-    if (hit.t < 1e-6) continue;
+    // The map's edge is the exception: nobody is ever legitimately standing on it
+    // (see clampToMapBounds' inset), so a path that starts there is still blocked.
+    if (hit.t < 1e-6 && !wall.edge) continue;
     if (!nearest || hit.t < nearest.hit.t) {
       nearest = { wall, hit };
     }
@@ -1127,6 +1307,57 @@ export function knockbackTarget(shooter, target, walls, distanceUnits = KNOCKBAC
     point: { x: target.x + (dest.x - target.x) * t, y: target.y + (dest.y - target.y) * t },
     hitWall: true,
   };
+}
+
+// ---- Carnivorous bloom (Necrobloom's summons_plant) -----------------------------
+// The Summon a Plant action plants a stationary "plant" combatant at the aimed
+// point: PLANT_MAX_GRIT Grit, no knockout pips (it just dies at 0 -- see
+// damagePlant in routes/combat.js), never takes a turn. It bites any enemy that
+// walks up to within PLANT_BITE_RANGE -- the same melee reach as boarding a
+// mecha -- for the summoning slug's clash power plus its element's DoT, and again
+// whenever an enemy starts a turn still standing there. See plantBites.
+export const PLANT_MAX_GRIT = 50;
+export const PLANT_BITE_RANGE = MOUNT_RANGE;
+// Phantasmo's summons_ghost reuses all of the above with kind "ghost" -- a ghost that
+// manifests this far from the slinger it was shot at, instead of at a spot on the ground.
+export const GHOST_SPAWN_OFFSET = 50;
+
+// Does moving from `from` to `to` cross the circle of `range` around `center` -- going in,
+// coming out, or passing clean through it? (Staying inside the whole way doesn't count.)
+// This is what sets off a bloom's or ghost's bite: see plantBites in routes/combat.js.
+export function pathCrossesRange(center, from, to, range) {
+  const startsInside = distance(center, from) <= range;
+  const endsInside = distance(center, to) <= range;
+  if (startsInside !== endsInside) return true;
+  if (startsInside) return false;
+  return distanceToSegment(center, from, to) <= range;
+}
+
+// ---- Grapple ----------------------------------------------------------------
+// The `grapple` slug flag (Arachnet and kin) has two uses. An Attack that lands
+// on a slinger hooks them and reels them toward the shooter, instead of the
+// usual knockback away. The dedicated Grapple action fires at a map point and,
+// if it hooks a wall or a bridge, reels the *shooter* across to it -- a way to
+// cover far more ground for one slug's AP than walking (MOVE_SPEED_PER_AP per
+// AP). Either way the reel is capped at GRAPPLE_MAX_DISTANCE and stops at the
+// first wall in its way.
+export const GRAPPLE_MAX_DISTANCE = 5 * MOVE_SPEED_PER_AP; // the furthest one grapple reels anything, either direction
+export const GRAPPLE_STOP_DISTANCE = 40; // a yanked slinger lands this far short of whoever pulled them
+export const GRAPPLE_WALL_STOP_DISTANCE = 30; // a reeled-in shooter stops this far short of the wall they hooked
+
+// Where `from` ends up when reeled toward `anchor`: up to `maxDistance` along
+// the line, `stopShort` units short of the anchor, clamped to the first wall
+// crossed on the way. `moved` is how far that actually is.
+export function grappleDestination(from, anchor, walls, { maxDistance = GRAPPLE_MAX_DISTANCE, stopShort = GRAPPLE_STOP_DISTANCE } = {}) {
+  const travel = Math.min(maxDistance, Math.max(0, distance(from, anchor) - stopShort));
+  if (travel < 1) return { point: { x: from.x, y: from.y }, moved: 0, hitWall: false };
+  let dest = pointAtDistance(from, anchor, travel);
+  const blocked = firstWallHit(from, dest, walls);
+  if (blocked) {
+    const t = Math.max(0, blocked.hit.t - 0.05);
+    dest = { x: from.x + (dest.x - from.x) * t, y: from.y + (dest.y - from.y) * t };
+  }
+  return { point: dest, moved: distance(from, dest), hitWall: Boolean(blocked) };
 }
 
 // Moves `targetPos` sideways by `distanceUnits`, perpendicular to the
@@ -1240,9 +1471,16 @@ export function combatSide(combatant) {
 }
 export const areAllies = (a, b) => combatSide(a) === combatSide(b);
 
-// Perception: rolled automatically (d20 + mod) -- above the DC spots things.
+// Perception: rolled automatically (d20 + mod) -- meeting the DC spots things
+// (same rule as Insight).
 export const PERCEPTION_DC = 16;
 export const PERCEPTION_RANGE = 400;
+
+// Insight: as a fight opens, every character rolls d20 + Insight against each
+// foe that carries slugs. Meeting the DC reads that foe's whole magazine (for
+// that character); a foe nobody read keeps its slugs hidden until it fires
+// them, one at a time.
+export const INSIGHT_DC = 16;
 
 // Athletics: +10% walking distance per AP for each point of modifier (a
 // negative modifier never slows you down).
@@ -1272,6 +1510,7 @@ export const FIRST_AID_RANGE = 120;
 export const firstAidApCost = (medicineMod) => Math.max(1, FIRST_AID_BASE_AP - (medicineMod || 0));
 export const NEGATIVE_STATUS_KEYS = [
   "burning",
+  "bleeding",
   "poison",
   "snared",
   "confused",
@@ -1346,9 +1585,70 @@ export function planWallRun(pos, walls, mapWidth, mapHeight) {
 // the map, only up against it. See Frightgeist's fear below.
 export function clampToMapBounds(point, mapWidth, mapHeight) {
   return {
-    x: Math.max(0, Math.min(mapWidth, point.x)),
-    y: Math.max(0, Math.min(mapHeight, point.y)),
+    x: Math.max(MAP_EDGE_INSET, Math.min(mapWidth - MAP_EDGE_INSET, point.x)),
+    y: Math.max(MAP_EDGE_INSET, Math.min(mapHeight - MAP_EDGE_INSET, point.y)),
   };
+}
+
+// The outside of the map is a wall. Four invisible segments along the map's
+// edge, added to the DM's walls (withMapEdges) wherever a *body* moves -- a
+// Move, a knockback, a grapple, a flee -- so nobody can be walked, shoved or
+// reeled off the board. They are never stored: they follow the map size, can't
+// be deleted or broken, and shots (which can fly off the map) ignore them.
+// Positions are kept MAP_EDGE_INSET units inside, so no one ever rests exactly
+// on one of them.
+export const MAP_EDGE_INSET = 1;
+
+// ---- Map size (physical scale) ------------------------------------------------
+// Every range, radius and length in this file is in map units, and a map unit
+// is a fixed physical distance: MAP_UNITS_PER_METER of them to the metre (so
+// MOVE_SPEED_PER_AP = 80 is a 4 m step, a 500-unit blaster reach is 25 m).
+// The DM never changes those numbers -- they set how big the *map* is, in
+// metres, and the map's width/height in units follow. A bigger map is simply
+// more units across, so a blaster reaches a smaller share of it, a hazard
+// covers less of it, and so on, with no per-rule scaling. Mirrored client-side
+// in client/src/mapScale.js -- keep the numbers in sync.
+// (Was 10 -- doubled to halve every real-world range, so they suit rooms and
+// small fights. The rules' numbers in units are untouched.)
+export const MAP_UNITS_PER_METER = 20;
+export const MIN_MAP_METERS = 30;
+// Water cells are indexed y * 1000 + x (see waterCellId), so the map can't be
+// more than 1000 cells (WATER_CELL units each) wide.
+export const MAX_MAP_METERS = 1200;
+export const DEFAULT_MAP_METERS = 160;
+
+// Rescales everything the DM places during setup when the map is resized, so
+// it stays over the same spot of the map image. Positions and walls scale
+// directly; the water mask (cells of WATER_CELL units) is re-rasterised.
+export function rescaleWater(water, kx, ky, newWidth, newHeight) {
+  const old = makeWaterSet(water);
+  if (old.size === 0 || (kx === 1 && ky === 1)) return [...old];
+  const out = new Set();
+  const maxX = Math.floor(newWidth / WATER_CELL);
+  const maxY = Math.floor(newHeight / WATER_CELL);
+  for (let cy = 0; cy <= maxY; cy++) {
+    for (let cx = 0; cx <= maxX; cx++) {
+      // Sample the old mask at the centre of this new cell.
+      const ox = ((cx + 0.5) * WATER_CELL) / kx;
+      const oy = ((cy + 0.5) * WATER_CELL) / ky;
+      if (old.has(waterCellId(ox, oy))) out.add(cy * 1000 + cx);
+    }
+  }
+  return [...out];
+}
+
+export function mapEdgeWalls(mapWidth, mapHeight) {
+  const w = mapWidth ?? 1600;
+  const h = mapHeight ?? 900;
+  return [
+    { id: "edge-n", edge: true, x1: 0, y1: 0, x2: w, y2: 0 },
+    { id: "edge-e", edge: true, x1: w, y1: 0, x2: w, y2: h },
+    { id: "edge-s", edge: true, x1: w, y1: h, x2: 0, y2: h },
+    { id: "edge-w", edge: true, x1: 0, y1: h, x2: 0, y2: 0 },
+  ];
+}
+export function withMapEdges(walls, mapWidth, mapHeight) {
+  return [...(walls || []), ...mapEdgeWalls(mapWidth, mapHeight)];
 }
 
 // ---- Bespoke unique-slug mechanics -----------------------------------------

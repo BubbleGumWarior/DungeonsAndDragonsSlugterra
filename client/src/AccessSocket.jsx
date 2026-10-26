@@ -11,17 +11,31 @@ export function useLiveState() {
 }
 
 export default function AccessSocket({ children }) {
-  const { token, updateUser, logout } = useAuth();
+  const { user, token, updateUser, logout } = useAuth();
   const navigate = useNavigate();
   const [onlineUserIds, setOnlineUserIds] = useState(() => new Set());
-  const [slugterraRevealed, setSlugterraRevealed] = useState(false);
-  // Whether the initial /api/settings fetch has resolved. Route guards need
-  // this so they don't bounce a player off a legitimately-revealed page
-  // during the brief window before the real value arrives.
+  // Players only see the Slugterra side of the app once they've created a
+  // character; until then the app stays "hidden". The DM always sees it all.
+  const [hasCharacter, setHasCharacter] = useState(false);
+  // Whether the initial settings + character fetches have resolved. Route
+  // guards need this so they don't bounce a player off a legitimately-revealed
+  // page during the brief window before the real value arrives.
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const userId = user?.id;
+  const slugterraRevealed = user?.role === "Dungeon Master" || hasCharacter;
   const [characterUpdate, setCharacterUpdate] = useState(null);
   const [characterCreated, setCharacterCreated] = useState(null);
   const [partyHealed, setPartyHealed] = useState(null);
+  // A player's equipment (melee weapon / ammo belt) or the blaster magazines it
+  // feeds changed -- a single signal; consumers refetch (see ammoBelt.js).
+  const [equipmentChanged, setEquipmentChanged] = useState(null);
+  // The DM put the party to sleep: carries the rest's summary (who went
+  // hungry, the market's new mood) for the sleep overlay.
+  const [longRest, setLongRest] = useState(null);
+  // When this client's sleep overlay began to lift. The Roster's "party is
+  // asleep" indicator lasts exactly until then, so the two change together.
+  const [restWokenAt, setRestWokenAt] = useState(0);
+  const markRestWoken = useCallback(() => setRestWokenAt(Date.now()), []);
   // Single "it happened" signals for the market and trading: consumers
   // refetch from the server instead of trusting a payload (see the
   // single-slot note on voiceSignalQueueRef below).
@@ -43,6 +57,9 @@ export default function AccessSocket({ children }) {
   const [diceRollOffered, setDiceRollOffered] = useState(null);
   const [encounter, setEncounter] = useState(null);
   const [counterOffered, setCounterOffered] = useState(null);
+  // Every counter offer received, not just the latest: when several shooters
+  // fire at once the single slot above would only ever hold the last one.
+  const [counterOffers, setCounterOffers] = useState([]);
   const [knockoutRollOffered, setKnockoutRollOffered] = useState(null);
   const [shotFx, setShotFx] = useState(null);
   // Best-effort "a shooter armed this slug" heads-up (a single latest slot --
@@ -51,6 +68,14 @@ export default function AccessSocket({ children }) {
   // An NPC/grunt was just kitted out with blasters and slugs -- see
   // equipNpcCombatant. Consumers refetch their gear lists on it.
   const [gearChanged, setGearChanged] = useState(null);
+  // What the party knows of the foes' slugs changed (an Insight read, or a foe
+  // fired one) -- a single signal; the roster refetches its own view.
+  const [slugKnowledgeChanged, setSlugKnowledgeChanged] = useState(null);
+  // A player's slug earned loyalty (a shot was fired) -- consumers refetch the
+  // slug list, since slug-updated is a single slot and a dual shot sends two.
+  const [slugLoyaltyChanged, setSlugLoyaltyChanged] = useState(null);
+  // One of this player's slugs just rose a loyalty tier.
+  const [slugTierUp, setSlugTierUp] = useState(null);
   const [shotResolved, setShotResolved] = useState(null);
   const [combatLogEntry, setCombatLogEntry] = useState(null);
   const [npcTemplatesUpdate, setNpcTemplatesUpdate] = useState(null);
@@ -89,6 +114,10 @@ export default function AccessSocket({ children }) {
   // inside the socket's onmessage handler, never needed at effect-setup
   // time, so a ref is enough: this keeps it current without making the
   // connection effect depend on it.
+  const userIdRef = useRef(userId);
+  useEffect(() => {
+    userIdRef.current = userId;
+  }, [userId]);
   const navigateRef = useRef(navigate);
   useEffect(() => {
     navigateRef.current = navigate;
@@ -113,14 +142,18 @@ export default function AccessSocket({ children }) {
   useEffect(() => {
     if (!token) return;
 
-    fetch("/api/settings", { headers: { Authorization: `Bearer ${token}` } })
+    setHasCharacter(false);
+    const settingsLoad = fetch("/api/settings", { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => res.json())
       .then((data) => {
-        setSlugterraRevealed(Boolean(data.slugterraRevealed));
         if (Number.isInteger(data.slugHuntArea)) setSlugHuntArea(data.slugHuntArea);
       })
-      .catch(() => {})
-      .finally(() => setSettingsLoaded(true));
+      .catch(() => {});
+    const characterLoad = fetch("/api/characters/me", { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => res.json())
+      .then((data) => setHasCharacter(Boolean(data.character)))
+      .catch(() => {});
+    Promise.all([settingsLoad, characterLoad]).finally(() => setSettingsLoaded(true));
 
     fetch("/api/presence/online", { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => res.json())
@@ -216,17 +249,13 @@ export default function AccessSocket({ children }) {
         return;
       }
 
-      if (data.type === "slugterra-revealed") {
-        setSlugterraRevealed(Boolean(data.revealed));
-        return;
-      }
-
       if (data.type === "character-updated") {
         setCharacterUpdate({ userId: data.userId, character: data.character, at: Date.now() });
         return;
       }
 
       if (data.type === "character-created") {
+        if (data.userId === userIdRef.current) setHasCharacter(true);
         setCharacterCreated({ userId: data.userId, at: Date.now() });
         return;
       }
@@ -251,8 +280,23 @@ export default function AccessSocket({ children }) {
         setPodsUpdate({ userId: data.userId, pods: data.pods, at: Date.now() });
         return;
       }
+      if (data.type === "equipment-changed") {
+        setEquipmentChanged({ userId: data.userId, at: data.at ?? Date.now() });
+        return;
+      }
       if (data.type === "party-healed") {
         setPartyHealed({ at: Date.now() });
+        return;
+      }
+      if (data.type === "long-rest") {
+        setLongRest({
+          at: data.at,
+          receivedAt: Date.now(),
+          rested: data.rested,
+          skippedInCombat: data.skippedInCombat,
+          slugEvents: data.slugEvents || [],
+          marketMood: data.marketMood || null,
+        });
         return;
       }
 
@@ -318,11 +362,27 @@ export default function AccessSocket({ children }) {
 
       if (data.type === "counter-offered") {
         setCounterOffered(data.offer);
+        setCounterOffers((prev) => [...prev.filter((o) => o.id !== data.offer.id), data.offer].slice(-8));
         return;
       }
 
       if (data.type === "combat-gear-changed") {
         setGearChanged(data.at ?? Date.now());
+        return;
+      }
+
+      if (data.type === "slug-loyalty-changed") {
+        setSlugLoyaltyChanged({ userId: data.userId, at: Date.now() });
+        return;
+      }
+
+      if (data.type === "slug-tier-up") {
+        setSlugTierUp({ slugId: data.slugId, slugName: data.slugName, tier: data.tier, at: Date.now() });
+        return;
+      }
+
+      if (data.type === "combat-slug-knowledge") {
+        setSlugKnowledgeChanged(Date.now());
         return;
       }
 
@@ -441,6 +501,10 @@ export default function AccessSocket({ children }) {
         characterUpdate,
         characterCreated,
         partyHealed,
+        equipmentChanged,
+        longRest,
+        restWokenAt,
+        markRestWoken,
         marketChanged,
         combatReportReady,
         tradeChanged,
@@ -459,10 +523,14 @@ export default function AccessSocket({ children }) {
         diceRollOffered,
         encounter,
         counterOffered,
+        counterOffers,
         knockoutRollOffered,
         shotFx,
         slugArmed,
         gearChanged,
+        slugKnowledgeChanged,
+        slugLoyaltyChanged,
+        slugTierUp,
         shotResolved,
         combatLogEntry,
         npcTemplatesUpdate,

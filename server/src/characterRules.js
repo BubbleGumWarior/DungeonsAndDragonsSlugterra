@@ -52,7 +52,7 @@ export const PROFICIENCY_LABELS = {
   investigation: "Investigation",
   nature: "Nature",
   religion: "Religion",
-  creatureHandling: "Creature Handling",
+  creatureHandling: "Slug Handling",
   insight: "Insight",
   medicine: "Medicine",
   perception: "Perception",
@@ -156,8 +156,9 @@ export function skillModifier(stats, proficiencies, skillKey) {
   return statModifier(stats[statKey]) + (isProficient ? 2 : 0);
 }
 
-export function computeMaxGrit(stats) {
-  return 20 + statModifier(stats.constitution) * 5 + statModifier(stats.dexterity);
+// `bonus` is flat extra Grit from worn armor (characters.grit_bonus).
+export function computeMaxGrit(stats, bonus = 0) {
+  return 20 + statModifier(stats.constitution) * 5 + statModifier(stats.dexterity) + (bonus || 0);
 }
 
 // Mirrors client/src/characterData.js -- kept here too since the server is

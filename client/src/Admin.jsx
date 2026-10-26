@@ -98,6 +98,7 @@ export default function Admin() {
                 <thead>
                   <tr>
                     <th>Username</th>
+                    <th>Character</th>
                     <th>Role</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -107,6 +108,9 @@ export default function Admin() {
                   {users.map((u) => (
                     <tr key={u.id}>
                       <td>{u.username}</td>
+                      <td>
+                        {u.characterName || <span className="admin-muted">&mdash;</span>}
+                      </td>
                       <td>{u.role}</td>
                       <td>
                         <span className={`admin-status admin-status--${u.status}`}>

@@ -68,7 +68,9 @@
 
 .market-purse {
   display: flex;
-  gap: 18px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px 18px;
   font-size: 14px;
   color: var(--ink-dim);
 }
@@ -221,9 +223,21 @@
   line-height: 1.5;
   color: var(--ink-dim);
   display: -webkit-box;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 7;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.market-owned {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+.market-owned strong {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--gold-soft);
 }
 
 .market-item-tags {
@@ -352,4 +366,11 @@
   .market-item:hover {
     transform: none;
   }
+}
+
+.market-closed {
+  padding: 18px;
+  text-align: center;
+  border: 1px dashed var(--charcoal-600);
+  border-radius: 12px;
 }

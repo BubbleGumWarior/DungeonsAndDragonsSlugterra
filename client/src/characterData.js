@@ -129,8 +129,9 @@ export function formatModifier(value) {
   return value >= 0 ? `+${value}` : `${value}`;
 }
 
-export function maxGrit(stats) {
-  return 20 + statModifier(stats.constitution) * 5 + statModifier(stats.dexterity);
+// `bonus` is the flat extra Grit worn armor gives (character.gritBonus).
+export function maxGrit(stats, bonus = 0) {
+  return 20 + statModifier(stats.constitution) * 5 + statModifier(stats.dexterity) + (bonus || 0);
 }
 
 export function initiativeBonus(stats) {
@@ -205,9 +206,10 @@ export const PROFICIENCIES = [
   },
   {
     key: "creatureHandling",
-    label: "Creature Handling",
+    label: "Slug Handling",
+    hiddenLabel: "Animal Handling",
     stat: "wisdom",
-    description: "Calming enraged or wild slugs; bonding with your own.",
+    description: "Tracking down wild slugs, feeding your own better, and growing their trust.",
     hiddenDescription: "Calming frightened or aggressive animals; bonding with your own.",
   },
   {
@@ -235,7 +237,7 @@ export const PROFICIENCIES = [
     key: "survival",
     label: "Survival",
     stat: "wisdom",
-    description: "Tracking wild slugs, foraging, and enduring hostile worlds.",
+    description: "Foraging, patching up gear in the field, and enduring hostile worlds.",
     hiddenDescription: "Tracking, foraging, navigating, and enduring the wilderness.",
   },
   {
@@ -268,6 +270,13 @@ export function statByKey(key) {
   return STATS.find((s) => s.key === key);
 }
 
+// A character's modifier for one skill, from their stats + proficiencies.
+export function characterSkillMod(character, skillKey) {
+  const skill = PROFICIENCIES.find((p) => p.key === skillKey);
+  if (!skill || !character?.stats) return 0;
+  return skillModifier(character.stats[skill.stat], Boolean(character.proficiencies?.includes(skillKey)));
+}
+
 // Most entries carry a hand-written `hiddenDescription` for the pre-reveal
 // (modern-Earth) view -- see the comment above PROFICIENCIES. This word-swap
 // is only the safety net for the few that don't: it catches the obvious
@@ -290,6 +299,10 @@ export function veilSlugTerms(text, revealed) {
 
 // Pre-reveal, prefer the hand-written modern-Earth copy; otherwise fall back
 // to the generic word-swap above.
+export function entryLabel(entry, revealed) {
+  return !revealed && entry.hiddenLabel ? entry.hiddenLabel : entry.label;
+}
+
 export function describeEntry(entry, revealed) {
   if (!revealed && entry.hiddenDescription) return entry.hiddenDescription;
   return veilSlugTerms(entry.description, revealed);

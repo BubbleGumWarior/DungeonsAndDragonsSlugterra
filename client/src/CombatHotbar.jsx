@@ -8,6 +8,7 @@ import {
   EyeSlashIcon,
   FirstAidKitIcon,
   PersonSimpleRunIcon,
+  SwordIcon,
   SkullIcon,
   LightningIcon,
   MotorcycleIcon,
@@ -15,6 +16,7 @@ import {
   WindIcon,
   XIcon,
 } from "@phosphor-icons/react";
+import { MELEE_STR_NOTE } from "./itemData.js";
 import "./CombatHotbar.css";
 
 const MOUNT_AP_COST = 1;
@@ -28,13 +30,15 @@ const MODE_META = {
   burrow: { icon: <ShovelIcon weight="bold" />, on: "Burrow", off: "Get Out of Burrow" },
 };
 
-function HotbarButton({ icon, label, apCost, active, disabled, onClick }) {
+// `locked`: the combatant is down (unconscious / disabled), so nothing but
+// End Turn is usable no matter how much AP they have left.
+function HotbarButton({ icon, label, apCost, active, disabled, locked, onClick }) {
   return (
     <button
       type="button"
       className={`combat-hotbar-btn ${active ? "combat-hotbar-btn--active" : ""}`}
       onClick={onClick}
-      disabled={disabled}
+      disabled={disabled || locked}
     >
       {icon}
       <span className="combat-hotbar-btn-label">{label}</span>
@@ -68,6 +72,7 @@ export default function CombatHotbar({
   isDM = false,
   mode,
   weaponSwitch,
+  meleeInfo,
   reloadInfo,
   wallRunInfo,
   skillActionInfo,
@@ -84,9 +89,10 @@ export default function CombatHotbar({
   const isMecha = actingCombatant.kind === "mecha";
   const isMounted = actingCombatant.mountedOn != null;
   const burrowed = modeInfo?.current === "burrow";
+  const down = Boolean(actingCombatant.unconscious || actingCombatant.disabled);
 
   return (
-    <div className="combat-hotbar">
+    <div className={`combat-hotbar ${isActiveTurn ? "combat-hotbar--active-turn" : ""}`}>
       {isMounted && mountedMecha ? (
         <div className="combat-hotbar-ap-group">
           <ApTrack label="Rider AP" current={ap} max={actingCombatant.maxAp} />
@@ -111,7 +117,7 @@ export default function CombatHotbar({
 
       <div className="combat-hotbar-buttons">
         {!burrowed && !isMecha && actingCombatant.currentGrit != null && (
-          <HotbarButton
+          <HotbarButton locked={down}
             icon={<CampfireIcon weight="bold" />}
             label="Hunker Down"
             apCost={ap > 0 ? ap : null}
@@ -121,7 +127,7 @@ export default function CombatHotbar({
         )}
 
         {!burrowed && !isMecha && reloadInfo && (
-          <HotbarButton
+          <HotbarButton locked={down}
             icon={<ArrowsCounterClockwiseIcon weight="bold" />}
             label={reloadInfo.pending > 0 ? `Reload (${reloadInfo.pending})` : reloadInfo.noPods > 0 ? "Reload (no pods)" : "Reload"}
             apCost={reloadInfo.apCost}
@@ -131,7 +137,7 @@ export default function CombatHotbar({
         )}
 
         {!burrowed && !isMecha && !isMounted && (
-          <HotbarButton
+          <HotbarButton locked={down}
             icon={<CarIcon weight="bold" />}
             label="Mount"
             apCost={MOUNT_AP_COST}
@@ -141,7 +147,7 @@ export default function CombatHotbar({
           />
         )}
         {!burrowed && !isMecha && isMounted && (
-          <HotbarButton
+          <HotbarButton locked={down}
             icon={<CarIcon weight="bold" />}
             label="Dismount"
             apCost={MOUNT_AP_COST}
@@ -151,7 +157,7 @@ export default function CombatHotbar({
         )}
 
         {!burrowed && isMounted && (
-          <HotbarButton
+          <HotbarButton locked={down}
             icon={<CarIcon weight="fill" />}
             label="Ram"
             apCost={RAM_AP_COST}
@@ -164,7 +170,7 @@ export default function CombatHotbar({
         )}
 
         {!isMecha && !isMounted && wallRunInfo && (
-          <HotbarButton
+          <HotbarButton locked={down}
             icon={<PersonSimpleRunIcon weight="bold" />}
             label="Wall Run"
             apCost={wallRunInfo.apCost}
@@ -175,14 +181,14 @@ export default function CombatHotbar({
 
         {!isMecha && !isMounted && skillActionInfo && (
           <>
-            <HotbarButton
+            <HotbarButton locked={down}
               icon={<EyeSlashIcon weight="bold" />}
               label="Hide"
               apCost={skillActionInfo.hide.apCost}
               disabled={ap < skillActionInfo.hide.apCost || !skillActionInfo.hide.skilled || skillActionInfo.hide.foesNearby || skillActionInfo.hide.tried}
               onClick={() => onAction("hide")}
             />
-            <HotbarButton
+            <HotbarButton locked={down}
               icon={<SkullIcon weight="bold" />}
               label="Intimidate"
               apCost={skillActionInfo.intimidate.apCost}
@@ -190,7 +196,7 @@ export default function CombatHotbar({
               disabled={ap < skillActionInfo.intimidate.apCost || !skillActionInfo.intimidate.skilled}
               onClick={() => onArmMode(mode?.type === "intimidate" ? null : { type: "intimidate" })}
             />
-            <HotbarButton
+            <HotbarButton locked={down}
               icon={<FirstAidKitIcon weight="bold" />}
               label="First Aid"
               apCost={skillActionInfo.firstAid.apCost}
@@ -201,8 +207,19 @@ export default function CombatHotbar({
           </>
         )}
 
+        {!burrowed && !isMecha && meleeInfo && (
+          <HotbarButton locked={down}
+            icon={<SwordIcon weight="bold" />}
+            label={meleeInfo.damage != null ? `Melee (${meleeInfo.damage} dmg)` : "Melee"}
+            apCost={meleeInfo.apCost}
+            active={mode?.type === "melee"}
+            disabled={ap < meleeInfo.apCost}
+            onClick={() => onArmMode(mode?.type === "melee" ? null : { type: "melee" })}
+          />
+        )}
+
         {!burrowed && !isMecha && weaponSwitch && (
-          <HotbarButton
+          <HotbarButton locked={down}
             icon={<ArrowsClockwiseIcon weight="bold" />}
             label={weaponSwitch.otherSlot === 1 ? "Switch to Secondary" : "Switch to Primary"}
             apCost={SWITCH_WEAPON_AP_COST}
@@ -217,7 +234,7 @@ export default function CombatHotbar({
             if (!meta || m === "aquatic") return null; // aquatic engages by itself in water
             const on = modeInfo.current === m;
             return (
-              <HotbarButton
+              <HotbarButton locked={down}
                 key={m}
                 icon={meta.icon}
                 label={on ? meta.off : meta.on}
@@ -257,6 +274,13 @@ export default function CombatHotbar({
       {mode?.type === "first-aid" && <p className="combat-hotbar-hint">Click a nearby ally (or yourself) to clear their negative effects.</p>}
       {mode?.type === "mount" && <p className="combat-hotbar-hint">Click a highlighted mecha inside the ring to mount it.</p>}
       {mode?.type === "ram" && <p className="combat-hotbar-hint">Click a target in range to ram.</p>}
+      {mode?.type === "melee" && meleeInfo && (
+        <p className="combat-hotbar-hint">
+          Click an enemy inside the ring to swing {meleeInfo.weapon.name}: d20 + STR{meleeInfo.weapon.accuracy ? ` ${meleeInfo.weapon.accuracy > 0 ? "+" : ""}${meleeInfo.weapon.accuracy}` : ""} to hit,{" "}
+          {meleeInfo.weapon.damage} {MELEE_STR_NOTE} damage.{" "}
+          {{ bludgeon: "Bludgeon: knocks them back.", slash: "Slash: leaves them bleeding.", pierce: "Pierce: ignores shields." }[meleeInfo.weapon.meleeType]}
+        </p>
+      )}
       {mode?.type === "shoot" && mode.actionType === "attack" && <p className="combat-hotbar-hint">Click a target to attack.</p>}
       {mode?.type === "shoot" && mode.actionType === "break-wall" && (
         <p className="combat-hotbar-hint">Click anywhere in range -- the slug breaks the first wall (or bridge) it hits.</p>
@@ -266,6 +290,12 @@ export default function CombatHotbar({
       )}
       {mode?.type === "shoot" && mode.actionType === "build-bridge" && (
         <p className="combat-hotbar-hint">Click anywhere in range to build a bridge there.</p>
+      )}
+      {mode?.type === "shoot" && mode.actionType === "summon-plant" && (
+        <p className="combat-hotbar-hint">Click the ground in range to plant a carnivorous bloom there. It bites enemies already in reach, then anyone who moves into, out of or through its reach, and can be shot down.</p>
+      )}
+      {mode?.type === "shoot" && mode.actionType === "grapple" && (
+        <p className="combat-hotbar-hint">Click a wall or bridge in range -- the line hooks it and reels you across to it. (To yank an enemy toward you instead, use Attack.)</p>
       )}
     </div>
   );

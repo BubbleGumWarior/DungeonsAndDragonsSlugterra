@@ -37,7 +37,7 @@ router.get("/party", async (req, res) => {
         name: c.name,
         age: c.age,
         portrait: c.portrait,
-        maxGrit: computeMaxGrit(c.stats),
+        maxGrit: computeMaxGrit(c.stats, c.grit_bonus),
         stats: c.stats,
         slugs: slugsByUser.get(c.user_id) || [],
       })),

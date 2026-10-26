@@ -33,6 +33,7 @@ Freeform vector canvas, not a grid.
   A wall blocks a shot unless the slug has `breaksWalls` (see §5), in which case the
   wall segment is shortened/removed at the impact point and the shot continues through
   with reduced power (see §5).
+- **The map's outer edge is a wall.** Four invisible segments (`mapEdgeWalls` in `combatRules.js`) are added to the DM's walls wherever a body moves -- Move, knockback, grapple, dodge sidestep, flee, wall-run landing, ram throw -- so nobody can walk, be shoved or be reeled off the board. They're never stored (they follow the map size), can't be deleted or broken, and shots ignore them. Every position write is also clamped `MAP_EDGE_INSET` (1) unit inside the map (`updateCombatant`), so nobody ever rests exactly on the edge. A delayed knockback re-checks walls when it lands, so a wall raised mid-flight still stops it. The DM roster has a **Reset position** button that teleports a combatant (and any mecha/riders paired with them) to the center of the map.
 - Movement is a **free drag** up to your remaining movement budget for the action,
   also blocked by walls (no walking through them).
 
@@ -48,6 +49,16 @@ unable to react until your next one.
 a flat `+0`). Sorted descending, ties broken by DEX modifier then randomly. Fixed order
 for the whole encounter.
 
+**Simultaneous turns**: combatants on the same team (see `combatSide`) who sit next
+to each other in the initiative order act *at the same time* as one phase. Everyone
+in the phase starts their turn together (AP refill, status ticks) and can act in any
+order; each presses **End Turn** for themselves, and play only passes to the next
+team once the last of them is done. A defender being shot at by several teammates at
+once gets several counter prompts but only so much AP and so little time to answer
+them. Fallen combatants are skipped without breaking a run, and a phase never
+straddles the end of a round. Stored as `encounters.active_group` (the ids still to
+act); `activeCombatantIds` on the client encounter.
+
 **Actions** (AP cost in parens):
 
 | Action | AP cost | Effect |
@@ -56,6 +67,7 @@ for the whole encounter.
 | Shoot Slug | `slug.apCost` (1–3, already on the slug) | Fire the slug currently chambered in the active weapon's selected magazine slot at a target in range + line of sight. Triggers the counter-clash window (§6) if the target has a loaded slug they can both react with *and* afford (its `apCost` ≤ their leftover AP). |
 | Reload | `blaster.reloadApCost` (flat, one action) | Re-chamber **every** slug in the active weapon that has returned to hand but is sitting unloaded (`loaded = false`, cooldown done — see §4's return-to-hand cooldown), and clear any "jammed" (failed-quality) shot. |
 | Swap Active Weapon | 0 (free, once per turn) | Switch which equipped blaster (Primary/Secondary) is active, matching the existing weapon-cycling UI. |
+| Melee | weapon's own AP (default 2) | Swing the melee weapon equipped in the Secondary slot at a hostile target within its reach (default `MOUNT_RANGE`, 80 units; no walls in the way). Hit roll `d20 + STR modifier (+ the weapon's accuracy)` vs `10 + target DEX modifier` (a mecha's handling for a mecha); a hit deals `weapon damage + STR modifier` (min 1) Grit/Structure through the normal damage path, as a plain "None"-element hit. No reaction window -- no counter-clash or dodge. Blinded / keen-vision effects are consumed by the swing like a shot. See "Melee & equipment" below. |
 | Hunker Down | **all remaining AP** | Sinks every remaining AP into a heal — a flat **`max(1, CON modifier)` Grit per AP spent**, no roll. Ends the turn. Cannot be done the same turn you were hit. The client asks for confirmation first whenever more than 1 AP would be spent. |
 | Mount / Dismount Mecha | 1 | Board or leave a mecha token within `MOUNT_RANGE` (**one Move's worth of walking**, `MOVE_SPEED_PER_AP` units). While armed, the map shows the range ring and highlights every in-range mecha. |
 | Ram (mecha) | 2, **from the mecha's AP** | Drive a mounted mecha into a target in `MOUNT_RANGE`; happens on the *rider's* turn. An unmounted mecha cannot ram. See §8. |
@@ -93,17 +105,17 @@ the equipped weapon's own range now *stack* into the shot's actual reach (§5's
 | Earth | Short (8) | −2 | +1 | Slow | Large knockback, always (doubled if the slug's `causesKnockback` is also set) — see §5 |
 | Electricity | Medium (11) | +1 | +0 | Fast | Chains: 50% power hit to one enemy within 8 units of target. **Also fries mechas** — every point of damage that lands on a mecha's Structure (a direct hit, or the 75% a mounted rider's mecha soaks) is doubled (`ELECTRIC_MECHA_DAMAGE_MULTIPLIER`); the rider's own share of a split hit is *not* doubled |
 | Energy | Medium (10) | +1 | +0 | Fast | Recharge: on a hit, regain 1 spent energy pip on another of your loaded slugs |
-| Fire | Short (9) | +2 | +0 | Fast | Burns: 50% of the slug's own clashPower (min 1) grit dmg/turn, for 3 turns (DoT; doesn't stack — a fresh hit refreshes duration + damage) |
-| Healing* | Short (9) | +1 | n/a | Medium | Heals instead of harms |
+| Fire | Short (9) | +2 | +0 | Fast | Burns: 100% of the slug's own clashPower (min 1) grit dmg/turn, for 3 turns (DoT; doesn't stack — a fresh hit refreshes duration + damage) |
+| Healing* | Short (9) | +1 | n/a | Medium | Heals instead of harms — **double** the slug's clashPower (`HEAL_POWER_MULTIPLIER`) |
 | Ice | Medium (10) | 0 | +0 | Medium | Leaves an icy hazard patch on the ground at the shot's impact point — see §5 |
-| Light | Long (14) | +3 | −2 | Very fast | Blinds: the target's very next attack roll is made with disadvantage (roll twice, take the lower), then the effect is consumed |
-| Metal | Medium (9) | 0 | +1 | Slow | Short knockback, always (doubled if the slug's `causesKnockback` is also set) — see §5 |
-| None† | Short (5) | −5 | −10 | Slow | Dud — no combat effect |
-| Plant | Short (9) | −1 | +0 | Slow | Snares: target can't take the Move action for `SNARE_DURATION_TURNS` (2) of their own turns |
-| Psychic | Medium (9) | 0 | −2 | Medium | Stuns: target loses 1 AP on their next turn |
-| Toxic | Medium (10) | +1 | −1 | Medium | Poison: +1 grit dmg/turn per stack, for 3 turns; stacks (each poisoning hit adds a stack **and** resets the shared duration back to 3 turns) |
+| Light | Long (14) | +3 | +0 | Very fast | Blinds: the target's very next attack roll is made with disadvantage (roll twice, take the lower), then the effect is consumed |
+| Metal | Medium (9) | 0 | +1 | Slow | Short knockback, always (doubled if the slug's `causesKnockback` is also set) — see §5. **+25% damage** (`METAL_UNCOUNTERED_MULTIPLIER`) on any hit that wasn't the outcome of a counter-clash |
+| None† | Short (5) | 0 | +0 | Slow | A plain hit — no type benefits, but no penalties either |
+| Plant | Short (9) | −1 | +0 | Slow | Snares: target can't take the Move action on their next turn (`SNARE_DURATION_TURNS` is 2 because the countdown ticks at the start of that turn) |
+| Psychic | Medium (9) | 0 | −2 | Medium | Stuns: target loses AP equal to 50% of the damage the hit dealt (min 1) on their next turn (`STUN_AP_FRACTION`); stuns from several hits add up |
+| Toxic | Medium (10) | +1 | −1 | Medium | Poison: +1 grit dmg/turn per stack; stacks with each poisoning hit and **never wears off** until First Aid cures it |
 | Unique‡ | — | — | — | — | No default modifiers — fully custom per template |
-| Water | Medium (12) | +1 | +0 | Medium | Douses Fire DoT on hit |
+| Water | Medium (12) | +1 | +0 | Medium | Douses Fire DoT on hit, and soaks 1 energy pip from a random one of the target's slugs (any loaded in a blaster with a live pip) |
 
 Reaction-speed feeds the counter-clash timer in §6 (Fast = short window for the
 *defender* to react, Slow = long window; Very fast shrinks it further still).
@@ -121,43 +133,43 @@ turns knockback on at all, always at the flat short distance, never doubled. See
 circular icy patch (`ICE_PATCH_RADIUS` map units) on the ground where the bolt
 actually came to rest — dead on the target for a hit, out at the deflected wide
 point for a miss, the clash point for a countered shot, the fizzle point for one
-that fell short — and that patch persists for the rest of the encounter. It never
+that fell short — and that patch fades after 4 rounds (`HAZARD_DURATION_ROUNDS`). It never
 lands on a target the shot visibly sailed past. Any non-mecha combatant
-whose Move destination lands inside one has a flat `ICE_SLIP_CHANCE` (50%) chance
+whose Move destination lands inside one has a flat `ICE_SLIP_CHANCE` (75%) chance
 of slipping: the move still happens, but their remaining AP is immediately zeroed
 out, ending their turn on the spot. See `findHazardAt()`/`addIceHazard()`.
 
 **Snare** (Plant) is a full movement lock, not an AP surcharge: while
 `SNARE_DURATION_TURNS` is still counting down, the Move action is rejected
 outright. It ticks down once per the target's own turn (same moment burn/poison
-resolve — see below), so a snare landed mid-round blocks movement for that
-target's next two turns.
+resolve — see below), so a snare landed mid-round blocks movement for exactly
+that target's next turn (the constant is 2 because the first tick happens at the
+start of that turn).
 
 **Burn and poison are real damage-over-time effects**, not an instant bonus to
 the triggering hit. Getting burned or poisoned only *flags* the target on the
 hit that inflicts it; `tickStatusEffects()` (in `combatRules.js`) applies the
 actual damage at the start of each of the target's own next `BURN_DURATION_TURNS`
-/ `POISON_DURATION_TURNS` (3 each) turns, called from `advanceTurn`, alongside
-snare's countdown.
+(3) turns — and, for poison, every turn until cured — called from `advanceTurn`,
+alongside snare's countdown.
 
 - **Burn** doesn't stack. Its damage is set once, from the hit that inflicted
-  it, as `BURN_DAMAGE_FRACTION` (50%) of that slug's own `clashPower`, rounded
+  it, as `BURN_DAMAGE_FRACTION` (100%) of that slug's own `clashPower`, rounded
   and floored at 1. A second Fire hit while already burning doesn't add a
   second DoT — it just refreshes the 3-turn clock and recalculates the damage
   off the new hit's own `clashPower` (so a stronger Fire slug replaces a
   weaker burn rather than stacking with it).
 - **Poison** stacks instead: each poisoning hit adds a stack (so the per-turn
-  damage grows by `POISON_DAMAGE_PER_STACK`) **and** resets the shared
-  duration back to the full 3 turns, so keeping a target poisoned means it
-  never has a chance to fall off on its own.
+  damage grows by `POISON_DAMAGE_PER_STACK`). It has no expiry: it ticks every
+  turn until someone cures it with First Aid (`poison` is in `NEGATIVE_STATUS_KEYS`).
 
 \* **Healing** slugs don't attack. A Shoot Slug action with a Healing slug must
-target an ally (or yourself) and restores grit equal to `slug.clashPower` instead of
+target an ally (or yourself) and restores grit equal to `slug.clashPower × HEAL_POWER_MULTIPLIER` (2) instead of
 dealing damage. It never triggers a counter-clash — you can't clash-counter being
 healed. (Boon Doc.)
 
-† **None**-type slugs (a dud/joke slug) can still be loaded and fired, but always
-resolve as a harmless miss — no attack roll needed, 0 damage, no trait. (Flopper.)
+† **None**-type slugs have no type trait, but they're an ordinary attack otherwise:
+normal accuracy, normal power, normal clash and counter rules. (Flopper.)
 
 ‡ **Unique** slugs (webs, grapples, sticky globs, sonic decoys, etc.) don't follow
 the standard range/accuracy/power formula. Build their range/accuracy straight off
@@ -238,7 +250,7 @@ Attack shot from a flagged slug, a `type: "damage"` hazard entry appears where t
 bolt actually came to rest (same rule as Ice above — target on a hit, the
 deflected wide point on a miss, the clash/fizzle point otherwise), tagged with
 the firing slug's own type and `clashPower`, `HAZARD_RADIUS` (180 map units).
-Persists for the rest of the encounter, same as Ice's patches. Its actual
+Fades after 4 rounds (`HAZARD_DURATION_ROUNDS`), same as Ice's patches. Its actual
 appearance (the DB write and the broadcast) is deferred to land only once the
 shot's flight/explosion animation would have finished playing (see "Delayed
 resolution" below), and it grows in from nothing on the client instead of popping
@@ -266,7 +278,7 @@ chain) a real effect instead of silently doing nothing beyond the type's own tra
 - **Causes Snare** reuses Plant's `snared` status verbatim (Move rejected outright
   for `SNARE_DURATION_TURNS`) on any type. Sand Angler, Polero.
 - **Causes Shock** is a *new*, stronger status — distinct from Psychic's `stunned`
-  (which only costs 1 AP) — that skips the target's entire next turn: `advanceTurn`
+  (which only costs some AP) — that skips the target's entire next turn: `advanceTurn`
   still runs their start-of-turn bookkeeping (DoT ticks, slug cooldowns tick down,
   the `shocked` flag itself is consumed) but refills their AP to 0 and immediately
   recurses to the next living combatant instead of ever handing them the turn.
@@ -282,6 +294,110 @@ chain) a real effect instead of silently doing nothing beyond the type's own tra
 None of these four apply to mecha targets (no blaster/attack-roll concept exists
 for Structure). All four are struck by a counter-clash outcome exactly like a
 normal hit, since clash resolution (§6) routes through the same `dealHit`.
+
+### Heal Over Time (`healOverTime`) and Grapple (`grapple`)
+
+**Heal Over Time** is a per-slug flag backed by a `regen` status effect
+(`{ turnsLeft, amount, by }`). A Healing-type slug carrying it doesn't heal on
+impact; it leaves `regen` on whoever it hits instead, and `tickStatusEffects`
+(called from `advanceTurn`) heals that combatant at the start of each of their own
+next `REGEN_DURATION_TURNS` (3) turns, after any burn/poison has ticked, up to
+max Grit. Each tick is `computeRegenAmount(power)` = `round(power * 1.5 / 3)`, so
+waiting pays back 1.5x the slug's power in total. It never stacks: re-applying
+refreshes the duration and keeps the stronger per-turn amount. Any other type
+only gets the effect when fired at its own shooter (a self-buff). AOE Blast on a
+Healing HoT slug regens everyone caught in the blast. A regen shows as a green dot
+on the token and a "Regen +N" chip in the roster.
+
+**Grapple** is a per-slug flag with two uses, both capped at `GRAPPLE_MAX_DISTANCE`
+(5 AP of walking, 400 units) and stopped by the first wall in the way:
+
+- *Attack a Slinger:* a landed primary hit hooks the target and reels them toward
+  the shooter (`grappleDestination`, landing `GRAPPLE_STOP_DISTANCE` short of them),
+  in place of any knockback. Mecha, mounted riders and anyone standing inside an
+  Anchorage zone can't be dragged. Splash, chain and ricochet hits never pull.
+- *Grapple to a Spot* (a fourth entry in the slug action picker, action type
+  `grapple`): an environment shot at a map point. If the line hooks a wall (the
+  first one along the shot) or a bridge at the aimed point, the *shooter* is reeled
+  across to it, stopping `GRAPPLE_WALL_STOP_DISTANCE` short of a wall or right on a
+  bridge. That is much more ground than Move gives for one slug's AP
+  (`MOVE_SPEED_PER_AP` = 80 per AP). Not available while snared, riding a mecha, or
+  from inside an Anchorage zone; landing in a damaging hazard hurts as it does on
+  a Move.
+
+### Stun, slug stall, amplifier, metal pull, burrowing
+
+Five more per-slug flags, added to make several Velocity Abilities real:
+
+- **Causes Stun** (`causesStun`): the hit target gets the same `stunned` status Psychic's
+  trait gives (AP loss equal to half the hit's damage on their next turn), whatever the slug's element. Bubbaleone,
+  Jellyish, Gazzer, Flatulorhinkus and Neotox.
+- **Stalls Slugs** (`stallsSlugs`, Pieper): every slug the hit target owns goes on
+  cooldown for one of their turns (`STALL_COOLDOWN_TURNS` = 2, because a cooldown
+  ticks at the start of its owner's turn), or has its existing cooldown extended by
+  one. `loaded` is untouched. Only a landed hit on a slinger does it (not a mecha).
+- **Amplifies Partner** (`amplifiesPartner`, Enigmo): in a dual shot the *other* slug's
+  power is tripled (`AMPLIFY_PARTNER_MULTIPLIER`) before the two are added; the
+  partner picker preview shows it. Fired alone it's just a Light slug.
+- **Pulls Metal** (`pullsMetal`, Slicksilver): where the shot lands, walls and bridges
+  that a Metal-type slug built (tagged `slugType: "Metal"`) within
+  `METAL_PULL_RADIUS` slide `METAL_PULL_DISTANCE` units toward the impact point, never
+  past it. DM-drawn walls have no material and don't move; Anchorage zones hold things
+  in place. Note no Metal slug currently has Wall Maker/Bridge Maker, so there's
+  nothing for it to pull until one does.
+- **Phases Walls** (`phasesWalls`, Graspvine): `slugHasTrait(slug, "phase")` is true,
+  so the shot passes through walls exactly like a Dark slug's.
+
+**Mirror Counter** (`mirrorsClash`, Mimkey): when it's the slug fired as a *counter*,
+`resolveCounterOffer` treats the clash as a guaranteed bounce (no damage, no ejects,
+no roll) -- it transforms into the opposing slug, so the two always cancel out. Same
+end state as Caligo's voided Fire clash, but for any attacker. Only applies as the
+counter, not when Mimkey is the one shooting.
+
+**Surround Strike** (`surroundsTarget`, Pentalux): purely a visual, like Performance's
+style shot. On a hit, the bolt flies straight until about 58% of its flight, splits
+into five bolts that fan out to a ring around the target, then converges on it from
+all sides (`surroundBolts` in `CombatMap.jsx`). The server still resolves one shot;
+Pentalux also carries **Uncounterable**, so the target never gets a counter or Dodge
+window. A miss is drawn as an ordinary single wide bolt.
+
+**Summons Plant** (`summonsPlant`, Necrobloom): adds a fifth entry to the slug action
+picker, "Summon a Plant" (action type `summon-plant`, an environment shot at a map point
+with the usual accuracy roll). It plants a stationary **carnivorous bloom**: a combatant
+of kind `plant` on the summoner's team with `PLANT_MAX_GRIT` (50) Grit, no knockout
+pips, and no turn in the order. It's shootable like anyone else, but a landing shot is
+plain Grit damage (`damagePlant`) -- no statuses, knockback or knockout roll -- and at 0
+Grit the row is deleted. It bites any enemy within `PLANT_BITE_RANGE` (= `MOUNT_RANGE`,
+80 units, the same reach as boarding a mecha) for the summoning slug's clash power plus its
+element's DoT. It bites every enemy in reach once as it sprouts (`plantBiteNearby`), and after
+that only when an enemy's movement goes into, out of, or straight through its reach
+(`pathCrossesRange` / `plantBites`): on a Move, a terrified slinger's flight, a knockback or
+pull, or a grapple reel. Standing beside it, or shuffling about inside its reach, never sets it off. On the map the token is a green toothy star with a dashed circle
+showing the bite range. Blooms are excluded from splash hazards, pods, cones and marks,
+and can't be First Aided or Intimidated.
+
+**Causes Burn** (`causesBurn`) puts Fire's burning status on whatever the slug hits, whatever its
+element. **Massive Blast** (`massiveAoe`, with AOE Blast) doubles the blast radius
+(`MASSIVE_AOE_MULTIPLIER`, so 240 instead of `AOE_RADIUS` 120) for who gets caught, including on
+a miss, and the explosion is drawn twice as large (`aoeScale`). Novaflare uses both plus Causes Blind.
+
+**Random Statuses** (`randomStatuses`, Panaceon): a hit applies `RANDOM_STATUS_COUNT` (3) distinct
+effects, each exactly as the dedicated flag applies it. Thrown at an **enemy** they come only from `RANDOM_STATUS_NEGATIVE`
+(burn, poison, blind, snare, shock, stun, jam, fear, confusion, disarm, reversed direction, slowed reaction, slippery, marked);
+thrown at an **ally** (3 effects) or **yourself** (only `RANDOM_STATUS_SELF_COUNT` = 2) they come only from `RANDOM_STATUS_POSITIVE`
+(regen, invisible, keen vision, enhanced reaction) and the shot does no damage and offers no counter window. Rolled fresh on every hit, rolled fresh on every hit (including
+splash). On a Healing-type slug it turns the shot into an ordinary attack: it deals damage instead of
+healing, and (via `isSupportiveSlug`) offers the target a normal counter window.
+
+**Potent Poison** (`potentPoison`, Plaguebell): each poisoning hit adds `POTENT_POISON_MULTIPLIER` (2) times the usual
+poison stacks, so the damage per turn doubles. A Hazard Maker patch it leaves carries the same multiplier
+(`poisonStacks` on the hazard), so stepping into it poisons twice as hard too.
+
+**Causes Bleed** (`causesBleed`, Madicus): a hit leaves a `bleeding` status (`{ turnsLeft, by }`). At the start of
+each of the target's next `BLEED_DURATION_TURNS` (3) turns they lose `BLEED_MAX_GRIT_FRACTION` (10%) of their own
+**max** Grit (at least 1), whatever the slug's power -- so it hurts a tough target more. It ticks in `tickStatusEffects`
+alongside burn and poison, doesn't stack (a fresh bleed just resets the duration), shows as a red dot / "Bleeding" chip,
+and First Aid cures it. Mechas (Structure-only) don't bleed.
 
 ### Slug return-to-hand cooldown
 
@@ -441,7 +557,7 @@ in the Shoot Slug flow (`routes/combat.js`), keyed on the fired blaster's
 |---|---|---|
 | **Bow** | Attack roll also adds the **shooter's own DEX modifier** (on top of the usual accuracy terms). | `blasterTypeAccuracyBonus` — folded into the attack roll in `resolveNormalHit` / `resolveEnvironmentShot` |
 | **Gatling** | Every slug it fires costs **`GATLING_AP_DISCOUNT` (2) less AP** to shoot, floored at 1. Applies to Attack and to Break/Make Wall & Build Bridge alike. | `gatlingShotApCost` — `shotApCost` replaces `slug.ap_cost` for the whole shoot route's AP check + spend |
-| **Cannon** | The fired slug gets **`+CANNON_CLASH_BONUS` (+3) clash power**, which rides through both the §6 clash comparison and the eventual hit damage (`clash_power` drives both). A `None`-type dud stays a dud. | `applyBlasterTypeToSlug` — clones the slug at fire time, stored on the pending offer |
+| **Cannon** | The fired slug gets **`+CANNON_CLASH_BONUS` (+3) clash power**, which rides through both the §6 clash comparison and the eventual hit damage (`clash_power` drives both). | `applyBlasterTypeToSlug` — clones the slug at fire time, stored on the pending offer |
 
 A DM-puppeted NPC opts into one of these by setting `npcBlaster.baseType` to the
 matching type; leaving it unset (the default) means no base-type effect.
@@ -657,6 +773,31 @@ blaster, and Dodge never fires one.
 
 See `resolveDodgeAttempt` in `routes/combat.js`.
 
+### 6b. Auto-counter (NPCs and grunts)
+
+The DM can switch **Auto-counter** on per NPC/grunt (the robot button on its Turn Order row) or for a whole group (the *Grunts* / *NPCs* chips above the list). While it's on, that combatant never sends the DM a counter prompt: when a shot that will land opens its reaction window, the server runs the forecast in `server/src/autoCounter.js` and acts for them. Stored as `combatants.data.autoCounter`.
+
+The forecast scores each reaction as a **Grit swing** and compares it to doing nothing (the shot lands uncountered, Metal's +25% included):
+
+| Option | Swing |
+| --- | --- |
+| Do nothing | -(harm of the uncountered hit + its status riders) |
+| Counter, defender wins the clash | + harm the reflected slug does to the attacker - AP/pip cost |
+| Counter, bounce | -(cost) -- the shot is stopped |
+| Counter, double-break | -(cost) - lost counter slug |
+| Counter, attacker wins | -(harm of the hit, no Metal bonus) - cost - lost counter slug |
+| Dodge | -(1 - P(dodge)) x (harm of the hit) - Dodge's AP cost |
+
+* The clash uses the real `resolveClash` with the x3 `clash_tripled` multipliers, fire-voiding (Caligo) and mimic (Mimkey); damage uses the shared `slugBaseHitAmount` that `dealHit` also uses, so the forecast can't drift from what lands. A mounted rider only eats 25% of a hit.
+* "Harm" is the Grit actually lost (overkill ignored) plus a lethal bump when it would drop them to 0 -- so a grunt on its last Grit reaches for a bounce or dodge that a healthy one wouldn't bother with. The same bump applies to a reflected hit that would kill the attacker.
+* Each status rider on the incoming slug (burn, poison, snare, stun, blind, `causes_*`...) adds a point of harm.
+* P(dodge) is the opposed `d20 + acrobatics > attack` odds. A window only opens for a shot that already hit, so the shooter's die is averaged over just the rolls that would hit the defender's DC -- skewed high, which makes dodging a skilled shooter a long shot. The NPC reasons from the shooter's modifier, it doesn't read the actual roll.
+* The best option is taken only if it beats doing nothing by at least `AUTO_COUNTER_MIN_GAIN` (1). Otherwise the shot resolves as a plain hit, with no prompt and no AP spent.
+* A counter isn't attempted if the window is too short for the counter slug to finish its windup (it would auto-lose), only Dodge.
+* The reaction is sent after a delay (quicker for a high-DEX NPC, with jitter) through the same resolve path a human click uses, timestamped at that moment so the clash point is where a real reaction would put it.
+
+Tunables (all at the top of `autoCounter.js`): `AUTO_COUNTER_AP_VALUE`, `_PIP_COST`, `_SLUG_LOSS`, `_RIDER_HARM`, `_LETHAL_HARM`, `_MIN_GAIN`.
+
 ## 7. Grit, knockout, unconsciousness
 
 - Grit hits 0 → if the character has any unused knockout pip, a **Knockout Roll**
@@ -716,6 +857,39 @@ maxStructure = 20 + armor * 4 + tier * 5
 - Structure at 0 → mecha is disabled (can't move/ram this encounter); passengers are
   dismounted in place and each immediately makes a knockback-style knockout roll
   check (a wrecked mecha throws its riders).
+
+## Melee & equipment
+
+The **Secondary** slot (slot 1) holds *one* thing: a second blaster, **or** a piece of
+equipment (`equipment` table, `server/src/equipmentRules.js`, routes in
+`routes/equipment.js`; kinds: melee weapon, ammo belt, shield -- armor has its own slot). The DM grants equipment from Inventory Management ("Grant
+Equipment"); players equip it by dragging onto the Secondary slot. Equipping into the
+slot bumps whatever was there (a bumped blaster is unloaded), and equipping a blaster
+into slot 1 sends equipment back to the pack. Equipment can be traded like any item.
+
+- **Melee weapon** -- damage, accuracy, AP cost and reach are all DM-set per weapon. It
+  adds a hotbar **Melee** button (see the action table in section 3). It is not a
+  "weapon switch": having it equipped is enough, Switch Weapon only toggles blasters.
+- **Melee types** -- each melee weapon is a **bludgeon** (shoves the target `MELEE_KNOCKBACK_DISTANCE`, half a
+  step, with the usual into-a-wall knockout check), a **slash** (leaves the target bleeding, same as Madicus's bleed)
+  or a **pierce** (ignores shields). All three go through the normal hit path as a plain "None"-element hit.
+- **Shield** (Secondary slot) -- the DM sets how much damage it `absorb`s. It soaks that much per fight, then it's
+  **broken for the rest of that fight** and works again in the next one. The tally lives on the combatant
+  (`data.shieldUsed`, keyed by equipment id, so unequipping and re-equipping a broken shield doesn't mend it;
+  `data.shield` is the snapshot the roster draws). It acts in `absorbRiderDamage`, after a mounted rider's mecha has
+  soaked its share, so it covers slug hits, melee, rams, hazards and cones -- but not burn/poison/bleed ticks.
+  Pierce weapons skip it.
+- **Armor** (its own Armor slot, worn with a Secondary item) -- adds flat max Grit (`characters.grit_bonus`, folded
+  into `computeMaxGrit`). Current Grit is not raised on equip -- it fills at the next rest -- but is capped when armor
+  comes off. Armor can't be changed during a fight; a fight picks up whatever is worn when it starts.
+- **Ammo belt** -- gives the *Primary* blaster `extra_slots` more magazine slots (one
+  blaster, more slugs). Stored as `blasters.magazine_bonus`, kept in step by
+  `syncAmmoBelt` (`server/src/ammoBelt.js`) whenever a belt or the primary changes;
+  slugs sitting in slots that no longer exist are unloaded. Anything that reads a
+  player's magazine uses `totalMagazineSize` (`magazine_size + magazine_bonus`);
+  `magazineSize` stays the DM-edited base.
+- Changes broadcast a single `equipment-changed` signal (not per-row payloads --
+  the live socket only keeps the last message of a burst) and clients refetch.
 
 ## 9. Data model additions
 
@@ -865,3 +1039,9 @@ your house-rule instinct:
   playstyles.
 - `DODGE_SIDESTEP_DISTANCE = 40` vs `AOE_RADIUS = 120` — tuned so a dodge usually but
   not always ducks a blast too; worth revisiting once you've seen it land in practice.
+
+## Map size and view
+
+- Every range/radius/length in `combatRules.js` is in map units, and a unit is a fixed distance: `MAP_UNITS_PER_METER = 20` (so `MOVE_SPEED_PER_AP = 80` is a 4 m step). The DM sets how many **metres wide** the map is during setup (`PATCH /encounters/:id/size`, 30-1200 m, default 160 m = 3200 units); the width in units follows and the height keeps the aspect ratio. A bigger map is just more units, so blaster range, melee reach, hazards, mount range etc. cover less of it with no per-rule scaling. Resizing rescales placed combatants, walls and water so they stay over the same spot of the map picture. Mirrored client-side in `client/src/mapScale.js`.
+- A distance scale bar (round metres at the current zoom) is drawn along the bottom of the map for everyone.
+- The DM no longer pans/zooms the map picture (it is always cover-fitted). Every viewer, DM included, has their own zoom/pan: scroll to zoom toward the cursor, drag an empty spot (or middle-drag) to pan, buttons bottom-right. It is the SVG `viewBox`, so picture, tokens, walls and rings move together, and it is never sent to anyone else.

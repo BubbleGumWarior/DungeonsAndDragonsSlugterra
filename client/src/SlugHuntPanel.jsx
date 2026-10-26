@@ -21,11 +21,13 @@ export default function SlugHuntPanel({ isDungeonMaster = false }) {
   const areaIndex = Math.min(Math.max(slugHuntArea ?? 0, 0), AREAS.length - 1);
   const area = AREAS[areaIndex];
 
-  // "Try Hunt" (players only): d20 + Survival, rolled server-side. One attempt
-  // per rest -- `locked` until the DM's next Heal All. On a success the DM is
-  // prompted to approve the slug it turns up.
+  // "Try Hunt" (players only): d20 + Slug Handling, rolled server-side. A rest
+  // allows as many tries as the hunter's Nature earns, and one find ends the
+  // day's hunting -- `status` is the server's tally, refreshed on the next
+  // Long Rest. On a success the DM is prompted to approve the slug it turns up.
   const [hunt, setHunt] = useState(null); // { state: 'rolling'|'fail'|'pending'|'found'|'dismissed'|'error', ... }
-  const [locked, setLocked] = useState(false);
+  const [status, setStatus] = useState(null); // { locked, found, attemptsLeft, maxAttempts }
+  const locked = Boolean(status?.locked);
 
   useEffect(() => {
     if (isDungeonMaster || !token) return;
@@ -33,7 +35,7 @@ export default function SlugHuntPanel({ isDungeonMaster = false }) {
     fetch("/api/slug-hunt/status", { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => res.json())
       .then((data) => {
-        if (!cancelled) setLocked(Boolean(data.locked));
+        if (!cancelled && typeof data.attemptsLeft === "number") setStatus(data);
       })
       .catch(() => {});
     return () => {
@@ -44,12 +46,16 @@ export default function SlugHuntPanel({ isDungeonMaster = false }) {
   useEffect(() => {
     if (!slugHuntLock) return;
     if (slugHuntLock.all) {
-      setLocked(false);
+      // A Long Rest: the tally resets, so refetch what this character now gets.
       setHunt(null);
-    } else if (slugHuntLock.userId === user?.id) {
-      setLocked(Boolean(slugHuntLock.locked));
+      fetch("/api/slug-hunt/status", { headers: { Authorization: `Bearer ${token}` } })
+        .then((res) => res.json())
+        .then((data) => typeof data.attemptsLeft === "number" && setStatus(data))
+        .catch(() => {});
+    } else if (slugHuntLock.userId === user?.id && slugHuntLock.status) {
+      setStatus(slugHuntLock.status);
     }
-  }, [slugHuntLock, user?.id]);
+  }, [slugHuntLock, user?.id, token]);
 
   useEffect(() => {
     if (!slugHuntResolved || !hunt || hunt.state !== "pending") return;
@@ -82,7 +88,7 @@ export default function SlugHuntPanel({ isDungeonMaster = false }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Could not attempt the hunt.");
-      setLocked(true);
+      if (data.status) setStatus(data.status);
       if (data.success) {
         setHunt({
           state: "pending",
@@ -236,19 +242,26 @@ export default function SlugHuntPanel({ isDungeonMaster = false }) {
                 : hunt?.state === "pending"
                 ? "Waiting for the DM…"
                 : locked
-                ? "Already hunted this rest"
+                ? status?.found
+                  ? "Found a slug today"
+                  : "Out of hunts this rest"
                 : "Try Hunt"}
             </button>
 
-            {locked && !hunt && (
-              <p className="slughunt-hunt-result">
-                You've used your hunt for now — it refreshes when the party rests.
+            {status && (
+              <p className="slughunt-hunt-tally">
+                {status.found
+                  ? "A find ends the day's hunting — it refreshes when the party rests."
+                  : locked
+                  ? "You're out of hunts — they refresh when the party rests."
+                  : `${status.attemptsLeft} of ${status.maxAttempts} ${status.maxAttempts === 1 ? "hunt" : "hunts"} left this rest. Nature earns more tries; Arcana favours rarer finds.`}
+                {status.floppersOnly && !status.locked && " Your Nature is too weak to find anything but Floppers."}
               </p>
             )}
 
             {hunt?.state === "fail" && (
               <p className="slughunt-hunt-result">
-                Rolled <strong>{hunt.total}</strong> ({hunt.roll} {formatModifier(hunt.modifier)} Survival) — nothing
+                Rolled <strong>{hunt.total}</strong> ({hunt.roll} {formatModifier(hunt.modifier)} Slug Handling) — nothing
                 turned up this time.
               </p>
             )}
@@ -258,7 +271,7 @@ export default function SlugHuntPanel({ isDungeonMaster = false }) {
                   <>Your instincts finally catch a break — </>
                 ) : (
                   <>
-                    Rolled <strong>{hunt.total}</strong> ({hunt.roll} {formatModifier(hunt.modifier)} Survival) —{" "}
+                    Rolled <strong>{hunt.total}</strong> ({hunt.roll} {formatModifier(hunt.modifier)} Slug Handling) —{" "}
                   </>
                 )}
                 something's out there. The DM is confirming what you found.

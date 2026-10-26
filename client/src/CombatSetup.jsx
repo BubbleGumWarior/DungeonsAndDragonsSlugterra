@@ -14,6 +14,7 @@ import {
 } from "@phosphor-icons/react";
 import { COMBAT_TEAMS, teamById } from "./combatTeams.js";
 import { combatSide } from "./combatSkills.js";
+import { MAP_SIZE_PRESETS, MIN_MAP_METERS, MAX_MAP_METERS, mapMeters } from "./mapScale.js";
 import "./CombatSetup.css";
 
 // Where each team musters on a fresh map, as fractions of its width/height --
@@ -30,15 +31,8 @@ const TEAM_ANCHOR = {
 const TOOLS = [
   { id: "move", label: "Place", key: "V", Icon: CursorIcon, hint: "Drag any token to place it." },
   { id: "walls", label: "Walls", key: "W", Icon: WallIcon, hint: "Click and drag to draw a wall. Click a wall to remove it." },
-  { id: "paint", label: "Water", key: "B", Icon: DropIcon, hint: "Drag across the map to flood cells." },
-  { id: "erase", label: "Drain", key: "E", Icon: EraserIcon, hint: "Drag across water to drain it." },
-];
-
-const BRUSHES = [
-  { size: 1, label: "Fine" },
-  { size: 3, label: "Medium" },
-  { size: 5, label: "Broad" },
-  { size: 9, label: "Flood" },
+  { id: "paint", label: "Water", key: "B", Icon: DropIcon, hint: "Drag around an area to outline it -- the inside floods when you let go." },
+  { id: "erase", label: "Drain", key: "E", Icon: EraserIcon, hint: "Drag around water to outline it -- the inside drains when you let go." },
 ];
 
 const ADD_TABS = [
@@ -221,6 +215,61 @@ function Roster({ combatants, isDM, onSetTeam, onRemove }) {
   );
 }
 
+// How big the battlefield really is, in metres across. Ranges, hazards and mount
+// reach are fixed real distances, so this is what makes them feel long or short
+// on this map. Everything already placed is rescaled to stay on the same spot.
+function MapSizeControl({ meters, onResize }) {
+  const [draft, setDraft] = useState(String(meters));
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setDraft(String(meters)), [meters]);
+
+  async function apply(value) {
+    const n = Math.round(Number(value));
+    if (!Number.isFinite(n) || n === Math.round(meters)) {
+      setDraft(String(meters));
+      return;
+    }
+    const clamped = Math.min(MAX_MAP_METERS, Math.max(MIN_MAP_METERS, n));
+    setBusy(true);
+    try {
+      await onResize(clamped);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="setup-mapsize">
+      <label className="setup-mapsize-field">
+        <span>Map width</span>
+        <input
+          type="number"
+          min={MIN_MAP_METERS}
+          max={MAX_MAP_METERS}
+          step="10"
+          value={draft}
+          disabled={busy}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => apply(draft)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+          }}
+        />
+        <span>m</span>
+      </label>
+      <div className="setup-tools" role="group" aria-label="Map size presets">
+        {MAP_SIZE_PRESETS.map((p) => (
+          <button key={p.meters} type="button" className={Math.round(meters) === p.meters ? "is-on" : ""} disabled={busy} onClick={() => apply(p.meters)}>
+            {p.label}
+            <kbd>{p.meters}m</kbd>
+          </button>
+        ))}
+      </div>
+      <p className="setup-hint">Blaster range, melee reach, hazards and mounting are fixed distances -- a bigger map makes each cover less of it.</p>
+    </div>
+  );
+}
+
 export default function CombatSetup({
   encounter,
   isDM,
@@ -231,14 +280,14 @@ export default function CombatSetup({
   error,
   tool,
   onToolChange,
-  brush,
-  onBrushChange,
+  onResizeMap,
   onAddCombatant,
   onPullNpc,
   onPullGrunt,
   onSetTeam,
   onRemove,
   onStart,
+  onCancel,
   children,
 }) {
   const [deployTeam, setDeployTeam] = useState("auto");
@@ -294,7 +343,6 @@ export default function CombatSetup({
   const npcRel = (t) => t.profile?.fields?.relationship?.value || null;
 
   const tool_ = TOOLS.find((t) => t.id === tool) || TOOLS[0];
-  const water = tool === "paint" || tool === "erase";
   const startHint =
     combatants.length === 0 ? "Add at least one combatant." : teamsInPlay < 2 ? "Only one team on the map, so nobody has an opponent." : null;
 
@@ -312,9 +360,14 @@ export default function CombatSetup({
         </div>
         {isDM ? (
           <div className="setup-start">
-            <button type="button" className="panel-btn setup-start-btn" disabled={combatants.length === 0} onClick={onStart}>
-              <PlayIcon weight="fill" /> Start encounter
-            </button>
+            <div className="setup-start-actions">
+              <button type="button" className="panel-btn panel-btn--ghost setup-cancel-btn" onClick={onCancel}>
+                <XIcon weight="bold" /> Cancel
+              </button>
+              <button type="button" className="panel-btn setup-start-btn" disabled={combatants.length === 0} onClick={onStart}>
+                <PlayIcon weight="fill" /> Start encounter
+              </button>
+            </div>
             {startHint && <p className="setup-note">{startHint}</p>}
           </div>
         ) : (
@@ -363,11 +416,11 @@ export default function CombatSetup({
                   {tab === "party" && (
                     <>
                       <ul>
-                        {players.filter((p) => matches(p.username)).map((p) => (
+                        {players.filter((p) => matches(p.characterName || p.username)).map((p) => (
                           <PickRow
                             key={`u${p.id}`}
-                            avatar={<Avatar src={p.portrait} name={p.username} teamId="party" />}
-                            name={p.username}
+                            avatar={<Avatar src={p.portrait} name={p.characterName || p.username} teamId="party" />}
+                            name={p.characterName || p.username}
                             meta="Player character"
                             tint="var(--gold-soft)"
                             taken={takenUsers.has(p.id)}
@@ -483,26 +536,9 @@ export default function CombatSetup({
                   </button>
                 ))}
               </div>
-              {water && (
-                <div className="setup-brushes" role="radiogroup" aria-label="Brush size">
-                  {BRUSHES.map((b, i) => (
-                    <button
-                      key={b.size}
-                      type="button"
-                      role="radio"
-                      aria-checked={brush === b.size}
-                      aria-label={b.label}
-                      title={b.label}
-                      className={brush === b.size ? "is-on" : ""}
-                      onClick={() => onBrushChange(b.size)}
-                    >
-                      <i style={{ width: 5 + i * 4, height: 5 + i * 4 }} />
-                    </button>
-                  ))}
-                </div>
-              )}
               <p className="setup-hint">{tool_.hint}</p>
             </div>
+            <MapSizeControl meters={mapMeters(encounter.mapWidth)} onResize={onResizeMap} />
             <div className={`setup-map setup-map--${tool}`}>{children}</div>
           </section>
         )}

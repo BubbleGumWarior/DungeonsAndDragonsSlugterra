@@ -300,7 +300,7 @@ export default function ChallengePanel({ isDungeonMaster = false }) {
                     className={`challenge-result-row${roll.value === highest ? " challenge-result-row--top" : ""}`}
                   >
                     <span className="challenge-result-rank">#{i + 1}</span>
-                    <span className="challenge-result-name">{roll.username}</span>
+                    <span className="challenge-result-name">{roll.name}</span>
                     <span className="challenge-result-value num-tabular">{roll.value}</span>
                     {isDungeonMaster && (
                       <button

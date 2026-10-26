@@ -1,5 +1,5 @@
 import { CheckIcon } from "@phosphor-icons/react";
-import { PROFICIENCIES, REQUIRED_PROFICIENCIES, STATS, describeEntry } from "./characterData.js";
+import { PROFICIENCIES, REQUIRED_PROFICIENCIES, STATS, describeEntry, entryLabel } from "./characterData.js";
 import "./ProficiencyPicker.css";
 
 export default function ProficiencyPicker({ selected, onChange, unlimited = false, revealed = true }) {
@@ -45,7 +45,7 @@ export default function ProficiencyPicker({ selected, onChange, unlimited = fals
                       {isSelected && <CheckIcon weight="bold" />}
                     </span>
                     <span className="proficiency-item-text">
-                      <span className="proficiency-item-label">{p.label}</span>
+                      <span className="proficiency-item-label">{entryLabel(p, revealed)}</span>
                       <span className="proficiency-item-description">{describeEntry(p, revealed)}</span>
                     </span>
                   </button>

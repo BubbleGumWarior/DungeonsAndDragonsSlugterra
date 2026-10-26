@@ -4,6 +4,7 @@ import AccessSocket, { useLiveState } from "./AccessSocket.jsx";
 import VoiceChatProvider from "./VoiceChatContext.jsx";
 import VoiceWidget from "./VoiceWidget.jsx";
 import ChallengeResultOverlay from "./ChallengeResultOverlay.jsx";
+import LongRestOverlay from "./LongRestOverlay.jsx";
 import DiceRollPrompt from "./DiceRollPrompt.jsx";
 import SlugHuntPrompt from "./SlugHuntPrompt.jsx";
 import CounterClashPrompt from "./CounterClashPrompt.jsx";
@@ -17,9 +18,11 @@ import Admin from "./Admin.jsx";
 import CharacterCreate from "./CharacterCreate.jsx";
 import CharacterSheet from "./CharacterSheet.jsx";
 import Inventory from "./Inventory.jsx";
+import Consumables from "./Consumables.jsx";
 import Market from "./Market.jsx";
 import { ToastProvider } from "./Toast.jsx";
 import TradeToasts from "./TradeToasts.jsx";
+import SlugToasts from "./SlugToasts.jsx";
 import Slugs from "./Slugs.jsx";
 import Mechas from "./Mechas.jsx";
 import GalaxyPage from "./GalaxyPage.jsx";
@@ -35,10 +38,10 @@ function PublicOnlyRoute({ children }) {
   return token ? <Navigate to="/dashboard" replace /> : children;
 }
 
-// Guards the routes that only exist once Slugterra is revealed. The NavBar
-// hides these links for players until then, but hiding a link doesn't stop
+// Guards the routes that only exist once a player has created their character.
+// The NavBar hides these links until then, but hiding a link doesn't stop
 // someone typing /ship into the address bar -- this bounces them back to the
-// dashboard unless they're the Dungeon Master or the reveal has happened.
+// dashboard unless they're the Dungeon Master or have a character.
 function SlugterraGate() {
   const { user } = useAuth();
   const { slugterraRevealed, settingsLoaded } = useLiveState();
@@ -46,8 +49,8 @@ function SlugterraGate() {
 
   if (isDungeonMaster) return <Outlet />;
 
-  // Wait for the real setting before deciding -- otherwise a player deep-linking
-  // to a revealed page would get bounced on the first render.
+  // Wait for the character check before deciding -- otherwise a player
+  // deep-linking to a revealed page would get bounced on the first render.
   if (!settingsLoaded) {
     return (
       <div className="gate-loading">
@@ -78,8 +81,10 @@ function App() {
       <AccessSocket>
        <ToastProvider>
         <TradeToasts />
+        <SlugToasts />
         <CombatReportToasts />
         <ChallengeResultOverlay />
+        <LongRestOverlay />
         <DiceRollPrompt />
         <SlugHuntPrompt />
         <CounterClashPrompt />
@@ -112,6 +117,7 @@ function App() {
             <Route path="/character" element={<CharacterSheet />} />
             <Route element={<SlugterraGate />}>
               <Route path="/inventory" element={<Inventory />} />
+              <Route path="/consumables" element={<Consumables />} />
               <Route path="/market" element={<Market />} />
               <Route path="/slugs" element={<Slugs />} />
               <Route path="/mechas" element={<Mechas />} />

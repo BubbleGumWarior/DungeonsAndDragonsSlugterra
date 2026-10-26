@@ -6,6 +6,7 @@ import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { broadcastAll, notifyUser } from "../ws.js";
 import { skillModifier } from "../characterRules.js";
+import { huntAttemptsFor, huntFindsOnlyFloppers, arcanaOddsFactor, FLOPPER_NAME } from "../huntRules.js";
 import { recordSlugpediaEntry } from "../slugpediaStore.js";
 import { toClientTemplate } from "./slugTemplates.js";
 
@@ -81,7 +82,14 @@ function areaName(areaIndex) {
 // Weighted random slug for an area, restricted to names the DM actually has a
 // template for (so approving can always add a real entry to the slugpedia).
 // Returns a slug_templates row, or null if nothing is eligible.
-async function pickSlugForArea(areaIndex) {
+// `arcanaMod` (the hunter's Arcana) tilts the weights toward rarer templates;
+// a reroll by the DM keeps the same tilt. A hunter with Nature below 1 only
+// ever turns up Floppers, whatever the planet's odds say.
+async function pickSlugForArea(areaIndex, arcanaMod = 0, natureMod = 0) {
+  if (huntFindsOnlyFloppers(natureMod)) {
+    const { rows } = await pool.query("SELECT * FROM slug_templates WHERE name = $1 LIMIT 1", [FLOPPER_NAME]);
+    return rows[0] ?? null;
+  }
   const entries = ODDS.oddsByArea[areaName(areaIndex)] || [];
   if (entries.length === 0) return null;
 
@@ -92,16 +100,30 @@ async function pickSlugForArea(areaIndex) {
   );
   const byName = new Map(templates.map((t) => [t.name, t]));
 
-  const pool_ = entries.filter((e) => e.chance > 0 && byName.has(e.name));
-  if (pool_.length === 0) return null;
+  const weighted = entries
+    .filter((e) => e.chance > 0 && byName.has(e.name))
+    .map((e) => ({ name: e.name, weight: e.chance * arcanaOddsFactor(arcanaMod, byName.get(e.name).rarity) }));
+  if (weighted.length === 0) return null;
 
-  const total = pool_.reduce((sum, e) => sum + e.chance, 0);
+  const total = weighted.reduce((sum, e) => sum + e.weight, 0);
   let r = Math.random() * total;
-  for (const e of pool_) {
-    r -= e.chance;
+  for (const e of weighted) {
+    r -= e.weight;
     if (r <= 0) return byName.get(e.name);
   }
-  return byName.get(pool_[pool_.length - 1].name);
+  return byName.get(weighted[weighted.length - 1].name);
+}
+
+// The hunter's tally for this rest: how many tries they've used, how many
+// their Nature allows, and whether one has already turned something up.
+async function huntStatusFor(userId, character) {
+  const { rows } = await pool.query("SELECT attempts, found FROM slug_hunt_locks WHERE user_id = $1", [userId]);
+  const used = rows[0]?.attempts ?? 0;
+  const found = rows[0]?.found ?? false;
+  const natureMod = skillModifier(character.stats, character.proficiencies, "nature");
+  const maxAttempts = huntAttemptsFor(natureMod);
+  const attemptsLeft = found ? 0 : Math.max(0, maxAttempts - used);
+  return { locked: attemptsLeft === 0, floppersOnly: huntFindsOnlyFloppers(natureMod), found, attemptsUsed: used, maxAttempts, attemptsLeft };
 }
 
 function huntPayload(hunt, template) {
@@ -148,28 +170,25 @@ async function postChatMessage(role, body) {
   });
 }
 
-// Whether the current player has already used their hunt this rest.
+// How many hunts the current player has left this rest.
 router.get("/status", async (req, res) => {
   try {
-    const { rows } = await pool.query("SELECT 1 FROM slug_hunt_locks WHERE user_id = $1", [req.user.sub]);
-    res.json({ locked: rows.length > 0 });
+    const { rows: charRows } = await pool.query("SELECT stats, proficiencies FROM characters WHERE user_id = $1", [req.user.sub]);
+    if (!charRows[0]) return res.json({ locked: false, found: false, attemptsUsed: 0, maxAttempts: 1, attemptsLeft: 1 });
+    res.json(await huntStatusFor(req.user.sub, charRows[0]));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not load hunt status." });
   }
 });
 
-// A player attempts a hunt at the party's current location. Rolls d20 +
-// Survival server-side; on a total above 15 a pending hunt is created and the
-// DM(s) are prompted with a weighted-random slug to approve or reroll. One
-// attempt per rest -- a lock row is written whether it succeeds or fails.
+// A player attempts a hunt at the party's current location. Rolls d20 + Slug
+// Handling server-side; on a total above 15 a pending hunt is created and the
+// DM(s) are prompted with a weighted-random slug to approve or reroll. A rest
+// allows as many tries as the hunter's Nature earns (see huntRules.js), but one
+// success ends the day's hunting.
 router.post("/attempt", async (req, res) => {
   try {
-    const { rows: lockRows } = await pool.query("SELECT 1 FROM slug_hunt_locks WHERE user_id = $1", [req.user.sub]);
-    if (lockRows.length > 0) {
-      return res.status(409).json({ error: "You've already hunted this rest -- wait for the party to rest." });
-    }
-
     const { rows: charRows } = await pool.query(
       "SELECT name, stats, proficiencies FROM characters WHERE user_id = $1",
       [req.user.sub]
@@ -179,12 +198,22 @@ router.post("/attempt", async (req, res) => {
       return res.status(400).json({ error: "You don't have a character sheet yet." });
     }
 
+    const before = await huntStatusFor(req.user.sub, character);
+    if (before.found) {
+      return res.status(409).json({ error: "You've already found a slug today -- wait for the party to rest." });
+    }
+    if (before.attemptsLeft < 1) {
+      return res.status(409).json({ error: "You're out of hunts this rest -- wait for the party to rest." });
+    }
+
     const { rows: settingRows } = await pool.query(
       "SELECT slug_hunt_area FROM campaign_settings WHERE id = 1"
     );
     const area = settingRows[0]?.slug_hunt_area ?? 0;
 
-    const modifier = skillModifier(character.stats, character.proficiencies, "survival");
+    const modifier = skillModifier(character.stats, character.proficiencies, "creatureHandling");
+    const arcanaMod = skillModifier(character.stats, character.proficiencies, "arcana");
+    const natureMod = skillModifier(character.stats, character.proficiencies, "nature");
     const roll = rollD20();
     const total = roll + modifier;
 
@@ -194,12 +223,23 @@ router.post("/attempt", async (req, res) => {
     const pityBreak = missStreak >= PITY_MISS_LIMIT;
     const success = pityBreak || total > SUCCESS_THRESHOLD;
 
-    // Burn the attempt now -- win or lose, they don't get another until a rest.
+    // Arcana tilts which slug turns up; settle that before the attempt is
+    // spent so an empty catalogue never costs a try.
+    const template = success ? await pickSlugForArea(area, arcanaMod, natureMod) : null;
+    if (success && !template) {
+      return res.status(409).json({
+        error: "No slugs are catalogued for this area yet -- ask the DM to import the slug templates.",
+      });
+    }
+
+    // Spend the attempt; a success also ends the day's hunting.
     await pool.query(
-      "INSERT INTO slug_hunt_locks (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
-      [req.user.sub]
+      `INSERT INTO slug_hunt_locks (user_id, attempts, found) VALUES ($1, 1, $2::boolean)
+       ON CONFLICT (user_id) DO UPDATE SET attempts = slug_hunt_locks.attempts + 1, found = slug_hunt_locks.found OR $2::boolean`,
+      [req.user.sub, success]
     );
-    notifyUser(req.user.sub, { type: "slug-hunt-lock", userId: req.user.sub, locked: true });
+    const after = await huntStatusFor(req.user.sub, character);
+    notifyUser(req.user.sub, { type: "slug-hunt-lock", userId: req.user.sub, status: after });
 
     if (!success) {
       await incrementMissStreak(req.user.sub);
@@ -207,17 +247,10 @@ router.post("/attempt", async (req, res) => {
         "Player",
         `${character.name} tried a slug hunt on ${areaName(area)} but found nothing.`
       );
-      return res.json({ success: false, roll, modifier, total, area, areaName: areaName(area) });
+      return res.json({ success: false, roll, modifier, total, area, areaName: areaName(area), status: after });
     }
 
     await resetMissStreak(req.user.sub);
-
-    const template = await pickSlugForArea(area);
-    if (!template) {
-      return res.status(409).json({
-        error: "No slugs are catalogued for this area yet -- ask the DM to import the slug templates.",
-      });
-    }
 
     cleanupExpired();
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -227,6 +260,8 @@ router.post("/attempt", async (req, res) => {
       initiatingName: character.name,
       area,
       slugTemplateId: template.id,
+      arcanaMod,
+      natureMod,
       roll,
       modifier,
       total,
@@ -236,7 +271,7 @@ router.post("/attempt", async (req, res) => {
 
     await notifyDungeonMasters({ type: "slug-hunt-offered", hunt: huntPayload(hunt, template) });
 
-    res.status(201).json({ success: true, roll, modifier, total, area, areaName: areaName(area), pityBreak });
+    res.status(201).json({ success: true, roll, modifier, total, area, areaName: areaName(area), pityBreak, status: after });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not attempt the hunt." });
@@ -264,7 +299,7 @@ router.post("/:id/reroll", requireDungeonMaster, async (req, res) => {
     return res.status(404).json({ error: "This hunt has expired or was already resolved." });
   }
   try {
-    const template = await pickSlugForArea(hunt.area);
+    const template = await pickSlugForArea(hunt.area, hunt.arcanaMod ?? 0, hunt.natureMod ?? 0);
     if (!template) {
       return res.status(409).json({ error: "No eligible slugs to reroll." });
     }

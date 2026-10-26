@@ -6,10 +6,8 @@ import {
   DiceFiveIcon,
   ShieldCheckIcon,
   SignOutIcon,
-  EyeIcon,
-  EyeSlashIcon,
   BackpackIcon,
-  CircleDashedIcon,
+  FlaskIcon,
   StorefrontIcon,
   PawPrintIcon,
   PlanetIcon,
@@ -22,6 +20,7 @@ import {
 } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
+import SlugIcon from "./SlugIcon.jsx";
 import "./NavBar.css";
 
 // A navbar dropdown that groups several destinations under one trigger, so
@@ -75,7 +74,7 @@ function NavGroup({ id, label, icon, items, openGroup, setOpenGroup }) {
 // indicator, so every page gets consistent "where am I" color-coding without
 // re-deriving it locally.
 export default function NavBar() {
-  const { user, token, logout } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { slugterraRevealed } = useLiveState();
@@ -91,8 +90,9 @@ export default function NavBar() {
   const isDashboard = location.pathname === "/dashboard";
 
   const loadoutItems = [
-    { to: "/slugs", label: slugterraRevealed ? "Slugs" : "Creatures", icon: <CircleDashedIcon weight="bold" /> },
+    { to: "/slugs", label: slugterraRevealed ? "Slugs" : "Creatures", icon: <SlugIcon size={20} /> },
     { to: "/inventory", label: "Inventory", icon: <BackpackIcon weight="bold" /> },
+    { to: "/consumables", label: "Consumables", icon: <FlaskIcon weight="bold" /> },
     { to: "/mechas", label: "Mecha-Beasts", icon: <PawPrintIcon weight="bold" /> },
     { to: "/market", label: "Market", icon: <StorefrontIcon weight="bold" /> },
   ];
@@ -158,17 +158,6 @@ export default function NavBar() {
   function handleLogout() {
     logout();
     navigate("/login");
-  }
-
-  async function handleToggleSlugterra() {
-    await fetch("/api/settings/slugterra", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ revealed: !slugterraRevealed }),
-    });
   }
 
   function linkClass({ isActive }) {
@@ -246,10 +235,6 @@ export default function NavBar() {
           )}
           {isDungeonMaster && (
             <>
-              <button type="button" className="navbar-action" onClick={handleToggleSlugterra}>
-                {slugterraRevealed ? <EyeSlashIcon weight="bold" /> : <EyeIcon weight="bold" />}
-                <span className="nav-label">{slugterraRevealed ? "Hide Slugterra" : "Reveal Slugterra"}</span>
-              </button>
               <NavLink className={linkClass} to="/admin">
                 <ShieldCheckIcon weight="bold" />
                 <span className="nav-label">Admin</span>

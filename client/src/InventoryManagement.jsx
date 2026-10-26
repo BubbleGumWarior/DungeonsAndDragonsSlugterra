@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { PencilSimpleIcon, PlusIcon, TrashIcon, UserPlusIcon } from "@phosphor-icons/react";
+import { PencilSimpleIcon, PlusIcon, TrashIcon, UserPlusIcon, WrenchIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import BlasterCard from "./BlasterCard.jsx";
 import ModCard from "./ModCard.jsx";
+import EquipmentCard from "./EquipmentCard.jsx";
+import EquipmentForm from "./EquipmentForm.jsx";
 import BlasterForm from "./BlasterForm.jsx";
 import ModForm from "./ModForm.jsx";
 import CollapseTitle from "./CollapseTitle.jsx";
@@ -15,10 +17,13 @@ export default function InventoryManagement() {
   const [players, setPlayers] = useState([]);
   const [blasters, setBlasters] = useState([]);
   const [mods, setMods] = useState([]);
+  const [equipment, setEquipment] = useState([]);
+  const [equipmentTemplates, setEquipmentTemplates] = useState([]);
   const [modal, setModal] = useState(null);
   // Template lists start collapsed, like the slug templates.
   const [blastersOpen, setBlastersOpen] = useState(false);
   const [modsOpen, setModsOpen] = useState(false);
+  const [equipmentOpen, setEquipmentOpen] = useState(false);
 
   function authHeaders(extra) {
     return { Authorization: `Bearer ${token}`, ...extra };
@@ -52,11 +57,27 @@ export default function InventoryManagement() {
       .catch(() => {});
   }
 
+  function loadEquipmentTemplates() {
+    fetch("/api/equipment-templates", { headers: authHeaders() })
+      .then((res) => res.json())
+      .then((data) => setEquipmentTemplates(data.templates || []))
+      .catch(() => {});
+  }
+
+  function loadEquipment() {
+    fetch("/api/equipment", { headers: authHeaders() })
+      .then((res) => res.json())
+      .then((data) => setEquipment(data.equipment || []))
+      .catch(() => {});
+  }
+
   useEffect(() => {
     loadBlasterTemplates();
     loadModTemplates();
     loadBlasters();
     loadMods();
+    loadEquipment();
+    loadEquipmentTemplates();
     fetch("/api/admin/users", { headers: authHeaders() })
       .then((res) => res.json())
       .then((data) => setPlayers((data.users || []).filter((u) => u.role === "Player")))
@@ -103,6 +124,12 @@ export default function InventoryManagement() {
     loadBlasters();
   }
 
+  // The party visited an expert: put a worn or broken blaster back to 100%.
+  async function restoreBlaster(id) {
+    await fetch(`/api/blasters/${id}/restore`, { method: "POST", headers: authHeaders() });
+    loadBlasters();
+  }
+
   async function deleteBlasterInstance(id) {
     await fetch(`/api/blasters/${id}`, { method: "DELETE", headers: authHeaders() });
     setModal(null);
@@ -145,10 +172,48 @@ export default function InventoryManagement() {
     loadMods();
   }
 
+  async function createEquipmentTemplate(payload) {
+    await submitJson("/api/equipment-templates", "POST", payload);
+    setModal(null);
+    loadEquipmentTemplates();
+  }
+
+  async function updateEquipmentTemplate(id, payload) {
+    await submitJson(`/api/equipment-templates/${id}`, "PATCH", payload);
+    setModal(null);
+    loadEquipmentTemplates();
+  }
+
+  async function deleteEquipmentTemplate(id) {
+    await fetch(`/api/equipment-templates/${id}`, { method: "DELETE", headers: authHeaders() });
+    loadEquipmentTemplates();
+  }
+
+  async function assignEquipment(payload) {
+    await submitJson("/api/equipment", "POST", payload);
+    setModal(null);
+    loadEquipment();
+  }
+
+  async function updateEquipmentInstance(id, payload) {
+    await submitJson(`/api/equipment/${id}`, "PATCH", payload);
+    setModal(null);
+    loadEquipment();
+    loadBlasters();
+  }
+
+  async function deleteEquipmentInstance(id) {
+    await fetch(`/api/equipment/${id}`, { method: "DELETE", headers: authHeaders() });
+    setModal(null);
+    loadEquipment();
+    loadBlasters();
+  }
+
   const inventoryByPlayer = players.map((player) => ({
     player,
     blasters: blasters.filter((b) => b.userId === player.id),
     mods: mods.filter((m) => m.userId === player.id),
+    equipment: equipment.filter((e) => e.userId === player.id),
   }));
 
   return (
@@ -249,15 +314,77 @@ export default function InventoryManagement() {
       </section>
 
       <section className="slug-management-section">
-        <h2>Players &amp; Their Inventory</h2>
+        <div className="slug-management-section-header">
+          <CollapseTitle title="Equipment Templates" count={equipmentTemplates.length} open={equipmentOpen} onToggle={() => setEquipmentOpen((v) => !v)} />
+          <button type="button" className="slug-management-new" onClick={() => setModal({ type: "new-equipment-template" })}>
+            <PlusIcon weight="bold" />
+            New Equipment
+          </button>
+        </div>
+
+        {equipmentOpen && (equipmentTemplates.length === 0 ? (
+          <p className="slug-management-empty">No equipment templates yet. Templates are what the Market sells.</p>
+        ) : (
+          <div className="slug-management-grid">
+            {equipmentTemplates.map((template) => (
+              <EquipmentCard
+                key={template.id}
+                item={template}
+                actions={
+                  <>
+                    <button
+                      type="button"
+                      className="slug-management-icon-btn"
+                      onClick={() => setModal({ type: "assign-equipment", template })}
+                      title="Assign to player"
+                    >
+                      <UserPlusIcon weight="bold" />
+                    </button>
+                    <button
+                      type="button"
+                      className="slug-management-icon-btn"
+                      onClick={() => setModal({ type: "edit-equipment-template", template })}
+                      title="Edit template"
+                    >
+                      <PencilSimpleIcon weight="bold" />
+                    </button>
+                    <button
+                      type="button"
+                      className="slug-management-icon-btn slug-management-icon-btn--danger"
+                      onClick={() => deleteEquipmentTemplate(template.id)}
+                      title="Delete template"
+                    >
+                      <TrashIcon weight="bold" />
+                    </button>
+                  </>
+                }
+              />
+            ))}
+          </div>
+        ))}
+      </section>
+
+      <section className="slug-management-section">
+        <div className="slug-management-section-header">
+          <h2>Players &amp; Their Inventory</h2>
+          <button
+            type="button"
+            className="slug-management-new"
+            disabled={players.length === 0}
+            onClick={() => setModal({ type: "assign-equipment" })}
+          >
+            <PlusIcon weight="bold" />
+            Grant Equipment
+          </button>
+        </div>
         {players.length === 0 ? (
           <p className="slug-management-empty">No players yet.</p>
         ) : (
           <div className="slug-management-players">
-            {inventoryByPlayer.map(({ player, blasters: playerBlasters, mods: playerMods }) => (
+            {inventoryByPlayer.map(({ player, blasters: playerBlasters, mods: playerMods, equipment: playerEquipment }) => (
               <div className="slug-management-player" key={player.id}>
-                <h3>{player.username}</h3>
-                {playerBlasters.length === 0 && playerMods.length === 0 ? (
+                <h3>{player.characterName || player.username}</h3>
+                {playerBlasters.length === 0 && playerMods.length === 0 && playerEquipment.length === 0 ? (
                   <p className="slug-management-empty">No items assigned.</p>
                 ) : (
                   <div className="slug-management-grid">
@@ -267,10 +394,26 @@ export default function InventoryManagement() {
                         blaster={blaster}
                         equippedMods={mods.filter((m) => m.equippedBlasterId === blaster.id)}
                         onClick={() => setModal({ type: "edit-blaster-instance", blaster })}
+                        actions={
+                          (blaster.durability ?? 100) < 100 ? (
+                            <button
+                              type="button"
+                              className="slug-management-icon-btn"
+                              onClick={() => restoreBlaster(blaster.id)}
+                              title="Expert repair: restore to 100%"
+                              aria-label={`Restore ${blaster.name} to 100%`}
+                            >
+                              <WrenchIcon weight="bold" />
+                            </button>
+                          ) : undefined
+                        }
                       />
                     ))}
                     {playerMods.map((mod) => (
                       <ModCard key={`mod-${mod.id}`} mod={mod} blasters={playerBlasters} onClick={() => setModal({ type: "edit-mod-instance", mod })} />
+                    ))}
+                    {playerEquipment.map((item) => (
+                      <EquipmentCard key={`equipment-${item.id}`} item={item} onClick={() => setModal({ type: "edit-equipment-instance", item })} />
                     ))}
                   </div>
                 )}
@@ -292,6 +435,10 @@ export default function InventoryManagement() {
               {modal.type === "edit-mod-template" && "Edit Mod Template"}
               {modal.type === "assign-mod" && `Assign "${modal.template.name}"`}
               {modal.type === "edit-mod-instance" && `Edit ${modal.mod.name}`}
+              {modal.type === "new-equipment-template" && "New Equipment Template"}
+              {modal.type === "edit-equipment-template" && "Edit Equipment Template"}
+              {modal.type === "assign-equipment" && (modal.template ? `Assign "${modal.template.name}"` : "Grant Equipment")}
+              {modal.type === "edit-equipment-instance" && `Edit ${modal.item.name}`}
             </h2>
 
             {modal.type === "new-blaster-template" && (
@@ -364,6 +511,44 @@ export default function InventoryManagement() {
                   submitLabel="Save Mod"
                 />
                 <button type="button" className="slug-management-remove" onClick={() => deleteModInstance(modal.mod.id)}>
+                  <TrashIcon weight="bold" />
+                  Remove from Player
+                </button>
+              </>
+            )}
+
+            {modal.type === "new-equipment-template" && (
+              <EquipmentForm mode="template" onSubmit={createEquipmentTemplate} onCancel={() => setModal(null)} submitLabel="Create Equipment" />
+            )}
+            {modal.type === "edit-equipment-template" && (
+              <EquipmentForm
+                mode="template"
+                initialValues={modal.template}
+                onSubmit={(payload) => updateEquipmentTemplate(modal.template.id, payload)}
+                onCancel={() => setModal(null)}
+                submitLabel="Save Equipment"
+              />
+            )}
+            {modal.type === "assign-equipment" && (
+              <EquipmentForm
+                mode="assign"
+                initialValues={modal.template ? { ...modal.template, templateId: modal.template.id } : undefined}
+                players={players}
+                onSubmit={assignEquipment}
+                onCancel={() => setModal(null)}
+                submitLabel={modal.template ? "Assign Equipment" : "Grant Equipment"}
+              />
+            )}
+            {modal.type === "edit-equipment-instance" && (
+              <>
+                <EquipmentForm
+                  mode="instance"
+                  initialValues={modal.item}
+                  onSubmit={(payload) => updateEquipmentInstance(modal.item.id, payload)}
+                  onCancel={() => setModal(null)}
+                  submitLabel="Save Equipment"
+                />
+                <button type="button" className="slug-management-remove" onClick={() => deleteEquipmentInstance(modal.item.id)}>
                   <TrashIcon weight="bold" />
                   Remove from Player
                 </button>
