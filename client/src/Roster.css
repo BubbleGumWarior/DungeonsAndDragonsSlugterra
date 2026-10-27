@@ -262,3 +262,12 @@
     font-size: 13.5px;
   }
 }
+
+.roster-ill {
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}

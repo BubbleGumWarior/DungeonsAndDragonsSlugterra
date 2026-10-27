@@ -8,6 +8,7 @@ import EquipmentForm from "./EquipmentForm.jsx";
 import BlasterForm from "./BlasterForm.jsx";
 import ModForm from "./ModForm.jsx";
 import CollapseTitle from "./CollapseTitle.jsx";
+import DMWardrobe from "./DMWardrobe.jsx";
 import "./SlugManagement.css";
 
 export default function InventoryManagement() {
@@ -422,6 +423,8 @@ export default function InventoryManagement() {
           </div>
         )}
       </section>
+
+      <DMWardrobe />
 
       {modal && (
         <div className="slug-modal-backdrop" onClick={() => setModal(null)}>

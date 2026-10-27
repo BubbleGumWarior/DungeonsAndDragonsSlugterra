@@ -5,13 +5,19 @@ import { COMBAT_TEAMS } from "./combatTeams.js";
 
 export const MOVE_SPEED_PER_AP = 80;
 export const ATHLETICS_MOVE_BONUS_PER_MOD = 0.1;
-export const WALL_RUN_BASE_AP = 6;
+export const WALL_VAULT_BASE_AP = 6;
+export const WALL_RUN_AP_COST = 2;
+export const WALL_RUN_BASE_DISTANCE = 240;
+export const WALL_RUN_DISTANCE_PER_MOD = 40;
 export const HIDE_AP_COST = 2;
 export const HIDE_RANGE = 400;
 export const INTIMIDATE_AP_COST = 2;
 export const INTIMIDATE_RANGE = 400;
 export const FIRST_AID_BASE_AP = 6;
 export const FIRST_AID_RANGE = 120;
+// Mirrors combatRules.js: Patch Up never heals past this share of max Grit.
+export const HUNKER_MAX_GRIT_FRACTION = 0.5;
+export const hunkerGritCap = (maxGrit) => Math.floor((maxGrit || 0) * HUNKER_MAX_GRIT_FRACTION);
 
 // Characters carry every skill modifier on data.skills (snapshotted when they
 // joined the fight); NPCs and grunts use their DEX modifier for all of them.
@@ -34,8 +40,13 @@ export const areAllies = (a, b) => combatSide(a) === combatSide(b);
 
 export const moveSpeedPerAp = (athleticsMod) =>
   MOVE_SPEED_PER_AP * (1 + ATHLETICS_MOVE_BONUS_PER_MOD * Math.max(0, athleticsMod || 0));
+// Outfit and climate effects ride on data.gear (server outfitRules.js).
+export const gearMoveMult = (combatant) => combatant?.data?.gear?.moveMult ?? 1;
+export const gearReloadAp = (combatant) => combatant?.data?.gear?.reloadApBonus ?? 0;
 export const reloadApCostFor = (baseCost, sleightMod) => Math.max(1, (baseCost || 1) - Math.max(0, sleightMod || 0));
-export const wallRunApCost = (acrobaticsMod) => Math.max(1, WALL_RUN_BASE_AP - (acrobaticsMod || 0));
+export const wallVaultApCost = (acrobaticsMod) => Math.max(1, WALL_VAULT_BASE_AP - (acrobaticsMod || 0));
+export const wallRunDistance = (acrobaticsMod) =>
+  WALL_RUN_BASE_DISTANCE + WALL_RUN_DISTANCE_PER_MOD * Math.max(0, acrobaticsMod || 0);
 export const firstAidApCost = (medicineMod) => Math.max(1, FIRST_AID_BASE_AP - (medicineMod || 0));
 
 // ---- Water terrain + mecha modes (mirrors server/src/combatRules.js) ----------

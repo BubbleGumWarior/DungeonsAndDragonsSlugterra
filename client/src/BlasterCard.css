@@ -352,3 +352,193 @@
   font-size: 0.75em;
   font-weight: 700;
 }
+
+
+/* Row variant: the inventory's ledger line. Identity on the left, the numbers
+   and the things you can do with it on the right, all in one card. The grid
+   areas collapse by themselves when a card has no condition bar or mod slots
+   (equipment), so one layout serves both. */
+.blaster-card--row {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "top stats stats"
+    "top cond cond"
+    "top effect effect"
+    "fail slots actions";
+  column-gap: 22px;
+  row-gap: 14px;
+  align-items: start;
+  padding: 20px;
+  background:
+    radial-gradient(70% 120% at 0% 0%, color-mix(in srgb, var(--quality-color) 12%, transparent), transparent 70%),
+    linear-gradient(168deg, #1c1e22, #0f1012 85%);
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.42),
+    0 1px 0 rgba(255, 255, 255, 0.03) inset;
+}
+
+.blaster-card--row::before {
+  border-bottom: 0;
+}
+
+.blaster-card--row::after {
+  display: none;
+}
+
+.blaster-card--row.blaster-card--equipped {
+  border-color: var(--gold-dim);
+}
+
+.blaster-card--row .blaster-card-top {
+  grid-area: top;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  text-align: left;
+}
+
+.blaster-card--row .blaster-card-image {
+  width: 100%;
+  height: 128px;
+  border-radius: 14px;
+}
+
+.blaster-card--row .blaster-card-name {
+  font-size: 19px;
+  white-space: normal;
+}
+
+.blaster-card--row .blaster-card-stats {
+  grid-area: stats;
+  display: flex;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--charcoal-700);
+  border-radius: 10px;
+  background: var(--charcoal-900);
+}
+
+.blaster-card--row .blaster-card-stats:has(> .blaster-card-stat:only-child) {
+  justify-self: start;
+}
+
+.blaster-card--row .blaster-card-stat {
+  flex: 1 1 0;
+  min-width: 76px;
+  padding: 10px 8px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.blaster-card--row .blaster-card-stat + .blaster-card-stat {
+  border-left: 1px solid var(--charcoal-700);
+}
+
+.blaster-card--row .blaster-card-stat-value {
+  font-size: 19px;
+}
+
+.blaster-card--row .blaster-card-stat-label {
+  font-size: 10.5px;
+  letter-spacing: 0.4px;
+}
+
+.blaster-card--row .blaster-condition-hint {
+  grid-area: cond;
+  align-self: center;
+}
+
+.blaster-card--row .blaster-card-fail-rate {
+  grid-area: fail;
+  align-self: end;
+  font-size: 12px;
+  text-align: left;
+}
+
+.blaster-card--row .blaster-card-effect {
+  grid-area: effect;
+}
+
+.blaster-card--row .blaster-card-effect-label {
+  font-size: 10.5px;
+}
+
+.blaster-card--row .blaster-card-effect-text {
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.blaster-card--row .blaster-card-slots {
+  grid-area: slots;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.blaster-card--row .blaster-card-slots-label {
+  font-size: 11px;
+}
+
+.blaster-card--row .blaster-card-actions {
+  grid-area: actions;
+  align-self: end;
+  justify-self: end;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+@media (max-width: 760px) {
+  .blaster-card--row {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "top"
+      "stats"
+      "cond"
+      "effect"
+      "slots"
+      "fail"
+      "actions";
+    padding: 16px;
+  }
+
+  .blaster-card--row .blaster-card-top {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .blaster-card--row .blaster-card-image {
+    width: 104px;
+    height: 66px;
+    border-radius: 12px;
+  }
+
+  .blaster-card--row .blaster-card-stats {
+    flex-wrap: wrap;
+  }
+
+  .blaster-card--row .blaster-card-stat {
+    flex-basis: 30%;
+  }
+
+  .blaster-card--row .blaster-card-fail-rate {
+    text-align: left;
+  }
+
+  .blaster-card--row .blaster-card-actions {
+    justify-self: stretch;
+    justify-content: flex-start;
+  }
+}
+
+/* Gear has no artwork, only an icon, so it doesn't earn the tall picture box. */
+.blaster-card--row.blaster-card--gear .blaster-card-image {
+  height: 76px;
+}
+
+@media (max-width: 760px) {
+  .blaster-card--row.blaster-card--gear .blaster-card-image {
+    width: 76px;
+    height: 56px;
+  }
+}

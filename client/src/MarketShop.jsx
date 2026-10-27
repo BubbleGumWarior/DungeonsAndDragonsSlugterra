@@ -16,7 +16,9 @@ import {
   TrashIcon,
   WrenchIcon,
   PackageIcon,
+  PillIcon,
   ToolboxIcon,
+  TShirtIcon,
 } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
@@ -36,6 +38,7 @@ const CATEGORIES = [
   { key: "mecha_mod", label: "Mecha Mods", icon: <CubeIcon weight="bold" /> },
   { key: "blaster", label: "Blasters", icon: <TargetIcon weight="bold" /> },
   { key: "equipment", label: "Equipment", icon: <SwordIcon weight="bold" /> },
+  { key: "outfit", label: "Outfits", icon: <TShirtIcon weight="bold" /> },
   { key: "mecha", label: "Mecha-Beasts", icon: <PawPrintIcon weight="bold" /> },
   { key: "slug", label: "Slugs", icon: <SlugIcon size={19} /> },
 ];
@@ -48,6 +51,7 @@ const SUPPLY_ICONS = {
   "energy-cell": <BatteryChargingIcon weight="duotone" />,
   medpack: <FirstAidKitIcon weight="duotone" />,
   "revival-tonic": <FlaskIcon weight="duotone" />,
+  meds: <PillIcon weight="duotone" />,
 };
 
 // Supply key -> the field on the player's `me` counts.
@@ -59,6 +63,7 @@ const KIND_LABELS = {
   mecha_mod: "Mecha Mod",
   blaster: "Blaster",
   equipment: "Equipment",
+  outfit: "Outfit",
   mecha: "Mecha-Beast",
   slug: "Slug",
 };
@@ -315,10 +320,10 @@ export default function MarketShop() {
                       <button
                         type="button"
                         className="panel-btn"
-                        disabled={busyKey === item.key}
+                        disabled={busyKey === item.key || item.owned}
                         onClick={() => buy(item, item.kind === "supply" ? qtyOf(item) : 1)}
                       >
-                        Buy
+                        {item.owned ? "Owned" : "Buy"}
                       </button>
                     </div>
                   )}

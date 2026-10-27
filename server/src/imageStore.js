@@ -57,8 +57,6 @@ const IMAGE_COLUMNS = [
   ["encounters", "map_image"],
   ["combatants", "portrait"],
   ["characters", "portrait"],
-  ["blasters", "image"],
-  ["blaster_templates", "image"],
   ["mechas", "image"],
   ["mecha_templates", "image"],
   ["npc_templates", "image"],

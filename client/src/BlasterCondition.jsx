@@ -27,7 +27,7 @@ export function DurabilityRules({ blaster }) {
         .
       </p>
       <p>
-        A <b>Repair Kit</b> lets you roll d20 + Survival. Above <b>{REPAIR_DC}</b> it is restored to 100%. On a fail the
+        A <b>Repair Kit</b> lets you roll d20 + Engineering. Above <b>{REPAIR_DC}</b> it is restored to 100%. On a fail the
         kit is used up and the blaster loses a further <b>{REPAIR_FAIL_DAMAGE}%</b>.
       </p>
       <p className="hint-warn">

@@ -51,7 +51,6 @@ export const QUALITY_TIERS = [
 
 const QUALITY_MIN = 0;
 const QUALITY_MAX = QUALITY_TIERS.length - 1;
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_TEXT_LENGTH = 500;
 const STAT_MIN = -10;
 const STAT_MAX = 20;
@@ -63,17 +62,6 @@ const RANGE_MAX = 3000;
 // make a shot's flight time infinite or undefined (see shotFlightMs).
 const SPEED_MIN = 1;
 const SPEED_MAX = 2000;
-
-function validateImage(image, label) {
-  if (image === undefined || image === null) return null;
-  if (typeof image !== "string" || !image.startsWith("data:image/")) {
-    return `${label} must be a base64 image data URL.`;
-  }
-  if (image.length > MAX_IMAGE_BYTES) {
-    return `${label} image is too large.`;
-  }
-  return null;
-}
 
 function validateText(text, label) {
   if (text === undefined || text === null) return null;
@@ -104,16 +92,13 @@ function validateSpeed(value, label) {
   return null;
 }
 
-export function validateBlasterFields({ name, baseType, image, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality }) {
+export function validateBlasterFields({ name, baseType, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality }) {
   if (typeof name !== "string" || !name.trim() || name.trim().length > 40) {
     return { valid: false, error: "Name must be a non-empty string of 40 characters or fewer." };
   }
   if (!BASE_TYPE_KEYS.includes(baseType)) {
     return { valid: false, error: `Base type must be one of: ${BASE_TYPE_KEYS.join(", ")}.` };
   }
-  const imageError = validateImage(image, "Image");
-  if (imageError) return { valid: false, error: imageError };
-
   const rangeError = validateRange(range, "Range");
   if (rangeError) return { valid: false, error: rangeError };
 

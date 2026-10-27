@@ -33,6 +33,11 @@ export default function CharacterSheetView({ character, onChangeFame, onChangeHe
             </div>
             <div className="sheet-identity">
               <h1>{character.name}</h1>
+              {character.ill && (
+                <p className="sheet-ill" title="Max Grit, AP and accuracy are halved when a fight begins. Take Meds on three long rests in a row.">
+                  Ill: halved Grit, AP and accuracy in a fight
+                </p>
+              )}
               {character.age && <p className="sheet-age">Age {character.age}</p>}
             </div>
           </div>

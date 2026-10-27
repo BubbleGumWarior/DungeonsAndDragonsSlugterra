@@ -5,7 +5,7 @@ import { useLiveState } from "./AccessSocket.jsx";
 import { heatColor, maxGrit } from "./characterData.js";
 import KnockoutPips from "./KnockoutPips.jsx";
 import GritRing from "./GritRing.jsx";
-import { FOOD_DRAIN_PER_REST } from "./careData.js";
+import { FOOD_DRAIN_PER_REST, NO_MEDBAY_REST_HEAL_FRACTION } from "./careData.js";
 import "./Panel.css";
 import "./Roster.css";
 
@@ -67,6 +67,7 @@ export default function Roster({ selectable = false, selectedUserId, onSelect, h
               maxGrit: maxGrit(characterUpdate.character.stats, characterUpdate.character.gritBonus),
               fame: characterUpdate.character.fame,
               heat: characterUpdate.character.heat,
+              ill: characterUpdate.character.ill,
             }
           : c
       )
@@ -166,8 +167,10 @@ export default function Roster({ selectable = false, selectedUserId, onSelect, h
           <div className="roster-confirm-text">
             <p className="roster-confirm-title">Put the party to sleep?</p>
             <p>
-              Everyone not in a fight heals fully and their slugs recharge. Every slug loses {FOOD_DRAIN_PER_REST}% of its
-              food, and the merchants wake up in a new mood.
+              {preview && !preview.medbay
+                ? `The ship has no working Medbay: everyone not in a fight only mends up to ${Math.round(NO_MEDBAY_REST_HEAL_FRACTION * 100)}% of max Grit and keeps their knockout pips, and their slugs recharge.`
+                : "Everyone not in a fight heals fully and their slugs recharge."}{" "}
+              Every slug loses {FOOD_DRAIN_PER_REST}% of its food, and the merchants wake up in a new mood.
             </p>
             {preview?.skippedInCombat > 0 && (
               <p className="roster-confirm-note">
@@ -232,6 +235,11 @@ export default function Roster({ selectable = false, selectedUserId, onSelect, h
                 />
               </span>
               <span className="roster-name">{character.name}</span>
+              {character.ill && (
+                <span className="roster-ill" title="Ill: halved Grit, AP and accuracy in a fight">
+                  Ill
+                </span>
+              )}
               {character.heat > 0 && (
                 <span className="roster-heat" title="Heat" style={{ color: heatColor(character.heat) }}>
                   <FireIcon weight="fill" />

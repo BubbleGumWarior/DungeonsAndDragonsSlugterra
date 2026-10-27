@@ -51,7 +51,7 @@ export default function BlasterCard({
 
   return (
     <div
-      className={`blaster-card blaster-card--${size} ${onClick ? "blaster-card--clickable" : ""} ${draggableEquip ? "blaster-card--draggable" : ""}`}
+      className={`blaster-card blaster-card--${size} ${onClick ? "blaster-card--clickable" : ""} ${draggableEquip ? "blaster-card--draggable" : ""} ${equipSlotLabel ? "blaster-card--equipped" : ""}`}
       style={{ "--quality-color": qualityColor(blaster.quality) }}
       onClick={onClick}
       draggable={draggableEquip}
@@ -60,7 +60,7 @@ export default function BlasterCard({
     >
       <div className="blaster-card-top">
         <div className="blaster-card-image">
-          {blaster.image ? <img src={blaster.image} alt={blaster.name} loading="lazy" decoding="async" /> : <TargetIcon weight="duotone" />}
+          <TargetIcon weight="duotone" />
         </div>
         <div className="blaster-card-identity">
           <h3 className="blaster-card-name">{blaster.name}</h3>

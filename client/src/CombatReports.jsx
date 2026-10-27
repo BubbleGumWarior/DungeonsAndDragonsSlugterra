@@ -55,11 +55,12 @@ const VIA_LABELS = {
 
 const ACTION_LABELS = {
   reload: "Reload",
-  "hunker-down": "Hunker Down",
+  "hunker-down": "Patch Up",
   hide: "Hide",
   intimidate: "Intimidate",
   "first-aid": "First Aid",
   "switch-weapon": "Switch weapon",
+  "wall-vault": "Wall vault",
   "wall-run": "Wall run",
   mount: "Mount",
   dismount: "Dismount",

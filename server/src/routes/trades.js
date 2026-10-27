@@ -186,7 +186,7 @@ router.get("/inventory/:userId", async (req, res) => {
     const locked = new Set(pending.flatMap((t) => t.give.map((g) => `${g.kind}:${g.id}`)));
     const out = { items: [], credits: 0, pods: 0, supplies: {} };
     const specs = [
-      ["blaster", "SELECT id, name, image, base_type AS hint, equip_slot IS NOT NULL AS equipped FROM blasters WHERE user_id = $1 AND owner_combatant_id IS NULL ORDER BY name"],
+      ["blaster", "SELECT id, name, NULL AS image, base_type AS hint, equip_slot IS NOT NULL AS equipped FROM blasters WHERE user_id = $1 AND owner_combatant_id IS NULL ORDER BY name"],
       ["equipment", "SELECT id, name, NULL AS image, CASE kind WHEN 'melee' THEN 'Melee' WHEN 'shield' THEN 'Shield' WHEN 'armor' THEN 'Armor' ELSE 'Ammo Belt' END AS hint, equip_slot IS NOT NULL AS equipped FROM equipment WHERE user_id = $1 ORDER BY name"],
       ["mod", "SELECT id, name, image, NULL AS hint, equipped_blaster_id IS NOT NULL AS equipped FROM mods WHERE user_id = $1 ORDER BY name"],
       ["slug", "SELECT id, name, protoform_image AS image, type AS hint, equipped_blaster_id IS NOT NULL AS equipped FROM slugs WHERE user_id = $1 ORDER BY name"],

@@ -3,7 +3,7 @@ import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { broadcastAll } from "../ws.js";
 import { computeMaxGrit } from "../characterRules.js";
-import { ENERGY_CELL_PIPS, MEDPACK_HEAL_FRACTION, TONIC_PIPS } from "../careRules.js";
+import { ENERGY_CELL_PIPS, MEDPACK_HEAL_FRACTION, TONIC_PIPS, MEDS_DOSES_NEEDED } from "../careRules.js";
 import { toClientSlug } from "./slugs.js";
 import { toClientCharacter } from "./characters.js";
 import { getActiveEncounterRow } from "./combat.js";
@@ -106,6 +106,38 @@ router.post("/tonic", playersOnly, async (req, res) => {
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
     fail(res, err, "Could not use that Revival Tonic.");
+  } finally {
+    client.release();
+  }
+});
+
+// Take one dose of Meds: only while ill, once per long rest. The third dose in
+// a row clears the illness (a rest with no dose resets the count -- see the long
+// rest in characters.js).
+router.post("/meds", playersOnly, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await assertNotInCombat(req.user.sub);
+    await client.query("BEGIN");
+    const { rows } = await client.query("SELECT * FROM characters WHERE user_id = $1 FOR UPDATE", [req.user.sub]);
+    const c = rows[0];
+    if (!c) throw new SupplyError("You don't have a character sheet yet.", 404);
+    if (!c.ill) throw new SupplyError("You're not ill.");
+    if (c.meds_taken) throw new SupplyError("You've already taken today's dose -- the next one is after your next long rest.");
+    if (c.meds < 1) throw new SupplyError("You're out of Meds -- buy more at the Market.");
+    const streak = (c.meds_streak ?? 0) + 1;
+    const cured = streak >= MEDS_DOSES_NEEDED;
+    const { rows: updated } = await client.query(
+      "UPDATE characters SET meds = meds - 1, meds_taken = true, meds_streak = $1, ill = $2 WHERE user_id = $3 RETURNING *",
+      [cured ? 0 : streak, !cured, req.user.sub]
+    );
+    await client.query("COMMIT");
+    const character = toClientCharacter(updated[0]);
+    broadcastAll({ type: "character-updated", userId: req.user.sub, character });
+    res.json({ character, cured, streak: cured ? MEDS_DOSES_NEEDED : streak, needed: MEDS_DOSES_NEEDED });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    fail(res, err, "Could not take those Meds.");
   } finally {
     client.release();
   }

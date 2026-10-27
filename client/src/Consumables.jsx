@@ -7,13 +7,15 @@ import {
   FlaskIcon,
   HeartbeatIcon,
   PackageIcon,
+  PillIcon,
+  ThermometerIcon,
   ToolboxIcon,
   WarningIcon,
 } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import { maxGrit } from "./characterData.js";
-import { MEDPACK_HEAL_FRACTION, SUPPLIES } from "./careData.js";
+import { MEDPACK_HEAL_FRACTION, MEDS_DOSES_NEEDED, SUPPLIES } from "./careData.js";
 import { magazineCapacity } from "./itemData.js";
 import NavBar from "./NavBar.jsx";
 import SlugCare from "./SlugCare.jsx";
@@ -31,6 +33,7 @@ const SUPPLY_ICONS = {
   "energy-cell": BatteryChargingIcon,
   medpack: FirstAidKitIcon,
   "revival-tonic": FlaskIcon,
+  meds: PillIcon,
 };
 
 function authHeaders(token) {
@@ -105,6 +108,9 @@ function FieldMedicine({ character, onCharacter }) {
   const healAmount = Math.ceil(max * MEDPACK_HEAL_FRACTION);
   const medpacks = character.medpacks ?? 0;
   const tonics = character.revivalTonics ?? 0;
+  const meds = character.meds ?? 0;
+  const ill = Boolean(character.ill);
+  const medsStreak = character.medsStreak ?? 0;
   const pct = Math.max(0, Math.min(100, (grit / max) * 100));
 
   async function use(kind) {
@@ -116,7 +122,15 @@ function FieldMedicine({ character, onCharacter }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "That didn't work.");
       onCharacter(data.character);
-      setNote(kind === "medpack" ? `Healed ${data.healed} Grit.` : `Cleared ${data.cleared} knockout pip.`);
+      setNote(
+        kind === "medpack"
+          ? `Healed ${data.healed} Grit.`
+          : kind === "meds"
+          ? data.cured
+            ? "You feel well again."
+            : `Dose ${data.streak} of ${data.needed} taken. Take the next one after your next long rest.`
+          : `Cleared ${data.cleared} knockout pip.`
+      );
     } catch (err) {
       setError(err.message);
     } finally {
@@ -224,6 +238,53 @@ function FieldMedicine({ character, onCharacter }) {
               onClick={() => use("tonic")}
             >
               Use Tonic
+            </button>
+          </div>
+        </div>
+
+        <div className="slug-care-lane">
+          <span className="slug-care-lane-label">
+            <ThermometerIcon weight="bold" />
+            Illness
+          </span>
+          <Hint
+            align="start"
+            title="Meds"
+            tip={
+              <>
+                <p>
+                  Sleeping in clothes that don't suit the climate can make you ill. While ill, your max Grit, AP and accuracy are all halved
+                  when a fight begins.
+                </p>
+                <p>
+                  Take one dose of Meds per long rest, <b>{MEDS_DOSES_NEEDED}</b> rests in a row, to recover. Miss a rest and the count starts over.
+                </p>
+              </>
+            }
+            className="slug-care-lane-hint"
+          >
+            <div className="slug-care-food">
+              <span className="slug-care-state">
+                <strong>{ill ? "Ill" : "Healthy"}</strong>
+                {ill && (
+                  <>
+                    {" "}
+                    · <strong className="num-tabular">{medsStreak}/{MEDS_DOSES_NEEDED}</strong> doses
+                    {character.medsTaken ? " (taken for today)" : ""}
+                  </>
+                )}
+              </span>
+            </div>
+          </Hint>
+          <div className="slug-care-actions">
+            <button
+              type="button"
+              className="panel-btn slug-care-btn"
+              disabled={!ill || character.medsTaken || meds < 1 || busy === "meds"}
+              title={!ill ? "You're not ill" : character.medsTaken ? "Already taken today" : meds < 1 ? "You're out of Meds" : undefined}
+              onClick={() => use("meds")}
+            >
+              Take Meds
             </button>
           </div>
         </div>

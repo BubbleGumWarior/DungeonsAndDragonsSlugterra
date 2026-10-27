@@ -146,7 +146,7 @@ export function defaultKnockoutPips() {
   return [false, false, false];
 }
 
-export const REQUIRED_PROFICIENCIES = 5;
+export const REQUIRED_PROFICIENCIES = 6;
 
 // Each entry's `description` is the revealed, Slugterra-aware text (slugs,
 // slingers, blasters, other worlds). `hiddenDescription` is the version the
@@ -155,6 +155,13 @@ export const REQUIRED_PROFICIENCIES = 5;
 // just present-day people doing present-day things.
 export const PROFICIENCIES = [
   { key: "athletics", label: "Athletics", stat: "strength", description: "Climbing, swimming, forcing doors — feats of raw strength." },
+  {
+    key: "fortitude",
+    label: "Fortitude",
+    stat: "constitution",
+    description: "Standing the cold and the heat: a hardy body stays comfortable in clothes that would leave anyone else shivering or sweating.",
+    hiddenDescription: "Standing the cold and the heat: a hardy body copes with weather that would leave anyone else shivering or sweating.",
+  },
   {
     key: "acrobatics",
     label: "Acrobatics",
@@ -171,6 +178,13 @@ export const PROFICIENCIES = [
   },
   { key: "stealth", label: "Stealth", stat: "dexterity", description: "Moving silently, staying out of sight and out of mind." },
   {
+    key: "piloting",
+    label: "Piloting",
+    stat: "dexterity",
+    description: "Flying the ship and Mecha-Beasts: tight turns, rough landings, getting out of a bad spot.",
+    hiddenDescription: "Handling any vehicle — cars, boats, planes — and keeping it under control when things go wrong.",
+  },
+  {
     key: "arcana",
     label: "Arcana",
     stat: "intelligence",
@@ -185,10 +199,26 @@ export const PROFICIENCIES = [
     hiddenDescription: "Recalling past events, old feuds, and half-forgotten history.",
   },
   {
-    key: "investigation",
-    label: "Investigation",
+    key: "splicing",
+    label: "Splicing",
     stat: "intelligence",
-    description: "Piecing together clues from corporate data logs or the wreckage of a crash site.",
+    description: "Cutting into locked systems and living tech: hacking terminals, bypassing security, wiping a trail.",
+    hiddenDescription: "Getting into locked systems — hacking terminals, bypassing security, cleaning up a digital trail.",
+  },
+  {
+    key: "engineering",
+    label: "Engineering",
+    stat: "intelligence",
+    description: "Building, repairing and tuning machines, from a worn blaster to a ship's drive.",
+    hiddenDescription: "Building, repairing and tuning machines, from engines to electronics.",
+  },
+  {
+    key: "astrogation",
+    label: "Astrogation",
+    hiddenLabel: "Navigation",
+    stat: "intelligence",
+    description: "Plotting courses between worlds, reading star charts and the nav computer.",
+    hiddenDescription: "Plotting a course by charts, stars and instruments.",
   },
   {
     key: "nature",
@@ -196,13 +226,6 @@ export const PROFICIENCIES = [
     stat: "intelligence",
     description: "Knowledge of alien ecosystems, terrain, and wild slug habitats.",
     hiddenDescription: "Knowledge of ecosystems, terrain, weather, and wildlife.",
-  },
-  {
-    key: "religion",
-    label: "Religion",
-    stat: "intelligence",
-    description: "Understanding the myths and legends surrounding the Elder Slugs.",
-    hiddenDescription: "Understanding the world's religions, myths, and legends.",
   },
   {
     key: "creatureHandling",
@@ -237,15 +260,15 @@ export const PROFICIENCIES = [
     key: "survival",
     label: "Survival",
     stat: "wisdom",
-    description: "Foraging, patching up gear in the field, and enduring hostile worlds.",
+    description: "Foraging, tracking, and living off whatever a hostile world offers.",
     hiddenDescription: "Tracking, foraging, navigating, and enduring the wilderness.",
   },
   {
     key: "deception",
     label: "Deception",
     stat: "charisma",
-    description: "Bluffing a rival slinger or talking your way past a guard.",
-    hiddenDescription: "Bluffing a rival or talking your way past a guard.",
+    description: "Bluffing a rival slinger, talking your way past a guard, and keeping your name out of the wrong ears.",
+    hiddenDescription: "Bluffing a rival, talking your way past a guard, and keeping your name out of the wrong ears.",
   },
   { key: "intimidation", label: "Intimidation", stat: "charisma", description: "Cowing an opponent before the fight even starts." },
   {

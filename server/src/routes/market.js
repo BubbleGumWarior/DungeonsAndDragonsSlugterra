@@ -22,7 +22,11 @@ import {
   MEDPACK_PRICE,
   TONIC_PIPS,
   TONIC_PRICE,
+  MEDS_PRICE,
+  MEDS_DOSES_NEEDED,
 } from "../careRules.js";
+import { grantOutfit } from "../outfitService.js";
+import { formatOutfitRange } from "../outfitRules.js";
 import {
   POD_PRICE,
   PLANET_PCT_MIN,
@@ -129,7 +133,7 @@ function describeTemplate(kind, t) {
     case "blaster":
       return {
         name: t.name,
-        image: t.image,
+        image: null,
         description: t.base_type,
         tags: [`${signed(t.accuracy)} Accuracy`, `Range ${t.range}`, `Mag ${t.magazine_size}`, `${t.mod_slots} mod slots`],
       };
@@ -205,8 +209,8 @@ const SUPPLY_ITEMS = [
     column: "repair_kits",
     name: "Repair Kit",
     image: null,
-    description: `Patches up a worn blaster: roll a d20 + Survival, and above ${REPAIR_DC} it is restored to 100%. On a failure the kit is still used up and the blaster loses a further ${REPAIR_FAIL_DAMAGE}%. A blaster at 0% is past a kit's help and needs an expert.`,
-    tags: [`DC ${REPAIR_DC}`, "d20 + Survival"],
+    description: `Patches up a worn blaster: roll a d20 + Engineering, and above ${REPAIR_DC} it is restored to 100%. On a failure the kit is still used up and the blaster loses a further ${REPAIR_FAIL_DAMAGE}%. A blaster at 0% is past a kit's help and needs an expert.`,
+    tags: [`DC ${REPAIR_DC}`, "d20 + Engineering"],
     basePrice: REPAIR_KIT_PRICE,
     quantity: null,
     standing: true,
@@ -247,6 +251,18 @@ const SUPPLY_ITEMS = [
     quantity: null,
     standing: true,
   },
+  {
+    key: "meds",
+    kind: "supply",
+    column: "meds",
+    name: "Meds",
+    image: null,
+    description: `A course of tablets for the sickness you pick up from sleeping in the wrong clothes. Take one dose per long rest, ${MEDS_DOSES_NEEDED} rests in a row, to be well again. Miss a day and you start over. Take it from the Consumables page.`,
+    tags: [`${MEDS_DOSES_NEEDED} daily doses cure illness`],
+    basePrice: MEDS_PRICE,
+    quantity: null,
+    standing: true,
+  },
 ];
 
 // characters.* counters the market and the DM purse can read/write.
@@ -259,6 +275,7 @@ const supplyCounts = (row) => ({
   energyCells: row.energy_cells,
   medpacks: row.medpacks,
   revivalTonics: row.revival_tonics,
+  meds: row.meds,
 });
 const SUPPLY_SELECT = `credits, ${SUPPLY_FIELDS.join(", ")}`;
 const SUPPLY_KEYS = SUPPLY_ITEMS.map((s) => s.key);
@@ -289,6 +306,32 @@ async function standingItems(planet) {
       templateId: t.id,
       ...describeTemplate("mecha_mod", t),
       basePrice: t.base_price ?? defaultMechaModPrice(t),
+      quantity: null,
+      standing: true,
+    });
+  }
+  // Clothes: each world stocks its own racks (outfit_template_planets).
+  const { rows: outfits } = await pool.query(
+    `SELECT t.* FROM outfit_templates t JOIN outfit_template_planets p ON p.template_id = t.id
+     WHERE p.planet_index = $1 ORDER BY t.name`,
+    [planet]
+  );
+  for (const t of outfits) {
+    items.push({
+      key: `outfit:${t.id}`,
+      kind: "outfit",
+      templateId: t.id,
+      name: t.name,
+      image: null,
+      description: t.description,
+      tags: [
+        `Comfortable ${formatOutfitRange(t.comfort_min, t.comfort_max)}`,
+        ...(t.grit_bonus ? [`${t.grit_bonus > 0 ? "+" : ""}${t.grit_bonus} max Grit`] : []),
+        ...(t.move_pct ? [`${t.move_pct > 0 ? "+" : ""}${t.move_pct}% walking`] : []),
+        ...(t.ap_bonus ? [`${t.ap_bonus > 0 ? "+" : ""}${t.ap_bonus} AP`] : []),
+        ...(t.accuracy_bonus ? [`${t.accuracy_bonus > 0 ? "+" : ""}${t.accuracy_bonus} accuracy`] : []),
+      ],
+      basePrice: t.base_price,
       quantity: null,
       standing: true,
     });
@@ -332,10 +375,16 @@ router.get("/", async (req, res) => {
     // A closed market shows players nothing; the DM still sees (and stocks) it.
     const visible = dm || pm.open;
     const all = visible ? [...(await standingItems(planet)), ...(await listingItems(planet))] : [];
+    // Outfits can only be owned once; tell the shop which ones this player has.
+    const { rows: ownedOutfits } = dm
+      ? { rows: [] }
+      : await pool.query("SELECT template_id FROM outfits WHERE user_id = $1", [req.user.sub]);
+    const ownedIds = new Set(ownedOutfits.map((r) => r.template_id));
     const items = all
       .filter((it) => dm || !it.hidden)
       .map((it) => ({
         ...it,
+        ...(it.kind === "outfit" ? { owned: ownedIds.has(it.templateId) } : {}),
         price: finalPrice(it.basePrice, pm.pricePct, priceOpts(pm, discountPct)),
       }));
 
@@ -375,8 +424,8 @@ export async function cloneTemplateToUser(client, kind, templateId, userId) {
   switch (kind) {
     case "blaster": {
       const { rows } = await client.query(
-        `INSERT INTO blasters (template_id, user_id, name, base_type, image, accuracy, reload_ap_cost, range, speed, mod_slots, magazine_size, quality)
-         SELECT id, $2, name, base_type, image, accuracy, reload_ap_cost, range, speed, mod_slots, magazine_size, quality
+        `INSERT INTO blasters (template_id, user_id, name, base_type, accuracy, reload_ap_cost, range, speed, mod_slots, magazine_size, quality)
+         SELECT id, $2, name, base_type, accuracy, reload_ap_cost, range, speed, mod_slots, magazine_size, quality
          FROM blaster_templates WHERE id = $1 RETURNING *`,
         [templateId, userId]
       );
@@ -495,6 +544,24 @@ router.post("/buy", async (req, res) => {
       unitPrice = priceOf(t.base_price ?? (kind === "mod" ? defaultBlasterModPrice(t) : defaultMechaModPrice(t)));
       label = t.name;
       give = () => cloneTemplateToUser(client, kind, id, req.user.sub);
+    } else if (key.startsWith("outfit:")) {
+      if (hiddenRows[0]) throw new MarketError("That isn't for sale here.");
+      const id = Number(key.split(":")[1]);
+      const { rows } = await client.query(
+        `SELECT t.* FROM outfit_templates t JOIN outfit_template_planets p ON p.template_id = t.id
+         WHERE t.id = $1 AND p.planet_index = $2`,
+        [id, planet]
+      );
+      const t = rows[0];
+      if (!t) throw new MarketError("That isn't for sale here.");
+      const { rows: owned } = await client.query("SELECT 1 FROM outfits WHERE user_id = $1 AND template_id = $2", [req.user.sub, id]);
+      if (owned[0]) throw new MarketError("You already own that outfit.");
+      unitPrice = priceOf(t.base_price);
+      label = t.name;
+      give = async () => {
+        await grantOutfit(client, req.user.sub, id);
+        return { type: "outfits-changed", payload: { at: Date.now() }, userId: req.user.sub };
+      };
     } else if (key.startsWith("listing:")) {
       const id = Number(key.split(":")[1]);
       const { rows } = await client.query("SELECT * FROM market_listings WHERE id = $1 AND planet_index = $2 FOR UPDATE", [id, planet]);
@@ -724,7 +791,7 @@ router.delete("/listings/:id", requireDungeonMaster, async (req, res) => {
 router.post("/hidden", requireDungeonMaster, async (req, res) => {
   const key = String(req.body?.key ?? "");
   const hidden = Boolean(req.body?.hidden);
-  if (!SUPPLY_KEYS.includes(key) && !/^(mod:\d+|mecha_mod:\d+)$/.test(key)) return res.status(400).json({ error: "Invalid item." });
+  if (!SUPPLY_KEYS.includes(key) && !/^(mod:\d+|mecha_mod:\d+|outfit:\d+)$/.test(key)) return res.status(400).json({ error: "Invalid item." });
   try {
     const planet = await currentPlanet();
     if (hidden) {
@@ -743,7 +810,7 @@ router.post("/hidden", requireDungeonMaster, async (req, res) => {
 // Absolute credits/pods for one character's purse.
 router.patch("/purse/:userId", requireDungeonMaster, async (req, res) => {
   const userId = Number(req.params.userId);
-  const { credits, pods, kibble, repairKits, energyCells, medpacks, revivalTonics } = req.body || {};
+  const { credits, pods, kibble, repairKits, energyCells, medpacks, revivalTonics, meds } = req.body || {};
   const sets = [];
   const values = [];
   if (credits !== undefined) {
@@ -766,6 +833,7 @@ router.patch("/purse/:userId", requireDungeonMaster, async (req, res) => {
     [energyCells, "energy_cells", "Energy cells"],
     [medpacks, "medpacks", "Medpacks"],
     [revivalTonics, "revival_tonics", "Revival tonics"],
+    [meds, "meds", "Meds"],
   ]) {
     if (value === undefined) continue;
     if (!Number.isInteger(value) || value < 0 || value > 999) {

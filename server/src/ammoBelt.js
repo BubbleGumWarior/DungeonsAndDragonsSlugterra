@@ -5,8 +5,8 @@
 //     more magazine slots; every other blaster of theirs gets none. A smaller
 //     magazine than before (belt removed, primary swapped) leaves slugs in
 //     slots that no longer exist, so those are unloaded.
-//   * characters.grit_bonus -- worn armor (kind = 'armor', Armor slot) adds its
-//     `grit_bonus` to max Grit (computeMaxGrit); current Grit rises by the
+//   * characters.grit_bonus -- worn armor (kind = 'armor', Armor slot) and the
+//     worn outfit add their `grit_bonus` to max Grit (computeMaxGrit); current Grit rises by the
 //     bonus when armor goes on, and is capped to the new maximum when it comes off.
 //
 // Idempotent -- call syncAmmoBelt (inside the same transaction, with that
@@ -19,12 +19,15 @@ import { syncTempoAura } from "./slugAura.js";
 import { computeMaxGrit } from "./characterRules.js";
 import { toClientCharacter } from "./routes/characters.js";
 
-async function syncArmorGrit(db, userId) {
+// Worn armor and the worn outfit (outfits table) both add Grit, so the stored
+// bonus is their sum.
+export async function syncArmorGrit(db, userId) {
   const { rows: armor } = await db.query(
     "SELECT grit_bonus FROM equipment WHERE user_id = $1 AND kind = 'armor' AND equip_slot IS NOT NULL LIMIT 1",
     [userId]
   );
-  const bonus = armor[0]?.grit_bonus ?? 0;
+  const { rows: outfit } = await db.query("SELECT grit_bonus FROM outfits WHERE user_id = $1 AND equipped LIMIT 1", [userId]);
+  const bonus = (armor[0]?.grit_bonus ?? 0) + (outfit[0]?.grit_bonus ?? 0);
   const { rows } = await db.query("SELECT stats, grit_bonus FROM characters WHERE user_id = $1", [userId]);
   if (!rows[0] || rows[0].grit_bonus === bonus) return false;
   // Putting armor on heals the extra Grit it adds; taking it off only caps

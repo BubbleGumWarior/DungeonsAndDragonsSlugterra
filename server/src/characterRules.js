@@ -2,14 +2,17 @@ export const STAT_KEYS = ["strength", "dexterity", "constitution", "intelligence
 
 export const PROFICIENCY_KEYS = [
   "athletics",
+  "fortitude",
   "acrobatics",
   "sleightOfHand",
   "stealth",
+  "piloting",
   "arcana",
   "history",
-  "investigation",
+  "splicing",
+  "engineering",
+  "astrogation",
   "nature",
-  "religion",
   "creatureHandling",
   "insight",
   "medicine",
@@ -23,14 +26,17 @@ export const PROFICIENCY_KEYS = [
 
 export const PROFICIENCY_STATS = {
   athletics: "strength",
+  fortitude: "constitution",
   acrobatics: "dexterity",
   sleightOfHand: "dexterity",
   stealth: "dexterity",
+  piloting: "dexterity",
   arcana: "intelligence",
   history: "intelligence",
-  investigation: "intelligence",
+  splicing: "intelligence",
+  engineering: "intelligence",
+  astrogation: "intelligence",
   nature: "intelligence",
-  religion: "intelligence",
   creatureHandling: "wisdom",
   insight: "wisdom",
   medicine: "wisdom",
@@ -44,14 +50,17 @@ export const PROFICIENCY_STATS = {
 
 export const PROFICIENCY_LABELS = {
   athletics: "Athletics",
+  fortitude: "Fortitude",
   acrobatics: "Acrobatics",
   sleightOfHand: "Sleight of Hand",
   stealth: "Stealth",
+  piloting: "Piloting",
   arcana: "Arcana",
   history: "History",
-  investigation: "Investigation",
+  splicing: "Splicing",
+  engineering: "Engineering",
+  astrogation: "Astrogation",
   nature: "Nature",
-  religion: "Religion",
   creatureHandling: "Slug Handling",
   insight: "Insight",
   medicine: "Medicine",
@@ -64,7 +73,7 @@ export const PROFICIENCY_LABELS = {
 };
 
 const TOTAL_STAT_POINTS = 27;
-const REQUIRED_PROFICIENCIES = 5;
+const REQUIRED_PROFICIENCIES = 6;
 const MAX_PORTRAIT_BYTES = 2 * 1024 * 1024;
 const MIN_STAT = 8;
 const MAX_STAT = 15;
@@ -159,6 +168,18 @@ export function skillModifier(stats, proficiencies, skillKey) {
 // `bonus` is flat extra Grit from worn armor (characters.grit_bonus).
 export function computeMaxGrit(stats, bonus = 0) {
   return 20 + statModifier(stats.constitution) * 5 + statModifier(stats.dexterity) + (bonus || 0);
+}
+
+// Deception: Heat normally rises by exactly what Fame does. Each point of
+// Deception modifier shaves 10% off the Heat a Fame gain brings, up to half (a
+// negative modifier never adds Heat). Fame itself is untouched.
+export const DECEPTION_HEAT_CUT_PER_MOD = 0.1;
+export const DECEPTION_HEAT_CUT_MAX = 0.5;
+
+export function heatGainFor(fameGain, deceptionMod) {
+  const gain = Math.max(0, fameGain || 0);
+  const cut = Math.min(DECEPTION_HEAT_CUT_MAX, DECEPTION_HEAT_CUT_PER_MOD * Math.max(0, deceptionMod || 0));
+  return Math.round(gain * (1 - cut));
 }
 
 // Mirrors client/src/characterData.js -- kept here too since the server is

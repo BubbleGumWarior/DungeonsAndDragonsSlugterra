@@ -93,12 +93,12 @@ export default function NavBar() {
     { to: "/slugs", label: slugterraRevealed ? "Slugs" : "Creatures", icon: <SlugIcon size={20} /> },
     { to: "/inventory", label: "Inventory", icon: <BackpackIcon weight="bold" /> },
     { to: "/consumables", label: "Consumables", icon: <FlaskIcon weight="bold" /> },
-    { to: "/mechas", label: "Mecha-Beasts", icon: <PawPrintIcon weight="bold" /> },
-    { to: "/market", label: "Market", icon: <StorefrontIcon weight="bold" /> },
   ];
   const starChartItems = [
     // The star map lives inside the ship now: the Nav Computer on the Deck Plan.
     { to: "/ship", label: "Deck Plan", icon: <RocketIcon weight="bold" /> },
+    { to: "/mechas", label: "Mecha-Beasts", icon: <PawPrintIcon weight="bold" /> },
+    { to: "/market", label: "Market", icon: <StorefrontIcon weight="bold" /> },
     { to: "/chronicle", label: "Chronicle", icon: <BookOpenTextIcon weight="bold" /> },
   ];
 

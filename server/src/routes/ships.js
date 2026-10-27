@@ -192,7 +192,7 @@ router.delete("/templates/:id", requireDungeonMaster, async (req, res) => {
 });
 
 // A player signs on (or off, with a null compartmentId) as the engineer for a
-// compartment that is being built. It takes Survival proficiency, and each
+// compartment that is being built. It takes Engineering proficiency, and each
 // player works one compartment at a time. While the ship is under way, only
 // compartments with an engineer move forward at a long rest.
 router.post("/engineer", async (req, res) => {
@@ -213,8 +213,8 @@ router.post("/engineer", async (req, res) => {
         return res.status(400).json({ error: "That compartment isn't being built." });
       }
       const proficiencies = chars[0].proficiencies;
-      if (!Array.isArray(proficiencies) || !proficiencies.includes("survival")) {
-        return res.status(403).json({ error: "Only someone proficient in Survival can engineer repairs and builds." });
+      if (!Array.isArray(proficiencies) || !proficiencies.includes("engineering")) {
+        return res.status(403).json({ error: "Only someone proficient in Engineering can engineer repairs and builds." });
       }
     }
 

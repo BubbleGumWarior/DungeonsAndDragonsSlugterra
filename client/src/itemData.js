@@ -92,7 +92,6 @@ export function defaultBlasterFields(baseType = BASE_TYPE_KEYS[0]) {
   return {
     name: "",
     baseType,
-    image: null,
     accuracy: base.accuracy,
     reloadApCost: base.reloadApCost,
     range: base.range,

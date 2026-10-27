@@ -1,0 +1,386 @@
+.wardrobe {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ---- Right now: the weather and what it does to the outfit you're in ---- */
+
+.wardrobe-climate {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 28px;
+  align-items: center;
+  padding: 20px 24px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--tier) 45%, var(--charcoal-600));
+  background:
+    radial-gradient(60% 140% at 0% 50%, color-mix(in srgb, var(--tier) 11%, transparent), transparent 70%),
+    var(--charcoal-900);
+}
+
+.wardrobe-climate,
+.wardrobe-item {
+  --tier: var(--success);
+}
+
+.wardrobe-climate--uncomfortable,
+.wardrobe-climate--strained,
+.wardrobe-item--uncomfortable,
+.wardrobe-item--strained {
+  --tier: var(--gold);
+}
+
+.wardrobe-climate--harsh,
+.wardrobe-climate--severe,
+.wardrobe-climate--brutal,
+.wardrobe-climate--lethal,
+.wardrobe-item--harsh,
+.wardrobe-item--severe,
+.wardrobe-item--brutal,
+.wardrobe-item--lethal {
+  --tier: var(--danger);
+}
+
+.wardrobe-climate-temp {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-areas:
+    "icon deg"
+    "where where";
+  align-items: center;
+  justify-content: start;
+  gap: 2px 10px;
+  min-width: 150px;
+}
+
+.wardrobe-climate-temp svg {
+  grid-area: icon;
+  width: 34px;
+  height: 34px;
+  color: var(--tier);
+}
+
+.wardrobe-climate-deg {
+  grid-area: deg;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 44px;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.wardrobe-climate-deg small {
+  margin-left: 2px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink-dim);
+}
+
+.wardrobe-climate-where {
+  grid-area: where;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-dim);
+}
+
+.wardrobe-climate-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 28px;
+  border-left: 1px solid var(--charcoal-700);
+}
+
+.wardrobe-climate-body p {
+  margin: 0;
+}
+
+.wardrobe-climate-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.wardrobe-climate-outfit {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--gold-soft);
+}
+
+.wardrobe-tier {
+  padding: 2px 11px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--tier) 60%, transparent);
+  background: color-mix(in srgb, var(--tier) 14%, transparent);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--tier);
+}
+
+.wardrobe-climate-note {
+  font-size: 13.5px;
+  color: var(--ink-dim);
+}
+
+.wardrobe-effects {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wardrobe-effects li {
+  padding: 3px 10px;
+  border-radius: 7px;
+  background: var(--charcoal-800);
+  border: 1px solid var(--charcoal-600);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.wardrobe-climate-warn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-dim);
+}
+
+.wardrobe-climate-warn svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--tier);
+}
+
+/* ---- The closet: one line per outfit, compared on one temperature scale ---- */
+
+.wardrobe-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wardrobe-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(210px, 1fr) 104px;
+  gap: 24px;
+  align-items: center;
+  padding: 16px 20px;
+  border-radius: 14px;
+  border: 1px solid var(--charcoal-600);
+  background: var(--charcoal-900);
+  transition: border-color 0.15s var(--ease-out);
+}
+
+.wardrobe-item:hover {
+  border-color: var(--charcoal-500, #4a4d53);
+}
+
+.wardrobe-item--worn {
+  border-color: var(--gold-dim);
+  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-900) 80%);
+}
+
+.wardrobe-item-main {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.wardrobe-item-icon {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  margin-top: 1px;
+  color: var(--gold-dim);
+}
+
+.wardrobe-item--worn .wardrobe-item-icon {
+  color: var(--gold-soft);
+}
+
+.wardrobe-item-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wardrobe-item-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--ink);
+}
+
+.wardrobe-item--worn .wardrobe-item-name {
+  color: var(--gold-soft);
+}
+
+.wardrobe-item-desc {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.wardrobe-chips {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wardrobe-chip {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  border: 1px solid var(--charcoal-600);
+  color: var(--ink-dim);
+}
+
+.wardrobe-chip--good {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 45%, var(--charcoal-600));
+}
+
+.wardrobe-chip--bad {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--charcoal-600));
+}
+
+/* The comfort track: the band is where the outfit is comfortable, the tick is
+   the weather right now. Same scale on every row. */
+.wardrobe-item-comfort {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wardrobe-track {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-600);
+}
+
+.wardrobe-track-band {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--gold) 55%, var(--charcoal-800));
+}
+
+.wardrobe-track-now {
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: var(--tier);
+  box-shadow: 0 0 0 2px var(--charcoal-900);
+}
+
+.wardrobe-item--worn .wardrobe-track-now {
+  box-shadow: 0 0 0 2px var(--charcoal-800);
+}
+
+.wardrobe-comfort-text {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 12px;
+  font-size: 12px;
+}
+
+.wardrobe-range {
+  color: var(--ink-dim);
+}
+
+.wardrobe-fit {
+  font-weight: 700;
+  color: var(--tier);
+}
+
+.wardrobe-wear {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 96px;
+}
+
+.wardrobe-wear svg {
+  width: 14px;
+  height: 14px;
+}
+
+@media (max-width: 860px) {
+  .wardrobe-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "main wear"
+      "comfort comfort";
+    gap: 14px 16px;
+    align-items: start;
+  }
+
+  .wardrobe-item-main {
+    grid-area: main;
+  }
+
+  .wardrobe-item-comfort {
+    grid-area: comfort;
+  }
+
+  .wardrobe-wear {
+    grid-area: wear;
+  }
+}
+
+@media (max-width: 640px) {
+  .wardrobe-climate {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 18px;
+  }
+
+  .wardrobe-climate-body {
+    padding-left: 0;
+    padding-top: 16px;
+    border-left: 0;
+    border-top: 1px solid var(--charcoal-700);
+  }
+
+  .wardrobe-item {
+    padding: 14px 16px;
+  }
+
+  .wardrobe-item-icon {
+    display: none;
+  }
+}

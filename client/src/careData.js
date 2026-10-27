@@ -54,7 +54,11 @@ export function shotsLeft(durability, quality) {
 // ---- Field consumables (mirrors careRules.js) --------------------------------
 export const ENERGY_CELL_PIPS = 2;
 export const MEDPACK_HEAL_FRACTION = 0.5;
+// Mirrors careRules.js: a long rest without a working Medbay only mends this
+// share of max Grit and leaves knockout pips alone.
+export const NO_MEDBAY_REST_HEAL_FRACTION = 0.5;
 export const TONIC_PIPS = 1;
+export const MEDS_DOSES_NEEDED = 3;
 
 // Everything a player carries that gets used up. `field` is the key on the
 // character record; `effect` is the one-line promise, `rules` the full hover.
@@ -83,9 +87,9 @@ export const SUPPLIES = [
     key: "repair-kit",
     field: "repairKits",
     name: "Repair Kits",
-    effect: `Mends a worn blaster (d20 + Survival over ${REPAIR_DC})`,
+    effect: `Mends a worn blaster (d20 + Engineering over ${REPAIR_DC})`,
     rules: [
-      `Use a kit from the Repair button on a blaster in your Inventory. Roll d20 + Survival: above ${REPAIR_DC} and it is restored to 100%.`,
+      `Use a kit from the Repair button on a blaster in your Inventory. Roll d20 + Engineering: above ${REPAIR_DC} and it is restored to 100%.`,
       `On a fail the kit is used up and the blaster loses a further ${REPAIR_FAIL_DAMAGE}%. At 0% it is past a kit's help -- only an expert can mend it.`,
     ],
   },
@@ -107,6 +111,7 @@ export const SUPPLIES = [
     effect: `Heals ${Math.round(MEDPACK_HEAL_FRACTION * 100)}% of your max Grit`,
     rules: [
       `Each Medpack heals ${Math.round(MEDPACK_HEAL_FRACTION * 100)}% of your maximum Grit. Use one below, under Field Medicine.`,
+      `A long rest only mends up to ${Math.round(NO_MEDBAY_REST_HEAL_FRACTION * 100)}% of max Grit unless the ship has a working Medbay, so keep some spare.`,
       "Can't be used while you're in a fight.",
     ],
   },
@@ -117,6 +122,18 @@ export const SUPPLIES = [
     effect: `Clears ${TONIC_PIPS} knockout pip`,
     rules: [
       `Each tonic clears ${TONIC_PIPS} of your knockout pips. Use one below, under Field Medicine.`,
+      "A long rest only clears knockout pips if the ship has a working Medbay.",
+      "Can't be used while you're in a fight.",
+    ],
+  },
+  {
+    key: "meds",
+    field: "meds",
+    name: "Meds",
+    effect: `${MEDS_DOSES_NEEDED} daily doses cure illness`,
+    rules: [
+      "Sleeping in the wrong clothes for the climate can make you ill. While ill, your max Grit, AP and accuracy are all halved when a fight begins.",
+      `Take one dose per long rest, ${MEDS_DOSES_NEEDED} rests in a row, and the sickness clears. Miss a rest and the count starts over. Use it below, under Field Medicine.`,
       "Can't be used while you're in a fight.",
     ],
   },

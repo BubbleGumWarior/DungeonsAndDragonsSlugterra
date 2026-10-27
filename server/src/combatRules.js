@@ -27,9 +27,9 @@ export const MOUNT_RANGE = MOVE_SPEED_PER_AP; // 1 AP of walking -- how close yo
 // ---- Action costs -----------------------------------------------------
 
 export const MOVE_AP_COST = 1;
-// Hunker Down no longer has a fixed cost -- it sinks *all* remaining AP into
-// the heal (see hunkerHeal / routes/combat.js). Kept only as the threshold
-// above which the client asks for confirmation first.
+// Patch Up (route /actions/hunker-down) has no fixed cost -- it sinks *all*
+// remaining AP into the heal (see hunkerHeal / routes/combat.js). Kept only as
+// the threshold above which the client asks for confirmation first.
 export const HUNKER_MIN_AP = 1;
 export const MOUNT_AP_COST = 1;
 export const RAM_AP_COST = 2; // spent from the mecha's AP pool, on the rider's turn
@@ -187,14 +187,22 @@ export function applyPowerSurgeToSlug(slug) {
   return { ...slug, clash_power: slug.clash_power * POWER_SURGE_MULTIPLIER, power_doubled: true };
 }
 
-// ---- Hunker Down ------------------------------------------------------
+// ---- Patch Up (self-heal) ---------------------------------------------
 
-// Hunker Down spends every remaining AP on patching yourself up: a flat
+// Patch Up spends every remaining AP on patching yourself up: a flat
 // `max(1, CON modifier)` Grit per AP consumed, no roll. The per-AP floor of 1
 // means a zero or negative CON still gets something back rather than a wasted
 // turn.
 export function hunkerHeal(conModifier, apSpent = 1) {
   return Math.max(1, conModifier) * Math.max(1, apSpent);
+}
+
+// Patch Up only heals you up to this share of max Grit -- past that you
+// need a Medpack, First Aid or a rest. Mirrored in client combatSkills.js.
+export const HUNKER_MAX_GRIT_FRACTION = 0.5;
+
+export function hunkerGritCap(maxGrit) {
+  return Math.floor(maxGrit * HUNKER_MAX_GRIT_FRACTION);
 }
 
 // ---- Shooting -----------------------------------------------------------
@@ -1488,6 +1496,15 @@ export const ATHLETICS_MOVE_BONUS_PER_MOD = 0.1;
 export const moveSpeedPerAp = (athleticsMod) =>
   MOVE_SPEED_PER_AP * (1 + ATHLETICS_MOVE_BONUS_PER_MOD * Math.max(0, athleticsMod || 0));
 
+// Outfit and climate effects (outfitRules.js buildGearSnapshot): a character's
+// combatant carries `data.gear`, snapshotted when the fight begins. These read it
+// for walking distance, attack rolls and reloads; NPCs and mechas have none.
+export const gearMoveMult = (combatant) => combatant?.data?.gear?.moveMult ?? 1;
+export const gearAccuracyMod = (combatant) => combatant?.data?.gear?.accuracyMod ?? 0;
+export const gearReloadAp = (combatant) => combatant?.data?.gear?.reloadApBonus ?? 0;
+// Ill: every attack roll is made at disadvantage.
+export const gearDisadvantage = (combatant) => Boolean(combatant?.data?.gear?.disadvantage);
+
 // Sleight of Hand: shaves its modifier off a blaster's reload cost.
 export const reloadApCostFor = (baseCost, sleightMod) => Math.max(1, (baseCost || 1) - Math.max(0, sleightMod || 0));
 
@@ -1532,19 +1549,33 @@ export const NEGATIVE_STATUS_KEYS = [
 export const STYLE_DC = 18;
 export const STYLE_FAME_BONUS = 10;
 
-// ---- Wall Run ---------------------------------------------------------------
-// Hotbar action: skim along a nearby wall and drop down on its far side. Costs
-// 6 AP minus the runner's Acrobatics modifier (never less than 1). Mirrored in
-// client/src/CombatPage.jsx for the button's preview.
-export const WALL_RUN_BASE_AP = 6;
-export const WALL_RUN_RANGE = 40; // how close to a wall the runner has to be
-export const WALL_RUN_LANDING_MIN = 20; // never land closer to the wall than this
-export const wallRunApCost = (acrobaticsMod) => Math.max(1, WALL_RUN_BASE_AP - (acrobaticsMod || 0));
+// ---- Wall Vault / Wall Run --------------------------------------------------
+// Two Acrobatics hotbar actions that need the runner standing close to a wall.
+// Both need a positive Acrobatics modifier. Mirrored in client/src/combatSkills.js
+// and CombatPage.jsx for the buttons' previews.
+//
+// Wall Vault: spring off a nearby wall and drop down on its far side. Costs
+// 6 AP minus the Acrobatics modifier (never less than 1).
+export const WALL_VAULT_BASE_AP = 6;
+export const WALL_VAULT_RANGE = 40; // how close to a wall the vaulter has to be
+export const WALL_VAULT_LANDING_MIN = 20; // never land closer to the wall than this
+export const wallVaultApCost = (acrobaticsMod) => Math.max(1, WALL_VAULT_BASE_AP - (acrobaticsMod || 0));
 
-// Finds the nearest wall within WALL_RUN_RANGE of `pos` and the spot straight
-// across it (a mirror of `pos` through the wall's line), or null if no wall is
-// close enough.
-export function planWallRun(pos, walls, mapWidth, mapHeight) {
+// Wall Run: kick off and slide along the length of the wall, staying on the
+// same side of it. A flat WALL_RUN_AP_COST for up to WALL_RUN_BASE_DISTANCE
+// units of wall (plus WALL_RUN_DISTANCE_PER_MOD per Acrobatics modifier) --
+// well past what the same AP of walking covers -- stopping at the wall's end.
+export const WALL_RUN_AP_COST = 2;
+export const WALL_RUN_BASE_DISTANCE = 240;
+export const WALL_RUN_DISTANCE_PER_MOD = 40;
+export const WALL_RUN_MIN_DISTANCE = 20; // a shorter slide than this isn't worth the AP
+export const wallRunDistance = (acrobaticsMod) =>
+  WALL_RUN_BASE_DISTANCE + WALL_RUN_DISTANCE_PER_MOD * Math.max(0, acrobaticsMod || 0);
+
+// The wall within `range` of `pos` that is closest to it, with the closest point
+// on it (`near`, `t` along it from its first end) and how far away that is.
+// Null if none is close enough.
+function nearestWall(pos, walls, range) {
   let best = null;
   for (const wall of walls || []) {
     const dx = wall.x2 - wall.x1;
@@ -1555,9 +1586,52 @@ export function planWallRun(pos, walls, mapWidth, mapHeight) {
     t = Math.max(0, Math.min(1, t));
     const near = { x: wall.x1 + t * dx, y: wall.y1 + t * dy };
     const d = Math.hypot(pos.x - near.x, pos.y - near.y);
-    if (d > WALL_RUN_RANGE) continue;
-    if (!best || d < best.d) best = { wall, near, d };
+    if (d > range) continue;
+    if (!best || d < best.d) best = { wall, near, d, t };
   }
+  return best;
+}
+
+// Where a Wall Run from `pos` ends: along the nearest wall (within
+// WALL_VAULT_RANGE) toward whichever end `towardPoint` is closer to -- or the
+// wall's farther end when no point is given -- for at most `maxDistance` units,
+// keeping the runner's own distance from the wall. Null if no wall is close
+// enough; `distance` is how far the slide actually goes (0 if already at the end).
+export function planWallRun(pos, walls, mapWidth, mapHeight, towardPoint = null, maxDistance = WALL_RUN_BASE_DISTANCE) {
+  const best = nearestWall(pos, walls, WALL_VAULT_RANGE);
+  if (!best) return null;
+  const { wall, near, d } = best;
+  const wallLen = Math.hypot(wall.x2 - wall.x1, wall.y2 - wall.y1);
+  const ux = (wall.x2 - wall.x1) / wallLen;
+  const uy = (wall.y2 - wall.y1) / wallLen;
+  const along = best.t * wallLen;
+
+  let dir;
+  if (towardPoint && Number.isFinite(towardPoint.x) && Number.isFinite(towardPoint.y)) {
+    const pull = (towardPoint.x - near.x) * ux + (towardPoint.y - near.y) * uy;
+    dir = pull >= 0 ? 1 : -1;
+  } else {
+    dir = along <= wallLen / 2 ? 1 : -1;
+  }
+  const travel = Math.max(0, Math.min(maxDistance, dir > 0 ? wallLen - along : along));
+
+  // Stay on the runner's side of the wall; standing right on it, pick a side.
+  const gap = Math.max(d, 10);
+  const sideX = d > 1e-6 ? (pos.x - near.x) / d : -uy;
+  const sideY = d > 1e-6 ? (pos.y - near.y) / d : ux;
+  const landing = clampToMapBounds(
+    { x: near.x + ux * dir * travel + sideX * gap, y: near.y + uy * dir * travel + sideY * gap },
+    mapWidth,
+    mapHeight
+  );
+  return { wall, landing, distance: travel };
+}
+
+// Wall Vault's landing: the spot straight across the nearest wall within
+// WALL_VAULT_RANGE (a mirror of `pos` through the wall's line), or null if no
+// wall is close enough.
+export function planWallVault(pos, walls, mapWidth, mapHeight) {
+  const best = nearestWall(pos, walls, WALL_VAULT_RANGE);
   if (!best) return null;
   // Unit vector from the runner toward the wall; if they're standing right on
   // it, step off perpendicular to the wall instead.
@@ -1571,7 +1645,7 @@ export function planWallRun(pos, walls, mapWidth, mapHeight) {
     nx = -(best.wall.y2 - best.wall.y1) / len;
     ny = (best.wall.x2 - best.wall.x1) / len;
   }
-  const through = Math.max(best.d, WALL_RUN_LANDING_MIN);
+  const through = Math.max(best.d, WALL_VAULT_LANDING_MIN);
   const landing = clampToMapBounds(
     { x: best.near.x + nx * through, y: best.near.y + ny * through },
     mapWidth,

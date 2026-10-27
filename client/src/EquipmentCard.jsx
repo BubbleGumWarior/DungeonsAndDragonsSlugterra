@@ -28,7 +28,7 @@ export default function EquipmentCard({ item, size = "sm", onClick, actions, dra
 
   return (
     <div
-      className={`blaster-card blaster-card--${size} ${onClick ? "blaster-card--clickable" : ""} ${draggableEquip ? "blaster-card--draggable" : ""}`}
+      className={`blaster-card blaster-card--${size} blaster-card--gear ${onClick ? "blaster-card--clickable" : ""} ${draggableEquip ? "blaster-card--draggable" : ""} ${item.equipped ? "blaster-card--equipped" : ""}`}
       onClick={onClick}
       draggable={draggableEquip}
       onDragStart={

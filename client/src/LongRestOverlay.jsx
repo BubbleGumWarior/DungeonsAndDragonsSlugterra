@@ -3,7 +3,9 @@ import {
   MoonStarsIcon,
   RocketLaunchIcon,
   SkullIcon,
+  PlantIcon,
   StorefrontIcon,
+  ThermometerIcon,
   WarningIcon,
   WrenchIcon,
 } from "@phosphor-icons/react";
@@ -11,7 +13,7 @@ import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import { PLANETS } from "./planetData.js";
 import { LOYALTY_TIER_LABELS } from "./slugData.js";
-import { FOOD_DRAIN_PER_REST } from "./careData.js";
+import { FOOD_DRAIN_PER_REST, MEDS_DOSES_NEEDED, NO_MEDBAY_REST_HEAL_FRACTION } from "./careData.js";
 import "./LongRestOverlay.css";
 
 const AUTO_CLOSE_MS = 5200;
@@ -120,9 +122,28 @@ export default function LongRestOverlay() {
         .map((e) => ({ key: `${e.kind}-${e.slugId}`, ...describeEvent(e, isDM) }))
         .filter((r) => r.text)
     : [];
+  const forage = shown
+    ? (shown.foraged || [])
+        .filter((f) => isDM || f.userId === user?.id)
+        .map((f) => ({
+          key: `forage-${f.userId}`,
+          text: `${isDM ? `${f.name} foraged` : "You foraged"} ${f.scoops} ${f.scoops === 1 ? "scoop" : "scoops"} of Slug Kibble (d6 ${f.roll} + ${f.modifier}).`,
+        }))
+    : [];
+  // Anyone who woke up ill. These hold the overlay open like a hungry slug does.
+  const illnessRows = shown
+    ? (shown.illness || [])
+        .filter((e) => isDM || e.userId === user?.id)
+        .map((e) => ({
+          key: `ill-${e.userId}`,
+          tone: "bad",
+          icon: <ThermometerIcon weight="fill" />,
+          text: `${isDM ? `${e.name} woke` : "You woke"} up ill. ${e.temp} °C was ${e.outside} °C too ${e.side === "cold" ? "cold" : "hot"} for ${e.outfit ?? "their clothes"}. ${isDM ? "They need" : "Take"} Meds ${MEDS_DOSES_NEEDED} rests in a row.`,
+        }))
+    : [];
   const mood = shown?.marketMood;
   const news = shown ? shipNews(shown.day) : [];
-  const hasConsequences = rows.length > 0;
+  const hasConsequences = rows.length > 0 || illnessRows.length > 0;
 
   useEffect(() => {
     if (!shown) return undefined;
@@ -155,13 +176,15 @@ export default function LongRestOverlay() {
         </h2>
         <p className="rest-sub">
           {shown.rested > 0
-            ? `Grit is restored and every slug is recharged, though each lost ${FOOD_DRAIN_PER_REST}% of its food.`
+            ? shown.medbay === false
+              ? `With no working Medbay, Grit only mends to ${Math.round(NO_MEDBAY_REST_HEAL_FRACTION * 100)}% and knockout pips remain. Every slug is recharged, though each lost ${FOOD_DRAIN_PER_REST}% of its food.`
+              : `Grit is restored and every slug is recharged, though each lost ${FOOD_DRAIN_PER_REST}% of its food.`
             : "Nobody was free to rest -- everyone is still in the fight."}
         </p>
 
         {hasConsequences && (
           <ul className="rest-events">
-            {rows.map((r) => (
+            {[...illnessRows, ...rows].map((r) => (
               <li key={r.key} className={`rest-event rest-event--${r.tone}`}>
                 {r.icon}
                 <span>{r.text}</span>
@@ -169,6 +192,13 @@ export default function LongRestOverlay() {
             ))}
           </ul>
         )}
+
+        {forage.map((f) => (
+          <p key={f.key} className="rest-mood">
+            <PlantIcon weight="bold" />
+            <span>{f.text}</span>
+          </p>
+        ))}
 
         {shown.day?.day != null && <p className="rest-sub">Day {shown.day.day}</p>}
         {news.map((n) => (

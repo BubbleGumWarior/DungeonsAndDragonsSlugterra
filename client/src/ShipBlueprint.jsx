@@ -79,7 +79,7 @@ function Engineers({ compartment }) {
     <p className="ship-progress-text">
       {crew.length
         ? `Engineering: ${crew.map((e) => e.name).join(", ")}`
-        : "No engineer assigned. It only moves forward while docked. Someone proficient in Survival can work on it."}
+        : "No engineer assigned. It only moves forward while docked. Someone proficient in Engineering can work on it."}
     </p>
   );
 }
@@ -149,13 +149,13 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
   const dragRef = useRef(null); // { id, moved }
   const justDraggedRef = useRef(false); // set on a real drag so the trailing click doesn't open the panel
 
-  // The deck plan can be tall on a wide screen, pushing the detail panel well
-  // below the fold -- so opening a compartment drops the page down to it. The
-  // panel is in the DOM by the time this passive effect runs (same commit as
-  // selectedId), and scrollIntoView forces the layout it needs.
+  // The detail panel floats over the deck plan beside the pin, so on a tall
+  // plan it can sit off-screen: nudge the page just enough to bring it into
+  // view. The panel is in the DOM by the time this passive effect runs (same
+  // commit as selectedId), and scrollIntoView forces the layout it needs.
   useEffect(() => {
     if (!selectedId) return;
-    detailRef.current?.scrollIntoView({ block: "start" });
+    detailRef.current?.scrollIntoView({ block: "nearest" });
   }, [selectedId]);
 
   // The DM edits whichever ship is being shown; players always see the active
@@ -650,6 +650,7 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
         </section>
       )}
 
+      <div className={`ship-plan-wrap ${selected ? "ship-plan-wrap--open" : ""}`}>
       {!ship ? (
         <div className="ship-empty-card">
           <RocketIcon weight="duotone" />
@@ -719,7 +720,12 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
       )}
 
       {selected && (
-        <div className="ship-detail" ref={detailRef}>
+        <div
+          className={`ship-detail ${selected.xPct < 50 ? "ship-detail--right" : "ship-detail--left"}`}
+          style={{ "--y": Math.min(Math.max(selected.yPct / 100, 0), 1) }}
+          ref={detailRef}
+          onClick={(e) => e.stopPropagation()}
+        >
           <button
             type="button"
             className="ship-detail-close"
@@ -910,6 +916,7 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
           )}
         </div>
       )}
+      </div>
 
           </div>
           <span className="tablet-home" aria-hidden="true" />

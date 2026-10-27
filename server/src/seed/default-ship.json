@@ -1,6 +1,6 @@
 {
   "name": "The Traveler",
-  "speed": 50,
+  "speed": 5,
   "compartmentSlots": 12,
   "image": "default-ship.jpg",
   "compartments": [

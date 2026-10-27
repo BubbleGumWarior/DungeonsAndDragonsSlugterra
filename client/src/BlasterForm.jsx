@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { MinusIcon, PlusIcon } from "@phosphor-icons/react";
-import ImageCropper from "./ImageCropper.jsx";
 import {
   BASE_TYPES,
   BASE_TYPE_KEYS,
@@ -114,11 +113,6 @@ export default function BlasterForm({ mode, initialValues, players, onSubmit, on
             </button>
           </div>
         </div>
-      </div>
-
-      <div className="slug-form-image-field" style={{ margin: "0 auto" }}>
-        <label>Image</label>
-        <ImageCropper value={fields.image} onChange={(v) => update("image", v)} shape="landscape" />
       </div>
 
       <div className="slug-form-field">

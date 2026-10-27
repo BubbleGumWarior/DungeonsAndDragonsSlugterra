@@ -20,8 +20,12 @@ import {
   combatantSkillMod,
   areAllies,
   moveSpeedPerAp,
+  gearMoveMult,
+  gearReloadAp,
   reloadApCostFor,
-  wallRunApCost,
+  wallVaultApCost,
+  wallRunDistance,
+  WALL_RUN_AP_COST,
   firstAidApCost,
   HIDE_AP_COST,
   HIDE_RANGE,
@@ -34,6 +38,7 @@ import {
   modeIgnoresWater,
   effectiveMode,
   WATER_FOOT_COST_MULT,
+  hunkerGritCap,
 } from "./combatSkills.js";
 import { typeRange } from "./slugData.js";
 import { effectiveReloadApCost, meleeDamageFor } from "./itemData.js";
@@ -78,7 +83,7 @@ async function del(token, url) {
 // live preview while dragging. The server is always the authority on the
 // real AP cost when the move is actually submitted.
 const MOVE_SPEED_PER_AP = 80; // mirrors server combatRules.js -- walking distance only; a given walk costs 2.5x the AP vs. the old 200
-const WALL_RUN_RANGE = 40; // mirrors server -- how close to a wall you must be
+const WALL_VAULT_RANGE = 40; // mirrors server -- how close to a wall you must be to vault or run it
 const MOUNT_RANGE = MOVE_SPEED_PER_AP; // mirrors server -- 1 AP of walking, to mount / dismount / ram
 
 function TopBar({ title, subtitle, children }) {
@@ -171,8 +176,8 @@ export default function CombatPage() {
   const [actionPicker, setActionPicker] = useState(null); // slug awaiting an Attack/Break Wall/Make Wall/Build Bridge choice
   const [mindScramblePicker, setMindScramblePicker] = useState(null); // Perplexus awaiting an effect choice
   const [frictionPicker, setFrictionPicker] = useState(null); // Psi awaiting a friction choice
-  const [wallRunId, setWallRunId] = useState(null); // combatant mid Wall Run -- gives its token the slow slide
-  const [hunkerConfirm, setHunkerConfirm] = useState(null); // { ap, conMod } while awaiting "spend all AP?" confirmation
+  const [wallRunId, setWallRunId] = useState(null); // combatant mid Wall Vault / Wall Run -- gives its token the slow slide
+  const [hunkerConfirm, setHunkerConfirm] = useState(null); // { ap, conMod } while awaiting Patch Up's "spend all AP?" confirmation
 
   const isDM = user?.role === "Dungeon Master";
 
@@ -516,12 +521,13 @@ export default function CombatPage() {
     const needsPod = pods == null ? 0 : waiting.filter((s) => s.podBroken).length;
     const podless = Math.max(0, needsPod - (pods ?? 0));
     const equippedMods = allMods.filter((m) => m.equippedBlasterId === activeBlaster.id);
-    return { apCost: reloadApCostFor(effectiveReloadApCost(activeBlaster, equippedMods), combatantSkillMod(actingCombatant, "sleightOfHand")), pending: waiting.length - podless, noPods: podless };
+    return { apCost: reloadApCostFor(effectiveReloadApCost(activeBlaster, equippedMods), combatantSkillMod(actingCombatant, "sleightOfHand")) + gearReloadAp(actingCombatant), pending: waiting.length - podless, noPods: podless };
   }, [actingCombatant, allBlasters, allSlugs, allMods, pods]);
 
-  // Wall Run: 6 AP minus Acrobatics (NPCs use DEX), and only offered right
-  // next to a wall. Mirrors server planWallRun/wallRunApCost -- preview only.
-  const wallRunInfo = useMemo(() => {
+  // Wall Vault (6 AP minus Acrobatics, NPCs use DEX) and Wall Run (flat 2 AP,
+  // slides further with Acrobatics) -- both only offered right next to a wall.
+  // Mirrors server planWallVault / planWallRun -- preview only.
+  const wallInfo = useMemo(() => {
     if (!actingCombatant || (actingCombatant.kind !== "character" && actingCombatant.kind !== "npc")) return null;
     const mod = combatantSkillMod(actingCombatant, "acrobatics");
     const nearWall = (encounter?.walls || []).some((w) => {
@@ -530,12 +536,18 @@ export default function CombatPage() {
       const lenSq = dx * dx + dy * dy;
       if (lenSq < 1e-9) return false;
       const t = Math.max(0, Math.min(1, ((actingCombatant.x - w.x1) * dx + (actingCombatant.y - w.y1) * dy) / lenSq));
-      return Math.hypot(actingCombatant.x - (w.x1 + t * dx), actingCombatant.y - (w.y1 + t * dy)) <= WALL_RUN_RANGE;
+      return Math.hypot(actingCombatant.x - (w.x1 + t * dx), actingCombatant.y - (w.y1 + t * dy)) <= WALL_VAULT_RANGE;
     });
-    return { apCost: wallRunApCost(mod), nearWall, skilled: mod > 0 };
+    return {
+      vaultApCost: wallVaultApCost(mod),
+      runApCost: WALL_RUN_AP_COST,
+      runDistance: wallRunDistance(mod),
+      nearWall,
+      skilled: mod > 0,
+    };
   }, [actingCombatant, encounter]);
 
-  // Skill actions beyond Wall Run: Hide (Stealth), Intimidate, First Aid
+  // Skill actions beyond Wall Vault / Wall Run: Hide (Stealth), Intimidate, First Aid
   // (Medicine). Stealth / Intimidation need a positive modifier; Hide also
   // needs nobody hostile within HIDE_RANGE. Mirrors the server's checks.
   const skillActionInfo = useMemo(() => {
@@ -654,7 +666,7 @@ export default function CombatPage() {
         const inWater = isWaterAt(water, { x: vehicle.x, y: vehicle.y });
         speedPerAp = MOVE_SPEED_PER_AP * Math.max(1, vehicle.data?.speed || 1) * modeMechaSpeedFactor(mode, inWater);
       } else {
-        speedPerAp = moveSpeedPerAp(combatantSkillMod(combatant, "athletics"));
+        speedPerAp = moveSpeedPerAp(combatantSkillMod(combatant, "athletics")) * gearMoveMult(combatant);
       }
       if (from && to) return pathApCost(from, to, water, speedPerAp, modeIgnoresWater(mode), vehicle ? undefined : WATER_FOOT_COST_MULT);
       return Math.max(1, Math.ceil(dist / speedPerAp));
@@ -853,10 +865,19 @@ export default function CombatPage() {
     setError(null);
     try {
       if (name === "hunker-down") {
-        // Hunker Down burns *all* remaining AP -- confirm first if there's more
+        // Patch Up burns *all* remaining AP -- confirm first if there's more
         // than one to lose, so a stray click doesn't end the turn.
+        if ((actingCombatant.currentGrit ?? 0) >= hunkerGritCap(actingCombatant.maxGrit)) {
+          setError("Patch Up can't heal you above 50% Grit.");
+          return;
+        }
         if ((actingCombatant.currentAp ?? 0) > 1) {
-          setHunkerConfirm({ ap: actingCombatant.currentAp, conMod: actingCombatant.data?.conMod ?? 0 });
+          setHunkerConfirm({
+            ap: actingCombatant.currentAp,
+            conMod: actingCombatant.data?.conMod ?? 0,
+            currentGrit: actingCombatant.currentGrit ?? 0,
+            maxGrit: actingCombatant.maxGrit ?? 0,
+          });
           return;
         }
         applyEncounter(await postJson(token, "/api/combat/actions/hunker-down", { combatantId: actingCombatant.id }));
@@ -882,17 +903,22 @@ export default function CombatPage() {
         );
       } else if (name === "hide") {
         applyEncounter(await postJson(token, "/api/combat/actions/hide", { combatantId: actingCombatant.id }));
-      } else if (name === "wall-run") {
-        const runnerId = actingCombatant.id;
-        applyEncounter(await postJson(token, "/api/combat/actions/wall-run", { combatantId: runnerId }));
-        setWallRunId(runnerId);
-        setTimeout(() => setWallRunId((cur) => (cur === runnerId ? null : cur)), 1100);
+      } else if (name === "wall-vault") {
+        await slideAlongWall("wall-vault", actingCombatant.id);
       } else if (name === "reload") {
         applyEncounter(await postJson(token, "/api/combat/actions/reload", { combatantId: actingCombatant.id }));
       }
     } catch (err) {
       setError(err.message);
     }
+  }
+
+  // Wall Vault / Wall Run: POST it, then give the runner's token the slow slide
+  // while it travels. `body` carries Wall Run's chosen direction.
+  async function slideAlongWall(action, runnerId, body = {}) {
+    applyEncounter(await postJson(token, `/api/combat/actions/${action}`, { combatantId: runnerId, ...body }));
+    setWallRunId(runnerId);
+    setTimeout(() => setWallRunId((cur) => (cur === runnerId ? null : cur)), 1100);
   }
 
   async function confirmHunker() {
@@ -907,6 +933,18 @@ export default function CombatPage() {
   }
 
   async function handleBackgroundClick(point) {
+    // Wall Run is aimed by clicking along the wall: the end nearest the click
+    // is the way the runner slides.
+    if (mode?.type === "wall-run" && actingCombatant) {
+      setError(null);
+      try {
+        await slideAlongWall("wall-run", actingCombatant.id, { targetPoint: point });
+      } catch (err) {
+        setError(err.message);
+      }
+      setMode(null);
+      return;
+    }
     // Break Wall / Make Wall / Build Bridge target a bare map point, not a
     // combatant -- a background click during one of those is the shot
     // itself, not a mode-cancel like every other background click is.
@@ -1326,7 +1364,7 @@ export default function CombatPage() {
             weaponSwitch={weaponSwitch}
             meleeInfo={meleeInfo}
             reloadInfo={reloadInfo}
-            wallRunInfo={wallRunInfo}
+            wallInfo={wallInfo}
             skillActionInfo={skillActionInfo}
             modeInfo={modeInfo}
             mountedMecha={mountedMecha}
@@ -1378,6 +1416,8 @@ export default function CombatPage() {
         <HunkerConfirmModal
           ap={hunkerConfirm.ap}
           conMod={hunkerConfirm.conMod}
+          currentGrit={hunkerConfirm.currentGrit}
+          maxGrit={hunkerConfirm.maxGrit}
           onConfirm={confirmHunker}
           onClose={() => setHunkerConfirm(null)}
         />

@@ -1,8 +1,9 @@
 import {
   ArrowRightIcon,
+  ArrowUpIcon,
   ArrowsClockwiseIcon,
   ArrowsCounterClockwiseIcon,
-  CampfireIcon,
+  BandaidsIcon,
   CarIcon,
   DropIcon,
   EyeSlashIcon,
@@ -17,6 +18,7 @@ import {
   XIcon,
 } from "@phosphor-icons/react";
 import { MELEE_STR_NOTE } from "./itemData.js";
+import { hunkerGritCap } from "./combatSkills.js";
 import "./CombatHotbar.css";
 
 const MOUNT_AP_COST = 1;
@@ -74,7 +76,7 @@ export default function CombatHotbar({
   weaponSwitch,
   meleeInfo,
   reloadInfo,
-  wallRunInfo,
+  wallInfo,
   skillActionInfo,
   modeInfo,
   mountedMecha = null,
@@ -118,10 +120,14 @@ export default function CombatHotbar({
       <div className="combat-hotbar-buttons">
         {!burrowed && !isMecha && actingCombatant.currentGrit != null && (
           <HotbarButton locked={down}
-            icon={<CampfireIcon weight="bold" />}
-            label="Hunker Down"
+            icon={<BandaidsIcon weight="bold" />}
+            label="Patch Up"
             apCost={ap > 0 ? ap : null}
-            disabled={ap < 1 || actingCombatant.damagedThisTurn}
+            disabled={
+              ap < 1 ||
+              actingCombatant.damagedThisTurn ||
+              (actingCombatant.currentGrit ?? 0) >= hunkerGritCap(actingCombatant.maxGrit)
+            }
             onClick={() => onAction("hunker-down")}
           />
         )}
@@ -169,14 +175,24 @@ export default function CombatHotbar({
           />
         )}
 
-        {!isMecha && !isMounted && wallRunInfo && (
-          <HotbarButton locked={down}
-            icon={<PersonSimpleRunIcon weight="bold" />}
-            label="Wall Run"
-            apCost={wallRunInfo.apCost}
-            disabled={ap < wallRunInfo.apCost || !wallRunInfo.nearWall || !wallRunInfo.skilled}
-            onClick={() => onAction("wall-run")}
-          />
+        {!isMecha && !isMounted && wallInfo && (
+          <>
+            <HotbarButton locked={down}
+              icon={<ArrowUpIcon weight="bold" />}
+              label="Wall Vault"
+              apCost={wallInfo.vaultApCost}
+              disabled={ap < wallInfo.vaultApCost || !wallInfo.nearWall || !wallInfo.skilled}
+              onClick={() => onAction("wall-vault")}
+            />
+            <HotbarButton locked={down}
+              icon={<PersonSimpleRunIcon weight="bold" />}
+              label="Wall Run"
+              apCost={wallInfo.runApCost}
+              active={mode?.type === "wall-run"}
+              disabled={ap < wallInfo.runApCost || !wallInfo.nearWall || !wallInfo.skilled}
+              onClick={() => onArmMode(mode?.type === "wall-run" ? null : { type: "wall-run" })}
+            />
+          </>
         )}
 
         {!isMecha && !isMounted && skillActionInfo && (
@@ -264,11 +280,17 @@ export default function CombatHotbar({
       )}
       {burrowed && <p className="combat-hotbar-hint">Burrowed -- untargetable and unseen. You can only move or get out of the burrow.</p>}
       {isMounted && <p className="combat-hotbar-hint">Mounted -- moving spends the mecha's AP and drives it at the mecha's speed.</p>}
-      {!isMecha && !isMounted && wallRunInfo && !wallRunInfo.skilled && (
-        <p className="combat-hotbar-hint">Wall Run needs a positive Acrobatics modifier.</p>
+      {!isMecha && !isMounted && wallInfo && !wallInfo.skilled && (
+        <p className="combat-hotbar-hint">Wall Vault and Wall Run need a positive Acrobatics modifier.</p>
       )}
-      {!isMecha && !isMounted && wallRunInfo && wallRunInfo.skilled && !wallRunInfo.nearWall && (
-        <p className="combat-hotbar-hint">Wall Run needs you standing close to a wall.</p>
+      {!isMecha && !isMounted && wallInfo && wallInfo.skilled && !wallInfo.nearWall && (
+        <p className="combat-hotbar-hint">Wall Vault and Wall Run need you standing close to a wall.</p>
+      )}
+      {mode?.type === "wall-run" && wallInfo && (
+        <p className="combat-hotbar-hint">
+          Click along the wall in the direction you want to run -- you slide up to {wallInfo.runDistance} units along it,
+          or to its end, staying on your side.
+        </p>
       )}
       {mode?.type === "intimidate" && <p className="combat-hotbar-hint">Click an enemy within 400 units to intimidate them.</p>}
       {mode?.type === "first-aid" && <p className="combat-hotbar-hint">Click a nearby ally (or yourself) to clear their negative effects.</p>}

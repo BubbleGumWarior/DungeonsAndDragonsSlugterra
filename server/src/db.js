@@ -1,6 +1,7 @@
 import pg from "pg";
 import "dotenv/config";
 import { computeMaxGrit } from "./characterRules.js";
+import { BASE_TYPES, BASE_TYPE_KEYS, QUALITY_TIERS } from "./itemRules.js";
 
 export const pool = new pg.Pool({
   host: process.env.PGHOST,
@@ -485,6 +486,29 @@ async function seedDefaultEquipmentTemplates() {
   }
 }
 
+// Starter blaster catalog: one template per base type per quality tier (8 types
+// x 5 tiers), named "<Quality> <Type>" and carrying that base type's stock stats
+// from BASE_TYPES. Quality's accuracy bonus and fail rate come from the tier
+// itself (QUALITY_TIERS), and the Market price scales with it, so the templates
+// only need the tier number.
+//
+// Idempotent per name -- seeds the full set on a fresh install and back-fills
+// anything a later release adds; never touches a row a DM has edited. A deleted
+// entry comes back on the next boot, same as the other house catalogs.
+async function seedDefaultBlasterTemplates() {
+  for (const baseType of BASE_TYPE_KEYS) {
+    const base = BASE_TYPES[baseType];
+    for (const q of QUALITY_TIERS) {
+      await pool.query(
+        `INSERT INTO blaster_templates (name, base_type, accuracy, reload_ap_cost, range, speed, mod_slots, magazine_size, quality)
+         SELECT $1::text, $2, $3, $4, $5, $6, $7, $8, $9
+         WHERE NOT EXISTS (SELECT 1 FROM blaster_templates WHERE name = $1::text)`,
+        [`${q.label} ${baseType}`, baseType, base.accuracy, base.reloadApCost, base.range, base.speed, base.modSlots, base.magazineSize, q.tier]
+      );
+    }
+  }
+}
+
 export async function initSchema() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -572,11 +596,12 @@ export async function initSchema() {
     INSERT INTO campaign_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
   `);
 
-  // The party's current planet for the dashboard Slug Hunt panel -- an
-  // index (0-7) into the eight charted worlds (see slugHuntOdds.json).
-  // The DM sets it from the panel's dropdown; players see it and hunt on it.
+  // The party's current planet for the dashboard Slug Hunt panel -- a flat
+  // world index (see slugHuntOdds.json). A fresh campaign starts on The
+  // Threshold (16, the last world); every other world stays unknown until
+  // visited. The DM sets it from the panel's dropdown; players see it and hunt on it.
   await pool.query(`
-    ALTER TABLE campaign_settings ADD COLUMN IF NOT EXISTS slug_hunt_area INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE campaign_settings ADD COLUMN IF NOT EXISTS slug_hunt_area INTEGER NOT NULL DEFAULT 16;
   `);
 
   // The party's ship(s). One row per vessel the party has flown -- the DM
@@ -1334,6 +1359,7 @@ export async function initSchema() {
   await seedDefaultMechaTemplates();
   await seedDefaultMechaModTemplates();
   await refreshSeededMechaMods();
+  await seedDefaultBlasterTemplates();
   await seedDefaultBlasterModTemplates();
   await seedDefaultEquipmentTemplates();
 
@@ -1692,5 +1718,71 @@ export async function initSchema() {
   // and were all fully shown, so they default to discovered.
   await pool.query(`
     ALTER TABLE slugpedia_entries ADD COLUMN IF NOT EXISTS discovered BOOLEAN NOT NULL DEFAULT true;
+  `);
+
+  // Skill list changes: Religion is gone and Investigation became Splicing.
+  // Characters that already hold either are brought across (a Religion pick is
+  // simply dropped, so that character is one proficiency short until the DM
+  // edits them). Safe to re-run: it only touches rows that still hold an old key.
+  await pool.query(`
+    UPDATE characters
+    SET proficiencies = COALESCE((
+      SELECT jsonb_agg(CASE WHEN p = 'investigation' THEN 'splicing' ELSE p END ORDER BY ord)
+      FROM jsonb_array_elements_text(proficiencies) WITH ORDINALITY AS t(p, ord)
+      WHERE p <> 'religion'
+    ), '[]'::jsonb)
+    WHERE proficiencies ? 'religion' OR proficiencies ? 'investigation';
+  `);
+
+  // ---- Outfits and illness (outfitRules.js) ---------------------------------
+  // A template is the catalog entry; an `outfits` row is a player's own copy of
+  // it (so editing a template never changes what someone owns). Exactly one of a
+  // player's outfits is worn. `outfit_template_planets` is the per-world market
+  // stock: no row, not sold there.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS outfit_templates (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT NOT NULL DEFAULT '',
+      comfort_min INTEGER NOT NULL,
+      comfort_max INTEGER NOT NULL,
+      grit_bonus INTEGER NOT NULL DEFAULT 0,
+      move_pct INTEGER NOT NULL DEFAULT 0,
+      ap_bonus INTEGER NOT NULL DEFAULT 0,
+      accuracy_bonus INTEGER NOT NULL DEFAULT 0,
+      base_price INTEGER NOT NULL DEFAULT 0,
+      starter BOOLEAN NOT NULL DEFAULT false
+    );
+    CREATE TABLE IF NOT EXISTS outfit_template_planets (
+      template_id INTEGER NOT NULL REFERENCES outfit_templates(id) ON DELETE CASCADE,
+      planet_index INTEGER NOT NULL,
+      PRIMARY KEY (template_id, planet_index)
+    );
+    CREATE TABLE IF NOT EXISTS outfits (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      template_id INTEGER REFERENCES outfit_templates(id) ON DELETE SET NULL,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      comfort_min INTEGER NOT NULL,
+      comfort_max INTEGER NOT NULL,
+      grit_bonus INTEGER NOT NULL DEFAULT 0,
+      move_pct INTEGER NOT NULL DEFAULT 0,
+      ap_bonus INTEGER NOT NULL DEFAULT 0,
+      accuracy_bonus INTEGER NOT NULL DEFAULT 0,
+      equipped BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS outfits_one_worn ON outfits (user_id) WHERE equipped;
+    CREATE UNIQUE INDEX IF NOT EXISTS outfits_one_per_template ON outfits (user_id, template_id) WHERE template_id IS NOT NULL;
+  `);
+  // Illness: `ill` stays until three consecutive daily doses of Meds clear it
+  // (`meds_streak`); `meds_taken` marks that today's dose is spent and is cleared
+  // by the next long rest.
+  await pool.query(`
+    ALTER TABLE characters ADD COLUMN IF NOT EXISTS ill BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE characters ADD COLUMN IF NOT EXISTS meds INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE characters ADD COLUMN IF NOT EXISTS meds_streak INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE characters ADD COLUMN IF NOT EXISTS meds_taken BOOLEAN NOT NULL DEFAULT false;
   `);
 }

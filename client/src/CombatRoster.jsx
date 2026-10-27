@@ -94,6 +94,26 @@ function Row({ combatant, knowledge, isActive, isActing, isDM, onSelect, onReviv
         )}
         {!isDM && knowledge && <FoeSlugs name={combatant.name} knowledge={knowledge} />}
         {downed && <span className="combat-roster-status">{combatant.unconscious ? "Unconscious" : "Disabled"}</span>}
+        {combatant.data?.gear && (combatant.data.gear.ill || combatant.data.gear.tier !== "comfortable") && (
+          <div className="combat-roster-effects">
+            {combatant.data.gear.ill && (
+              <span
+                className="combat-roster-effect combat-roster-effect--poison"
+                title="Ill: max Grit, AP and accuracy are halved for this fight."
+              >
+                Ill
+              </span>
+            )}
+            {combatant.data.gear.tier !== "comfortable" && (
+              <span
+                className="combat-roster-effect combat-roster-effect--burn"
+                title={`${combatant.data.gear.outside} °C outside the comfortable range of their outfit (${combatant.data.gear.temp} °C here).`}
+              >
+                {combatant.data.gear.side === "cold" ? "Cold" : combatant.data.gear.side === "hot" ? "Hot" : "Climate"}: {combatant.data.gear.tierLabel}
+              </span>
+            )}
+          </div>
+        )}
         {combatant.statusEffects && Object.keys(combatant.statusEffects).length > 0 && (
           <div className="combat-roster-effects">
             {combatant.statusEffects.burning && (

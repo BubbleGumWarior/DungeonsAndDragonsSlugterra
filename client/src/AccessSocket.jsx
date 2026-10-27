@@ -29,6 +29,8 @@ export default function AccessSocket({ children }) {
   // A player's equipment (melee weapon / ammo belt) or the blaster magazines it
   // feeds changed -- a single signal; consumers refetch (see ammoBelt.js).
   const [equipmentChanged, setEquipmentChanged] = useState(null);
+  // A player's wardrobe changed (worn, bought, granted) -- same refetch signal.
+  const [outfitsChanged, setOutfitsChanged] = useState(null);
   // The DM put the party to sleep: carries the rest's summary (who went
   // hungry, the market's new mood) for the sleep overlay.
   const [longRest, setLongRest] = useState(null);
@@ -83,7 +85,7 @@ export default function AccessSocket({ children }) {
   const [slugpediaUpdate, setSlugpediaUpdate] = useState(null);
   const [shipUpdate, setShipUpdate] = useState(null);
   const [travelUpdate, setTravelUpdate] = useState(null);
-  const [slugHuntArea, setSlugHuntArea] = useState(0);
+  const [slugHuntArea, setSlugHuntArea] = useState(16);
   const [slugHuntOffered, setSlugHuntOffered] = useState(null);
   const [slugHuntUpdated, setSlugHuntUpdated] = useState(null);
   const [slugHuntResolved, setSlugHuntResolved] = useState(null);
@@ -285,6 +287,10 @@ export default function AccessSocket({ children }) {
         setEquipmentChanged({ userId: data.userId, at: data.at ?? Date.now() });
         return;
       }
+      if (data.type === "outfits-changed") {
+        setOutfitsChanged({ userId: data.userId, at: data.at ?? Date.now() });
+        return;
+      }
       if (data.type === "party-healed") {
         setPartyHealed({ at: Date.now() });
         return;
@@ -296,6 +302,8 @@ export default function AccessSocket({ children }) {
           rested: data.rested,
           skippedInCombat: data.skippedInCombat,
           slugEvents: data.slugEvents || [],
+          foraged: data.foraged || [],
+          illness: data.illness || [],
           marketMood: data.marketMood || null,
           day: data.day || null,
         });
@@ -511,6 +519,7 @@ export default function AccessSocket({ children }) {
         characterCreated,
         partyHealed,
         equipmentChanged,
+        outfitsChanged,
         longRest,
         restWokenAt,
         markRestWoken,

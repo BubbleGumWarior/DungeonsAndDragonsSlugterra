@@ -286,3 +286,10 @@
     grid-template-columns: repeat(3, 1fr);
   }
 }
+
+.sheet-ill {
+  margin: 6px 0 0;
+  color: var(--danger);
+  font-size: 13.5px;
+  font-weight: 600;
+}

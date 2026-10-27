@@ -6,134 +6,20 @@
   gap: 36px;
 }
 
+/* Shared with the Mecha-Beasts page. */
 .weapon-loadout {
   display: flex;
   flex-direction: column;
   gap: 22px;
 }
 
-.weapon-loadout-title {
+.weapon-loadout-title,
+.inv-heading {
   margin: 0;
   font-family: var(--font-display);
   font-weight: 700;
   color: var(--gold-soft);
   font-size: 19px;
-}
-
-.weapon-loadout-slots {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
-}
-
-.weapon-loadout-slot {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 112px;
-  padding: 14px 16px;
-  border-radius: 14px;
-  border: 1px dashed var(--charcoal-600);
-  background: var(--charcoal-900);
-  transition: border-color 0.15s var(--ease-out), background 0.15s var(--ease-out);
-}
-
-.weapon-loadout-slot--filled {
-  border-style: solid;
-  border-color: var(--gold-dim);
-  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 75%);
-}
-
-.weapon-loadout-slot--dragover {
-  border-color: var(--gold);
-  box-shadow: 0 0 0 2px rgba(201, 162, 75, 0.35);
-}
-
-.weapon-loadout-slot-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.weapon-loadout-slot-label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--gold-dim);
-}
-
-.weapon-loadout-slot-remove {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  border: 1px solid var(--charcoal-600);
-  background: var(--charcoal-900);
-  color: var(--ink-dim);
-  cursor: pointer;
-}
-
-.weapon-loadout-slot-remove:hover {
-  border-color: var(--danger);
-  color: var(--danger);
-}
-
-.weapon-loadout-slot-remove svg {
-  width: 11px;
-  height: 11px;
-}
-
-.weapon-loadout-slot-weapon {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.weapon-loadout-slot-image {
-  flex-shrink: 0;
-  width: 60px;
-  height: 38px;
-  border-radius: 10px;
-  overflow: hidden;
-  background: var(--charcoal-950);
-  border: 1px solid var(--charcoal-600);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.weapon-loadout-slot-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.weapon-loadout-slot-image svg {
-  width: 40%;
-  height: 40%;
-  color: var(--gold-dim);
-}
-
-.weapon-loadout-slot-name {
-  font-family: var(--font-display);
-  font-weight: 700;
-  color: var(--gold-soft);
-  font-size: 15px;
-}
-
-.weapon-loadout-slot-empty {
-  font-size: 12.5px;
-  color: var(--charcoal-600);
-}
-
-.weapon-loadout-slot-hint {
-  margin-top: auto;
-  font-size: 11px;
-  color: var(--ink-dim);
-  line-height: 1.4;
 }
 
 .player-inventory-mods h2 {
@@ -150,52 +36,445 @@
   gap: 16px;
 }
 
-.player-inventory-pods {
+/* ---- Loadout: the three things you carry into a fight, in one strip ---- */
+
+.loadout {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px 14px;
-  padding: 12px 16px;
-  color: var(--ink);
-  background: var(--charcoal-900);
+  flex-direction: column;
+  gap: 12px;
+}
+
+.loadout-slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   border: 1px solid var(--charcoal-600);
-  border-radius: 12px;
+  border-radius: 16px;
+  background: var(--charcoal-900);
 }
 
-.player-inventory-pods > svg {
-  font-size: 20px;
-  color: var(--gold);
+.loadout-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 112px;
+  padding: 14px 16px 16px;
+  transition: background 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
 }
 
-.player-inventory-pods strong {
-  color: var(--gold-soft);
-  font-family: var(--font-display);
+.loadout-slot + .loadout-slot {
+  border-left: 1px solid var(--charcoal-700);
 }
 
-.player-inventory-pods-hint {
+.loadout-slot:first-child {
+  border-radius: 15px 0 0 15px;
+}
+
+.loadout-slot:last-child {
+  border-radius: 0 15px 15px 0;
+}
+
+.loadout-slot--filled {
+  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-900) 80%);
+}
+
+/* While a card is being dragged: the slots it fits pulse gold, the rest dim. */
+.loadout-slot--fits {
+  box-shadow: inset 0 0 0 1px var(--gold);
+  background: rgba(201, 162, 75, 0.06);
+  animation: loadout-slot-fits 1.2s ease-in-out infinite;
+}
+
+.loadout-slot--nofit {
+  opacity: 0.4;
+}
+
+@keyframes loadout-slot-fits {
+  50% {
+    background: rgba(201, 162, 75, 0.14);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loadout-slot--fits {
+    animation: none;
+  }
+}
+
+.loadout-slot--dragover {
+  background: rgba(201, 162, 75, 0.1);
+  box-shadow: inset 0 0 0 2px var(--gold);
+}
+
+.loadout-slot-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 22px;
+}
+
+.loadout-slot-label {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--gold);
+}
+
+.loadout-slot-label svg {
+  width: 13px;
+  height: 13px;
+  color: var(--ink-dim);
+}
+
+.loadout-slot-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--charcoal-600);
+  background: var(--charcoal-900);
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+
+.loadout-slot-remove:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.loadout-slot-remove svg {
+  width: 11px;
+  height: 11px;
+}
+
+.loadout-slot-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.loadout-slot-image {
+  flex-shrink: 0;
+  width: 64px;
+  height: 42px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-600);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loadout-slot-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.loadout-slot-image svg {
+  width: 44%;
+  height: 44%;
+  color: var(--gold-dim);
+}
+
+.loadout-slot-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.loadout-slot-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gold-soft);
+  font-size: 15px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.loadout-slot-detail {
+  font-size: 12px;
+  color: var(--ink-dim);
+  line-height: 1.35;
+}
+
+.loadout-slot-bonus {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--success);
+  line-height: 1.35;
+}
+
+.loadout-slot-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 6px 10px;
+  border: 1px dashed var(--charcoal-600);
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+  text-align: center;
+}
+
+/* ---- The pack: everything you own that isn't in the loadout ---- */
+
+.inv-pack {
+  display: flex;
+  flex-direction: column;
+}
+
+.inv-tabbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--charcoal-600);
+}
+
+.inv-tabs {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.inv-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.inv-tab {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: -1px;
+  padding: 12px 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition: color 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+}
+
+.inv-tab:hover {
+  color: var(--ink);
+}
+
+.inv-tab--on {
+  color: var(--gold-soft);
+  border-bottom-color: var(--gold);
+}
+
+.inv-tab:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
+.inv-tab-count {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--charcoal-800);
+  border: 1px solid var(--charcoal-600);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--ink-dim);
+}
+
+.inv-tab--on .inv-tab-count {
+  border-color: var(--gold-dim);
+  color: var(--gold-soft);
+}
+
+.inv-kits {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 12px;
   font-size: 12.5px;
   color: var(--ink-dim);
 }
 
-.player-inventory-pods--low {
-  border-color: rgba(224, 161, 60, 0.5);
+.inv-kits svg {
+  width: 14px;
+  height: 14px;
+  color: var(--gold-dim);
 }
 
-.player-inventory-pods--low .player-inventory-pods-hint {
-  color: #e0a13c;
+.inv-kits .num-tabular {
+  font-weight: 700;
+  color: var(--ink);
 }
 
-/* A line under the slotted item: what it adds (belt slots, melee damage). */
-.weapon-loadout-slot-weapon {
+.inv-panel {
+  padding-top: 22px;
+  animation: inv-rise 0.28s var(--ease-out);
+}
+
+.inv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.inv-spare {
+  margin-top: 36px;
+}
+
+.inv-list + .inv-spare {
+  padding-top: 28px;
+  border-top: 1px solid var(--charcoal-700);
+}
+
+.inv-subhead {
+  display: flex;
   flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  margin-bottom: 16px;
 }
 
-.weapon-loadout-slot-bonus {
-  flex-basis: 100%;
-  font-size: 11.5px;
+.inv-subheading {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gold-soft);
+  font-size: 16px;
+}
+
+.inv-subhead p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+/* A spare mod is never fitted, so the "equipped on" footer has nothing to say. */
+.inv-spare .mod-card-equip {
+  display: none;
+}
+
+/* Equip a blaster without dragging. Pressing the slot it holds takes it back out. */
+.slot-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--charcoal-600);
+  border-radius: 9px;
+  background: var(--charcoal-900);
+}
+
+.slot-toggle-label {
+  padding: 0 8px 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--ink-dim);
+}
+
+.slot-toggle-btn {
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
   font-weight: 600;
-  color: var(--success);
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+
+.slot-toggle-btn:hover {
+  background: var(--charcoal-700);
+  color: var(--ink);
+}
+
+.slot-toggle-btn--on {
+  background: rgba(201, 162, 75, 0.18);
+  color: var(--gold-soft);
+  box-shadow: inset 0 0 0 1px var(--gold-dim);
+}
+
+.slot-toggle-btn:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+
+@keyframes inv-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inv-panel {
+    animation: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .player-inventory {
+    gap: 28px;
+  }
+
+  .loadout-slots {
+    grid-template-columns: 1fr;
+  }
+
+  .loadout-slot + .loadout-slot {
+    border-left: 0;
+    border-top: 1px solid var(--charcoal-700);
+  }
+
+  .loadout-slot:first-child {
+    border-radius: 15px 15px 0 0;
+  }
+
+  .loadout-slot:last-child {
+    border-radius: 0 0 15px 15px;
+  }
+
+  .loadout-slot {
+    min-height: 0;
+  }
+
+  .inv-tabbar {
+    flex-wrap: wrap;
+    gap: 0 16px;
+  }
+
+  .inv-tabs {
+    max-width: 100%;
+  }
+
+  .slot-toggle-btn {
+    padding: 10px 14px;
+  }
 }

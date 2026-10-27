@@ -25,13 +25,16 @@ export const STAT_GUIDE = [
       acrobatics: "Dodge incoming shots, sidestep blasts, and run along walls for less effort.",
       sleightOfHand: "Reload faster, so more of your turn goes into shooting.",
       stealth: "Slip out of sight mid-fight and strike from hiding.",
+      piloting: null,
     },
   },
   {
     key: "constitution",
-    summary: "Your staying power: more Grit to burn through, a better chance of staying on your feet, and bigger heals when you Hunker down.",
+    summary: "Your staying power: more Grit to burn through, a better chance of staying on your feet, and bigger heals when you Patch Up.",
     hiddenSummary: "Shrug off knocks and stay on your feet longer.",
-    skills: {},
+    skills: {
+      fortitude: "Every point of Fortitude stretches the range of temperatures your outfit is comfortable in by 5 degrees at both ends, so you can wear it on colder and hotter worlds without paying for it.",
+    },
   },
   {
     key: "intelligence",
@@ -41,20 +44,21 @@ export const STAT_GUIDE = [
       nature: "Earns you more slug hunts every time the party rests. Without it, all you'll ever turn up is Floppers.",
       arcana: "Tips a slug hunt toward rarer finds.",
       history: null,
-      investigation: null,
-      religion: null,
+      splicing: null,
+      engineering: "Work on the ship's compartments, and make Repair Kits mend a worn blaster.",
+      astrogation: null,
     },
   },
   {
     key: "wisdom",
-    summary: "Instinct and awareness. It's how you read a fight, look after your slugs, and keep your gear working.",
+    summary: "Instinct and awareness. It's how you read a fight, look after your slugs, and live off the land.",
     hiddenSummary: "Awareness and instinct, for spotting trouble and handling animals.",
     skills: {
       creatureHandling: "Find wild slugs on a hunt, feed your own better, and earn your slugs' trust faster as you fire them.",
       insight: "At the start of a fight, read a foe and learn which slugs they carry. Miss, and you only learn them as they fire.",
       perception: "Spot a shot early enough to answer it, and see through foes who are hiding.",
       medicine: "Patch up a friend in a fight for less of your turn.",
-      survival: "Make Repair Kits work on a worn blaster.",
+      survival: "Forage while the party sleeps: every long rest you turn up Slug Kibble, as long as your Survival is above zero.",
     },
   },
   {
@@ -65,7 +69,7 @@ export const STAT_GUIDE = [
       persuasion: "Haggle prices down at the market.",
       intimidation: "Rattle a foe so they have less to spend on their next turn.",
       performance: "Fire with flair for a chance at extra Fame.",
-      deception: null,
+      deception: "Keep your name quiet: Heat climbs more slowly than your Fame does.",
     },
   },
 ];

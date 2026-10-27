@@ -5,6 +5,7 @@ import { useLiveState } from "./AccessSocket.jsx";
 import { formatModifier } from "./characterData.js";
 import { oddsByArea } from "./slugHuntOdds.json";
 import { PLANETS } from "./planetData.js";
+import useTravel from "./useTravel.js";
 import "./Panel.css";
 import "./SlugHuntPanel.css";
 
@@ -28,6 +29,9 @@ export default function SlugHuntPanel({ isDungeonMaster = false }) {
   const [hunt, setHunt] = useState(null); // { state: 'rolling'|'fail'|'pending'|'found'|'dismissed'|'error', ... }
   const [status, setStatus] = useState(null); // { locked, found, attemptsLeft, maxAttempts }
   const locked = Boolean(status?.locked);
+  // Hunting needs solid ground: no tries while the ship is under way.
+  const { travel } = useTravel();
+  const inTransit = Boolean(travel?.traveling);
 
   useEffect(() => {
     if (isDungeonMaster || !token) return;
@@ -79,7 +83,7 @@ export default function SlugHuntPanel({ isDungeonMaster = false }) {
   }
 
   async function tryHunt() {
-    if (hunt?.state === "rolling" || hunt?.state === "pending") return;
+    if (inTransit || hunt?.state === "rolling" || hunt?.state === "pending") return;
     setHunt({ state: "rolling" });
     try {
       const res = await fetch("/api/slug-hunt/attempt", {
@@ -234,13 +238,15 @@ export default function SlugHuntPanel({ isDungeonMaster = false }) {
               type="button"
               className="panel-btn slughunt-hunt-btn"
               onClick={tryHunt}
-              disabled={locked || hunt?.state === "rolling" || hunt?.state === "pending"}
+              disabled={inTransit || locked || hunt?.state === "rolling" || hunt?.state === "pending"}
             >
               <BinocularsIcon weight="bold" />
               {hunt?.state === "rolling"
                 ? "Rolling…"
                 : hunt?.state === "pending"
                 ? "Waiting for the DM…"
+                : inTransit
+                ? "Ship in transit"
                 : locked
                 ? status?.found
                   ? "Found a slug today"
@@ -248,7 +254,13 @@ export default function SlugHuntPanel({ isDungeonMaster = false }) {
                 : "Try Hunt"}
             </button>
 
-            {status && (
+            {inTransit && (
+              <p className="slughunt-hunt-tally">
+                There's nothing to hunt in deep space — you can hunt once the ship lands.
+              </p>
+            )}
+
+            {status && !inTransit && (
               <p className="slughunt-hunt-tally">
                 {status.found
                   ? "A find ends the day's hunting — it refreshes when the party rests."

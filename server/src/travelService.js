@@ -3,6 +3,7 @@ import { broadcastAll } from "./ws.js";
 import {
   WORLD_COUNT,
   buildProgressPerRest,
+  hasWorkingMedbay,
   hasWorkingNavComputer,
   speedBreakdown,
   tallyVotes,
@@ -106,6 +107,12 @@ async function loadVoters() {
 export async function navComputerWorking() {
   const ship = await getActiveShip();
   return Boolean(ship) && hasWorkingNavComputer(ship.compartments);
+}
+
+// A long rest only heals fully while the active ship's Medbay is online.
+export async function medbayWorking() {
+  const ship = await getActiveShip();
+  return Boolean(ship) && hasWorkingMedbay(ship.compartments);
 }
 
 export function shipSpeed(ship) {

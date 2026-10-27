@@ -2,7 +2,7 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { broadcastAll, notifyUser } from "../ws.js";
-import { statModifier, skillModifier, PROFICIENCY_KEYS, computeMaxGrit, actionPoints, initiativeBonus, npcActionPoints, npcMaxGrit } from "../characterRules.js";
+import { statModifier, skillModifier, PROFICIENCY_KEYS, computeMaxGrit, actionPoints, initiativeBonus, npcActionPoints, npcMaxGrit, heatGainFor } from "../characterRules.js";
 import { QUALITY_TIERS, BASE_TYPES, BASE_TYPE_KEYS } from "../itemRules.js";
 import { TIER_LABELS as MECHA_TIER_LABELS, effectiveMechaStats } from "../mechaRules.js";
 import { LOYALTY_TIER_MIN, LOYALTY_TIER_MAX, RARITY_MAX } from "../slugRules.js";
@@ -10,6 +10,7 @@ import { loyaltyPerShot, LOYALTY_FULL_EPSILON, LOYALTY_TIER_LABELS } from "../lo
 import { wearPerShot } from "../careRules.js";
 import { toClientSlug } from "./slugs.js";
 import { toClientBlaster } from "./blasters.js";
+import { toClientCharacter } from "./characters.js";
 import { EQUIPMENT_SLOT, meleeDamageFor, DEFAULT_MELEE_TYPE } from "../equipmentRules.js";
 import { recordSlugpediaEntry } from "../slugpediaStore.js";
 import { recordCombatEvent, publishCombatReport } from "../combatStats.js";
@@ -29,6 +30,7 @@ import {
   PRIMARY_WEAPON_SLOT,
   SECONDARY_WEAPON_SLOT,
   hunkerHeal,
+  hunkerGritCap,
   rollD20,
   distance,
   pointAtDistance,
@@ -119,7 +121,11 @@ import {
   withMapEdges,
   MELEE_KNOCKBACK_DISTANCE,
   INSIGHT_DC,
-  wallRunApCost,
+  wallVaultApCost,
+  planWallVault,
+  WALL_RUN_AP_COST,
+  WALL_RUN_MIN_DISTANCE,
+  wallRunDistance,
   planWallRun,
   makeWaterSet,
   isWaterAt,
@@ -140,6 +146,10 @@ import {
   PERCEPTION_DC,
   PERCEPTION_RANGE,
   moveSpeedPerAp,
+  gearMoveMult,
+  gearAccuracyMod,
+  gearReloadAp,
+  gearDisadvantage,
   reloadApCostFor,
   dodgeSidestepDistance,
   HIDE_AP_COST,
@@ -212,6 +222,8 @@ import {
   slugBaseHitAmount,
 } from "../combatRules.js";
 import { evaluateAutoCounter } from "../autoCounter.js";
+import { buildGearSnapshot } from "../outfitRules.js";
+import { getClimate, getWornOutfit } from "../outfitService.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -239,7 +251,7 @@ router.use("/actions", async (req, res, next) => {
 });
 
 // Battle Report: every successful action route leaves a one-line "this
-// combatant did X" event (Reload, Hide, Hunker Down...). Shooting and moving
+// combatant did X" event (Reload, Hide, Patch Up...). Shooting and moving
 // have richer, dedicated events of their own, so they're skipped here.
 const STAT_SKIP_ACTIONS = new Set(["/shoot", "/move", "/end-turn", "/arm-slug"]);
 router.use("/actions", (req, res, next) => {
@@ -447,6 +459,23 @@ async function updateCombatant(id, fields) {
   return rows[0] || null;
 }
 
+// What a character brings into a fight: AP and max Grit from stats, then their
+// worn outfit against the temperature of the world (or ship) they are on, then
+// illness. Used when they are added to the lobby and again when the fight
+// starts, since an outfit can change in between. See outfitRules.js.
+async function characterGearSnapshot(character) {
+  const outfit = await getWornOutfit(pool, character.user_id);
+  const { temp } = await getClimate();
+  return buildGearSnapshot({
+    baseMaxAp: actionPoints(character.stats),
+    baseMaxGrit: computeMaxGrit(character.stats, character.grit_bonus),
+    outfit,
+    fortitudeMod: skillModifier(character.stats, character.proficiencies, "fortitude"),
+    temp,
+    ill: Boolean(character.ill),
+  });
+}
+
 async function syncCharacterFromCombatant(combatant) {
   if (combatant.kind !== "character" || !combatant.ref_user_id) return;
   try {
@@ -458,24 +487,10 @@ async function syncCharacterFromCombatant(combatant) {
     broadcastAll({
       type: "character-updated",
       userId: combatant.ref_user_id,
-      character: {
-        id: rows[0].id,
-        name: rows[0].name,
-        age: rows[0].age,
-        portrait: rows[0].portrait,
-        stats: rows[0].stats,
-        proficiencies: rows[0].proficiencies,
-        knockoutPips: rows[0].knockout_pips,
-        currentGrit: rows[0].current_grit,
-        gritBonus: rows[0].grit_bonus ?? 0,
-        // fame/heat aren't touched by this UPDATE, but this broadcast is a
-        // full-object replace on the client (CharacterSheet.jsx etc.) --
-        // leaving them out would blank the player's displayed Fame/Heat on
-        // every single combat grit sync.
-        fame: rows[0].fame,
-        heat: rows[0].heat,
-        createdAt: rows[0].created_at,
-      },
+      // A full character: this broadcast is a full-object replace on the client
+      // (CharacterSheet.jsx etc.), so anything left out (Fame, Heat, illness...)
+      // would blank on every single combat grit sync.
+      character: toClientCharacter(rows[0]),
     });
   } catch (err) {
     console.error("Could not sync character from combatant:", err);
@@ -484,16 +499,18 @@ async function syncCharacterFromCombatant(combatant) {
 
 // Fame only ever moves up automatically (see the callers below); a DM's
 // manual override (routes/characters.js's PATCH /:userId/fame) can move it
-// either way. Heat mirrors Fame one-directionally: whatever positive amount
-// Fame just gained, from EITHER source, Heat gains the same amount,
-// atomically, in the same query -- a negative delta lowers Fame but never
-// touches Heat. Heat's only decrease path is the separate, explicit DM
+// either way. Heat follows Fame one-directionally: whatever positive amount
+// Fame just gained, from EITHER source, Heat gains the same amount less the
+// character's Deception cut (heatGainFor), atomically, in the same query -- a
+// negative delta lowers Fame but never touches Heat. Heat's only decrease path is the separate, explicit DM
 // action in PATCH /:userId/heat, which never calls this function. Floors
 // both stats at 0.
 async function grantFame(userId, delta) {
   if (!userId || !delta) return null;
-  const heatDelta = Math.max(0, delta);
   try {
+    const { rows: who } = await pool.query("SELECT stats, proficiencies FROM characters WHERE user_id = $1", [userId]);
+    if (!who[0]) return null;
+    const heatDelta = heatGainFor(delta, skillModifier(who[0].stats, who[0].proficiencies, "deception"));
     const { rows } = await pool.query(
       `UPDATE characters SET fame = GREATEST(0, fame + $1), heat = GREATEST(0, heat + $2) WHERE user_id = $3 RETURNING *`,
       [delta, heatDelta, userId]
@@ -502,20 +519,7 @@ async function grantFame(userId, delta) {
     broadcastAll({
       type: "character-updated",
       userId,
-      character: {
-        id: rows[0].id,
-        name: rows[0].name,
-        age: rows[0].age,
-        portrait: rows[0].portrait,
-        stats: rows[0].stats,
-        proficiencies: rows[0].proficiencies,
-        knockoutPips: rows[0].knockout_pips,
-        currentGrit: rows[0].current_grit,
-        gritBonus: rows[0].grit_bonus ?? 0,
-        fame: rows[0].fame,
-        heat: rows[0].heat,
-        createdAt: rows[0].created_at,
-      },
+      character: toClientCharacter(rows[0]),
     });
     return rows[0];
   } catch (err) {
@@ -1006,9 +1010,10 @@ router.post("/encounters/:id/combatants", requireDungeonMaster, async (req, res)
       fields.ref_user_id = refUserId;
       fields.name = (name || character.name).trim();
       fields.portrait = character.portrait;
-      fields.max_ap = actionPoints(character.stats);
-      fields.max_grit = computeMaxGrit(character.stats, character.grit_bonus);
-      fields.current_grit = character.current_grit;
+      const gearSnap = await characterGearSnapshot(character);
+      fields.max_ap = gearSnap.maxAp;
+      fields.max_grit = gearSnap.maxGrit;
+      fields.current_grit = Math.min(character.current_grit, gearSnap.maxGrit);
       fields.knockout_pips = JSON.stringify(character.knockout_pips);
       // Every character joins on their primary weapon (equip slot 0) --
       // Switch Weapon (see /actions/switch-weapon) flips this to secondary.
@@ -1022,6 +1027,7 @@ router.post("/encounters/:id/combatants", requireDungeonMaster, async (req, res)
           PROFICIENCY_KEYS.map((key) => [key, skillModifier(character.stats, character.proficiencies, key)])
         ),
         activeWeaponSlot: PRIMARY_WEAPON_SLOT,
+        gear: gearSnap.gear,
       };
     } else if (kind === "mecha") {
       if (!Number.isInteger(refMechaId)) return res.status(400).json({ error: "A mecha is required." });
@@ -1660,14 +1666,17 @@ router.post("/encounters/:id/start", requireDungeonMaster, async (req, res) => {
     // soaked anything yet.
     for (const c of combatantRows) {
       if (c.kind !== "character" || !c.ref_user_id) continue;
-      const { rows: chars } = await pool.query("SELECT stats, grit_bonus, current_grit FROM characters WHERE user_id = $1", [c.ref_user_id]);
+      const { rows: chars } = await pool.query("SELECT * FROM characters WHERE user_id = $1", [c.ref_user_id]);
       if (!chars[0]) continue;
-      const maxGrit = computeMaxGrit(chars[0].stats, chars[0].grit_bonus);
-      await pool.query("UPDATE combatants SET max_grit = $1, current_grit = LEAST($2::int, $1::int), data = $3 WHERE id = $4", [
-        maxGrit,
+      // Armor, outfit, the weather and illness are all read again here, so what
+      // they were wearing when the fight began is what counts.
+      const gearSnap = await characterGearSnapshot(chars[0]);
+      await pool.query("UPDATE combatants SET max_grit = $1, max_ap = $5, current_grit = LEAST($2::int, $1::int), data = $3 WHERE id = $4", [
+        gearSnap.maxGrit,
         chars[0].current_grit,
-        JSON.stringify({ ...(c.data || {}), shieldUsed: {}, shield: await shieldSnapshot(c.ref_user_id, {}) }),
+        JSON.stringify({ ...(c.data || {}), shieldUsed: {}, shield: await shieldSnapshot(c.ref_user_id, {}), gear: gearSnap.gear }),
         c.id,
+        gearSnap.maxAp,
       ]);
     }
 
@@ -2230,7 +2239,7 @@ router.post("/actions/move", async (req, res) => {
 
     // Only characters/NPCs on foot reach here -- a mecha or a mounted rider
     // returned from the vehicle branch above.
-    const speedPerAp = moveSpeedPerAp(combatantSkillMod(combatant, "athletics"));
+    const speedPerAp = moveSpeedPerAp(combatantSkillMod(combatant, "athletics")) * gearMoveMult(combatant);
     const apNeeded = pathApCost(
       { x: combatant.x, y: combatant.y },
       { x, y },
@@ -2319,11 +2328,73 @@ router.post("/actions/move", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Wall Run
+// Wall Vault: spring over a nearby wall and land on its far side
+// ---------------------------------------------------------------------------
+
+router.post("/actions/wall-vault", async (req, res) => {
+  const { combatantId } = req.body || {};
+  try {
+    const combatant = await getCombatant(combatantId);
+    if (!combatant) return res.status(404).json({ error: "Combatant not found." });
+    const encounterRow = await pool.query("SELECT * FROM encounters WHERE id = $1", [combatant.encounter_id]);
+    const encounter = encounterRow.rows[0];
+    if (!encounter) return res.status(404).json({ error: "Encounter not found." });
+    if (!isActingCombatantAuthorized(req, combatant, encounter)) {
+      return res.status(403).json({ error: "That isn't your combatant." });
+    }
+    if (req.user.role !== "Dungeon Master" && !requireOwnTurn(encounter, combatant)) {
+      return res.status(400).json({ error: "It isn't your turn." });
+    }
+    if (combatant.unconscious || combatant.disabled) {
+      return res.status(400).json({ error: "This combatant can't act." });
+    }
+    if (combatant.kind === "mecha" || combatant.mounted_on != null) {
+      return res.status(400).json({ error: "Only a combatant on foot can vault a wall." });
+    }
+    if (combatant.status_effects?.snared?.turnsLeft > 0) {
+      return res.status(400).json({ error: "This combatant is snared and can't move." });
+    }
+
+    // Characters carry their Acrobatics modifier from when they joined; NPCs
+    // (and grunts) have no skills, so their DEX modifier stands in.
+    const acrobaticsMod = combatantSkillMod(combatant, "acrobatics");
+    if (acrobaticsMod <= 0) {
+      return res.status(400).json({ error: "You need a positive Acrobatics modifier to Wall Vault." });
+    }
+    const apCost = wallVaultApCost(acrobaticsMod);
+    if (combatant.current_ap < apCost) {
+      return res.status(400).json({ error: `Not enough AP -- Wall Vault costs ${apCost}.` });
+    }
+
+    const plan = planWallVault({ x: combatant.x, y: combatant.y }, encounter.walls, encounter.map_width, encounter.map_height);
+    if (!plan) return res.status(400).json({ error: "You need to be close to a wall to Wall Vault." });
+    // Whatever else is in the way (other than the wall being vaulted) still blocks.
+    if (firstWallHit({ x: combatant.x, y: combatant.y }, plan.landing, withMapEdges(encounter.walls, encounter.map_width, encounter.map_height), [plan.wall.id])) {
+      return res.status(400).json({ error: "Another wall blocks the landing." });
+    }
+
+    const { x, y } = plan.landing;
+    await updateCombatant(combatant.id, { x, y, current_ap: combatant.current_ap - apCost });
+    for (const decoyId of combatant.status_effects?.mirage?.decoyIds || []) {
+      const decoy = await getCombatant(decoyId);
+      const offset = decoy?.data?.offset || { dx: 0, dy: 0 };
+      await updateCombatant(decoyId, { x: x + offset.dx, y: y + offset.dy });
+    }
+    const encounterOut = await broadcastEncounter(combatant.encounter_id);
+    await pushCombatLog(combatant.encounter_id, `${combatant.name} vaults over the wall and lands on the other side (${apCost} AP).`);
+    res.json({ encounter: encounterOut, wallVault: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not Wall Vault." });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Wall Run: slide along the length of a nearby wall
 // ---------------------------------------------------------------------------
 
 router.post("/actions/wall-run", async (req, res) => {
-  const { combatantId } = req.body || {};
+  const { combatantId, targetPoint } = req.body || {};
   try {
     const combatant = await getCombatant(combatantId);
     if (!combatant) return res.status(404).json({ error: "Combatant not found." });
@@ -2346,34 +2417,50 @@ router.post("/actions/wall-run", async (req, res) => {
       return res.status(400).json({ error: "This combatant is snared and can't move." });
     }
 
-    // Characters carry their Acrobatics modifier from when they joined; NPCs
-    // (and grunts) have no skills, so their DEX modifier stands in.
     const acrobaticsMod = combatantSkillMod(combatant, "acrobatics");
     if (acrobaticsMod <= 0) {
       return res.status(400).json({ error: "You need a positive Acrobatics modifier to Wall Run." });
     }
-    const apCost = wallRunApCost(acrobaticsMod);
-    if (combatant.current_ap < apCost) {
-      return res.status(400).json({ error: `Not enough AP -- Wall Run costs ${apCost}.` });
+    if (combatant.current_ap < WALL_RUN_AP_COST) {
+      return res.status(400).json({ error: `Not enough AP -- Wall Run costs ${WALL_RUN_AP_COST}.` });
     }
 
-    const plan = planWallRun({ x: combatant.x, y: combatant.y }, encounter.walls, encounter.map_width, encounter.map_height);
+    const from = { x: combatant.x, y: combatant.y };
+    const plan = planWallRun(
+      from,
+      encounter.walls,
+      encounter.map_width,
+      encounter.map_height,
+      targetPoint,
+      wallRunDistance(acrobaticsMod)
+    );
     if (!plan) return res.status(400).json({ error: "You need to be close to a wall to Wall Run." });
+    if (plan.distance < WALL_RUN_MIN_DISTANCE) {
+      return res.status(400).json({ error: "You're already at the end of that wall -- pick the other direction." });
+    }
     // Whatever else is in the way (other than the wall being run) still blocks.
-    if (firstWallHit({ x: combatant.x, y: combatant.y }, plan.landing, withMapEdges(encounter.walls, encounter.map_width, encounter.map_height), [plan.wall.id])) {
-      return res.status(400).json({ error: "Another wall blocks the landing." });
+    if (firstWallHit(from, plan.landing, withMapEdges(encounter.walls, encounter.map_width, encounter.map_height), [plan.wall.id])) {
+      return res.status(400).json({ error: "Another wall blocks the run." });
     }
 
     const { x, y } = plan.landing;
-    await updateCombatant(combatant.id, { x, y, current_ap: combatant.current_ap - apCost });
+    await updateCombatant(combatant.id, { x, y, current_ap: combatant.current_ap - WALL_RUN_AP_COST });
+    await recordCombatEvent(combatant.encounter_id, "move", {
+      actor: combatant,
+      distance: distance(from, { x, y }),
+      ap: WALL_RUN_AP_COST,
+    });
     for (const decoyId of combatant.status_effects?.mirage?.decoyIds || []) {
       const decoy = await getCombatant(decoyId);
       const offset = decoy?.data?.offset || { dx: 0, dy: 0 };
       await updateCombatant(decoyId, { x: x + offset.dx, y: y + offset.dy });
     }
+    // Like a Move: damaging patches along the run still bite, as do blooms and ghosts.
+    const crossed = await applyPathHazards(combatant.id, from, { x, y }, { hazards: encounter.hazards, verb: "runs through" });
+    await plantBites(await getCombatant(combatant.id), { fromPos: from });
     const encounterOut = await broadcastEncounter(combatant.encounter_id);
-    await pushCombatLog(combatant.encounter_id, `${combatant.name} runs along the wall and lands on the other side (${apCost} AP).`);
-    res.json({ encounter: encounterOut, wallRun: true });
+    await pushCombatLog(combatant.encounter_id, `${combatant.name} runs along the wall (${WALL_RUN_AP_COST} AP).`);
+    res.json({ encounter: encounterOut, wallRun: true, hazardHit: crossed[0]?.hit ?? null });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not Wall Run." });
@@ -2530,7 +2617,7 @@ router.post("/actions/first-aid", async (req, res) => {
     const who = target.id === combatant.id ? "themselves" : target.name;
     await pushCombatLog(
       combatant.encounter_id,
-      `${combatant.name} patches up ${who}, clearing ${cured.length} negative effect${cured.length === 1 ? "" : "s"} (${apCost} AP).`
+      `${combatant.name} treats ${who}, clearing ${cured.length} negative effect${cured.length === 1 ? "" : "s"} (${apCost} AP).`
     );
     res.json({ encounter: encounterOut, cured });
   } catch (err) {
@@ -2713,9 +2800,13 @@ router.post("/actions/melee", async (req, res) => {
       attackerStatus.blinded = false;
       rollNote = " (blinded -- disadvantage)";
     } else if (attackerStatus.keenVision) {
-      roll = Math.max(roll, rollD20());
+      // Advantage and an ill character's disadvantage cancel out.
+      if (!gearDisadvantage(attacker)) roll = Math.max(roll, rollD20());
       attackerStatus.keenVision = false;
       rollNote = " (keen vision -- advantage)";
+    } else if (gearDisadvantage(attacker)) {
+      roll = Math.min(roll, rollD20());
+      rollNote = " (ill -- disadvantage)";
     }
     await updateCombatant(attacker.id, {
       current_ap: attacker.current_ap - weapon.ap_cost,
@@ -2724,7 +2815,7 @@ router.post("/actions/melee", async (req, res) => {
 
     const evasion = target.kind === "mecha" ? target.data?.handling ?? 0 : target.data?.dexMod ?? 0;
     const dc = 10 + evasion;
-    const attackTotal = roll + strMod + weapon.accuracy;
+    const attackTotal = roll + strMod + weapon.accuracy + gearAccuracyMod(attacker);
     const hit = attackTotal >= dc;
     const damage = meleeDamageFor(weapon.damage, strMod);
 
@@ -2772,7 +2863,8 @@ router.post("/actions/melee", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Hunker Down
+// Patch Up: spend all remaining AP to heal yourself (route keeps its old
+// "hunker-down" name so earlier battle reports still read right)
 // ---------------------------------------------------------------------------
 
 router.post("/actions/hunker-down", async (req, res) => {
@@ -2792,20 +2884,27 @@ router.post("/actions/hunker-down", async (req, res) => {
       return res.status(400).json({ error: "This combatant can't act." });
     }
     if (combatant.current_grit === null) {
-      return res.status(400).json({ error: "This combatant can't hunker down." });
+      return res.status(400).json({ error: "This combatant can't patch themselves up." });
     }
     if (combatant.damaged_this_turn) {
-      return res.status(400).json({ error: "Can't hunker down the same round you were hit." });
+      return res.status(400).json({ error: "Can't Patch Up the same round you were hit." });
     }
     if (combatant.current_ap < 1) {
-      return res.status(400).json({ error: "No AP left to hunker down." });
+      return res.status(400).json({ error: "No AP left to Patch Up." });
     }
 
-    // Sinks every remaining AP into the heal -- a flat max(1, CON mod) Grit per AP.
+    // No point burning the turn once Grit is already at the cap.
+    const cap = hunkerGritCap(combatant.max_grit);
+    if (combatant.current_grit >= cap) {
+      return res.status(400).json({ error: "Patch Up can't heal you above 50% Grit." });
+    }
+
+    // Sinks every remaining AP into the heal -- a flat max(1, CON mod) Grit per AP,
+    // but never past the cap.
     const apSpent = combatant.current_ap;
     const conMod = combatant.data?.conMod ?? 0;
-    const heal = hunkerHeal(conMod, apSpent);
-    const newGrit = Math.min(combatant.max_grit, combatant.current_grit + heal);
+    const newGrit = Math.min(cap, combatant.current_grit + hunkerHeal(conMod, apSpent));
+    const heal = newGrit - combatant.current_grit;
 
     const updated = await updateCombatant(combatant.id, {
       current_grit: newGrit,
@@ -2821,12 +2920,12 @@ router.post("/actions/hunker-down", async (req, res) => {
     const encounterOut = await broadcastEncounter(combatant.encounter_id);
     await pushCombatLog(
       combatant.encounter_id,
-      `${combatant.name} hunkers down, spending ${apSpent} AP to recover ${heal} Grit.`
+      `${combatant.name} patches themselves up, spending ${apSpent} AP to recover ${heal} Grit.`
     );
     res.json({ encounter: encounterOut, healed: heal });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Could not hunker down." });
+    res.status(500).json({ error: "Could not Patch Up." });
   }
 });
 
@@ -2915,7 +3014,8 @@ router.post("/actions/reload", async (req, res) => {
     // Mods shift the weapon's own cost first (floored at 1), then Sleight of
     // Hand shaves its modifier off that.
     const modifiedCost = Math.max(1, (blaster.reload_ap_cost || 1) + (await blasterModTotal(blaster, "reload_ap_bonus")));
-    const apCost = reloadApCostFor(modifiedCost, combatantSkillMod(combatant, "sleightOfHand"));
+    // Cold fingers (or sweaty ones): the climate tier adds to what is left.
+    const apCost = reloadApCostFor(modifiedCost, combatantSkillMod(combatant, "sleightOfHand")) + gearReloadAp(combatant);
     if (combatant.current_ap < apCost) {
       return res.status(400).json({ error: "Not enough AP to reload." });
     }
@@ -5671,14 +5771,19 @@ async function resolveAttackRoll(offer, attacker, target) {
     });
   } else if (hasKeenVision) {
     // Advantage -- the exact mirror of blinded's disadvantage above -- plus
-    // the range-falloff waiver already applied to `penalty`.
-    roll = Math.max(roll, rollD20());
+    // the range-falloff waiver already applied to `penalty`. (An ill shooter's
+    // disadvantage cancels the advantage, but the keen vision is still used up.)
+    if (!gearDisadvantage(attacker)) roll = Math.max(roll, rollD20());
     await updateCombatant(attacker.id, {
       status_effects: JSON.stringify({ ...attacker.status_effects, keenVision: false }),
     });
+  } else if (gearDisadvantage(attacker)) {
+    // Ill (see outfitRules.js): every attack roll at disadvantage.
+    roll = Math.min(roll, rollD20());
   }
   const attackTotal =
     roll +
+    gearAccuracyMod(attacker) +
     offer.blaster.accuracy +
     (await blasterModTotal(offer.blaster, "accuracy_bonus")) +
     quality.accuracyBonus +
@@ -6514,7 +6619,8 @@ async function resolveEnvironmentShot({ actionType, attacker, slug, blaster, tb,
   const quality = QUALITY_TIERS[blaster.quality] || QUALITY_TIERS[0];
   const penalty = rangePenalty(dist, combinedRange);
   const attackTotal =
-    rollD20() +
+    (gearDisadvantage(attacker) ? Math.min(rollD20(), rollD20()) : rollD20()) +
+    gearAccuracyMod(attacker) +
     blaster.accuracy +
     (await blasterModTotal(blaster, "accuracy_bonus")) +
     quality.accuracyBonus +

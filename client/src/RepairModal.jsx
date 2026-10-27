@@ -11,7 +11,7 @@ import "./RepairModal.css";
 const ROLL_ANIMATION_MS = 1100;
 const ROLL_TICK_MS = 55;
 
-// Patching up a blaster with a Repair Kit. The server rolls (d20 + Survival);
+// Patching up a blaster with a Repair Kit. The server rolls (d20 + Engineering);
 // this animates the die, then lays out the roll against the DC and what it did
 // to the weapon, so the result is never a surprise number.
 export default function RepairModal({ blaster, kits, onClose, onResolved }) {
@@ -77,7 +77,7 @@ export default function RepairModal({ blaster, kits, onClose, onResolved }) {
         {phase === "ready" && (
           <>
             <ul className="barter-rules">
-              <li>Roll a d20 and add your Survival modifier.</li>
+              <li>Roll a d20 and add your Engineering modifier.</li>
               <li>
                 Roll <strong className="repair-good">above {REPAIR_DC}</strong> and the blaster is restored to 100%.
               </li>
@@ -88,7 +88,7 @@ export default function RepairModal({ blaster, kits, onClose, onResolved }) {
             </ul>
             <button type="button" className="panel-btn barter-roll" onClick={handleRoll}>
               <DiceSixIcon weight="bold" />
-              Roll Survival
+              Roll Engineering
             </button>
           </>
         )}

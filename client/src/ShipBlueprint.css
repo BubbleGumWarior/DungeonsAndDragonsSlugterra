@@ -270,16 +270,58 @@
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
 }
 
-/* Detail panel */
-.ship-detail {
+/* Holds the deck plan and the detail panel that floats over it, so the
+   tablet screen never reflows when a compartment opens. */
+.ship-plan-wrap {
   position: relative;
-  margin-top: 16px;
-  /* The wrapper can be very wide on ultrawides -- keep the text column sane. */
-  max-width: 760px;
+}
+
+/* Keeps a short plan tall enough to show a compartment's details. */
+.ship-plan-wrap--open .ship-stage-outer {
+  min-height: 460px;
+}
+
+/* Detail panel: a glass card hovering over the plan, on the side away from
+   the pin and level with it (--y is the pin's 0..1 height; the translate
+   keeps the card inside the plan at both extremes). */
+.ship-detail {
+  position: absolute;
+  z-index: 5;
+  top: calc(12px + (100% - 24px) * var(--y, 0));
+  transform: translateY(calc(var(--y, 0) * -100%));
+  width: min(400px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
   padding: 20px;
-  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 82%);
+  background: linear-gradient(160deg, rgba(34, 36, 40, 0.94), rgba(14, 15, 17, 0.96) 82%);
+  backdrop-filter: blur(6px);
   border: 1px solid var(--charcoal-600);
   border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  animation: ship-detail-in 0.16s var(--ease-out) both;
+}
+
+.ship-detail--right {
+  right: 12px;
+}
+
+.ship-detail--left {
+  left: 12px;
+}
+
+@keyframes ship-detail-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ship-detail {
+    animation: none;
+  }
 }
 
 .ship-detail-close {

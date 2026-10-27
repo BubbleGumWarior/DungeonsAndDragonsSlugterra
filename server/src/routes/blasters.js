@@ -28,7 +28,6 @@ export function toClientBlaster(row) {
     userId: row.user_id,
     name: row.name,
     baseType: row.base_type,
-    image: row.image,
     accuracy: row.accuracy,
     reloadApCost: row.reload_ap_cost,
     range: row.range,
@@ -84,10 +83,10 @@ router.get("/", requireDungeonMaster, async (req, res) => {
 });
 
 router.post("/", requireDungeonMaster, async (req, res) => {
-  const { userId, templateId, name, baseType, image, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality } =
+  const { userId, templateId, name, baseType, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality } =
     req.body || {};
 
-  const validation = validateBlasterFields({ name, baseType, image, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality });
+  const validation = validateBlasterFields({ name, baseType, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality });
   if (!validation.valid) {
     return res.status(400).json({ error: validation.error });
   }
@@ -98,15 +97,14 @@ router.post("/", requireDungeonMaster, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `INSERT INTO blasters
-        (template_id, user_id, name, base_type, image, accuracy, reload_ap_cost, range, speed, mod_slots, magazine_size, quality)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        (template_id, user_id, name, base_type, accuracy, reload_ap_cost, range, speed, mod_slots, magazine_size, quality)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [
         Number.isInteger(templateId) ? templateId : null,
         userId,
         name.trim(),
         baseType,
-        image ?? null,
         accuracy,
         reloadApCost,
         range,
@@ -128,9 +126,9 @@ router.post("/", requireDungeonMaster, async (req, res) => {
 
 router.patch("/:id", requireDungeonMaster, async (req, res) => {
   const id = Number(req.params.id);
-  const { name, baseType, image, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality } = req.body || {};
+  const { name, baseType, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality } = req.body || {};
 
-  const validation = validateBlasterFields({ name, baseType, image, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality });
+  const validation = validateBlasterFields({ name, baseType, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality });
   if (!validation.valid) {
     return res.status(400).json({ error: validation.error });
   }
@@ -138,11 +136,11 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE blasters SET
-        name = $1, base_type = $2, image = $3, accuracy = $4, reload_ap_cost = $5,
-        range = $6, speed = $7, mod_slots = $8, magazine_size = $9, quality = $10
-       WHERE id = $11
+        name = $1, base_type = $2, accuracy = $3, reload_ap_cost = $4,
+        range = $5, speed = $6, mod_slots = $7, magazine_size = $8, quality = $9
+       WHERE id = $10
        RETURNING *`,
-      [name.trim(), baseType, image ?? null, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality, id]
+      [name.trim(), baseType, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality, id]
     );
 
     if (!rows[0]) {
@@ -271,7 +269,7 @@ router.patch("/:id/unequip", async (req, res) => {
   }
 });
 
-// A player patches up their own blaster with a Repair Kit: d20 + Survival has
+// A player patches up their own blaster with a Repair Kit: d20 + Engineering has
 // to beat REPAIR_DC. Success restores it fully; failure still burns the kit and
 // wears the weapon down further. A blaster at 0% is beyond a player's tools --
 // only the DM can restore it (see /restore below).
@@ -310,7 +308,7 @@ router.post("/:id/repair", async (req, res) => {
     }
 
     const die = 1 + Math.floor(Math.random() * 20);
-    const modifier = skillModifier(character.stats, character.proficiencies, "survival");
+    const modifier = skillModifier(character.stats, character.proficiencies, "engineering");
     const total = die + modifier;
     const success = total > REPAIR_DC;
     const next = success ? DURABILITY_MAX : Math.max(0, durability - REPAIR_FAIL_DAMAGE);

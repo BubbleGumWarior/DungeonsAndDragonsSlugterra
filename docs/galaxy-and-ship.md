@@ -41,6 +41,23 @@ file, and if the table moves, update the plate numbers in the `.nav-stage` block
 of `NavConsole.css` (`--sheet-bottom`, `--plate-w`, the emitter's `top`/height)
 and `IMAGE_AR` in `NavConsole.jsx`.
 
+**Getting there.** The Deck Plan page is drawn as a crew tablet in the player's
+hands (`.tablet*` in `ShipBlueprint.css`). Clicking the Nav Computer drops it:
+the tablet slips and falls out of view toward the floor while the console's
+backdrop fades in and the room rises as if the head were lifting; then the HUD
+and the hologram arrive. Leaving the console picks the tablet back up. Timings
+live in `ShipBlueprint.jsx` (`openConsole` / `closeConsole`) and the animation
+delays at the end of `NavConsole.css`. An **online** Nav Computer is the only
+pin drawn differently (a larger gold ring with a planet icon and a "Star
+console" tag); every other pin, including an offline Nav Computer, looks like a
+normal compartment.
+
+The hologram has a round foot, not a flat one: the sheet is masked to a bowl
+shape whose lowest point is over the middle of the table, and the beam ends on
+the plate's centre line with the emitter's glow carrying it round the plate's
+front edge. The Threshold rides higher on the map (it follows `look.ringCy`) so
+it stays clear of the front cluster's outer orbits.
+
 Everything on the stage is placed as a share of the picture, so the hologram has
 the same proportions against the table on every screen. The stage fills the
 screen's height; a screen wider than the picture stretches the stage sideways
@@ -122,6 +139,13 @@ Players choose where the ship goes; a long rest is one day of the voyage.
   party lands on the last day, which moves `slug_hunt_area` and closes markets
   like a DM teleport), and moves compartment builds along. The result is sent in
   the `long-rest` broadcast as `day` and shown in the sleep overlay.
+- **A long rest only heals fully with a working Medbay** (`hasWorkingMedbay` in
+  `shipRules.js`: an `online` compartment with `templateKey: "medbay"` on the
+  active ship, checked before the day advances). Without one, rested characters'
+  Grit only rises to 50% of max (`NO_MEDBAY_REST_HEAL_FRACTION` in `careRules.js`,
+  mirrored in `client/src/careData.js`; never lowered) and knockout pips are
+  left alone, so players need Medpacks (30 cr) and Revival Tonics (100 cr).
+  `medbay` is in both the `long-rest` summary and `GET /long-rest/preview`.
 - While under way, Slug Hunt attempts are refused (`routes/slugHunt.js`). Markets
   are not gated.
 - State: `travel_state` (single row), `travel_votes`, `campaign_settings.campaign_day`.
@@ -188,7 +212,7 @@ parked on whichever ship they were inspecting.
 - **Build progress per long rest** (`buildProgressPerRest`): docked, a building
   compartment gains 1 day. Under way it gains 1 day per **engineer** assigned to
   it, and none otherwise (the overlay reports it as stalled). A player signs on
-  with `POST /api/ships/engineer { compartmentId | null }`; it needs Survival
+  with `POST /api/ships/engineer { compartmentId | null }`; it needs Engineering
   proficiency and a player works on one compartment at a time. A finished
   compartment goes `online` and clears its engineers.
 
@@ -220,7 +244,7 @@ The party only knows what it has visited:
 
 A brand-new database is seeded with **The Traveler**, the ship the DM built:
 `server/src/seedDefaultShip.js` reads `server/src/seed/default-ship.json` (name,
-speed 50, 12 slots, all 12 compartments with their positions, statuses and
+speed 5, 12 slots, all 12 compartments with their positions, statuses and
 build numbers) and `default-ship.jpg` (the deck plan), inserts it and makes it
 the active ship. It runs once: `campaign_settings.default_ship_seeded` is set
 even when nothing was inserted, so an existing campaign, or a DM who deletes

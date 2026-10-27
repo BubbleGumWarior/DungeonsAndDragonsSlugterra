@@ -68,7 +68,9 @@ act); `activeCombatantIds` on the client encounter.
 | Reload | `blaster.reloadApCost` (flat, one action) | Re-chamber **every** slug in the active weapon that has returned to hand but is sitting unloaded (`loaded = false`, cooldown done — see §4's return-to-hand cooldown), and clear any "jammed" (failed-quality) shot. |
 | Swap Active Weapon | 0 (free, once per turn) | Switch which equipped blaster (Primary/Secondary) is active, matching the existing weapon-cycling UI. |
 | Melee | weapon's own AP (default 2) | Swing the melee weapon equipped in the Secondary slot at a hostile target within its reach (default `MOUNT_RANGE`, 80 units; no walls in the way). Hit roll `d20 + STR modifier (+ the weapon's accuracy)` vs `10 + target DEX modifier` (a mecha's handling for a mecha); a hit deals `weapon damage + STR modifier` (min 1) Grit/Structure through the normal damage path, as a plain "None"-element hit. No reaction window -- no counter-clash or dodge. Blinded / keen-vision effects are consumed by the swing like a shot. See "Melee & equipment" below. |
-| Hunker Down | **all remaining AP** | Sinks every remaining AP into a heal — a flat **`max(1, CON modifier)` Grit per AP spent**, no roll. Ends the turn. Cannot be done the same turn you were hit. The client asks for confirmation first whenever more than 1 AP would be spent. |
+| Wall Vault | `6 − Acrobatics modifier` (min 1) | Needs a positive Acrobatics modifier and the runner within `WALL_VAULT_RANGE` (**40**) of a wall. Springs over it, landing on the far side (a mirror of the starting spot through the wall, at least 20 units off it). Blocked if another wall is in the way. |
+| Wall Run | **2** | Needs a positive Acrobatics modifier and the runner within 40 units of a wall. Armed from the hotbar, then the player clicks along the wall -- the runner slides toward the end nearest the click (the farther end if none), staying on their side, up to `240 + 40 × Acrobatics modifier` units or the wall's end. Hazards and blooms along the run apply like a Move; another wall in the way blocks it. Route `/actions/wall-run`; the vault is `/actions/wall-vault`. |
+| Patch Up | **all remaining AP** | (Route `/actions/hunker-down`.) Sinks every remaining AP into a heal — a flat **`max(1, CON modifier)` Grit per AP spent**, no roll, and never heals above **50% of max Grit** (refused once you're already there). Ends the turn. Cannot be done the same turn you were hit. The client asks for confirmation first whenever more than 1 AP would be spent. |
 | Mount / Dismount Mecha | 1 | Board or leave a mecha token within `MOUNT_RANGE` (**one Move's worth of walking**, `MOVE_SPEED_PER_AP` units). While armed, the map shows the range ring and highlights every in-range mecha. |
 | Ram (mecha) | 2, **from the mecha's AP** | Drive a mounted mecha into a target in `MOUNT_RANGE`; happens on the *rider's* turn. An unmounted mecha cannot ram. See §8. |
 | Free custom action (DM only) | DM sets cost | Escape hatch for narrative actions the system doesn't model. |
@@ -1011,7 +1013,7 @@ currently generate Fame.
 1. **Rules + schema** — `combatRules.js`, new tables/columns, no UI.
 2. **Encounter shell** — DM creates/starts an encounter, map canvas renders walls
    (draw/erase), tokens placeable/draggable, turn order + AP display, Move and
-   Hunker Down actions working end-to-end.
+   Patch Up (then called Hunker Down) actions working end-to-end.
 3. **Shooting** — range/LoS raycasting, attack roll, grit damage, wall-break,
    knockback.
 4. **Counter-clash** — the timed reaction window and clash resolution.
@@ -1031,7 +1033,7 @@ your house-rule instinct:
   big you draw maps; easy to retune once you see a real map.
 - Counter-clash `BASE_WINDOW = 3200ms` — is a few seconds the right feel, or should
   it be snappier/more forgiving?
-- Knockout DC escalation (`10 + pips used`) and Hunker Down heal (`max(1, CON) per AP`) — both
+- Knockout DC escalation (`10 + pips used`) and Patch Up heal (`max(1, CON) per AP`) — both
   arbitrary, said so you can veto.
 - Fame's per-hit weights (raw `clash_power` + overkill, both currently 1:1 with no
   scaling constant) and `DODGE_FAME_BONUS = 8` — all placeholders until real numbers

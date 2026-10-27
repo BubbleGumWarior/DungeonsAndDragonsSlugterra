@@ -6,15 +6,25 @@ import {
   validateKnockoutPips,
   validateCurrentGrit,
   computeMaxGrit,
+  skillModifier,
 } from "../characterRules.js";
 import { broadcastAll } from "../ws.js";
 import { toClientSlug } from "./slugs.js";
 import { getActiveEncounterRow, grantFame } from "./combat.js";
 import { syncTempoAura } from "../slugAura.js";
-import { FOOD_DRAIN_PER_REST, rollMoodKey } from "../careRules.js";
+import {
+  FOOD_DRAIN_PER_REST,
+  FORAGE_DIE,
+  FORAGE_MIN_MOD,
+  NO_MEDBAY_REST_HEAL_FRACTION,
+  rollMoodKey,
+} from "../careRules.js";
 import { MARKET_MOODS, moodPctFor } from "../marketRules.js";
 import { LOYALTY_TIER_MIN } from "../slugRules.js";
-import { advanceDay } from "../travelService.js";
+import { advanceDay, medbayWorking } from "../travelService.js";
+import { giveStarterOutfits } from "../seedDefaultOutfits.js";
+import { announceOutfitsChanged, getClimate, getWornOutfit } from "../outfitService.js";
+import { climateSide, degreesOutside, effectiveRange, illnessChance } from "../outfitRules.js";
 
 const router = Router();
 
@@ -47,6 +57,10 @@ export function toClientCharacter(row) {
     energyCells: row.energy_cells,
     medpacks: row.medpacks,
     revivalTonics: row.revival_tonics,
+    meds: row.meds ?? 0,
+    ill: Boolean(row.ill),
+    medsStreak: row.meds_streak ?? 0,
+    medsTaken: Boolean(row.meds_taken),
     createdAt: row.created_at,
   };
 }
@@ -54,7 +68,7 @@ export function toClientCharacter(row) {
 router.get("/", async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT id, user_id, name, portrait, knockout_pips, stats, current_grit, grit_bonus, fame, heat FROM characters ORDER BY created_at ASC"
+      "SELECT id, user_id, name, portrait, knockout_pips, stats, current_grit, grit_bonus, fame, heat, ill FROM characters ORDER BY created_at ASC"
     );
     res.json({
       characters: rows.map((row) => ({
@@ -68,6 +82,7 @@ router.get("/", async (req, res) => {
         gritBonus: row.grit_bonus ?? 0,
         fame: row.fame,
         heat: row.heat,
+        ill: Boolean(row.ill),
       })),
     });
   } catch (err) {
@@ -119,6 +134,10 @@ router.post("/", async (req, res) => {
     // Roster re-syncs from the server -- the per-character "character-updated"
     // signal only patches rows already in the list, it can't add a new one.
     broadcastAll({ type: "character-created", userId: req.user.sub, at: Date.now() });
+
+    // Everyone starts in the Museum Tour Outfit.
+    await giveStarterOutfits();
+    announceOutfitsChanged(req.user.sub);
 
     res.status(201).json({ character: toClientCharacter(rows[0]) });
   } catch (err) {
@@ -232,6 +251,7 @@ router.get("/long-rest/preview", requireDungeonMaster, async (req, res) => {
     );
     res.json({
       skippedInCombat: inCombat.size,
+      medbay: await medbayWorking(),
       starving: rows
         .filter((r) => !inCombat.has(r.user_id))
         .map((r) => ({
@@ -248,24 +268,44 @@ router.get("/long-rest/preview", requireDungeonMaster, async (req, res) => {
 });
 
 // The party goes to sleep. Every character not in a fight is fully healed --
-// Grit back to max, knockout pips cleared -- and every slug they own is
-// recharged. Sleeping also costs food: each slug's meter drains, and a slug
-// that was already at 0 loses a loyalty tier (or leaves the party at the
-// lowest). Slug Hunt, haggling and the merchants' mood all reset for the new
+// Grit back to max, knockout pips cleared -- if the ship has a working Medbay;
+// without one, Grit only comes back up to half of max and knockout pips are
+// left alone. Every slug they own is recharged either way. Anyone good at Survival forages kibble overnight. Sleeping also
+// costs food: each slug's meter drains, and a slug that was already at 0 loses
+// a loyalty tier (or leaves the party at the lowest). Slug Hunt, haggling and the merchants' mood all reset for the new
 // day. Lives here (not combat.js) because it's a table-wide reset the DM can
 // reach for any time.
 router.post(["/long-rest", "/heal-all"], requireDungeonMaster, async (req, res) => {
   try {
     const inCombat = await charactersInCombat();
+    // Read before the night's day-advance, so a Medbay that finishes building
+    // while the party sleeps only helps from the next rest.
+    const medbay = await medbayWorking();
 
     const { rows: allCharacters } = await pool.query("SELECT * FROM characters");
     const characters = allCharacters.filter((c) => !inCombat.has(c.user_id));
     const ownerNames = new Map(allCharacters.map((c) => [c.user_id, c.name]));
+    // Foraging: a Survival modifier of 1+ turns the night into d6 + modifier
+    // scoops of kibble, found while the rest of the party sleeps.
+    const foraged = [];
     for (const c of characters) {
       const newMax = computeMaxGrit(c.stats, c.grit_bonus);
+      const survivalMod = skillModifier(c.stats, c.proficiencies, "survival");
+      let scoops = 0;
+      if (survivalMod >= FORAGE_MIN_MOD) {
+        const roll = 1 + Math.floor(Math.random() * FORAGE_DIE);
+        scoops = roll + survivalMod;
+        foraged.push({ userId: c.user_id, name: c.name, roll, modifier: survivalMod, scoops });
+      }
+      // Without a Medbay the night only mends Grit up to half of max (never
+      // lowering what they already have) and knockout pips stay where they are.
+      const restGrit = medbay
+        ? newMax
+        : Math.min(newMax, Math.max(c.current_grit, Math.floor(newMax * NO_MEDBAY_REST_HEAL_FRACTION)));
+      const restPips = medbay || !Array.isArray(c.knockout_pips) ? [false, false, false] : c.knockout_pips;
       const { rows } = await pool.query(
-        `UPDATE characters SET current_grit = $1, knockout_pips = $2 WHERE user_id = $3 RETURNING *`,
-        [newMax, JSON.stringify([false, false, false]), c.user_id]
+        `UPDATE characters SET current_grit = $1, knockout_pips = $2, kibble = kibble + $3 WHERE user_id = $4 RETURNING *`,
+        [restGrit, JSON.stringify(restPips), scoops, c.user_id]
       );
       if (rows[0]) broadcastAll({ type: "character-updated", userId: c.user_id, character: toClientCharacter(rows[0]) });
     }
@@ -317,6 +357,39 @@ router.post(["/long-rest", "/heal-all"], requireDungeonMaster, async (req, res) 
     // Done before the markets settle so the mood below is rolled for the world
     // the party wakes up on.
     const day = await advanceDay();
+
+    // Illness. Sleeping in clothes that don't suit the climate (after the night's
+    // travel, so an arrival counts) can make a healthy character ill; an ill one
+    // who skipped today's Meds loses their run of doses. Doses reset for the new day.
+    const climate = await getClimate();
+    const illness = [];
+    for (const c of characters) {
+      if (c.ill) {
+        if (!c.meds_taken) await pool.query("UPDATE characters SET meds_streak = 0 WHERE user_id = $1", [c.user_id]);
+        continue;
+      }
+      const outfit = await getWornOutfit(pool, c.user_id);
+      const range = effectiveRange(outfit, skillModifier(c.stats, c.proficiencies, "fortitude"));
+      const outside = degreesOutside(range, climate.temp);
+      if (outside > 0 && Math.random() < illnessChance(outside)) {
+        await pool.query("UPDATE characters SET ill = true, meds_streak = 0 WHERE user_id = $1", [c.user_id]);
+        illness.push({
+          userId: c.user_id,
+          name: c.name,
+          outfit: outfit?.name ?? null,
+          temp: climate.temp,
+          outside,
+          side: climateSide(range, climate.temp),
+        });
+      }
+    }
+    if (characters.length > 0) {
+      await pool.query("UPDATE characters SET meds_taken = false WHERE user_id = ANY($1::int[])", [characters.map((c) => c.user_id)]);
+      const { rows: refreshed } = await pool.query("SELECT * FROM characters WHERE user_id = ANY($1::int[])", [
+        characters.map((c) => c.user_id),
+      ]);
+      for (const row of refreshed) broadcastAll({ type: "character-updated", userId: row.user_id, character: toClientCharacter(row) });
+    }
     // ...and settles the markets: everyone may haggle again, any planet-wide
     // markup from a poor barter roll wears off, and the merchants wake up in a
     // new mood (weighted toward neutral -- see MOOD_WEIGHTS).
@@ -342,8 +415,11 @@ router.post(["/long-rest", "/heal-all"], requireDungeonMaster, async (req, res) 
     const summary = {
       at: Date.now(),
       rested: characters.length,
+      medbay,
       skippedInCombat: inCombat.size,
       slugEvents,
+      foraged,
+      illness,
       marketMood: { key: marketMood, pct: moodPctFor(marketMood) },
       day,
     };

@@ -18,6 +18,17 @@ export function hasWorkingNavComputer(compartments) {
   );
 }
 
+// A long rest only heals fully, and only mends knockout pips, aboard a ship with
+// an online Medbay. Without one the crew leans on Medpacks and Revival Tonics.
+export const MEDBAY_KEY = "medbay";
+
+export function hasWorkingMedbay(compartments) {
+  return (
+    Array.isArray(compartments) &&
+    compartments.some((c) => c?.templateKey === MEDBAY_KEY && c.status === "online")
+  );
+}
+
 // Built-in compartments the DM can drop into an empty slot. `speedBonus` is
 // added to the ship's travel speed while the compartment is online; everything
 // else is flavour the party roleplays around. Mirrored client-side only by
@@ -27,7 +38,7 @@ export const DEFAULT_COMPARTMENT_TEMPLATES = [
   { key: "engine-room", name: "Engine Room", buildDays: 6, speedBonus: 2, description: "The main drive and its keepers. A well-tuned engine room makes every journey shorter." },
   { key: "thruster-array", name: "Thruster Array", buildDays: 8, speedBonus: 3, description: "Oversized auxiliary thrusters bolted to the hull. Loud, thirsty and fast." },
   { key: NAV_COMPUTER_KEY, name: "Nav Computer", buildDays: 4, speedBonus: 1, description: "Plots tighter routes between worlds and shaves days off long hauls. Its holographic star table is how the crew charts a course: without a working one the ship can't travel." },
-  { key: "medbay", name: "Medbay", buildDays: 4, speedBonus: 0, description: "Cots, scanners and a locked cabinet of medicine for patching up the crew." },
+  { key: MEDBAY_KEY, name: "Medbay", buildDays: 4, speedBonus: 0, description: "Cots, scanners and a locked cabinet of medicine for patching up the crew." },
   { key: "galley", name: "Galley", buildDays: 3, speedBonus: 0, description: "A cramped kitchen and mess. Hot meals keep a crew, and its slugs, in good spirits." },
   { key: "cargo-hold", name: "Cargo Hold", buildDays: 3, speedBonus: 0, description: "Lashed-down crates and loose floor space for loot, trade goods and anything that shouldn't be in the cabins." },
   { key: "crew-quarters", name: "Crew Quarters", buildDays: 3, speedBonus: 0, description: "Bunks, lockers and a little privacy. Somewhere to actually take a long rest." },

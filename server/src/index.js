@@ -37,6 +37,8 @@ import tradesRouter from "./routes/trades.js";
 import consumablesRouter from "./routes/consumables.js";
 import imagesRouter from "./routes/images.js";
 import { seedDefaultShip } from "./seedDefaultShip.js";
+import { seedDefaultOutfits } from "./seedDefaultOutfits.js";
+import outfitsRouter from "./routes/outfits.js";
 import { imageMiddleware } from "./imageStore.js";
 import { requireAuth } from "./middleware/auth.js";
 import { setupWebSocket, getOnlineUserIds } from "./ws.js";
@@ -82,6 +84,7 @@ app.use("/api/voice", voiceRouter);
 app.use("/api/market", marketRouter);
 app.use("/api/trades", tradesRouter);
 app.use("/api/consumables", consumablesRouter);
+app.use("/api/outfits", outfitsRouter);
 
 app.get("/api/presence/online", requireAuth, (req, res) => {
   res.json({ onlineUserIds: getOnlineUserIds() });
@@ -130,6 +133,7 @@ initSchema()
   .then(() => backfillFandangoTempo())
   .then(() => backfillMechanicFlags())
   .then(() => seedDefaultShip())
+  .then(() => seedDefaultOutfits())
   .then(() => {
     server.listen(port, () => console.log(`Server listening on port ${port}`));
   })
