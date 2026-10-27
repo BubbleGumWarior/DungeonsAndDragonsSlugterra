@@ -1,16 +1,29 @@
 import { useEffect, useState } from "react";
-import { PencilSimpleIcon, PlusIcon, TrashIcon, UserPlusIcon, WrenchIcon } from "@phosphor-icons/react";
+import { TrashIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
-import BlasterCard from "./BlasterCard.jsx";
-import ModCard from "./ModCard.jsx";
-import EquipmentCard from "./EquipmentCard.jsx";
 import EquipmentForm from "./EquipmentForm.jsx";
 import BlasterForm from "./BlasterForm.jsx";
 import ModForm from "./ModForm.jsx";
-import CollapseTitle from "./CollapseTitle.jsx";
-import DMWardrobe from "./DMWardrobe.jsx";
+import GiftCatalog from "./GiftCatalog.jsx";
+import PlayerSatchel from "./PlayerSatchel.jsx";
+import useDmOutfits from "./useDmOutfits.js";
+import { defaultBlasterFields, defaultEquipmentFields, defaultModFields } from "./itemData.js";
 import "./SlugManagement.css";
+import "./InventoryDesk.css";
 
+const RECIPIENT_KEY = "dm-inventory-recipient";
+
+function readSavedRecipient() {
+  try {
+    return Number(localStorage.getItem(RECIPIENT_KEY)) || null;
+  } catch {
+    return null;
+  }
+}
+
+// The DM's handout desk: pick who you are giving to, then hand them things from
+// the catalog with one click. Their inventory sits beside it so the result is
+// visible at once.
 export default function InventoryManagement() {
   const { token } = useAuth();
   const [blasterTemplates, setBlasterTemplates] = useState([]);
@@ -21,10 +34,10 @@ export default function InventoryManagement() {
   const [equipment, setEquipment] = useState([]);
   const [equipmentTemplates, setEquipmentTemplates] = useState([]);
   const [modal, setModal] = useState(null);
-  // Template lists start collapsed, like the slug templates.
-  const [blastersOpen, setBlastersOpen] = useState(false);
-  const [modsOpen, setModsOpen] = useState(false);
-  const [equipmentOpen, setEquipmentOpen] = useState(false);
+  const [recipientId, setRecipientId] = useState(readSavedRecipient);
+  const [narrowView, setNarrowView] = useState("catalog");
+  const [status, setStatus] = useState(null);
+  const outfitDesk = useDmOutfits();
 
   function authHeaders(extra) {
     return { Authorization: `Bearer ${token}`, ...extra };
@@ -210,221 +223,149 @@ export default function InventoryManagement() {
     loadBlasters();
   }
 
-  const inventoryByPlayer = players.map((player) => ({
-    player,
-    blasters: blasters.filter((b) => b.userId === player.id),
-    mods: mods.filter((m) => m.userId === player.id),
-    equipment: equipment.filter((e) => e.userId === player.id),
+  useEffect(() => {
+    if (!status) return undefined;
+    const timer = setTimeout(() => setStatus(null), 4500);
+    return () => clearTimeout(timer);
+  }, [status]);
+
+  const characterByUser = new Map(outfitDesk.characters.map((c) => [c.userId, c]));
+  const roster = players.map((player) => ({
+    id: player.id,
+    name: player.characterName || player.username,
+    ill: Boolean(characterByUser.get(player.id)?.ill),
   }));
+  const recipient = roster.find((p) => p.id === recipientId) ?? roster[0] ?? null;
+
+  function chooseRecipient(id) {
+    setRecipientId(id);
+    try {
+      localStorage.setItem(RECIPIENT_KEY, String(id));
+    } catch {
+      // Remembering the pick is a convenience; the page works without it.
+    }
+  }
+
+  const inventoryFor = (id) => ({
+    blasters: blasters.filter((b) => b.userId === id),
+    mods: mods.filter((m) => m.userId === id),
+    equipment: equipment.filter((e) => e.userId === id),
+    outfits: outfitDesk.outfits.filter((o) => o.userId === id),
+  });
+  const heldCount = (id) => {
+    const inv = inventoryFor(id);
+    return inv.blasters.length + inv.mods.length + inv.equipment.length + inv.outfits.length;
+  };
+  const held = recipient ? inventoryFor(recipient.id) : { blasters: [], mods: [], equipment: [], outfits: [] };
+  const ownedOutfitIds = new Set(held.outfits.map((o) => o.templateId));
+
+  // One click: hand a template to the chosen player exactly as it is.
+  async function give(type, template) {
+    if (!recipient) return false;
+    const common = { templateId: template.id, userId: recipient.id };
+    try {
+      if (type === "blaster") {
+        await submitJson("/api/blasters", "POST", { ...defaultBlasterFields(), ...template, ...common });
+        loadBlasters();
+      } else if (type === "mod") {
+        await submitJson("/api/mods", "POST", { ...defaultModFields(), ...template, ...common });
+        loadMods();
+      } else if (type === "equipment") {
+        await submitJson("/api/equipment", "POST", { ...defaultEquipmentFields(), ...template, ...common });
+        loadEquipment();
+      } else {
+        await outfitDesk.grant(recipient.id, template.id);
+      }
+      setStatus({ text: `Gave ${template.name} to ${recipient.name}.` });
+      return true;
+    } catch (err) {
+      setStatus({ text: err.message || "Could not give that.", error: true });
+      return false;
+    }
+  }
+
+  async function removeOutfit(outfit) {
+    try {
+      await outfitDesk.remove(outfit);
+      setStatus({ text: `Took ${outfit.name} from ${recipient?.name ?? "them"}.` });
+    } catch (err) {
+      setStatus({ text: err.message || "Could not remove that outfit.", error: true });
+    }
+  }
+
+  const openNew = (type) => setModal({ type: `new-${type}-template` });
+  const openEdit = (type, template) => setModal({ type: `edit-${type}-template`, template });
+  const openTweak = (type, template) => setModal({ type: `assign-${type}`, template });
+  const deleteTemplate = (type, template) =>
+    ({ blaster: deleteBlasterTemplate, mod: deleteModTemplate, equipment: deleteEquipmentTemplate })[type](template.id);
 
   return (
-    <div className="slug-management">
-      <section className="slug-management-section">
-        <div className="slug-management-section-header">
-          <CollapseTitle title="Blaster Templates" count={blasterTemplates.length} open={blastersOpen} onToggle={() => setBlastersOpen((v) => !v)} />
-          <button type="button" className="slug-management-new" onClick={() => setModal({ type: "new-blaster-template" })}>
-            <PlusIcon weight="bold" />
-            New Blaster
-          </button>
-        </div>
-
-        {blastersOpen && (blasterTemplates.length === 0 ? (
-          <p className="slug-management-empty">No blaster templates yet.</p>
+    <div className="slug-management desk">
+      <section className="desk-rail" aria-label="Giving to">
+        <span className="desk-rail-label">Giving to</span>
+        {roster.length === 0 ? (
+          <span className="desk-rail-none">No players yet.</span>
         ) : (
-          <div className="slug-management-grid">
-            {blasterTemplates.map((template) => (
-              <BlasterCard
-                key={template.id}
-                blaster={template}
-                onClick={() => setModal({ type: "edit-blaster-template", template })}
-                actions={
-                  <>
-                    <button
-                      type="button"
-                      className="slug-management-icon-btn"
-                      onClick={() => setModal({ type: "assign-blaster", template })}
-                      title="Assign to player"
-                    >
-                      <UserPlusIcon weight="bold" />
-                    </button>
-                    <button
-                      type="button"
-                      className="slug-management-icon-btn slug-management-icon-btn--danger"
-                      onClick={() => deleteBlasterTemplate(template.id)}
-                      title="Delete template"
-                    >
-                      <TrashIcon weight="bold" />
-                    </button>
-                  </>
-                }
-              />
-            ))}
-          </div>
-        ))}
-      </section>
-
-      <section className="slug-management-section">
-        <div className="slug-management-section-header">
-          <CollapseTitle title="Mod Templates" count={modTemplates.length} open={modsOpen} onToggle={() => setModsOpen((v) => !v)} />
-          <button type="button" className="slug-management-new" onClick={() => setModal({ type: "new-mod-template" })}>
-            <PlusIcon weight="bold" />
-            New Mod
-          </button>
-        </div>
-
-        {modsOpen && (modTemplates.length === 0 ? (
-          <p className="slug-management-empty">No mod templates yet.</p>
-        ) : (
-          <div className="slug-management-grid">
-            {modTemplates.map((template) => (
-              <ModCard
-                key={template.id}
-                mod={template}
-                actions={
-                  <>
-                    <button
-                      type="button"
-                      className="slug-management-icon-btn"
-                      onClick={() => setModal({ type: "assign-mod", template })}
-                      title="Assign to player"
-                    >
-                      <UserPlusIcon weight="bold" />
-                    </button>
-                    <button
-                      type="button"
-                      className="slug-management-icon-btn"
-                      onClick={() => setModal({ type: "edit-mod-template", template })}
-                      title="Edit template"
-                    >
-                      <PencilSimpleIcon weight="bold" />
-                    </button>
-                    <button
-                      type="button"
-                      className="slug-management-icon-btn slug-management-icon-btn--danger"
-                      onClick={() => deleteModTemplate(template.id)}
-                      title="Delete template"
-                    >
-                      <TrashIcon weight="bold" />
-                    </button>
-                  </>
-                }
-              />
-            ))}
-          </div>
-        ))}
-      </section>
-
-      <section className="slug-management-section">
-        <div className="slug-management-section-header">
-          <CollapseTitle title="Equipment Templates" count={equipmentTemplates.length} open={equipmentOpen} onToggle={() => setEquipmentOpen((v) => !v)} />
-          <button type="button" className="slug-management-new" onClick={() => setModal({ type: "new-equipment-template" })}>
-            <PlusIcon weight="bold" />
-            New Equipment
-          </button>
-        </div>
-
-        {equipmentOpen && (equipmentTemplates.length === 0 ? (
-          <p className="slug-management-empty">No equipment templates yet. Templates are what the Market sells.</p>
-        ) : (
-          <div className="slug-management-grid">
-            {equipmentTemplates.map((template) => (
-              <EquipmentCard
-                key={template.id}
-                item={template}
-                actions={
-                  <>
-                    <button
-                      type="button"
-                      className="slug-management-icon-btn"
-                      onClick={() => setModal({ type: "assign-equipment", template })}
-                      title="Assign to player"
-                    >
-                      <UserPlusIcon weight="bold" />
-                    </button>
-                    <button
-                      type="button"
-                      className="slug-management-icon-btn"
-                      onClick={() => setModal({ type: "edit-equipment-template", template })}
-                      title="Edit template"
-                    >
-                      <PencilSimpleIcon weight="bold" />
-                    </button>
-                    <button
-                      type="button"
-                      className="slug-management-icon-btn slug-management-icon-btn--danger"
-                      onClick={() => deleteEquipmentTemplate(template.id)}
-                      title="Delete template"
-                    >
-                      <TrashIcon weight="bold" />
-                    </button>
-                  </>
-                }
-              />
-            ))}
-          </div>
-        ))}
-      </section>
-
-      <section className="slug-management-section">
-        <div className="slug-management-section-header">
-          <h2>Players &amp; Their Inventory</h2>
-          <button
-            type="button"
-            className="slug-management-new"
-            disabled={players.length === 0}
-            onClick={() => setModal({ type: "assign-equipment" })}
-          >
-            <PlusIcon weight="bold" />
-            Grant Equipment
-          </button>
-        </div>
-        {players.length === 0 ? (
-          <p className="slug-management-empty">No players yet.</p>
-        ) : (
-          <div className="slug-management-players">
-            {inventoryByPlayer.map(({ player, blasters: playerBlasters, mods: playerMods, equipment: playerEquipment }) => (
-              <div className="slug-management-player" key={player.id}>
-                <h3>{player.characterName || player.username}</h3>
-                {playerBlasters.length === 0 && playerMods.length === 0 && playerEquipment.length === 0 ? (
-                  <p className="slug-management-empty">No items assigned.</p>
-                ) : (
-                  <div className="slug-management-grid">
-                    {playerBlasters.map((blaster) => (
-                      <BlasterCard
-                        key={`blaster-${blaster.id}`}
-                        blaster={blaster}
-                        equippedMods={mods.filter((m) => m.equippedBlasterId === blaster.id)}
-                        onClick={() => setModal({ type: "edit-blaster-instance", blaster })}
-                        actions={
-                          (blaster.durability ?? 100) < 100 ? (
-                            <button
-                              type="button"
-                              className="slug-management-icon-btn"
-                              onClick={() => restoreBlaster(blaster.id)}
-                              title="Expert repair: restore to 100%"
-                              aria-label={`Restore ${blaster.name} to 100%`}
-                            >
-                              <WrenchIcon weight="bold" />
-                            </button>
-                          ) : undefined
-                        }
-                      />
-                    ))}
-                    {playerMods.map((mod) => (
-                      <ModCard key={`mod-${mod.id}`} mod={mod} blasters={playerBlasters} onClick={() => setModal({ type: "edit-mod-instance", mod })} />
-                    ))}
-                    {playerEquipment.map((item) => (
-                      <EquipmentCard key={`equipment-${item.id}`} item={item} onClick={() => setModal({ type: "edit-equipment-instance", item })} />
-                    ))}
-                  </div>
-                )}
-              </div>
+          <div className="desk-rail-list" role="group" aria-label="Choose who receives items">
+            {roster.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className={`desk-person ${recipient?.id === p.id ? "desk-person--on" : ""}`}
+                aria-pressed={recipient?.id === p.id}
+                onClick={() => chooseRecipient(p.id)}
+              >
+                <span className="desk-person-name">{p.name}</span>
+                <span className="desk-person-count" aria-label={`${heldCount(p.id)} items held`}>
+                  {heldCount(p.id)}
+                </span>
+              </button>
             ))}
           </div>
         )}
       </section>
 
-      <DMWardrobe />
+      <div className="desk-switch" role="group" aria-label="Show">
+        <button type="button" className={narrowView === "catalog" ? "desk-switch--on" : ""} aria-pressed={narrowView === "catalog"} onClick={() => setNarrowView("catalog")}>
+          Catalog
+        </button>
+        <button type="button" className={narrowView === "gear" ? "desk-switch--on" : ""} aria-pressed={narrowView === "gear"} onClick={() => setNarrowView("gear")}>
+          {recipient ? `${recipient.name.split(" ")[0]}'s gear` : "Gear"}
+          {recipient && <span className="desk-tab-count">{heldCount(recipient.id)}</span>}
+        </button>
+      </div>
+
+      <div className="desk-layout">
+        <div className={`desk-pane desk-pane--catalog ${narrowView !== "catalog" ? "desk-pane--away" : ""}`}>
+          <GiftCatalog
+            catalog={{ blaster: blasterTemplates, mod: modTemplates, equipment: equipmentTemplates, outfit: outfitDesk.templates }}
+            recipient={recipient}
+            ownedOutfitIds={ownedOutfitIds}
+            status={status}
+            onGive={give}
+            onCustomize={openTweak}
+            onEdit={openEdit}
+            onDelete={deleteTemplate}
+            onNew={openNew}
+          />
+        </div>
+        <div className={`desk-pane desk-pane--gear ${narrowView !== "gear" ? "desk-pane--away" : ""}`}>
+          <PlayerSatchel
+            key={recipient?.id}
+            recipient={recipient}
+            blasters={held.blasters}
+            mods={held.mods}
+            equipment={held.equipment}
+            outfits={held.outfits}
+            allMods={mods}
+            onEditBlaster={(blaster) => setModal({ type: "edit-blaster-instance", blaster })}
+            onEditMod={(mod) => setModal({ type: "edit-mod-instance", mod })}
+            onEditEquipment={(item) => setModal({ type: "edit-equipment-instance", item })}
+            onRestoreBlaster={restoreBlaster}
+            onRemoveOutfit={removeOutfit}
+          />
+        </div>
+      </div>
 
       {modal && (
         <div className="slug-modal-backdrop" onClick={() => setModal(null)}>
@@ -440,7 +381,7 @@ export default function InventoryManagement() {
               {modal.type === "edit-mod-instance" && `Edit ${modal.mod.name}`}
               {modal.type === "new-equipment-template" && "New Equipment Template"}
               {modal.type === "edit-equipment-template" && "Edit Equipment Template"}
-              {modal.type === "assign-equipment" && (modal.template ? `Assign "${modal.template.name}"` : "Grant Equipment")}
+              {modal.type === "assign-equipment" && `Assign "${modal.template.name}"`}
               {modal.type === "edit-equipment-instance" && `Edit ${modal.item.name}`}
             </h2>
 
@@ -461,6 +402,7 @@ export default function InventoryManagement() {
                 mode="assign"
                 initialValues={{ ...modal.template, templateId: modal.template.id }}
                 players={players}
+                defaultPlayerId={recipient?.id}
                 onSubmit={assignBlaster}
                 onCancel={() => setModal(null)}
                 submitLabel="Assign Blaster"
@@ -499,6 +441,7 @@ export default function InventoryManagement() {
                 mode="assign"
                 initialValues={{ ...modal.template, templateId: modal.template.id }}
                 players={players}
+                defaultPlayerId={recipient?.id}
                 onSubmit={assignMod}
                 onCancel={() => setModal(null)}
                 submitLabel="Assign Mod"
@@ -535,11 +478,12 @@ export default function InventoryManagement() {
             {modal.type === "assign-equipment" && (
               <EquipmentForm
                 mode="assign"
-                initialValues={modal.template ? { ...modal.template, templateId: modal.template.id } : undefined}
+                initialValues={{ ...modal.template, templateId: modal.template.id }}
                 players={players}
+                defaultPlayerId={recipient?.id}
                 onSubmit={assignEquipment}
                 onCancel={() => setModal(null)}
-                submitLabel={modal.template ? "Assign Equipment" : "Grant Equipment"}
+                submitLabel="Assign Equipment"
               />
             )}
             {modal.type === "edit-equipment-instance" && (

@@ -36,9 +36,9 @@ function Stepper({ label, value, min, max, step = 1, onChange }) {
 
 // The DM's form for a melee weapon or ammo belt: "template" (the catalog the
 // Market sells from), "assign" (give one to a player) or "instance" (edit one).
-export default function EquipmentForm({ mode, initialValues, players, onSubmit, onCancel, submitLabel }) {
+export default function EquipmentForm({ mode, initialValues, players, defaultPlayerId, onSubmit, onCancel, submitLabel }) {
   const [fields, setFields] = useState(() => ({ ...defaultEquipmentFields(), ...initialValues }));
-  const [selectedPlayerId, setSelectedPlayerId] = useState(players?.[0]?.id ?? null);
+  const [selectedPlayerId, setSelectedPlayerId] = useState(defaultPlayerId ?? players?.[0]?.id ?? null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 

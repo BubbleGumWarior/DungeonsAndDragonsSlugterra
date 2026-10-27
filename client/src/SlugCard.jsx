@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { SparkleIcon } from "@phosphor-icons/react";
+import { ArrowsClockwiseIcon, SparkleIcon } from "@phosphor-icons/react";
 import {
   LOYALTY_TIER_LABELS,
   LOYALTY_TIERS,
@@ -10,26 +10,33 @@ import {
   loyaltyAccuracyModifier,
   loyaltyTierColor,
 } from "./slugData.js";
-import { useTypewriter } from "./useTypewriter.js";
 import SlugImage from "./SlugImage.jsx";
+import SlugImageModal from "./SlugImageModal.jsx";
 import EnergyPips from "./EnergyPips.jsx";
 import LoyaltyMeter from "./LoyaltyMeter.jsx";
 import "./SlugCard.css";
 
-export default function SlugCard({
+// One side of the card. The front shows the protoform, the back the velocity
+// form; stats are the slug's own and identical on both sides, only the art and
+// the ability text differ.
+function SlugCardFace({
   slug,
-  size = "sm",
-  editable = false,
+  size,
+  form,
+  active,
+  editable,
   onToggleEnergyPip,
-  onClick,
   actions,
-  redacted = false,
+  redacted,
+  canFlip,
+  onFlip,
+  onOpenImage,
 }) {
-  const [face, setFace] = useState("protoform");
-  const abilityText = (face === "velocity" ? slug.velocityAbility : slug.protoformUtility) || "";
-  const abilityLabel = face === "velocity" ? "Velocity Ability" : "Protoform Utility";
-  const typedAbility = useTypewriter(abilityText);
-  const typedLabel = useTypewriter(abilityLabel);
+  const isVelocity = form === "velocity";
+  const image = isVelocity ? slug.velocityImage : slug.protoformImage;
+  const abilityText = (isVelocity ? slug.velocityAbility : slug.protoformUtility) || "";
+  const abilityLabel = isVelocity ? "Velocity Ability" : "Protoform Utility";
+
   // Loyalty tier shifts this slug's effective clash power/defense and its
   // shooter's accuracy in combat (see loyaltyClashModifier/
   // loyaltyAccuracyModifier in server/src/combatRules.js) -- shown as a
@@ -64,37 +71,28 @@ export default function SlugCard({
     setBenefitLeft(rect.right + PANEL_SPACE > window.innerWidth);
   }
 
-  // A max-loyalty (Bonded) slug gets a heavier element-coloured frame plus a
-  // slow shimmer and glow pulse. Redacted Slugpedia entries have no real tier.
-  const isBonded = !redacted && slug.loyaltyTier === LOYALTY_TIER_MAX;
-  // A DM-approved Mega Morph slug gets its own iridescent frame and badge --
-  // deliberately unlike the element-coloured Bonded look (and it wins over it
-  // when a slug is both).
-  const isMega = !redacted && Boolean(slug.megaMorphAllowed);
-
   return (
-    <div
-      className={`slug-card slug-card--${size} ${onClick ? "slug-card--clickable" : ""} ${
-        redacted ? "slug-card--redacted" : ""
-      } ${isBonded ? "slug-card--bonded" : ""} ${isMega ? "slug-card--mega" : ""}`}
-      style={{ "--type-color": typeColor(slug.type) }}
-      onClick={onClick}
-    >
-      {isBonded && <span className="slug-card-bonded-fx" aria-hidden="true" />}
-      {isMega && (
-        <span className="slug-card-mega-badge" title="This slug can Mega Morph in combat">
-          <SparkleIcon weight="fill" />
-          Mega Morph
-        </span>
+    // The hidden side is inert so its buttons and tooltips can't be tabbed to
+    // or read out while it's turned away.
+    <div className={`slug-card-face slug-card-face--${form}`} inert={!active} aria-hidden={!active}>
+      {canFlip && (
+        <button
+          type="button"
+          className="slug-card-flip-btn"
+          aria-label={isVelocity ? "Flip back to protoform" : "Flip to velocity form"}
+          onClick={(e) => {
+            e.stopPropagation();
+            onFlip();
+          }}
+        >
+          <ArrowsClockwiseIcon weight="bold" />
+        </button>
       )}
-      <div className="slug-card-top">
-        <SlugImage
-          protoformImage={slug.protoformImage}
-          velocityImage={slug.velocityImage}
-          size={size === "lg" ? "lg" : size === "md" ? "md" : "sm"}
-          onFaceChange={setFace}
-        />
+
+      <div className={`slug-card-top ${canFlip ? "slug-card-top--flippable" : ""}`}>
+        <SlugImage image={image} form={form} size={size} onOpen={() => onOpenImage(form)} />
         <div className="slug-card-identity">
+          <span className="slug-card-form-tag">{isVelocity ? "Velocity Form" : "Protoform"}</span>
           <h3 className="slug-card-name">{slug.name}</h3>
           {/* Hovering (or focusing) the element chip reveals what that type
               does to a shot: its range/accuracy modifiers and on-hit effect. */}
@@ -110,34 +108,34 @@ export default function SlugCard({
             </span>
 
             {!redacted && (
-            <div className={`slug-card-benefit ${benefitLeft ? "slug-card-benefit--left" : ""}`} role="tooltip">
-              <p className="slug-card-benefit-title">
-                <span className="slug-card-benefit-type" style={{ "--type-color": typeColor(slug.type) }}>
-                  {slug.type}
-                </span>
-                element
-              </p>
-              <div className="slug-card-benefit-stats">
-                <div className="slug-card-benefit-stat">
-                  <span className="slug-card-benefit-stat-value">{ballistics.band}</span>
-                  <span className="slug-card-benefit-stat-label">Range</span>
-                  <span className="slug-card-benefit-stat-sub">~{ballistics.range}u</span>
-                </div>
-                <div className="slug-card-benefit-stat">
-                  <span className="slug-card-benefit-stat-value">{fmtMod(totalAccuracy)}</span>
-                  <span className="slug-card-benefit-stat-label">Accuracy</span>
-                  <span className="slug-card-benefit-stat-sub">
-                    type {fmtMod(ballistics.accuracyMod)}
-                    {accuracyMod !== 0 && ` · loyalty ${fmtMod(accuracyMod)}`}
+              <div className={`slug-card-benefit ${benefitLeft ? "slug-card-benefit--left" : ""}`} role="tooltip">
+                <p className="slug-card-benefit-title">
+                  <span className="slug-card-benefit-type" style={{ "--type-color": typeColor(slug.type) }}>
+                    {slug.type}
                   </span>
+                  element
+                </p>
+                <div className="slug-card-benefit-stats">
+                  <div className="slug-card-benefit-stat">
+                    <span className="slug-card-benefit-stat-value">{ballistics.band}</span>
+                    <span className="slug-card-benefit-stat-label">Range</span>
+                    <span className="slug-card-benefit-stat-sub">~{ballistics.range}u</span>
+                  </div>
+                  <div className="slug-card-benefit-stat">
+                    <span className="slug-card-benefit-stat-value">{fmtMod(totalAccuracy)}</span>
+                    <span className="slug-card-benefit-stat-label">Accuracy</span>
+                    <span className="slug-card-benefit-stat-sub">
+                      type {fmtMod(ballistics.accuracyMod)}
+                      {accuracyMod !== 0 && ` · loyalty ${fmtMod(accuracyMod)}`}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="slug-card-benefit-effect">
+                  <span className="slug-card-benefit-effect-label">Hit effect</span>
+                  <p>{ballistics.hitEffect}</p>
                 </div>
               </div>
-
-              <div className="slug-card-benefit-effect">
-                <span className="slug-card-benefit-effect-label">Hit effect</span>
-                <p>{ballistics.hitEffect}</p>
-              </div>
-            </div>
             )}
           </div>
         </div>
@@ -218,10 +216,8 @@ export default function SlugCard({
 
       {(slug.protoformUtility || slug.velocityAbility) && (
         <div className="slug-card-ability">
-          <span className={`slug-card-ability-label ${typedLabel.isTyping ? "slug-card-typing" : ""}`}>
-            {typedLabel.text}
-          </span>
-          <p className={typedAbility.isTyping ? "slug-card-typing" : ""}>{typedAbility.text}</p>
+          <span className="slug-card-ability-label">{abilityLabel}</span>
+          <p>{abilityText || "No ability recorded for this form."}</p>
         </div>
       )}
 
@@ -229,6 +225,92 @@ export default function SlugCard({
         <div className="slug-card-actions" onClick={(e) => e.stopPropagation()}>
           {actions}
         </div>
+      )}
+    </div>
+  );
+}
+
+export default function SlugCard({
+  slug,
+  size = "sm",
+  editable = false,
+  onToggleEnergyPip,
+  onClick,
+  actions,
+  redacted = false,
+}) {
+  const [flipped, setFlipped] = useState(false);
+  const [viewerForm, setViewerForm] = useState(null);
+  const imgSize = size === "lg" ? "lg" : size === "md" ? "md" : "sm";
+
+  // Only slugs with a velocity form have a back to turn to.
+  const canFlip = !redacted && Boolean(slug.velocityImage || slug.velocityAbility);
+  // A card that already has its own click action (e.g. opening an editor in
+  // Slug Management) keeps it; those cards flip with the corner button instead.
+  const flipsOnClick = canFlip && !onClick;
+
+  function handleCardClick(e) {
+    if (onClick) {
+      onClick(e);
+      return;
+    }
+    if (!flipsOnClick) return;
+    // Leave real controls alone, and don't flip when the click ended a text selection.
+    if (e.target.closest("button, a, input, select, textarea, label")) return;
+    if (window.getSelection?.()?.toString()) return;
+    setFlipped((f) => !f);
+  }
+
+  // A max-loyalty (Bonded) slug gets a heavier element-coloured frame plus a
+  // slow shimmer and glow pulse. Redacted Slugpedia entries have no real tier.
+  const isBonded = !redacted && slug.loyaltyTier === LOYALTY_TIER_MAX;
+  // A DM-approved Mega Morph slug gets its own iridescent frame and badge --
+  // deliberately unlike the element-coloured Bonded look (and it wins over it
+  // when a slug is both).
+  const isMega = !redacted && Boolean(slug.megaMorphAllowed);
+
+  const faceProps = {
+    slug,
+    size: imgSize,
+    editable,
+    onToggleEnergyPip,
+    actions,
+    redacted,
+    canFlip,
+    onFlip: () => setFlipped((f) => !f),
+    onOpenImage: setViewerForm,
+  };
+
+  return (
+    <div
+      className={`slug-card slug-card--${size} ${onClick ? "slug-card--clickable" : ""} ${
+        flipsOnClick ? "slug-card--flippable" : ""
+      } ${flipped ? "slug-card--flipped" : ""} ${redacted ? "slug-card--redacted" : ""} ${
+        isBonded ? "slug-card--bonded" : ""
+      } ${isMega ? "slug-card--mega" : ""}`}
+      style={{ "--type-color": typeColor(slug.type) }}
+      onClick={handleCardClick}
+    >
+      {isBonded && <span className="slug-card-bonded-fx" aria-hidden="true" />}
+      {isMega && (
+        <>
+          {/* One badge per side so the text never reads mirrored. */}
+          <span className="slug-card-mega-badge" title="This slug can Mega Morph in combat" aria-hidden={flipped}>
+            <SparkleIcon weight="fill" />
+            Mega Morph
+          </span>
+          <span className="slug-card-mega-badge slug-card-mega-badge--back" aria-hidden={!flipped}>
+            <SparkleIcon weight="fill" />
+            Mega Morph
+          </span>
+        </>
+      )}
+
+      <SlugCardFace {...faceProps} form="protoform" active={!flipped} />
+      {canFlip && <SlugCardFace {...faceProps} form="velocity" active={flipped} />}
+
+      {viewerForm && (
+        <SlugImageModal slug={slug} initialForm={viewerForm} onClose={() => setViewerForm(null)} />
       )}
     </div>
   );

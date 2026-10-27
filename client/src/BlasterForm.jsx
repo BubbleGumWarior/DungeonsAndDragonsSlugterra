@@ -34,9 +34,9 @@ function Stepper({ label, value, min, max, step = 1, onChange, formatValue }) {
   );
 }
 
-export default function BlasterForm({ mode, initialValues, players, onSubmit, onCancel, submitLabel }) {
+export default function BlasterForm({ mode, initialValues, players, defaultPlayerId, onSubmit, onCancel, submitLabel }) {
   const [fields, setFields] = useState(() => ({ ...defaultBlasterFields(), ...initialValues }));
-  const [selectedPlayerId, setSelectedPlayerId] = useState(players?.[0]?.id ?? null);
+  const [selectedPlayerId, setSelectedPlayerId] = useState(defaultPlayerId ?? players?.[0]?.id ?? null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 

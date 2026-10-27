@@ -1,56 +1,9 @@
+/* Portrait for the protoform, landscape for the velocity form. Sized as a
+   button so the whole picture is the "view full size" target. */
 .slug-image {
   position: relative;
-  perspective: 800px;
   flex-shrink: 0;
-  transition: width 0.6s var(--ease-in-out), height 0.6s var(--ease-in-out);
-}
-
-.slug-image--sm {
-  width: 56px;
-  height: 84px;
-}
-
-.slug-image--sm.slug-image--flipped {
-  width: 84px;
-  height: 56px;
-}
-
-.slug-image--md {
-  width: 84px;
-  height: 128px;
-}
-
-.slug-image--md.slug-image--flipped {
-  width: 128px;
-  height: 84px;
-}
-
-.slug-image--lg {
-  width: 152px;
-  height: 240px;
-}
-
-.slug-image--lg.slug-image--flipped {
-  width: 240px;
-  height: 152px;
-}
-
-.slug-image-flipper {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  transform-style: preserve-3d;
-  transition: transform 0.6s var(--ease-in-out);
-}
-
-.slug-image-flipper--flipped {
-  transform: rotateY(180deg);
-}
-
-.slug-image-face {
-  position: absolute;
-  inset: 0;
-  backface-visibility: hidden;
+  padding: 0;
   border-radius: 14px;
   overflow: hidden;
   background: var(--charcoal-950);
@@ -61,69 +14,105 @@
   justify-content: center;
 }
 
-.slug-image--lg .slug-image-face {
+.slug-image--sm {
+  width: 56px;
+  height: 84px;
+}
+
+.slug-image--md {
+  width: 84px;
+  height: 128px;
+}
+
+.slug-image--lg {
+  width: 152px;
+  height: 240px;
   border-radius: 20px;
 }
 
+.slug-image--velocity.slug-image--sm {
+  width: 84px;
+  height: 56px;
+}
+
+.slug-image--velocity.slug-image--md {
+  width: 128px;
+  height: 84px;
+}
+
+.slug-image--velocity.slug-image--lg {
+  width: 240px;
+  height: 152px;
+}
+
 /* contain, not cover: show the whole picture at its own aspect ratio and let
-   the face's dark background fill the leftover space as a letterbox. */
-.slug-image-face img {
+   the dark background fill the leftover space as a letterbox. */
+.slug-image img {
   width: 100%;
   height: 100%;
   object-fit: contain;
 }
 
-.slug-image-face svg {
+.slug-image > svg {
   width: 40%;
   height: 40%;
   color: var(--gold-dim);
 }
 
-.slug-image-face--back {
-  transform: rotateY(180deg);
+.slug-image--zoomable {
+  cursor: zoom-in;
+  transition: transform 0.16s var(--ease-out);
 }
 
-.slug-image-flip-btn {
+.slug-image--zoomable:active {
+  transform: scale(0.97);
+}
+
+.slug-image-zoom {
   position: absolute;
-  inset: 0;
-  margin: auto;
-  width: 32px;
-  height: 32px;
+  right: 5px;
+  bottom: 5px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(12, 13, 15, 0.75);
+  background: rgba(12, 13, 15, 0.78);
   border: 1px solid var(--gold);
   color: var(--gold-soft);
-  cursor: pointer;
   opacity: 0;
-  pointer-events: none;
+  transform: scale(0.9);
   transition: opacity 0.15s var(--ease-out), transform 0.15s var(--ease-out);
-  z-index: 3;
+  pointer-events: none;
 }
 
-.slug-image-flip-btn svg {
-  width: 16px;
-  height: 16px;
+.slug-image-zoom svg {
+  width: 12px;
+  height: 12px;
 }
 
-.slug-image:hover .slug-image-flip-btn {
+.slug-image--zoomable:focus-visible {
+  outline: 2px solid var(--gold-dim);
+  outline-offset: 2px;
+}
+
+.slug-image--zoomable:focus-visible .slug-image-zoom {
   opacity: 1;
-  pointer-events: auto;
+  transform: none;
 }
 
-.slug-image-flip-btn:hover {
-  transform: scale(1.1);
+@media (hover: hover) and (pointer: fine) {
+  .slug-image--zoomable:hover .slug-image-zoom {
+    opacity: 1;
+    transform: none;
+  }
 }
 
-.slug-image-flip-btn:active {
-  transform: scale(0.95);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .slug-image,
-  .slug-image-flipper {
-    transition-duration: 0.001ms;
+/* Touch has no hover: keep a faint hint visible so the art reads as tappable. */
+@media (hover: none) {
+  .slug-image-zoom {
+    opacity: 0.85;
+    transform: none;
   }
 }
