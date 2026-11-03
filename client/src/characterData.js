@@ -91,6 +91,9 @@ const HEAT_COOL_RGB = [56, 132, 244]; // a clean, icy blue
 const HEAT_HOT_RGB = [156, 32, 51]; // the burgundy red the table already knows as "danger"
 export const HEAT_MAX = 5000;
 
+// The same gauge as heatColor, as a CSS gradient for a slider track.
+export const HEAT_TRACK = `linear-gradient(90deg, rgb(${HEAT_COOL_RGB.join(", ")}), rgb(${HEAT_HOT_RGB.join(", ")}))`;
+
 export function heatColor(heat) {
   const t = Math.max(0, Math.min(1, (heat ?? 0) / HEAT_MAX));
   const rgb = HEAT_COOL_RGB.map((cool, i) => Math.round(cool + (HEAT_HOT_RGB[i] - cool) * t));

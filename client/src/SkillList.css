@@ -113,3 +113,26 @@
     transform: translateX(-50%) translateY(0);
   }
 }
+
+/* One-click d20 roll (player's own sheet only). */
+.skill-row--rollable {
+  cursor: pointer;
+  transition:
+    border-color 0.15s var(--ease-out),
+    background-color 0.15s var(--ease-out),
+    transform 0.12s var(--ease-out);
+}
+
+.skill-row--rollable:hover {
+  border-color: var(--gold);
+  background: rgba(201, 162, 75, 0.12);
+}
+
+.skill-row--rollable:active {
+  transform: scale(0.985);
+}
+
+.skill-row--rollable:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}

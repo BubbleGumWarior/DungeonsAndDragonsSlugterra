@@ -21,8 +21,10 @@ export default function AccessSocket({ children }) {
   // guards need this so they don't bounce a player off a legitimately-revealed
   // page during the brief window before the real value arrives.
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  // The DM's persisted "Hide Slugterra" switch -- overrides everything below.
+  const [slugterraHidden, setSlugterraHidden] = useState(false);
   const userId = user?.id;
-  const slugterraRevealed = user?.role === "Dungeon Master" || hasCharacter;
+  const slugterraRevealed = !slugterraHidden && (user?.role === "Dungeon Master" || hasCharacter);
   const [characterUpdate, setCharacterUpdate] = useState(null);
   const [characterCreated, setCharacterCreated] = useState(null);
   const [partyHealed, setPartyHealed] = useState(null);
@@ -103,6 +105,13 @@ export default function AccessSocket({ children }) {
   // themselves trigger a re-render.
   const voiceSignalQueueRef = useRef([]);
   const [voiceSignalTick, setVoiceSignalTick] = useState(0);
+  // Sound desk (AmbientPlayer.jsx). Soundboard presses are a queue for the
+  // same reason as voice signals above -- the DM hammering two pads shouldn't
+  // lose one -- while "the ambience changed" is only a counter: the listener
+  // refetches the authoritative state on it, so coalesced bumps lose nothing.
+  const soundEventQueueRef = useRef([]);
+  const [soundEventTick, setSoundEventTick] = useState(0);
+  const [ambientChangedTick, setAmbientChangedTick] = useState(0);
   // Bumped on every successful (re)connect, including an automatic
   // reconnect after a drop -- consumers that need to re-announce
   // themselves to the server once the socket comes back (VoiceChatContext
@@ -150,6 +159,7 @@ export default function AccessSocket({ children }) {
       .then((res) => res.json())
       .then((data) => {
         if (Number.isInteger(data.slugHuntArea)) setSlugHuntArea(data.slugHuntArea);
+        setSlugterraHidden(Boolean(data.slugterraHidden));
       })
       .catch(() => {});
     const characterLoad = fetch("/api/characters/me", { headers: { Authorization: `Bearer ${token}` } })
@@ -158,10 +168,14 @@ export default function AccessSocket({ children }) {
       .catch(() => {});
     Promise.all([settingsLoad, characterLoad]).finally(() => setSettingsLoaded(true));
 
-    fetch("/api/presence/online", { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => res.json())
-      .then((data) => setOnlineUserIds(new Set(data.onlineUserIds || [])))
-      .catch(() => {});
+    // Presence events only reach a connected socket, so anything missed while
+    // disconnected has to be re-read. Run on every (re)connect from onopen.
+    function syncOnlineUsers() {
+      fetch("/api/presence/online", { headers: { Authorization: `Bearer ${token}` } })
+        .then((res) => res.json())
+        .then((data) => setOnlineUserIds(new Set(data.onlineUserIds || [])))
+        .catch(() => {});
+    }
 
     // Self-healing connection: a dropped/failed socket used to just sit
     // dead until someone manually reloaded the page -- rough over any path
@@ -196,6 +210,7 @@ export default function AccessSocket({ children }) {
       socket.onopen = () => {
         failedAttempts = 0; // a connection that actually opened earns a fresh backoff
         setWsConnectedAt(Date.now());
+        syncOnlineUsers();
       };
 
       socket.onclose = () => {
@@ -448,6 +463,11 @@ export default function AccessSocket({ children }) {
         return;
       }
 
+      if (data.type === "slugterra-visibility") {
+        setSlugterraHidden(Boolean(data.hidden));
+        return;
+      }
+
       if (data.type === "slug-hunt-area") {
         setSlugHuntArea(data.area);
         return;
@@ -479,6 +499,17 @@ export default function AccessSocket({ children }) {
       // check needed client-side.
       if (data.type === "combat-damage-flash") {
         setDamageFlash({ combatantId: data.combatantId, at: Date.now() });
+        return;
+      }
+
+      if (data.type === "ambient-changed") {
+        setAmbientChangedTick((t) => t + 1);
+        return;
+      }
+
+      if (data.type === "sound-play" || data.type === "sound-stop") {
+        soundEventQueueRef.current.push(data);
+        setSoundEventTick((t) => t + 1);
         return;
       }
 
@@ -514,6 +545,7 @@ export default function AccessSocket({ children }) {
       value={{
         onlineUserIds,
         slugterraRevealed,
+        slugterraHidden,
         settingsLoaded,
         characterUpdate,
         characterCreated,
@@ -565,6 +597,9 @@ export default function AccessSocket({ children }) {
         voiceRoster,
         voiceSignalQueueRef,
         voiceSignalTick,
+        soundEventQueueRef,
+        soundEventTick,
+        ambientChangedTick,
         wsConnectedAt,
         sendMessage,
       }}

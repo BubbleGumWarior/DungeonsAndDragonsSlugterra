@@ -1,5 +1,5 @@
 import { CaretDownIcon } from "@phosphor-icons/react";
-import { PROFICIENCIES, entryLabel, statByKey } from "./characterData.js";
+import { PROFICIENCIES, describeEntry, entryLabel, statByKey } from "./characterData.js";
 import { STAT_GUIDE } from "./statGuide.js";
 import "./StatGuide.css";
 
@@ -31,12 +31,12 @@ export default function StatGuide({ proficiencies = [], revealed = true }) {
                     {skills.map((p) => {
                       const benefit = entry.skills[p.key];
                       return (
-                        <li key={p.key} className={benefit ? "" : "stat-guide-skill--idle"}>
+                        <li key={p.key}>
                           <span className="stat-guide-skill-name">
                             {entryLabel(p, revealed)}
                             {proficiencies.includes(p.key) && <span className="stat-guide-trained">Proficient</span>}
                           </span>
-                          <span className="stat-guide-skill-note">{benefit || "Rolled when the DM calls for it."}</span>
+                          <span className="stat-guide-skill-note">{benefit || describeEntry(p, revealed)}</span>
                         </li>
                       );
                     })}

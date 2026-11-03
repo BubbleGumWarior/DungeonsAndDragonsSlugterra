@@ -54,6 +54,9 @@ export function dualShotPairError(a, b) {
     if ((s.loyaltyTier ?? 0) < DUAL_SHOT_MIN_LOYALTY) return `${s.name} isn't loyal enough (needs tier ${DUAL_SHOT_MIN_LOYALTY}+).`;
     if (s.uncounterable) return `${s.name} is uncounterable.`;
     if (s.ultraFast) return `${s.name} is ultra-fast.`;
+    if (s.adaptiveStrain) return `${s.name}'s bolt splits into a DNA helix.`;
+    if (s.pounceStrike) return `${s.name}'s bolt stalks and pounces.`;
+    if (s.daggerThrow) return `${s.name} throws a knife.`;
   }
   if (a.type === b.type) return "Same element -- needs two different elements.";
   const needsPicker = (s) => Boolean(s.mindScramble || s.frictionShift);
@@ -69,7 +72,10 @@ export function canJoinDualShot(slug) {
     slug.type !== "Healing" &&
     slug.type !== "None" &&
     !slug.uncounterable &&
-    !slug.ultraFast
+    !slug.ultraFast &&
+    !slug.adaptiveStrain &&
+    !slug.pounceStrike &&
+    !slug.daggerThrow
   );
 }
 

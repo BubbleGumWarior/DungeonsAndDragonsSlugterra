@@ -11,9 +11,27 @@ import "./FameHeatStepper.css";
 // The pencil button opens a direct numeric entry for jumping straight to a
 // value -- clicking +/- one at a time doesn't scale once Fame/Heat climb
 // into the hundreds from actual play.
-export default function FameHeatStepper({ label, value, onChange, icon, valueColor }) {
+//
+// With `sliderMax` a slider sits under the row so the DM can see where a value
+// lands on the scale and drag to it. `sliderTrack` is its track's CSS background
+// (Heat passes its blue-to-red gauge). The stepper still has no cap: a value
+// past `sliderMax` just pins the thumb to the end. The slider holds a local
+// value while dragging and only commits on release, so one drag is one PATCH.
+export default function FameHeatStepper({ label, value, onChange, icon, valueColor, sliderMax, sliderTrack }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
+  const [sliding, setSliding] = useState(null);
+
+  // `valueColor` is a colour, or a function of the value so the number can
+  // follow the slider while it's still being dragged.
+  const shownValue = sliding ?? value ?? 0;
+  const shownColor = typeof valueColor === "function" ? valueColor(shownValue) : valueColor;
+
+  function commitSlide() {
+    if (sliding == null) return;
+    if (sliding !== value) onChange?.(sliding);
+    setSliding(null);
+  }
 
   function adjust(delta) {
     const next = Math.max(0, (value ?? 0) + delta);
@@ -68,9 +86,9 @@ export default function FameHeatStepper({ label, value, onChange, icon, valueCol
           <button type="button" onClick={() => adjust(-1)} disabled={(value ?? 0) <= 0} aria-label={`Decrease ${label}`}>
             <MinusIcon weight="bold" />
           </button>
-          <span className="fame-heat-value" style={valueColor ? { color: valueColor } : undefined}>
+          <span className="fame-heat-value" style={shownColor ? { color: shownColor } : undefined}>
             {icon}
-            {value ?? 0}
+            {shownValue}
           </span>
           <button type="button" onClick={() => adjust(1)} aria-label={`Increase ${label}`}>
             <PlusIcon weight="bold" />
@@ -80,6 +98,22 @@ export default function FameHeatStepper({ label, value, onChange, icon, valueCol
           </button>
         </div>
       )}
+      {sliderMax ? (
+        <input
+          type="range"
+          className="fame-heat-slider"
+          style={sliderTrack ? { background: sliderTrack } : undefined}
+          min={0}
+          max={sliderMax}
+          step={Math.max(1, Math.round(sliderMax / 500))}
+          value={Math.min(sliding ?? value ?? 0, sliderMax)}
+          aria-label={`Set ${label}`}
+          onChange={(e) => setSliding(Number(e.target.value))}
+          onPointerUp={commitSlide}
+          onKeyUp={commitSlide}
+          onBlur={commitSlide}
+        />
+      ) : null}
     </div>
   );
 }

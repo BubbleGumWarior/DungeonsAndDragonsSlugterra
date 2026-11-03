@@ -71,23 +71,23 @@ Share of each planet's slug-hunt odds by element (0% = no slug of that element c
 
 | Planet | Air | Dark | Earth | Electricity | Energy | Fire | Healing | Ice | Light | Metal | None | Plant | Psychic | Toxic | Unique | Water |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Cindrath | 7.3% | 7% | 15.2% | 8% | 2.9% | 32.6% | 0% | 0% | 4.9% | 12.2% | 0.7% | 0% | 2.6% | 4.3% | 2.3% | 0% |
-| Pyrsis Barrens | 18.3% | 6.8% | 16% | 7.3% | 2.7% | 19.7% | 0% | 0% | 4% | 9.2% | 1% | 0% | 3.5% | 6.4% | 2.3% | 2.8% |
-| Ashfall Rift | 15.2% | 11.2% | 20.1% | 5.7% | 2.5% | 16.9% | 0% | 0% | 6.3% | 9.6% | 1% | 0% | 3.9% | 3.7% | 3.4% | 0.5% |
-| Vorn's Forge | 4.5% | 4% | 1.5% | 23.3% | 8.2% | 14.8% | 0% | 0% | 2.7% | 25.7% | 1% | 0% | 5.5% | 5.4% | 3.1% | 0.3% |
-| The Wellspring | 8.7% | 13% | 8% | 7.3% | 11.2% | 1.4% | 0.7% | 0% | 10.2% | 8.8% | 2.3% | 1.2% | 17.2% | 2.2% | 6.1% | 1.7% |
-| Kessa-9 | 21.1% | 2.6% | 18.2% | 3.3% | 2% | 0% | 11.2% | 0% | 6.2% | 0.6% | 5% | 16% | 4.4% | 2.5% | 1.5% | 5.4% |
-| Virid Canopy | 13.7% | 10.1% | 6.5% | 3.9% | 2% | 0% | 9.9% | 0% | 9% | 1.8% | 2.6% | 18.9% | 4.3% | 6% | 4.7% | 6.6% |
-| Solenne | 16.5% | 2.9% | 13.2% | 3.1% | 2.6% | 0% | 15.2% | 0% | 6.3% | 2.2% | 3.7% | 18.9% | 4.3% | 3.6% | 2.5% | 5% |
-| Maren's Deep | 20.4% | 7.8% | 0% | 10.1% | 4.9% | 0% | 2.2% | 4.3% | 10.5% | 4.3% | 2% | 2.7% | 10.1% | 1.4% | 5.3% | 14% |
-| Aurelia Docks | 9.9% | 5.8% | 4% | 14.4% | 8% | 2% | 1.4% | 0% | 7.1% | 16.4% | 3.5% | 1.8% | 14.7% | 4.1% | 4.5% | 2.4% |
-| Kethrun Reach | 11.2% | 7.6% | 1.2% | 8.7% | 9.2% | 0% | 0% | 0% | 9.8% | 12.1% | 4.9% | 0% | 23.3% | 3.7% | 8% | 0.3% |
-| Marrek's Hold | 9.9% | 13.2% | 6.2% | 4.5% | 2% | 0% | 4.1% | 0% | 7.3% | 2.1% | 2.4% | 11.9% | 4.4% | 17.9% | 6.1% | 8% |
-| Drennow Yards | 0.3% | 19.7% | 9.8% | 13.3% | 11.3% | 6.7% | 0% | 0% | 10.3% | 22.7% | 0.3% | 0% | 1.8% | 2.5% | 1.3% | 0% |
-| Vhalden | 17.7% | 11% | 30.8% | 5.6% | 3.4% | 0% | 0% | 1.3% | 10.8% | 8.7% | 1.9% | 0% | 3.8% | 1.6% | 3.4% | 0% |
-| Ossuary Station | 0.3% | 26.5% | 10% | 9.7% | 13.2% | 1.5% | 0% | 0% | 13.3% | 18.6% | 0.5% | 0% | 2.5% | 1.9% | 2% | 0% |
-| Kaeloth Prime | 13.5% | 7.4% | 4.5% | 12.4% | 5.7% | 2.8% | 0% | 22.6% | 5.8% | 9.8% | 1.6% | 0% | 7.3% | 2% | 3.1% | 1.5% |
-| The Threshold | 0.3% | 25.4% | 6.2% | 8.6% | 11.4% | 1.6% | 0% | 0% | 11.3% | 22.1% | 0.6% | 0% | 4.5% | 2.3% | 5.7% | 0% |
+| Cindrath | 7.3% | 7% | 15.1% | 8% | 3% | 32.1% | 0% | 0% | 4.9% | 12.6% | 0.7% | 0% | 2.4% | 4.3% | 2.6% | 0% |
+| Pyrsis Barrens | 18.1% | 6.8% | 15.9% | 7.3% | 2.7% | 19.9% | 0% | 0% | 3.8% | 9.4% | 1% | 0% | 3.4% | 6.4% | 2.5% | 2.8% |
+| Ashfall Rift | 15.2% | 11% | 20% | 5.7% | 2.6% | 16.7% | 0% | 0% | 6.1% | 9.9% | 1% | 0% | 3.8% | 3.7% | 3.8% | 0.5% |
+| Vorn's Forge | 4.4% | 4% | 1.5% | 23.1% | 8.2% | 14.3% | 0% | 0% | 2.7% | 26.9% | 1% | 0% | 4.9% | 5.3% | 3.4% | 0.3% |
+| The Wellspring | 8.7% | 12.9% | 8% | 7.3% | 11.5% | 1.4% | 0.7% | 0% | 10.2% | 9.1% | 2.3% | 1.2% | 16% | 2.2% | 6.8% | 1.7% |
+| Kessa-9 | 20.9% | 2.6% | 18.1% | 3.3% | 1.9% | 0% | 11.2% | 0% | 6.2% | 0.6% | 5.1% | 15.8% | 4% | 2.4% | 2.5% | 5.4% |
+| Virid Canopy | 13.7% | 9.6% | 6.4% | 3.6% | 2.1% | 0% | 9.8% | 0% | 9% | 1.9% | 2.5% | 19.1% | 4.1% | 5.9% | 5.7% | 6.6% |
+| Solenne | 16.5% | 2.9% | 13.1% | 3.1% | 2.7% | 0% | 15.1% | 0% | 6.3% | 2.3% | 3.5% | 18.9% | 4.1% | 3.6% | 2.9% | 5% |
+| Maren's Deep | 20.4% | 7.8% | 0% | 10% | 5% | 0% | 2.2% | 4.3% | 10.5% | 4.4% | 2% | 2.7% | 9.7% | 1.4% | 5.7% | 13.9% |
+| Aurelia Docks | 9.9% | 5.8% | 4% | 14.4% | 7.9% | 2% | 1.4% | 0% | 7.1% | 16.9% | 3.5% | 1.8% | 13.9% | 3.9% | 5.1% | 2.4% |
+| Kethrun Reach | 11.1% | 7.6% | 1.2% | 8.7% | 9.2% | 0% | 0% | 0% | 9.8% | 12.1% | 4.9% | 0% | 22.4% | 3.7% | 9% | 0.3% |
+| Marrek's Hold | 9.9% | 13.2% | 6.2% | 4.5% | 2.1% | 0% | 4.1% | 0% | 7.3% | 2.2% | 2.4% | 11.8% | 4.2% | 17.5% | 6.7% | 7.9% |
+| Drennow Yards | 0.3% | 19.6% | 9.5% | 13.1% | 11.5% | 6.7% | 0% | 0% | 10.3% | 23.1% | 0.3% | 0% | 1.7% | 2.5% | 1.4% | 0% |
+| Vhalden | 17.6% | 11% | 30.1% | 5.6% | 3.5% | 0% | 0% | 1.3% | 10.8% | 9% | 1.9% | 0% | 3.7% | 1.6% | 3.9% | 0% |
+| Ossuary Station | 0.3% | 25.9% | 10% | 9.6% | 13.2% | 1.5% | 0% | 0% | 13.3% | 19.3% | 0.5% | 0% | 2.4% | 1.9% | 2.1% | 0% |
+| Kaeloth Prime | 13.3% | 7.4% | 4.5% | 12.4% | 5.8% | 2.8% | 0% | 22.4% | 5.8% | 10% | 1.6% | 0% | 7% | 2% | 3.5% | 1.5% |
+| The Threshold | 0.3% | 25.2% | 6.1% | 8.4% | 11.4% | 1.6% | 0% | 0% | 11.3% | 22.8% | 0.6% | 0% | 4.2% | 2.3% | 5.8% | 0% |
 
 ## Slug habitats
 
@@ -120,6 +120,7 @@ Top habitats for each slug, strongest first. ⌀ = vacuum-hardy (can live outsid
 | Capacitron | Electricity | 3 | industrial, storm, energy_field, forge, wreck, settlement |
 | Cartridgeling ⌀ | Energy | 3 | vacuum, ruins, settlement, energy_field, industrial, bright |
 | Chillnip | Ice | 2 | ice, ocean |
+| Chronix ⌀ | Energy | 9 | ruins, energy_field, vacuum, dark, settlement |
 | Cindermite | Fire | 2 | magma, ash, forge, geothermal, industrial |
 | Cinderwyrm | Fire | 7 | ash, magma, forge, geothermal, industrial |
 | Clinker ⌀ | Metal | 3 | industrial, forge, wreck, settlement, vacuum, rock |
@@ -181,6 +182,7 @@ Top habitats for each slug, strongest first. ⌀ = vacuum-hardy (can live outsid
 | Hailstrike | Ice | 4 | ice, ocean |
 | Heartwood | Plant | 7 | forest, farm, garden, grass, swamp, fresh_water |
 | Heliarch ⌀ | Light | 9 | bright, vacuum, ruins, energy_field, settlement, dark |
+| Helixel | Unique | 7 | settlement, garden, forest, ruins, industrial |
 | Hexlet ⌀ | Dark | 6 | industrial, vacuum, settlement, rock, ruins, wreck |
 | Hop Rock ⌀ | Earth | 4 | rock, soil, vacuum, ruins, ash, geothermal |
 | Hoverbug | Air | 3 | sky, storm, forest, grass, ash, industrial |
@@ -199,7 +201,7 @@ Top habitats for each slug, strongest first. ⌀ = vacuum-hardy (can live outsid
 | Lifeline | Healing | 6 | forest, farm, garden, grass, swamp |
 | Lumebug ⌀ | Light | 2 | dark, forest, vacuum, bright, rock, ruins |
 | Luxbison ⌀ | Light | 6 | grass, bright, vacuum, dark, ruins, energy_field |
-| Madicus | Psychic | 7 | ruins, settlement, dark, energy_field, forest, wreck |
+| Madicus ⌀ | Metal | 7 | industrial, wreck, forge, vacuum, rock, settlement |
 | Maelstrix | Air | 9 | sky, storm, ocean, settlement, rock |
 | Magnetis ⌀ | Metal | 5 | industrial, wreck, forge, vacuum, rock, settlement |
 | Makobreaker ⌀ | Metal | 6 | rock, wreck, forge, industrial, vacuum, settlement |
@@ -278,6 +280,7 @@ Top habitats for each slug, strongest first. ⌀ = vacuum-hardy (can live outsid
 | Titanite ⌀ | Earth | 8 | rock, soil, vacuum, ash, ruins, geothermal |
 | Tormato | Air | 4 | sky, storm, soil, ash, grass, settlement |
 | Torrentail | Water | 7 | ocean, fresh_water |
+| Trackjaw | Unique | 7 | forest, grass, rock, swamp, ruins |
 | Tremorock ⌀ | Earth | 2 | rock, soil, vacuum, ruins, ash, geothermal |
 | Venomaw | Toxic | 5 | swamp, forest, grass, rock |
 | Ventus | Air | 3 | sky, storm, rock, settlement |

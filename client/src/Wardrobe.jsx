@@ -4,6 +4,7 @@ import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import { PLANETS } from "./planetData.js";
 import { climateTier, degreesOutside, effectiveRange, formatRange, outfitChips, tierEffects } from "./outfitData.js";
+import AtmosphereNote from "./AtmosphereNote.jsx";
 import "./Wardrobe.css";
 
 // The temperature scale shared by every outfit's comfort track, so the list
@@ -64,7 +65,9 @@ export default function Wardrobe({ bare = false }) {
     if (!climate) return null;
     const range = effectiveRange(outfit, fortitudeMod);
     const outside = degreesOutside(range, climate.temp);
-    return { range, outside, tier: climateTier(outside) };
+    // The air a long rest is slept in can differ (no surface to bed down on).
+    const restOutside = degreesOutside(range, climate.restTemp ?? climate.temp);
+    return { range, outside, restOutside, tier: climateTier(outside) };
   }
 
   const current = worn ? fit(worn) : null;
@@ -105,15 +108,21 @@ export default function Wardrobe({ bare = false }) {
                   ))}
                 </ul>
               )}
-              {current.outside > 0 && (
+              {current.restOutside > 0 && (
                 <p className="wardrobe-climate-warn">
                   <WarningIcon weight="fill" aria-hidden="true" /> Sleeping like this risks illness.
+                </p>
+              )}
+              {climate.restAboard && (
+                <p className="wardrobe-climate-note">
+                  There is no surface to sleep on here, so long rests are taken aboard the ship at {climate.restTemp} °C. Fights outside still use the temperature above.
                 </p>
               )}
             </div>
           )}
         </div>
       )}
+      {data.atmosphere && <AtmosphereNote atmosphere={data.atmosphere} />}
       {error && (
         <p className="panel-error" role="alert">
           {error}

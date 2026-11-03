@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { EyeIcon, EyeSlashIcon, PencilSimpleIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
@@ -130,7 +131,9 @@ export default function ChronicleGallery() {
   const [blasterTemplates, setBlasterTemplates] = useState([]);
   const [mechaTemplates, setMechaTemplates] = useState([]);
 
-  const [segment, setSegment] = useState("met");
+  // A link from the Notes page can land straight on the Party segment.
+  const location = useLocation();
+  const [segment, setSegment] = useState(() => (location.state?.segment === "party" ? "party" : "met"));
   const [filter, setFilter] = useState("all");
   const [gridPhase, setGridPhase] = useState("in"); // "in" | "out" -- drives the grid shrink/grow transition
   const [modal, setModal] = useState(null); // { type: "new" } | { type: "edit", id } | { type: "guess", id }

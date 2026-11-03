@@ -40,11 +40,11 @@ function Stepper({ label, value, min, max, onChange, formatValue }) {
   );
 }
 
-export default function SlugForm({ mode, initialValues, players, slugId, onSubmit, onCancel, submitLabel }) {
+export default function SlugForm({ mode, initialValues, players, defaultPlayerId, slugId, onSubmit, onCancel, submitLabel }) {
   const { token } = useAuth();
   const [fields, setFields] = useState(() => ({ ...defaultSlugFields(), ...initialValues }));
   const [energyPips, setEnergyPips] = useState(() => initialValues?.energyPips ?? []);
-  const [selectedPlayerId, setSelectedPlayerId] = useState(players?.[0]?.id ?? null);
+  const [selectedPlayerId, setSelectedPlayerId] = useState(defaultPlayerId ?? players?.[0]?.id ?? null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 

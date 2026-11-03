@@ -7,8 +7,12 @@ import {
   MicrophoneSlashIcon,
   HandPalmIcon,
   SpeakerXIcon,
+  ArrowsClockwiseIcon,
+  SlidersHorizontalIcon,
 } from "@phosphor-icons/react";
 import { useVoiceChat } from "./VoiceChatContext.jsx";
+import { useAudioDevices } from "./voiceAudio.js";
+import { MAX_VOICE_VOLUME } from "./soundVolume.js";
 import "./Panel.css";
 import "./VoicePanel.css";
 
@@ -16,7 +20,54 @@ function initial(name) {
   return (name || "?").trim().charAt(0).toUpperCase() || "?";
 }
 
-function ParticipantRow({ name, speaking, muted, volume, onVolumeChange }) {
+// Chrome lists a "default" and a "communications" alias for the same devices
+// it already lists individually; "System default" covers the first and the
+// second is just noise in a short list.
+const isAlias = (device) => device.deviceId === "default" || device.deviceId === "communications";
+
+function DeviceSelect({ label, devices, value, onChange, fallbackName }) {
+  const options = devices.filter((d) => !isAlias(d));
+  return (
+    <label className="voice-device-field">
+      <span className="voice-device-label">{label}</span>
+      <select value={options.some((d) => d.deviceId === value) ? value : ""} onChange={(e) => onChange(e.target.value)}>
+        <option value="">System default</option>
+        {options.map((d, i) => (
+          <option key={d.deviceId || i} value={d.deviceId}>
+            {d.label || `${fallbackName} ${i + 1}`}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+// Mic and speaker choice. Saved per-browser (see voiceAudio.js), applied on
+// the next join -- or immediately for the mic if you're already in a call.
+function DevicePicker() {
+  const { inputDeviceId, outputDeviceId, setInputDevice, setOutputDevice, canPickOutput } = useVoiceChat();
+  const { inputs, outputs, labeled } = useAudioDevices();
+  const showOutput = canPickOutput && outputs.length > 0;
+  if (inputs.length === 0 && !showOutput) return null;
+
+  return (
+    <details className="voice-devices">
+      <summary className="voice-devices-summary">
+        <SlidersHorizontalIcon weight="bold" />
+        Audio devices
+      </summary>
+      <div className="voice-devices-body">
+        <DeviceSelect label="Microphone" devices={inputs} value={inputDeviceId} onChange={setInputDevice} fallbackName="Microphone" />
+        {showOutput && (
+          <DeviceSelect label="Speakers" devices={outputs} value={outputDeviceId} onChange={setOutputDevice} fallbackName="Speakers" />
+        )}
+        {!labeled && <p className="voice-device-hint">Device names appear once you've allowed microphone access (join the call once).</p>}
+      </div>
+    </details>
+  );
+}
+
+function ParticipantRow({ name, speaking, muted, reconnecting, volume, onVolumeChange }) {
   const percent = Math.round(volume * 100);
   return (
     <div className={`voice-row${speaking ? " voice-row--speaking" : ""}`}>
@@ -32,21 +83,26 @@ function ParticipantRow({ name, speaking, muted, volume, onVolumeChange }) {
               <MicrophoneSlashIcon weight="bold" /> muted
             </span>
           )}
+          {reconnecting && (
+            <span className="voice-row-muted-tag">
+              <ArrowsClockwiseIcon weight="bold" /> reconnecting
+            </span>
+          )}
         </span>
         <div className="voice-row-volume">
           <SpeakerXIcon weight="bold" className="voice-slider-icon" />
           <input
             type="range"
             min="0"
-            max="100"
+            max={MAX_VOICE_VOLUME * 100}
             step="1"
             value={percent}
             onChange={(e) => onVolumeChange(Number(e.target.value) / 100)}
             aria-label={`Volume for ${name}`}
             className="voice-slider"
-            style={{ "--volume-fill": `${percent}%` }}
+            style={{ "--volume-fill": `${percent / MAX_VOICE_VOLUME}%` }}
           />
-          <span className="voice-row-percent num-tabular">{percent}%</span>
+          <span className={`voice-row-percent num-tabular${percent > 100 ? " voice-row-percent--boost" : ""}`}>{percent}%</span>
         </div>
       </div>
     </div>
@@ -110,6 +166,7 @@ export default function VoicePanel({ onClose }) {
               <PhoneIcon weight="fill" />
               {joining ? "Joining…" : "Join Voice Chat"}
             </button>
+            <DevicePicker />
           </>
         )}
 
@@ -159,6 +216,7 @@ export default function VoicePanel({ onClose }) {
                     name={p.name}
                     speaking={p.speaking}
                     muted={p.muted}
+                    reconnecting={p.reconnecting}
                     volume={p.volume}
                     onVolumeChange={(value) => setPeerVolume(p.userId, value)}
                   />
@@ -167,6 +225,9 @@ export default function VoicePanel({ onClose }) {
             ) : (
               <p className="voice-panel-empty-hint">You're the only one here so far.</p>
             )}
+
+            <DevicePicker />
+            {error && <p className="panel-error">{error}</p>}
 
             <button type="button" className="panel-btn panel-btn--ghost voice-leave-btn" onClick={leaveCall}>
               <PhoneDisconnectIcon weight="bold" />

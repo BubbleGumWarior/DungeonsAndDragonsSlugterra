@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeftIcon,
+  EyeIcon,
+  EyeSlashIcon,
   CaretDownIcon,
   DiceFiveIcon,
   ShieldCheckIcon,
@@ -14,7 +16,9 @@ import {
   RocketIcon,
   SwordIcon,
   BookOpenTextIcon,
+  NotebookIcon,
   GearSixIcon,
+  WaveformIcon,
   ListIcon,
   XIcon,
 } from "@phosphor-icons/react";
@@ -74,10 +78,10 @@ function NavGroup({ id, label, icon, items, openGroup, setOpenGroup }) {
 // indicator, so every page gets consistent "where am I" color-coding without
 // re-deriving it locally.
 export default function NavBar() {
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { slugterraRevealed } = useLiveState();
+  const { slugterraRevealed, slugterraHidden } = useLiveState();
   const [navOpen, setNavOpen] = useState(false);
   const [openGroup, setOpenGroup] = useState(null);
   const navRef = useRef(null);
@@ -92,6 +96,7 @@ export default function NavBar() {
   const loadoutItems = [
     { to: "/slugs", label: slugterraRevealed ? "Slugs" : "Creatures", icon: <SlugIcon size={20} /> },
     { to: "/inventory", label: "Inventory", icon: <BackpackIcon weight="bold" /> },
+    { to: "/notes", label: "Notes", icon: <NotebookIcon weight="bold" /> },
     { to: "/consumables", label: "Consumables", icon: <FlaskIcon weight="bold" /> },
   ];
   const starChartItems = [
@@ -158,6 +163,19 @@ export default function NavBar() {
   function handleLogout() {
     logout();
     navigate("/login");
+  }
+
+  // The live-state socket carries the new value back to everyone (DM included),
+  // so there's nothing to set locally.
+  async function handleToggleSlugterra() {
+    await fetch("/api/settings/slugterra", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ hidden: !slugterraHidden }),
+    });
   }
 
   function linkClass({ isActive }) {
@@ -235,6 +253,14 @@ export default function NavBar() {
           )}
           {isDungeonMaster && (
             <>
+              <button type="button" className="navbar-action" onClick={handleToggleSlugterra}>
+                {slugterraHidden ? <EyeIcon weight="bold" /> : <EyeSlashIcon weight="bold" />}
+                <span className="nav-label">{slugterraHidden ? "Reveal Slugterra" : "Hide Slugterra"}</span>
+              </button>
+              <NavLink className={linkClass} to="/sound-desk">
+                <WaveformIcon weight="bold" />
+                <span className="nav-label">Sound Desk</span>
+              </NavLink>
               <NavLink className={linkClass} to="/admin">
                 <ShieldCheckIcon weight="bold" />
                 <span className="nav-label">Admin</span>

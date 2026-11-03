@@ -244,9 +244,82 @@
 }
 
 .voice-row-percent {
-  min-width: 30px;
+  min-width: 34px;
   text-align: right;
   font-size: 10.5px;
+  color: var(--ink-dim);
+}
+
+/* Past 100% the slider is boosting, not just un-attenuating -- the number
+   itself carries that, the gold is only a secondary cue. */
+.voice-row-percent--boost {
+  color: var(--gold-soft);
+  font-weight: 700;
+}
+
+.voice-devices {
+  border-top: 1px solid var(--charcoal-700);
+  padding-top: 8px;
+}
+
+.voice-devices-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink-dim);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+
+.voice-devices-summary::-webkit-details-marker {
+  display: none;
+}
+
+.voice-devices-summary svg {
+  width: 13px;
+  height: 13px;
+  color: var(--gold-dim);
+}
+
+.voice-devices-summary:hover {
+  color: var(--ink);
+}
+
+.voice-devices-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.voice-device-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.voice-device-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--ink-dim);
+}
+
+.voice-device-field select {
+  width: 100%;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+.voice-device-hint {
+  margin: 0;
+  font-size: 10.5px;
+  font-style: italic;
   color: var(--ink-dim);
 }
 

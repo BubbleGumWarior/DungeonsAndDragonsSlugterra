@@ -5,8 +5,8 @@
 // `summary` is the stat's own pull; `hiddenSummary` is the pre-reveal version,
 // which has to read like an ordinary modern-day campaign (no slugs, blasters or
 // worlds), so that view shows the stat summaries only.
-// A skill with no `benefit` has no mechanical job yet -- the guide says the DM
-// calls for it when the story needs it.
+// A skill with a null entry has no mechanical job yet -- the guide falls back to
+// the skill's own description (the same text as its hover tooltip).
 
 export const STAT_GUIDE = [
   {

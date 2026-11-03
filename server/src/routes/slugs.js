@@ -107,6 +107,11 @@ export function toClientSlug(row) {
     potentPoison: row.potent_poison,
     causesBleed: row.causes_bleed,
     lifeDrain: row.life_drain,
+    adaptiveStrain: row.adaptive_strain,
+    pounceStrike: row.pounce_strike,
+    timeSkip: row.time_skip,
+    lightningStrike: row.lightning_strike,
+    daggerThrow: row.dagger_throw,
     ownerCombatantId: row.owner_combatant_id,
     equippedBlasterId: row.equipped_blaster_id,
     magazineSlot: row.magazine_slot,
@@ -222,6 +227,11 @@ router.post("/", requireDungeonMaster, async (req, res) => {
     potentPoison,
     causesBleed,
     lifeDrain,
+    adaptiveStrain,
+    pounceStrike,
+    timeSkip,
+    lightningStrike,
+    daggerThrow,
   } = req.body || {};
 
   const validation = validateSlugFields({
@@ -274,8 +284,8 @@ router.post("/", requireDungeonMaster, async (req, res) => {
          pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion, trail_wall, clash_tripled,
          cone_blast, spawns_pods, mirage_decoy, star_wall, anchor_zone,
          voids_fire_clash, clears_fire_terrain, causes_disarm, disarm_zone, mind_scramble, swaps_position,
-         friction_shift, crosswind_zone, skips_reload, emotion_surge, uncounterable, damage_tripled, static_mark, tempo_aura, power_surge, heal_over_time, grapple, causes_stun, stalls_slugs, amplifies_partner, pulls_metal, phases_walls, mirrors_clash, surrounds_target, ambush_tripled, summons_plant, causes_burn, massive_aoe, random_statuses, summons_ghost, potent_poison, causes_bleed, life_drain)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69, $70, $71)
+         friction_shift, crosswind_zone, skips_reload, emotion_surge, uncounterable, damage_tripled, static_mark, tempo_aura, power_surge, heal_over_time, grapple, causes_stun, stalls_slugs, amplifies_partner, pulls_metal, phases_walls, mirrors_clash, surrounds_target, ambush_tripled, summons_plant, causes_burn, massive_aoe, random_statuses, summons_ghost, potent_poison, causes_bleed, life_drain, adaptive_strain, pounce_strike, time_skip, lightning_strike, dagger_throw)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69, $70, $71, $72, $73, $74, $75, $76)
        RETURNING *`,
       [
         Number.isInteger(templateId) ? templateId : null,
@@ -349,6 +359,11 @@ router.post("/", requireDungeonMaster, async (req, res) => {
         Boolean(potentPoison),
         Boolean(causesBleed),
         Boolean(lifeDrain),
+        Boolean(adaptiveStrain),
+        Boolean(pounceStrike),
+        Boolean(timeSkip),
+        Boolean(lightningStrike),
+        Boolean(daggerThrow),
       ]
     );
 
@@ -436,6 +451,11 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
     potentPoison,
     causesBleed,
     lifeDrain,
+    adaptiveStrain,
+    pounceStrike,
+    timeSkip,
+    lightningStrike,
+    daggerThrow,
   } = req.body || {};
 
   const validation = validateSlugFields({
@@ -500,8 +520,8 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
         mind_scramble = $41, swaps_position = $42, friction_shift = $43, crosswind_zone = $44, skips_reload = $45,
         emotion_surge = $46, uncounterable = $47, damage_tripled = $48, static_mark = $49, tempo_aura = $50, power_surge = $51,
         heal_over_time = $52, grapple = $53,
-        causes_stun = $54, stalls_slugs = $55, amplifies_partner = $56, pulls_metal = $57, phases_walls = $58, mirrors_clash = $59, surrounds_target = $60, ambush_tripled = $61, summons_plant = $62, causes_burn = $63, massive_aoe = $64, random_statuses = $65, summons_ghost = $66, potent_poison = $67, causes_bleed = $68, life_drain = $69
-       WHERE id = $70
+        causes_stun = $54, stalls_slugs = $55, amplifies_partner = $56, pulls_metal = $57, phases_walls = $58, mirrors_clash = $59, surrounds_target = $60, ambush_tripled = $61, summons_plant = $62, causes_burn = $63, massive_aoe = $64, random_statuses = $65, summons_ghost = $66, potent_poison = $67, causes_bleed = $68, life_drain = $69, adaptive_strain = $70, pounce_strike = $71, time_skip = $72, lightning_strike = $73, dagger_throw = $74
+       WHERE id = $75
        RETURNING *`,
       [
         name.trim(),
@@ -573,6 +593,11 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
         Boolean(potentPoison),
         Boolean(causesBleed),
         Boolean(lifeDrain),
+        Boolean(adaptiveStrain),
+        Boolean(pounceStrike),
+        Boolean(timeSkip),
+        Boolean(lightningStrike),
+        Boolean(daggerThrow),
         id,
       ]
     );

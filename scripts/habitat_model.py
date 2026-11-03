@@ -361,6 +361,12 @@ REPLACE = {
     # --- Unique ---
     "Arachnet": {"forest": 0.7, "rock": 0.6, "ruins": 0.5, "wreck": 0.6, "settlement": 0.5, "dark": 0.3},
     "Gantrix": {"industrial": 1.0, "wreck": 0.7, "settlement": 0.5},
+    # A gene-tinkering slug: lives where there are labs and tended living things -- towns, gardens, old halls.
+    "Helixel": {"settlement": 1.0, "garden": 0.7, "ruins": 0.4, "forest": 0.4, "industrial": 0.3},
+    # A predator: stalks game across open country and cover -- jungle, grassland, rough ground, bogs.
+    "Trackjaw": {"forest": 1.0, "grass": 0.8, "rock": 0.5, "swamp": 0.5, "ruins": 0.3},
+    # A time-bending relic creature: ancient halls and charged ley/accretion fields, hardy enough for vacuum.
+    "Chronix": {"ruins": 1.0, "energy_field": 0.9, "vacuum": 0.7, "dark": 0.3, "settlement": 0.3},
     "Jellyish": {"ocean": 0.9, "fresh_water": 0.4, "swamp": 0.4, "settlement": 0.2, "wreck": 0.2},
     "Lariat": {"swamp": 0.7, "forest": 0.7, "fresh_water": 0.4, "settlement": 0.3, "wreck": 0.3},
     "Mimkey": {"forest": 1.0, "settlement": 0.6, "ruins": 0.4},

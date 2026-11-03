@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FireIcon, MoonStarsIcon, UserCircleIcon, UsersThreeIcon, WarningIcon } from "@phosphor-icons/react";
+import { FireIcon, MoonStarsIcon, UserCircleIcon, ThermometerHotIcon, UsersThreeIcon, WarningIcon, WifiSlashIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import { heatColor, maxGrit } from "./characterData.js";
@@ -213,7 +213,7 @@ export default function Roster({ selectable = false, selectedUserId, onSelect, h
           return (
             <div
               key={character.id}
-              className={`roster-chip ${online ? "roster-chip--online" : ""} ${
+              className={`roster-chip ${online ? "roster-chip--online" : "roster-chip--offline"} ${
                 selectable ? "roster-chip--selectable" : ""
               } ${isSelected ? "roster-chip--selected" : ""}`}
               onClick={selectable ? () => onSelect?.(character) : undefined}
@@ -233,13 +233,23 @@ export default function Roster({ selectable = false, selectedUserId, onSelect, h
                   editable={selectable}
                   onToggle={(i) => togglePip(character, i)}
                 />
+                {!online && (
+                  <span className="roster-offline-mark" role="img" aria-label="Offline" title="Offline">
+                    <WifiSlashIcon className="roster-offline-icon" weight="bold" />
+                  </span>
+                )}
+                {character.ill && (
+                  <span
+                    className="roster-ill-mark"
+                    role="img"
+                    aria-label="Sick"
+                    title="Sick: halved Grit, AP and accuracy in a fight"
+                  >
+                    <ThermometerHotIcon className="roster-ill-icon" weight="fill" />
+                  </span>
+                )}
               </span>
               <span className="roster-name">{character.name}</span>
-              {character.ill && (
-                <span className="roster-ill" title="Ill: halved Grit, AP and accuracy in a fight">
-                  Ill
-                </span>
-              )}
               {character.heat > 0 && (
                 <span className="roster-heat" title="Heat" style={{ color: heatColor(character.heat) }}>
                   <FireIcon weight="fill" />

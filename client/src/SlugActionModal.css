@@ -87,178 +87,317 @@
   margin-top: 0;
 }
 
-/* Shoot Mega Morph -- deliberately unlike the four plain action tiles: a
-   full-width slab with a slowly drifting violet/magenta/gold rim, so it reads
-   as the "special" choice rather than just another option. */
-.slug-action-mega {
-  --mega-a: #8b5cf6;
-  --mega-b: #ec4899;
-  --mega-c: #f5c451;
-  position: relative;
+/* ---- Fire console: the picker shown when a slug is armed -------------------
+   A slug with many options (standard / Mega Morph / Dual Shot / terrain) gets
+   one compact row per option, grouped, with a single detail strip below that
+   explains whichever row is hovered or focused -- instead of a tile or a slab
+   with a paragraph per option. */
+.fire-modal {
+  max-width: 500px;
+  padding: 24px 24px 20px;
+}
+
+.fire-head {
+  --type-color: var(--gold);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--charcoal-700);
+}
+
+.fire-head-main {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.fire-modal .fire-title {
+  margin: 0;
+  text-align: left;
+  font-size: 21px;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+.fire-type {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--type-color);
+}
+
+.fire-stats {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.fire-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fire-stat strong {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.fire-stat svg {
+  width: 12px;
+  height: 12px;
+  color: var(--gold-soft);
+}
+
+.fire-pips {
+  gap: 4px;
+}
+
+.fire-pip {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--charcoal-600);
+}
+
+.fire-pip--on {
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
+.fire-group-label {
+  margin: 14px 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.fire-head + section .fire-group-label {
+  margin-top: 0;
+}
+
+.fire-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
+}
+
+.fire-opt {
+  --opt-accent: var(--gold-soft);
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
   width: 100%;
-  margin-top: 12px;
-  padding: 14px 16px;
+  min-height: 52px;
+  padding: 8px 12px 8px 10px;
   text-align: left;
-  border-radius: 12px;
-  border: 2px solid transparent;
   color: var(--ink);
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+  border-radius: 10px;
   cursor: pointer;
-  background:
-    linear-gradient(160deg, #1d1428, #120c1a) padding-box,
-    linear-gradient(115deg, var(--mega-a), var(--mega-b), var(--mega-c), var(--mega-a)) border-box;
-  background-size: 100% 100%, 300% 100%;
-  box-shadow: 0 0 18px rgba(139, 92, 246, 0.35), 0 0 34px rgba(236, 72, 153, 0.14);
-  animation: slug-action-mega-drift 6s linear infinite;
-  transition: transform 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
+  transition: border-color 0.15s var(--ease-out), background-color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
 }
 
-.slug-action-mega:hover:not(.slug-action-mega--disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 0 26px rgba(139, 92, 246, 0.55), 0 0 46px rgba(236, 72, 153, 0.25);
+.fire-opt--mega {
+  --opt-accent: #c4b5fd;
 }
 
-.slug-action-mega-head {
+.fire-opt--dual {
+  --opt-accent: #67e8f9;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .fire-opt:hover:not(:disabled) {
+    border-color: var(--gold-dim);
+    background: color-mix(in srgb, var(--gold) 8%, var(--charcoal-900));
+  }
+}
+
+.fire-opt:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-color: var(--gold-dim);
+}
+
+.fire-opt:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+.fire-opt:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.fire-opt-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--charcoal-800);
+  color: var(--opt-accent);
+}
+
+.fire-opt-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.fire-opt-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.fire-opt-label {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.slug-action-mega-icon {
-  width: 22px;
-  height: 22px;
-  color: var(--mega-c);
-  filter: drop-shadow(0 0 6px rgba(245, 196, 81, 0.7));
-}
-
-.slug-action-mega-title {
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #e9d5ff;
-}
-
-.slug-action-mega-tag {
-  margin-left: auto;
-  font-size: 9.5px;
+  font-size: 13.5px;
   font-weight: 700;
+}
+
+.fire-opt-tag {
+  padding: 1px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--charcoal-600);
+  font-size: 9px;
+  font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--ink-dim);
+  color: var(--gold-soft);
 }
 
-.slug-action-mega-desc {
+.fire-opt-summary {
   font-size: 11.5px;
-  line-height: 1.5;
+  line-height: 1.35;
   color: var(--ink-dim);
 }
 
-.slug-action-mega-desc strong {
-  color: var(--ink);
-  font-weight: 700;
+.fire-opt:disabled .fire-opt-summary {
+  color: var(--danger);
 }
 
-.slug-action-mega-blocked {
+.fire-opt-cost {
   font-size: 11px;
   font-weight: 700;
-  font-style: italic;
-  color: #f9a8d4;
+  white-space: nowrap;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
 }
 
-.slug-action-mega--disabled {
-  cursor: not-allowed;
-  filter: saturate(0.4);
-  opacity: 0.6;
-  animation: none;
-  box-shadow: none;
+.fire-opt-key {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 5px;
+  border: 1px solid var(--charcoal-600);
+  background: var(--charcoal-800);
+  font: 700 11px/1 var(--font-body, inherit);
+  color: var(--ink-dim);
 }
 
-@keyframes slug-action-mega-drift {
-  0% {
-    background-position: 0 0, 0% 0;
+.fire-detail {
+  min-height: 4.6em;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-700);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  text-wrap: pretty;
+}
+
+.fire-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.fire-foot-hint {
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+
+.fire-foot-hint kbd {
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--charcoal-600);
+  background: var(--charcoal-800);
+  font: 700 10.5px/1.3 var(--font-body, inherit);
+  color: var(--ink);
+}
+
+.fire-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: -4px 0 10px -6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 0;
+  background: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition: color 0.15s var(--ease-out);
+}
+
+.fire-back:hover {
+  color: var(--ink);
+}
+
+.fire-back:focus-visible {
+  outline: 2px solid var(--gold);
+}
+
+@media (max-width: 520px) {
+  .fire-modal {
+    padding: 18px 14px 14px;
   }
-  100% {
-    background-position: 0 0, 300% 0;
+  .fire-opt {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+  }
+  .fire-opt-key,
+  .fire-foot-hint {
+    display: none;
+  }
+  .fire-foot .slug-form-cancel {
+    width: 100%;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .slug-action-mega {
-    animation: none;
+  .fire-opt {
+    transition: none;
   }
-}
-
-/* Dual Shot -- a second special slab (cyan/amber, distinct from Mega Morph's
-   violet/magenta) opening the partner picker. */
-.slug-action-dual {
-  --dual-a: #22d3ee;
-  --dual-b: #f5a524;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-  margin-top: 12px;
-  padding: 14px 16px;
-  text-align: left;
-  border-radius: 12px;
-  border: 2px solid transparent;
-  color: var(--ink);
-  cursor: pointer;
-  background:
-    linear-gradient(160deg, #0f2129, #0b141a) padding-box,
-    linear-gradient(115deg, var(--dual-a), var(--dual-b), var(--dual-a)) border-box;
-  box-shadow: 0 0 18px rgba(34, 211, 238, 0.28), 0 0 30px rgba(245, 165, 36, 0.12);
-  transition: transform 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
-}
-
-.slug-action-dual:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 0 26px rgba(34, 211, 238, 0.45), 0 0 42px rgba(245, 165, 36, 0.2);
-}
-
-.slug-action-dual-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.slug-action-dual-icon {
-  width: 22px;
-  height: 22px;
-  color: var(--dual-a);
-  filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.6));
-}
-
-.slug-action-dual-title {
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #67e8f9;
-}
-
-.slug-action-dual-tag {
-  margin-left: auto;
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--ink-dim);
-}
-
-.slug-action-dual-desc {
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--ink-dim);
-}
-
-.slug-action-dual-desc strong {
-  color: var(--ink);
-  font-weight: 700;
 }
 
 /* Partner picker step */
@@ -414,4 +553,54 @@
 
 .slug-dual-fire {
   flex: 1;
+}
+
+/* "Show locked" -- reveals the options that can't be used right now. */
+.fire-locked-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 5px 9px;
+  border-radius: 7px;
+  border: 1px dashed var(--charcoal-600);
+  background: none;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition: color 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+}
+
+.fire-locked-toggle svg {
+  width: 13px;
+  height: 13px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .fire-locked-toggle:hover {
+    color: var(--ink);
+    border-color: var(--gold-dim);
+  }
+}
+
+.fire-locked-toggle:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.fire-foot .fire-locked-toggle {
+  margin: 0;
+}
+
+.fire-opt-lock {
+  width: 14px;
+  height: 14px;
+  color: var(--ink-dim);
+}
+
+@media (max-width: 520px) {
+  .fire-foot {
+    flex-wrap: wrap;
+  }
 }

@@ -132,7 +132,7 @@ export const SUPPLIES = [
     name: "Meds",
     effect: `${MEDS_DOSES_NEEDED} daily doses cure illness`,
     rules: [
-      "Sleeping in the wrong clothes for the climate can make you ill. While ill, your max Grit, AP and accuracy are all halved when a fight begins.",
+      "Sleeping in the wrong clothes for the climate can make you sick. While sick, your max Grit, AP and accuracy are all halved when a fight begins.",
       `Take one dose per long rest, ${MEDS_DOSES_NEEDED} rests in a row, and the sickness clears. Miss a rest and the count starts over. Use it below, under Field Medicine.`,
       "Can't be used while you're in a fight.",
     ],

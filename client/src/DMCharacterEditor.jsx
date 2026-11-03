@@ -9,7 +9,7 @@ import FameHeatStepper from "./FameHeatStepper.jsx";
 import SkillList from "./SkillList.jsx";
 import KnockoutPips from "./KnockoutPips.jsx";
 import GritRing from "./GritRing.jsx";
-import { heatColor, maxGrit } from "./characterData.js";
+import { HEAT_MAX, HEAT_TRACK, heatColor, maxGrit } from "./characterData.js";
 import "./DMCharacterEditor.css";
 
 export default function DMCharacterEditor({ userId, onSaved }) {
@@ -177,7 +177,9 @@ export default function DMCharacterEditor({ userId, onSaved }) {
         value={character.heat}
         onChange={changeHeat}
         icon={<FireIcon weight="fill" />}
-        valueColor={heatColor(character.heat)}
+        valueColor={heatColor}
+        sliderMax={HEAT_MAX}
+        sliderTrack={HEAT_TRACK}
       />
 
       <div className="dm-editor-section">

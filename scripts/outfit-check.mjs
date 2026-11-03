@@ -9,7 +9,8 @@ const root = path.resolve(import.meta.dirname, "..");
 const load = (rel) => import(pathToFileURL(path.join(root, rel)).href);
 
 const rules = await load("server/src/outfitRules.js");
-const { PLANET_TEMPS } = await load("server/src/planetRules.js");
+const planetRules = await load("server/src/planetRules.js");
+const { PLANET_TEMPS } = planetRules;
 const { DEFAULT_OUTFITS } = await load("server/src/data/defaultOutfits.js");
 const { soldOnWorlds, defaultOutfitPrice } = await load("server/src/seedDefaultOutfits.js");
 // planetData.js imports a JSON file Node can't load bare, so read the figures
@@ -99,6 +100,20 @@ check("market stock", () => {
   const sizes = new Set(stock.map((s) => s.join("|")));
   assert.equal(sizes.size, stock.length, "two worlds stock identical outfits");
   console.log("      stock per world:", PLANETS.map((p, i) => `${p.name} ${stock[i].length}`).join(", "));
+});
+
+check("sleeping aboard: only The Threshold, always ship air", () => {
+  const { REST_ABOARD_WORLDS, restTemperature, SHIP_TEMPERATURE_C, temperatureForArea } = planetRules;
+  const threshold = PLANETS.length - 1; // The Threshold is always the last world
+  assert.deepEqual([...REST_ABOARD_WORLDS], [threshold]);
+  assert.equal(restTemperature(threshold, false), SHIP_TEMPERATURE_C);
+  assert.equal(temperatureForArea(threshold), -170, "fights there still use the vacuum");
+  PLANET_TEMPS.forEach((t, i) => {
+    if (i !== threshold) assert.equal(restTemperature(i, false), t, `${PLANETS[i].name} sleeps planetside`);
+  });
+  // Ship air is inside every ordinary outfit's range, so no one falls ill there.
+  const museum = DEFAULT_OUTFITS.find((o) => o.starter);
+  assert.equal(rules.degreesOutside(rules.effectiveRange(museum, 0), restTemperature(threshold, false)), 0);
 });
 
 check("only the Space Suit covers every world", () => {

@@ -99,9 +99,9 @@ function Row({ combatant, knowledge, isActive, isActing, isDM, onSelect, onReviv
             {combatant.data.gear.ill && (
               <span
                 className="combat-roster-effect combat-roster-effect--poison"
-                title="Ill: max Grit, AP and accuracy are halved for this fight."
+                title="Sick: max Grit, AP and accuracy are halved for this fight."
               >
-                Ill
+                Sick
               </span>
             )}
             {combatant.data.gear.tier !== "comfortable" && (
@@ -170,6 +170,11 @@ function Row({ combatant, knowledge, isActive, isActing, isDM, onSelect, onReviv
             )}
             {combatant.statusEffects.marked && (
               <span className="combat-roster-effect combat-roster-effect--shock">Marked</span>
+            )}
+            {Math.max(0, ...Object.values(combatant.statusEffects.adapted || {}).map(Number)) > 0 && (
+              <span className="combat-roster-effect combat-roster-effect--regen">
+                Sampled +{Math.max(...Object.values(combatant.statusEffects.adapted).map(Number)) * 25}%
+              </span>
             )}
             {combatant.statusEffects.powerSurge && (
               <span className="combat-roster-effect combat-roster-effect--stun">Power Surge</span>

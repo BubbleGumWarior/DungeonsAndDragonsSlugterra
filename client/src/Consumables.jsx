@@ -253,7 +253,7 @@ function FieldMedicine({ character, onCharacter }) {
             tip={
               <>
                 <p>
-                  Sleeping in clothes that don't suit the climate can make you ill. While ill, your max Grit, AP and accuracy are all halved
+                  Sleeping in clothes that don't suit the climate can make you sick. While sick, your max Grit, AP and accuracy are all halved
                   when a fight begins.
                 </p>
                 <p>
@@ -265,7 +265,7 @@ function FieldMedicine({ character, onCharacter }) {
           >
             <div className="slug-care-food">
               <span className="slug-care-state">
-                <strong>{ill ? "Ill" : "Healthy"}</strong>
+                <strong>{ill ? "Sick" : "Healthy"}</strong>
                 {ill && (
                   <>
                     {" "}
@@ -281,7 +281,7 @@ function FieldMedicine({ character, onCharacter }) {
               type="button"
               className="panel-btn slug-care-btn"
               disabled={!ill || character.medsTaken || meds < 1 || busy === "meds"}
-              title={!ill ? "You're not ill" : character.medsTaken ? "Already taken today" : meds < 1 ? "You're out of Meds" : undefined}
+              title={!ill ? "You're not sick" : character.medsTaken ? "Already taken today" : meds < 1 ? "You're out of Meds" : undefined}
               onClick={() => use("meds")}
             >
               Take Meds

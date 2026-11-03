@@ -50,8 +50,8 @@ export async function seedDefaultSlugTemplates() {
            pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion, trail_wall, clash_tripled,
            cone_blast, spawns_pods, mirage_decoy, star_wall, anchor_zone, voids_fire_clash, clears_fire_terrain,
            causes_disarm, disarm_zone, mind_scramble, swaps_position, friction_shift, crosswind_zone, skips_reload,
-           emotion_surge, uncounterable, damage_tripled, static_mark, tempo_aura, power_surge, heal_over_time, grapple, causes_stun, stalls_slugs, amplifies_partner, pulls_metal, phases_walls, mirrors_clash, surrounds_target, ambush_tripled, summons_plant, causes_burn, massive_aoe, random_statuses, summons_ghost, potent_poison, causes_bleed, life_drain, rarity)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62,$63,$64,$65,$66,$67,$68,$69)`,
+           emotion_surge, uncounterable, damage_tripled, static_mark, tempo_aura, power_surge, heal_over_time, grapple, causes_stun, stalls_slugs, amplifies_partner, pulls_metal, phases_walls, mirrors_clash, surrounds_target, ambush_tripled, summons_plant, causes_burn, massive_aoe, random_statuses, summons_ghost, potent_poison, causes_bleed, life_drain, adaptive_strain, pounce_strike, time_skip, lightning_strike, dagger_throw, rarity)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71,$72,$73,$74)`,
         [
           t.name,
           t.type,
@@ -121,6 +121,11 @@ export async function seedDefaultSlugTemplates() {
           Boolean(t.potentPoison),
           Boolean(t.causesBleed),
           Boolean(t.lifeDrain),
+          Boolean(t.adaptiveStrain),
+          Boolean(t.pounceStrike),
+          Boolean(t.timeSkip),
+          Boolean(t.lightningStrike),
+          Boolean(t.daggerThrow),
           t.rarity ?? null,
         ]
       );
@@ -289,6 +294,11 @@ export async function backfillMechanicFlags() {
     ["causesBlind", "causes_blind"], // Novaflare gained it
     ["causesInvisible", "causes_invisible"], // Gloomstalk gained it
     ["lifeDrain", "life_drain"], // Duskfang's lifesteal -- missing on rows seeded before the flag existed
+    ["adaptiveStrain", "adaptive_strain"], // Helixel's hit ramp -- a no-op until the slug is in the default roster
+    ["pounceStrike", "pounce_strike"], // Trackjaw's stalk-and-pounce bolt (visual only)
+    ["timeSkip", "time_skip"], // Chronix's vanish-and-reappear bolt (visual only)
+    ["daggerThrow", "dagger_throw"], // Bladier's dagger-throw animation -- an existing slug, so this is what turns it on for rows seeded before the flag existed
+    ["lightningStrike", "lightning_strike"], // Zeus's lightning-bolt animation -- an existing slug, so this is what turns it on for rows seeded before the flag existed
   ]) {
     const names = defaults.filter((t) => t[jsonKey]).map((t) => t.name);
     if (names.length === 0) continue;

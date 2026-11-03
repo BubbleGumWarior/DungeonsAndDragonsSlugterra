@@ -37,16 +37,20 @@ import {
   missDeflection,
   firstWallHit,
   breakWallSegment,
+  wallBreakRadius,
   knockbackTarget,
   computeMaxStructure,
   knockoutDC,
   countKnockoutPipsUsed,
   typeBallistics,
   shotFlightMs,
+  shotCruiseMs,
   shotTooClose,
   shotWindupFraction,
   SHOT_SLOW_PHASE_MS,
   shotDistanceFraction,
+  shotTimeAtFraction,
+  daggerThrowPlan,
   lerpPoint,
   isSupportiveSlug,
   resolveClash,
@@ -75,6 +79,9 @@ import {
   GHOST_SPAWN_OFFSET,
   POTENT_POISON_MULTIPLIER,
   BLEED_DURATION_TURNS,
+  ADAPT_BONUS_PER_HIT,
+  ADAPT_MAX_STACKS,
+  adaptStacksOn,
   pathCrossesRange,
   aoeRadiusMult,
   RANDOM_STATUS_COUNT,
@@ -103,11 +110,12 @@ import {
   angleBetween,
   perpendicularSegment,
   pointInBridge,
+  perpendicularSegmentAtAngle,
+  normalizeBuildAngle,
   AOE_RADIUS,
   HAZARD_RADIUS,
   HAZARD_DAMAGE_FRACTION,
   HAZARD_DURATION_ROUNDS,
-  CHAIN_RADIUS,
   RICOCHET_MAX_BOUNCES,
   MEGA_MORPH_MIN_SPEED,
   MEGA_MORPH_PIP_COST,
@@ -223,7 +231,19 @@ import {
 } from "../combatRules.js";
 import { evaluateAutoCounter } from "../autoCounter.js";
 import { buildGearSnapshot } from "../outfitRules.js";
-import { getClimate, getWornOutfit } from "../outfitService.js";
+import { currentAtmosphere, getClimate, getWornOutfit } from "../outfitService.js";
+import {
+  atmosphereBallistics,
+  blindBlocked,
+  burnTurnsOf,
+  chainRadiusOf,
+  fireBlocked,
+  hazardBlocked,
+  iceRoundsOf,
+  knockbackMultOf,
+  snareTurnsOf,
+  walkMultOf,
+} from "../atmosphereRules.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -341,6 +361,9 @@ function toClientEncounter(row, combatants) {
     mapImage: row.map_image,
     walls: row.walls,
     water: row.water,
+    // Aboard/offboard and the air the fight is fought in (atmosphereRules.js).
+    aboard: Boolean(row.aboard),
+    atmosphere: row.atmosphere ?? null,
     hazards: row.hazards,
     bridges: row.bridges,
     pods: row.pods,
@@ -459,13 +482,21 @@ async function updateCombatant(id, fields) {
   return rows[0] || null;
 }
 
+// The air a fight is fought in, as snapshotted on the encounter. An encounter
+// from before atmospheres existed has none, and then nothing changes.
+async function getEncounterAtmosphere(encounterId) {
+  const { rows } = await pool.query("SELECT atmosphere FROM encounters WHERE id = $1", [encounterId]);
+  return rows[0]?.atmosphere ?? null;
+}
+
 // What a character brings into a fight: AP and max Grit from stats, then their
-// worn outfit against the temperature of the world (or ship) they are on, then
-// illness. Used when they are added to the lobby and again when the fight
-// starts, since an outfit can change in between. See outfitRules.js.
-async function characterGearSnapshot(character) {
+// worn outfit against the temperature of the fight (the world's, or ship air
+// when aboard / under way), then illness. Used when they are added to the lobby
+// and again when the fight starts, since an outfit can change in between. See
+// outfitRules.js. `tempC` is the encounter's own temperature when known.
+async function characterGearSnapshot(character, tempC = null) {
   const outfit = await getWornOutfit(pool, character.user_id);
-  const { temp } = await getClimate();
+  const temp = Number.isFinite(tempC) ? tempC : (await getClimate()).temp;
   return buildGearSnapshot({
     baseMaxAp: actionPoints(character.stats),
     baseMaxGrit: computeMaxGrit(character.stats, character.grit_bonus),
@@ -718,12 +749,15 @@ router.post("/encounters", requireDungeonMaster, async (req, res) => {
     if (existing) {
       return res.status(400).json({ error: "An encounter is already in progress. End it before starting another." });
     }
+    // Offboard by default: the fight takes place in the world's own air.
+    const atmosphere = await currentAtmosphere({ aboard: false });
     const { rows } = await pool.query(
-      `INSERT INTO encounters (name, map_width, map_height) VALUES ($1, $2, $3) RETURNING *`,
+      `INSERT INTO encounters (name, map_width, map_height, atmosphere) VALUES ($1, $2, $3, $4) RETURNING *`,
       [
         name.trim(),
         Number.isInteger(mapWidth) ? mapWidth : DEFAULT_MAP_METERS * MAP_UNITS_PER_METER,
         Number.isInteger(mapHeight) ? mapHeight : Math.round((DEFAULT_MAP_METERS * MAP_UNITS_PER_METER * 9) / 16),
+        JSON.stringify(atmosphere),
       ]
     );
     const encounter = await loadFullEncounter(rows[0].id);
@@ -893,6 +927,50 @@ router.patch("/encounters/:id/size", requireDungeonMaster, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Aboard / offboard (set by the DM during setup)
+// ---------------------------------------------------------------------------
+
+// Re-reads the air for the encounter's aboard flag and gives every character
+// already in the lobby the gear that goes with that temperature.
+async function refreshEncounterAtmosphere(id, aboard) {
+  const atmosphere = await currentAtmosphere({ aboard });
+  await pool.query("UPDATE encounters SET aboard = $1, atmosphere = $2 WHERE id = $3", [aboard, JSON.stringify(atmosphere), id]);
+  const { rows: members } = await pool.query("SELECT * FROM combatants WHERE encounter_id = $1 AND kind = 'character' AND ref_user_id IS NOT NULL", [id]);
+  for (const c of members) {
+    const { rows: chars } = await pool.query("SELECT * FROM characters WHERE user_id = $1", [c.ref_user_id]);
+    if (!chars[0]) continue;
+    const snap = await characterGearSnapshot(chars[0], atmosphere.temperatureC);
+    await pool.query("UPDATE combatants SET max_ap = $1, max_grit = $2, current_grit = LEAST($3::int, $2::int), data = $4 WHERE id = $5", [
+      snap.maxAp,
+      snap.maxGrit,
+      chars[0].current_grit,
+      JSON.stringify({ ...(c.data || {}), gear: snap.gear }),
+      c.id,
+    ]);
+  }
+  return atmosphere;
+}
+
+router.patch("/encounters/:id/aboard", requireDungeonMaster, async (req, res) => {
+  const id = Number(req.params.id);
+  const { aboard } = req.body || {};
+  if (typeof aboard !== "boolean") return res.status(400).json({ error: "aboard must be true or false." });
+  try {
+    const { rows } = await pool.query("SELECT status FROM encounters WHERE id = $1", [id]);
+    if (!rows[0]) return res.status(404).json({ error: "Encounter not found." });
+    if (rows[0].status !== "setup") {
+      return res.status(400).json({ error: "Aboard or offboard is fixed once the fight has started." });
+    }
+    await refreshEncounterAtmosphere(id, aboard);
+    const encounter = await broadcastEncounter(id);
+    res.json({ encounter });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not change where the fight takes place." });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Water terrain (painted by the DM during setup)
 // ---------------------------------------------------------------------------
 
@@ -933,9 +1011,8 @@ router.post("/encounters/:id/walls", requireDungeonMaster, async (req, res) => {
     const { rows } = await pool.query("SELECT walls, next_wall_id FROM encounters WHERE id = $1", [id]);
     if (!rows[0]) return res.status(404).json({ error: "Encounter not found." });
     const wallId = rows[0].next_wall_id;
-    // Explicit "dm" source (vs. a Wall Maker slug's "slug") -- see the
-    // Break Wall action: a DM wall only ever loses a WALL_BREAK_RADIUS
-    // chunk, a player-made one breaks outright.
+    // Explicit "dm" source (vs. a Wall Maker slug's "slug"). Either kind only ever loses a
+    // stretch around a Break Wall hit, sized by the slug's Clash Power (wallBreakRadius).
     const walls = [...rows[0].walls, { id: wallId, source: "dm", x1, y1, x2, y2 }];
     await pool.query("UPDATE encounters SET walls = $1, next_wall_id = $2 WHERE id = $3", [
       JSON.stringify(walls),
@@ -1010,7 +1087,7 @@ router.post("/encounters/:id/combatants", requireDungeonMaster, async (req, res)
       fields.ref_user_id = refUserId;
       fields.name = (name || character.name).trim();
       fields.portrait = character.portrait;
-      const gearSnap = await characterGearSnapshot(character);
+      const gearSnap = await characterGearSnapshot(character, (await getEncounterAtmosphere(encounterId))?.temperatureC);
       fields.max_ap = gearSnap.maxAp;
       fields.max_grit = gearSnap.maxGrit;
       fields.current_grit = Math.min(character.current_grit, gearSnap.maxGrit);
@@ -1328,8 +1405,8 @@ async function equipNpcCombatant(
          voids_fire_clash, clears_fire_terrain, causes_disarm, disarm_zone, mind_scramble, swaps_position,
          friction_shift, crosswind_zone, skips_reload,
          emotion_surge, uncounterable, damage_tripled, static_mark,
-         equipped_blaster_id, magazine_slot, tempo_aura, power_surge, heal_over_time, grapple, causes_stun, stalls_slugs, amplifies_partner, pulls_metal, phases_walls, mirrors_clash, surrounds_target, ambush_tripled, summons_plant, causes_burn, massive_aoe, random_statuses, summons_ghost, potent_poison, causes_bleed, life_drain)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71,$72,$73)
+         equipped_blaster_id, magazine_slot, tempo_aura, power_surge, heal_over_time, grapple, causes_stun, stalls_slugs, amplifies_partner, pulls_metal, phases_walls, mirrors_clash, surrounds_target, ambush_tripled, summons_plant, causes_burn, massive_aoe, random_statuses, summons_ghost, potent_poison, causes_bleed, life_drain, adaptive_strain, pounce_strike, time_skip, lightning_strike, dagger_throw)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71,$72,$73,$74,$75,$76,$77,$78)
        RETURNING *`,
       [
         st.id,
@@ -1405,6 +1482,11 @@ async function equipNpcCombatant(
         st.potent_poison,
         st.causes_bleed,
         st.life_drain,
+        st.adaptive_strain,
+        st.pounce_strike,
+        st.time_skip,
+        st.lightning_strike,
+        st.dagger_throw,
       ]
     );
     broadcastAll({ type: "slug-updated", userId: null, slug: toClientSlug(slugRows[0]) });
@@ -1661,6 +1743,12 @@ router.post("/encounters/:id/start", requireDungeonMaster, async (req, res) => {
       broadcastAll({ type: "slug-updated", userId: slugRow.user_id, slug: toClientSlug(slugRow) });
     }
 
+    // The air the fight is fought in is read once more and frozen here: the
+    // party may have travelled since the encounter was staged.
+    const { rows: stagedRows } = await pool.query("SELECT aboard FROM encounters WHERE id = $1", [id]);
+    const atmosphere = await currentAtmosphere({ aboard: Boolean(stagedRows[0]?.aboard) });
+    await pool.query("UPDATE encounters SET atmosphere = $1 WHERE id = $2", [JSON.stringify(atmosphere), id]);
+
     // Characters enter on whatever armor and shield they're wearing NOW (not when
     // they were added to the lobby): armor's Grit bonus, and a shield that hasn't
     // soaked anything yet.
@@ -1670,7 +1758,7 @@ router.post("/encounters/:id/start", requireDungeonMaster, async (req, res) => {
       if (!chars[0]) continue;
       // Armor, outfit, the weather and illness are all read again here, so what
       // they were wearing when the fight began is what counts.
-      const gearSnap = await characterGearSnapshot(chars[0]);
+      const gearSnap = await characterGearSnapshot(chars[0], atmosphere.temperatureC);
       await pool.query("UPDATE combatants SET max_grit = $1, max_ap = $5, current_grit = LEAST($2::int, $1::int), data = $3 WHERE id = $4", [
         gearSnap.maxGrit,
         chars[0].current_grit,
@@ -1822,7 +1910,12 @@ async function beginCombatantTurn(encounter, nextCombatant, wrapped) {
     ...(wrapped ? { rammed_this_round: false } : {}),
   };
 
-  if (feared) {
+  // A grapple reel (see dealHit) pins a terrified slinger where they were dragged: no flight, but the turn is still lost.
+  const flees = Boolean(feared) && !feared.reeled;
+  if (feared && !flees) {
+    fledLog = `${nextCombatant.name}, terrified and hauled in on a line, freezes in place and can't act this turn!`;
+  }
+  if (flees) {
     const fleeDistance = FEAR_FLEE_AP_EQUIVALENT * MOVE_SPEED_PER_AP;
     const kb = knockbackTarget(feared, { x: nextCombatant.x, y: nextCombatant.y }, withMapEdges(encounter.walls, encounter.map_width, encounter.map_height), fleeDistance);
     const dest = clampToMapBounds(kb.point, encounter.map_width, encounter.map_height);
@@ -1901,7 +1994,7 @@ async function beginCombatantTurn(encounter, nextCombatant, wrapped) {
 
   // A terrified slinger's flight is movement like any other: running out of (or through) the
   // reach of a bloom or ghost gets them bitten as they go.
-  if (feared && nextCombatant.kind !== "mecha") {
+  if (flees && nextCombatant.kind !== "mecha") {
     // ...and so is any damaging terrain they bolt through on the way.
     await applyPathHazards(nextCombatant.id, { x: nextCombatant.x, y: nextCombatant.y }, { x: fields.x, y: fields.y }, { hazards: encounter.hazards, verb: "bolts through" });
     await plantBites(await getCombatant(nextCombatant.id), { fromPos: { x: nextCombatant.x, y: nextCombatant.y }, fleeing: true });
@@ -2155,9 +2248,9 @@ router.post("/actions/move", async (req, res) => {
       if (vehicle.disabled) return res.status(400).json({ error: "That mecha is disabled." });
       const water = makeWaterSet(encounter.water);
       const mode = vehicle.data?.mode ?? null;
-      const inWater = isWaterAt(water, { x: vehicle.x, y: vehicle.y });
+      const inWater = isWaterAt(water, { x: vehicle.x, y: vehicle.y }, encounter.bridges);
       const speedPerAp = MECHA_SPEED_PER_AP(vehicle.data?.speed) * modeMechaSpeedFactor(mode, inWater);
-      const apNeeded = pathApCost({ x: vehicle.x, y: vehicle.y }, { x, y }, water, speedPerAp, modeIgnoresWater(mode));
+      const apNeeded = pathApCost({ x: vehicle.x, y: vehicle.y }, { x, y }, water, speedPerAp, modeIgnoresWater(mode), undefined, encounter.bridges);
       if ((vehicle.current_ap ?? 0) < apNeeded) {
         return res.status(400).json({ error: "Not enough mecha AP to move that far." });
       }
@@ -2181,7 +2274,7 @@ router.post("/actions/move", async (req, res) => {
       // the mecha is back on dry land (it never overrides another mode).
       let nextMode = mode;
       if ((vehicle.data?.modes || []).includes("aquatic")) {
-        const landedInWater = isWaterAt(water, { x, y });
+        const landedInWater = isWaterAt(water, { x, y }, encounter.bridges);
         if (landedInWater && mode === null) {
           nextMode = "aquatic";
           notes.push(`${vehicle.name} slips into the water -- Aquatic mode engages.`);
@@ -2200,7 +2293,7 @@ router.post("/actions/move", async (req, res) => {
       // Hazards hit mechas too -- except a gliding one, which flies over them.
       let slipped = false;
       if (mode !== "glider") {
-        if (findHazardAt({ x, y }, encounter.hazards, "ice") && Math.random() < ICE_SLIP_CHANCE) {
+        if (findHazardAt({ x, y }, encounter.hazards, "ice", encounter.bridges) && Math.random() < ICE_SLIP_CHANCE) {
           slipped = true;
           await updateCombatant(vehicle.id, { current_ap: 0 });
           for (const rider of riders) await updateCombatant(rider.id, { current_ap: 0 });
@@ -2239,14 +2332,16 @@ router.post("/actions/move", async (req, res) => {
 
     // Only characters/NPCs on foot reach here -- a mecha or a mounted rider
     // returned from the vehicle branch above.
-    const speedPerAp = moveSpeedPerAp(combatantSkillMod(combatant, "athletics")) * gearMoveMult(combatant);
+    // ...and the gravity of the place they are fighting in (atmosphereRules.js).
+    const speedPerAp = moveSpeedPerAp(combatantSkillMod(combatant, "athletics")) * gearMoveMult(combatant) * walkMultOf(encounter.atmosphere);
     const apNeeded = pathApCost(
       { x: combatant.x, y: combatant.y },
       { x, y },
       makeWaterSet(encounter.water),
       speedPerAp,
       false,
-      WATER_FOOT_COST_MULT
+      WATER_FOOT_COST_MULT,
+      encounter.bridges
     );
 
     if (combatant.current_ap < apNeeded) {
@@ -2266,7 +2361,7 @@ router.post("/actions/move", async (req, res) => {
     let slipped = false;
     let hazardHit = null;
     if (combatant.kind !== "mecha") {
-      const iceHazard = findHazardAt({ x, y }, encounter.hazards, "ice");
+      const iceHazard = findHazardAt({ x, y }, encounter.hazards, "ice", encounter.bridges);
       if (iceHazard && Math.random() < ICE_SLIP_CHANCE) slipped = true;
 
       // Psi's slippery status: a SLIPPERY_SLIP_CHANCE roll, carried on the
@@ -2280,7 +2375,7 @@ router.post("/actions/move", async (req, res) => {
     const dousedStatus = { ...(combatant.status_effects || {}) };
     const doused =
       Boolean(dousedStatus.burning) &&
-      pathTouchesWater({ x: combatant.x, y: combatant.y }, { x, y }, makeWaterSet(encounter.water));
+      pathTouchesWater({ x: combatant.x, y: combatant.y }, { x, y }, makeWaterSet(encounter.water), encounter.bridges);
     if (doused) delete dousedStatus.burning;
 
     await updateCombatant(combatant.id, {
@@ -2806,7 +2901,7 @@ router.post("/actions/melee", async (req, res) => {
       rollNote = " (keen vision -- advantage)";
     } else if (gearDisadvantage(attacker)) {
       roll = Math.min(roll, rollD20());
-      rollNote = " (ill -- disadvantage)";
+      rollNote = " (sick -- disadvantage)";
     }
     await updateCombatant(attacker.id, {
       current_ap: attacker.current_ap - weapon.ap_cost,
@@ -3357,9 +3452,11 @@ async function findEligibleCounterSlugs(target) {
 // ricochet never homes in on one of the shooter's own allies (same
 // areAllies/combatSide rule everything else uses; a decoy counts as its
 // owner's side, like it looks to everyone else).
-async function findChainTarget(encounterId, fromCombatantId, excludeCombatantId, { maxRadius = CHAIN_RADIUS, allowFrom = false } = {}) {
+async function findChainTarget(encounterId, fromCombatantId, excludeCombatantId, { maxRadius, allowFrom = false } = {}) {
   const from = await getCombatant(fromCombatantId);
   if (!from) return null;
+  // Humid air carries the arc further; the ricochet passes Infinity and is untouched.
+  if (maxRadius == null) maxRadius = chainRadiusOf(await getEncounterAtmosphere(encounterId));
   const shooter = await getCombatant(excludeCombatantId);
   const { rows } = await pool.query(
     "SELECT * FROM combatants WHERE encounter_id = $1 AND id != $2 AND unconscious = false AND disabled = false",
@@ -3650,12 +3747,17 @@ function scheduleKnockback(encounterId, targetCombatantId, destination, windowMs
 // same as a wall-break's impact location.
 async function addIceHazard(encounterId, point, radiusMult = 1) {
   try {
-    const { rows } = await pool.query("SELECT hazards, next_hazard_id FROM encounters WHERE id = $1", [encounterId]);
+    const { rows } = await pool.query("SELECT hazards, next_hazard_id, atmosphere FROM encounters WHERE id = $1", [encounterId]);
     if (!rows[0]) return;
+    // No patches in vacuum. Heat melts the ice faster, cold and dry air keep it longer.
+    if (hazardBlocked(rows[0].atmosphere, { type: "Ice" })) {
+      await pushCombatLog(encounterId, "With no air to hold it, the ice never forms.");
+      return;
+    }
     const hazardId = rows[0].next_hazard_id;
     const hazards = [
       ...(rows[0].hazards || []),
-      { id: hazardId, type: "ice", x: point.x, y: point.y, radius: ICE_PATCH_RADIUS * radiusMult, turnsLeft: HAZARD_DURATION_ROUNDS },
+      { id: hazardId, type: "ice", x: point.x, y: point.y, radius: ICE_PATCH_RADIUS * radiusMult, turnsLeft: iceRoundsOf(rows[0].atmosphere) },
     ];
     await pool.query("UPDATE encounters SET hazards = $1, next_hazard_id = $2 WHERE id = $3", [
       JSON.stringify(hazards),
@@ -3704,8 +3806,16 @@ async function addTrailWall(encounterId, fromPos, toPos, slugType) {
 // walks into it later.
 async function addDamageHazard(encounterId, point, slug, logText, ownerId = null) {
   try {
-    const { rows } = await pool.query("SELECT hazards, next_hazard_id FROM encounters WHERE id = $1", [encounterId]);
+    const { rows } = await pool.query("SELECT hazards, next_hazard_id, atmosphere FROM encounters WHERE id = $1", [encounterId]);
     if (!rows[0]) return;
+    // Vacuum leaves nothing behind; haze keeps Water from pooling or steaming.
+    if (hazardBlocked(rows[0].atmosphere, slug)) {
+      await pushCombatLog(
+        encounterId,
+        rows[0].atmosphere?.noHazards ? `${slug.name} leaves nothing behind in the vacuum.` : `The haze swallows ${slug.name}'s water -- no hazard forms.`
+      );
+      return;
+    }
     const hazardId = rows[0].next_hazard_id;
     const hazards = [
       ...(rows[0].hazards || []),
@@ -3785,7 +3895,7 @@ async function applyEnvironmentalDamage(combatant, amount, slugType, stat = null
   let note = "";
   if (tb.trait === "burn") {
     const burnDamage = computeBurnDamage(amount);
-    nextStatus.burning = { turnsLeft: BURN_DURATION_TURNS, damage: burnDamage, by: byId };
+    nextStatus.burning = { turnsLeft: burnTurnsOf(await getEncounterAtmosphere(combatant.encounter_id)), damage: burnDamage, by: byId };
     note = " and catches fire";
   } else if (tb.trait === "poison") {
     const stacks = (nextStatus.poison?.stacks || 0) + (stat?.poisonStacks ?? 1);
@@ -3854,7 +3964,7 @@ async function applyMechaHazard(hazard, mecha, rider) {
   if (rider && (tb.trait === "burn" || tb.trait === "poison")) {
     const status = { ...(rider.status_effects || {}) };
     if (tb.trait === "burn") {
-      status.burning = { turnsLeft: BURN_DURATION_TURNS, damage: computeBurnDamage(amount) };
+      status.burning = { turnsLeft: burnTurnsOf(await getEncounterAtmosphere(mecha.encounter_id)), damage: computeBurnDamage(amount) };
       note += `, and ${rider.name} catches fire`;
     } else {
       status.poison = { stacks: (status.poison?.stacks || 0) + 1, turnsLeft: POISON_DURATION_TURNS };
@@ -3883,9 +3993,12 @@ async function applyMechaHazard(hazard, mecha, rider) {
 async function applyPathHazards(combatantId, fromPos, toPos, { hazards, verb = "is caught in" } = {}) {
   const first = await getCombatant(combatantId);
   if (!first || ["decoy", "plant", "ghost"].includes(first.kind)) return [];
-  const list = hazards ?? (await pool.query("SELECT hazards FROM encounters WHERE id = $1", [first.encounter_id])).rows[0]?.hazards;
+  const row = (await pool.query("SELECT hazards, bridges FROM encounters WHERE id = $1", [first.encounter_id])).rows[0];
+  const list = hazards ?? row?.hazards;
   const results = [];
-  for (const hazard of hazardsAlongPath(fromPos, toPos, list, "damage")) {
+  // Bridges are always read fresh: the patch list may have been loaded before one was built,
+  // and a bridge over a patch keeps it from touching anyone crossing.
+  for (const hazard of hazardsAlongPath(fromPos, toPos, list, "damage", row?.bridges)) {
     const current = await getCombatant(combatantId);
     if (!current || current.unconscious || current.disabled) break;
     if (current.kind === "mecha") {
@@ -4432,6 +4545,8 @@ async function dealHit(
   const shooter = await getCombatant(shooterCombatantId);
   const target = await getCombatant(targetCombatantId);
   if (!shooter || !target) return "the target is no longer there.";
+  // The air the fight is in: burn and snare lengths, blind, knockback.
+  const air = await getEncounterAtmosphere(encounterId);
   // Battle Report attribution: how this particular hit reached its target.
   const via = statTag || (isRicochetLeg ? "ricochet" : half ? "chain" : isSplash ? "splash" : "direct");
   const statSlug = { slug: slug.name, slugType: slug.type };
@@ -4522,7 +4637,10 @@ async function dealHit(
   // Gloomstalk: an ambush from the dark -- triple damage while its shooter is invisible
   // (see causes_invisible). Only an actual attack: a shot at yourself is the self-buff.
   const ambushed = Boolean(slug.ambush_tripled && shooter.status_effects?.invisible && shooter.id !== target.id);
-  let amount = slugBaseHitAmount(slug, { ambushed, half });
+  // Helixel: each earlier hit on this same enemy from this shooter makes this one land harder.
+  const adaptsToTarget = Boolean(slug.adaptive_strain && shooter.id !== target.id && !areAllies(shooter, target));
+  const adaptStacks = adaptsToTarget ? adaptStacksOn(target.status_effects, shooter.id) : 0;
+  let amount = slugBaseHitAmount(slug, { ambushed, half, adaptStacks });
   // Metal hits harder when nobody got a counter in.
   const metalBonus = slugHasType(slug, "Metal") && !countered && !skipDamageResolution;
   if (metalBonus) amount = Math.round(amount * METAL_UNCOUNTERED_MULTIPLIER);
@@ -4600,7 +4718,7 @@ async function dealHit(
       // recalculates the damage off this hit's own clashPower. (Wildfire's
       // dual-shot combo doubles it -- burnMult.)
       burnDamage = computeBurnDamage(slug.clash_power) * (slug.dual?.burnMult ?? 1);
-      nextStatus.burning = { turnsLeft: BURN_DURATION_TURNS, damage: burnDamage, by: shooter.id };
+      nextStatus.burning = { turnsLeft: burnTurnsOf(air), damage: burnDamage, by: shooter.id };
     }
     let poisonStacks = 0;
     if (slugHasTrait(slug, "poison") && !isSelfTarget) {
@@ -4610,7 +4728,7 @@ async function dealHit(
       poisonStacks = (nextStatus.poison?.stacks || 0) + (slug.dual?.poisonStacks ?? 1) * (slug.potent_poison ? POTENT_POISON_MULTIPLIER : 1);
       nextStatus.poison = { stacks: poisonStacks, turnsLeft: POISON_DURATION_TURNS, by: shooter.id };
     }
-    if (slugHasTrait(slug, "snare") && !isSelfTarget) nextStatus.snared = { turnsLeft: SNARE_DURATION_TURNS };
+    if (slugHasTrait(slug, "snare") && !isSelfTarget) nextStatus.snared = { turnsLeft: snareTurnsOf(air) };
     // Perplexus's mind_scramble replaces Psychic's own baseline stun
     // entirely (see the block below) -- without this gate it'd just be a
     // strictly-better Psychic slug, stun plus a bonus effect.
@@ -4621,7 +4739,9 @@ async function dealHit(
       stunApLost = stunApOf(nextStatus.stunned) + computeStunAp(amount);
       nextStatus.stunned = { ap: stunApLost };
     }
-    if (slugHasTrait(slug, "blind") && !isSelfTarget) nextStatus.blinded = true;
+    // Haze scatters Light's blinding flash.
+    const hazeScattered = slugHasTrait(slug, "blind") && !isSelfTarget && blindBlocked(air);
+    if (slugHasTrait(slug, "blind") && !isSelfTarget && !hazeScattered) nextStatus.blinded = true;
     if (slugHasTrait(slug, "douse")) delete nextStatus.burning;
     // Perplexus -- 3 debuffs fired at someone else, 2 buffs fired at
     // yourself (isSelfTarget picks the pool, not a !isSelfTarget gate like
@@ -4727,6 +4847,10 @@ async function dealHit(
     // causes_stun is handled with the Psychic stun above (same status, any element).
     // Madicus: a bleed -- a fresh one resets the 3 turns (it doesn't stack).
     if (slug.causes_bleed && !isSelfTarget) nextStatus.bleeding = { turnsLeft: BLEED_DURATION_TURNS, by: shooter.id };
+    // Helixel: the target's body has now been sampled one more time, so this shooter's next hit on
+    // them lands harder (see slugBaseHitAmount). Kept per shooter, for the rest of the encounter.
+    const adaptedTo = adaptsToTarget && !isSupportBrew ? Math.min(ADAPT_MAX_STACKS, adaptStacks + 1) : 0;
+    if (adaptedTo > 0) nextStatus.adapted = { ...(nextStatus.adapted || {}), [shooter.id]: adaptedTo };
     // Panaceon: RANDOM_STATUS_COUNT distinct effects, rolled fresh on every hit.
     const randomRoll = slug.random_statuses ? applyRandomStatuses(nextStatus, slug, shooter, isSelfTarget || isSupportBrew, isSelfTarget ? RANDOM_STATUS_SELF_COUNT : RANDOM_STATUS_COUNT) : { keys: [], labels: [] };
     const randomStatusLabels = randomRoll.labels;
@@ -4886,7 +5010,7 @@ async function dealHit(
     // one reads as if nothing happened until it actually ticks on the
     // target's next turn.
     if ((slugHasTrait(slug, "burn") || slug.causes_burn) && !isSelfTarget) {
-      log += ` ${target.name} catches fire -- ${burnDamage} Grit damage at the start of each of their next ${BURN_DURATION_TURNS} turns.`;
+      log += ` ${target.name} catches fire -- ${burnDamage} Grit damage at the start of each of their next ${burnTurnsOf(air)} turns.`;
     }
     if (slugHasTrait(slug, "poison") && !isSelfTarget) {
       log += ` ${target.name} is poisoned (${poisonStacks * POISON_DAMAGE_PER_STACK} Grit/turn until cured with First Aid${poisonStacks > 1 ? `, ${poisonStacks} stacks` : ""}).`;
@@ -4897,7 +5021,9 @@ async function dealHit(
     if (stunApLost > 0) {
       log += ` ${target.name} is stunned -- they'll lose ${stunApLost} AP on their next turn.`;
     }
-    if (slugHasTrait(slug, "blind") && !isSelfTarget) {
+    if (hazeScattered) {
+      log += ` The haze scatters ${slug.name}'s light -- ${target.name} isn't blinded.`;
+    } else if (slugHasTrait(slug, "blind") && !isSelfTarget) {
       log += ` ${target.name} is blinded -- their next attack roll has disadvantage.`;
     }
     if (mindScrambleResult) {
@@ -4931,6 +5057,9 @@ async function dealHit(
     }
     if (slug.causes_bleed && !isSelfTarget) {
       log += ` ${target.name} is bleeding -- 10% of their max Grit at the start of each of their next ${BLEED_DURATION_TURNS} turns.`;
+    }
+    if (adaptedTo > 0) {
+      log += ` ${slug.name} samples ${target.name} and rewrites itself to beat them -- its next hit on them lands ${Math.round(ADAPT_BONUS_PER_HIT * 100 * adaptedTo)}% harder${adaptedTo >= ADAPT_MAX_STACKS ? " (fully adapted)" : ""}.`;
     }
     if (slug.causes_jam && !isSelfTarget) {
       log += ` ${target.name}'s blaster is fried -- their next shot misfires.`;
@@ -4982,7 +5111,7 @@ async function dealHit(
       if (chainTarget) {
         // A fast, forced-yellow bolt -- purely visual, no counter offer (the
         // arc calls dealHit directly below, same as it always has).
-        broadcastChainFx({ fromPos: { x: target.x, y: target.y }, toPos: { x: chainTarget.x, y: chainTarget.y } });
+        broadcastChainFx({ fromPos: { x: target.x, y: target.y }, toPos: { x: chainTarget.x, y: chainTarget.y }, lightning: true });
         // Conduction (Water+Electricity) arcs at full power; isSplash then
         // stops that full-power hit re-arcing, since `half` no longer does.
         const chainLog = await dealHit(
@@ -4999,7 +5128,8 @@ async function dealHit(
     let knockedIntoWall = false;
     // Metal/Earth always shove on hit; any other type only does if its
     // template has causes_knockback ticked -- see slugKnockbackDistance.
-    const kbDistance = isSelfTarget || slug.grapple ? 0 : shotKnockbackDistance(slug); // a bludgeon sets melee_knockback
+    // Gravity scales the shove: far in low gravity, short on a heavy world.
+    const kbDistance = isSelfTarget || slug.grapple ? 0 : shotKnockbackDistance(slug) * knockbackMultOf(air); // a bludgeon sets melee_knockback
     if (kbDistance > 0) {
       const encRow = (await pool.query("SELECT walls, zones, map_width, map_height FROM encounters WHERE id = $1", [encounterId])).rows[0];
       // Anchorage's zone suppresses knockback entirely for anyone inside it.
@@ -5052,6 +5182,14 @@ async function dealHit(
         if (pull.moved >= 1) {
           scheduleKnockback(encounterId, target.id, pull.point, windowMs, firedAt);
           log += ` ${slug.name}'s line hooks ${target.name} and reels them ${Math.round(pull.moved)} units toward ${shooter.name}!`;
+          // A terrified slinger would bolt straight back away from the shooter on their turn,
+          // undoing the reel -- so a reeled one stays put instead (still loses the turn).
+          const reeled = await getCombatant(target.id);
+          if (reeled?.status_effects?.feared) {
+            await updateCombatant(target.id, {
+              status_effects: JSON.stringify({ ...reeled.status_effects, feared: { ...reeled.status_effects.feared, reeled: true } }),
+            });
+          }
         }
       }
     }
@@ -5157,12 +5295,23 @@ function broadcastShotFx(fx) {
       // for synthetic effects with no real weapon/distance behind them (the
       // chain arc, a pod blast), which fall back to the client's default.
       windupFraction: fx.windupFraction,
+      // A ricochet leg: the shot is already at full speed, so the client skips the windup crawl
+      // (and its neutral windup colour and launch sound) and just cruises -- see shotCruiseMs.
+      noWindup: Boolean(fx.noWindup),
+      // Speedstinger (and any ricochet slug): the bolt is drawn as a sparking steel streak.
+      ricochet: Boolean(fx.slug.ricochets),
       countered: Boolean(fx.countered),
       counterSlugType: fx.counterSlugType || null,
       outcome: fx.outcome,
       // True when the miss was already decided at launch: the bolt flies the
       // deflected trajectory from the start instead of veering at a late reveal.
       preMissed: Boolean(fx.preMissed),
+      // True when the accuracy roll already passed at launch, so the shot
+      // lands unless a counter/dodge says otherwise. A reaction is revealed the
+      // moment it happens, but an unanswered hit is only confirmed after the
+      // reaction window closes -- the client flies the bolt straight in and
+      // bursts on arrival instead of parking it short of the target to wait.
+      expectHit: Boolean(fx.expectHit),
       // Lets the client draw a blast-radius-sized burst instead of the
       // normal small one -- an AOE slug always explodes at full size,
       // hit or miss (see the miss branch of resolveNormalHit below).
@@ -5173,6 +5322,18 @@ function broadcastShotFx(fx) {
       mega: Boolean(fx.slug.mega_morphed),
       // Pentalux: on a hit the bolt splits into five that circle the target and strike from five directions.
       split: Boolean(fx.slug.surrounds_target),
+      // Helixel: the bolt splits into two strands that twist around each other like DNA for the whole flight.
+      helix: Boolean(fx.slug.adaptive_strain),
+      // Trackjaw: the bolt stalks along its path as a faint ghost, then lunges into view and claws the target on a hit.
+      pounce: Boolean(fx.slug.pounce_strike),
+      // Chronix: shortly after transforming the bolt vanishes for everyone, then reappears in a burst of light in front of the target.
+      timeSkip: Boolean(fx.slug.time_skip),
+      // Zeus: the bolt is drawn as a jagged, crackling lightning bolt with forks, and arcs out on impact.
+      lightning: Boolean(fx.slug.lightning_strike),
+      // Bladier: throws a knife at a wall in its way. `piercePoint` is set only when there is one --
+      // without it nothing is thrown and the shot is just the ordinary Metal bolt.
+      dagger: Boolean(fx.slug.dagger_throw),
+      piercePoint: fx.piercePoint ?? null,
       // A dual shot: the second element (its bolt shows both colours) and the
       // partner slug's id, so clients can prefetch its art too.
       secondaryType: fx.slug.secondary_type ?? null,
@@ -5187,7 +5348,10 @@ function broadcastShotFx(fx) {
 // anyone to react to). Self-contained: no launch/resolve split like a normal
 // shot needs, since the outcome is already known the instant this fires.
 const CHAIN_FX_MS = 350;
-function broadcastChainFx({ fromPos, toPos }) {
+// A slug's chain arc is near-instant whatever the distance: it crosses to the next target in a fixed
+// quarter of a second (the melee slash flash keeps CHAIN_FX_MS).
+const CHAIN_ARC_MS = 250;
+function broadcastChainFx({ fromPos, toPos, lightning = false }) {
   broadcastAll({
     type: "combat-shot-fx",
     fx: {
@@ -5198,12 +5362,15 @@ function broadcastChainFx({ fromPos, toPos }) {
       targetPos: toPos,
       impactPoint: toPos,
       slugType: null,
-      windowMs: CHAIN_FX_MS,
+      windowMs: lightning ? CHAIN_ARC_MS : CHAIN_FX_MS,
       countered: false,
       counterSlugType: null,
       outcome: "hit",
       aoe: false,
       chain: true,
+      // A slug's chain arc is drawn as a lightning bolt (the melee slash flash, which shares this
+      // broadcast, stays the plain dart).
+      lightning: Boolean(lightning),
     },
   });
 }
@@ -5449,7 +5616,9 @@ async function launchAndOfferCounter(offer) {
     }
     offer = { ...offer, attackRoll };
   }
-  broadcastShotFx({ ...offer, outcome: null });
+  // A passed accuracy roll (or a self-shot, which always lands) means the
+  // shot is a hit unless the target reacts -- see broadcastShotFx's expectHit.
+  broadcastShotFx({ ...offer, outcome: null, expectHit: Boolean(offer.attackRoll) || offer.attackerCombatantId === offer.targetCombatantId });
   // A supportive slug (a heal, an inert None) is a boon, not an attack --
   // there's nothing to clash with, so it never offers the target a counter,
   // whoever it was aimed at. A self-targeted shot (a self-buff) is the same:
@@ -5465,7 +5634,9 @@ async function launchAndOfferCounter(offer) {
   const brewer = offer.slug.random_statuses ? await getCombatant(offer.attackerCombatantId) : null;
   const friendlyBrew = Boolean(brewer && target && areAllies(brewer, target));
   const reactionEligible = target && !isSupportiveSlug(offer.slug) && !isSelfShot && !friendlyBrew && !offer.slug.uncounterable;
-  const eligible = reactionEligible ? await findEligibleCounterSlugs(target) : [];
+  // A Fire slug can't be fired back in a vacuum either.
+  const counterAir = reactionEligible ? await getEncounterAtmosphere(offer.encounterId) : null;
+  const eligible = reactionEligible ? (await findEligibleCounterSlugs(target)).filter((s) => !fireBlocked(counterAir, s)) : [];
   // A Dodge-only defender (no usable counter slug, but enough AP for the
   // flat Dodge cost) still gets a reaction window -- just without any slug
   // option in it. Re-validated for real in resolveDodgeAttempt; this copy is
@@ -5537,7 +5708,7 @@ async function launchAndOfferCounter(offer) {
         // be identified until it's out of the barrel and transformed, so the
         // prompt holds back until then (the window itself, windowMs, still
         // runs from launch and isn't extended).
-        revealAfterMs: spottedEarly ? 0 : Math.max(0, SHOT_SLOW_PHASE_MS - (Date.now() - offer.firedAt)),
+        revealAfterMs: spottedEarly || offer.noWindup ? 0 : Math.max(0, SHOT_SLOW_PHASE_MS - (Date.now() - offer.firedAt)),
         // Who's being shot at -- the DM may be fielding counters for several
         // NPCs at once, so the prompt names the defender.
         defenderName: offer.targetName,
@@ -5606,8 +5777,8 @@ async function blasterEffectiveSpeed(blaster, shooter = null) {
   const base = await blasterBaseEffectiveSpeed(blaster);
   const mode = effectiveMode(shooter);
   if (!mode) return base;
-  const { rows } = await pool.query("SELECT water FROM encounters WHERE id = $1", [shooter.encounter_id]);
-  const inWater = isWaterAt(makeWaterSet(rows[0]?.water), { x: shooter.x, y: shooter.y });
+  const { rows } = await pool.query("SELECT water, bridges FROM encounters WHERE id = $1", [shooter.encounter_id]);
+  const inWater = isWaterAt(makeWaterSet(rows[0]?.water), { x: shooter.x, y: shooter.y }, rows[0]?.bridges);
   return Math.max(1, Math.round(base * modeBlasterSpeedFactor(mode, inWater)));
 }
 
@@ -5633,7 +5804,8 @@ async function fireSecondaryShot({ encounterId, attackerId, attackerName, origin
   // inside shotEffectiveSpeed. reactionWindowFactor is the *target's* own
   // slowedReaction/enhancedReaction, applied on top regardless.
   const speed = await blasterEffectiveSpeed(blaster, await getCombatant(attackerId));
-  const rawWindowMs = shotFlightMs(dist, speed, slug);
+  // A bounce keeps the speed the shot already had -- no windup crawl, just the cruise.
+  const rawWindowMs = shotCruiseMs(dist, speed, slug);
   const windowMs = Math.round(rawWindowMs * reactionWindowFactor(target.status_effects));
   const fxId = `ricochet-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const firedAt = Date.now();
@@ -5652,7 +5824,8 @@ async function fireSecondaryShot({ encounterId, attackerId, attackerName, origin
     targetPos,
     impactPoint,
     windowMs,
-    windupFraction: shotWindupFraction(dist, speed, slug),
+    windupFraction: 0,
+    noWindup: true,
     // Flags this as a bounce (suppresses terrain marks + the chain arc on
     // its own hit -- see applyShotTerrain / dealHit); ricochetCount tracks
     // how deep the chain is so maybeRicochet can cap it.
@@ -5745,7 +5918,7 @@ async function maybeRicochet(
 // shot.
 async function resolveAttackRoll(offer, attacker, target) {
   const quality = QUALITY_TIERS[offer.blaster.quality] || QUALITY_TIERS[0];
-  const tb = slugBallistics(offer.slug);
+  const tb = atmosphereBallistics(offer.slug, slugBallistics(offer.slug), await getEncounterAtmosphere(offer.encounterId));
   // Uses offer.attackerPos (the shot's real visual origin), not a fresh
   // attacker.x/y -- normally identical (the attacker can't move mid-
   // resolution), but this is also what lets Speedstinger's ricochet leg
@@ -6143,7 +6316,7 @@ async function resolveCounterOffer(id, chosenSlugId, reactedAt = Date.now()) {
   const shotPosAtCounter = lerpPoint(
     offer.attackerPos,
     offer.impactPoint,
-    shotDistanceFraction(counterAtMs, offer.windowMs, offer.windupFraction)
+    shotDistanceFraction(counterAtMs, offer.windowMs, offer.windupFraction, offer.noWindup)
   );
   const clashPoint = lerpPoint(shotPosAtCounter, offer.impactPoint, 0.5);
 
@@ -6434,6 +6607,11 @@ async function resolveShooterSlugAndBlaster(attacker, req, { slugId, npcSlug, np
       potent_poison: Boolean(npcSlug?.potentPoison),
       causes_bleed: Boolean(npcSlug?.causesBleed),
       life_drain: Boolean(npcSlug?.lifeDrain),
+      adaptive_strain: Boolean(npcSlug?.adaptiveStrain),
+      pounce_strike: Boolean(npcSlug?.pounceStrike),
+      time_skip: Boolean(npcSlug?.timeSkip),
+      lightning_strike: Boolean(npcSlug?.lightningStrike),
+      dagger_throw: Boolean(npcSlug?.daggerThrow),
       energy_pips: [true],
       user_id: null,
     };
@@ -6460,7 +6638,22 @@ async function resolveShooterSlugAndBlaster(attacker, req, { slugId, npcSlug, np
 // delayed to land when the bolt's flight animation would actually arrive --
 // same reasoning as the old scheduleWallBreak/scheduleKnockback: nothing
 // should visibly change on the map before the projectile gets there.
-async function applyEnvironmentEffect({ actionType, attacker, slug, tb, attackerPos, finalPoint, hit, fxId }) {
+// Breaks a stretch out of `wall` around `hit`, sized by the slug's Clash Power (wallBreakRadius, never more
+// than WALL_BREAK_MAX_FRACTION of the wall), and returns the new wall list with whatever survives as up to two
+// pieces. The pieces keep the wall's source and, for a Wall Maker's wall, its element tint -- so a half-broken
+// wall is still that slug's wall. `pieces` is empty only if nothing of the wall could survive.
+function wallAfterBreak(walls, wall, hit, slug, nextWallId) {
+  const pieces = breakWallSegment(wall, hit, wallBreakRadius(slug.clash_power));
+  const nextWalls = walls.filter((w) => w.id !== wall.id);
+  let nextId = nextWallId;
+  for (const piece of pieces) {
+    nextWalls.push({ id: nextId, source: wall.source || "dm", ...(wall.slugType ? { slugType: wall.slugType } : {}), ...piece });
+    nextId += 1;
+  }
+  return { nextWalls, nextId, pieces };
+}
+
+async function applyEnvironmentEffect({ actionType, attacker, slug, tb, attackerPos, finalPoint, hit, fxId, buildAngle = null }) {
   const encounterId = attacker.encounter_id;
   let impactPoint = finalPoint;
   let log;
@@ -6482,27 +6675,11 @@ async function applyEnvironmentEffect({ actionType, attacker, slug, tb, attacker
         log = `${attacker.name}'s ${slug.name} slams into the wall, but some anchoring force keeps it standing!`;
       } else if (wallHit) {
         impactPoint = wallHit.hit;
-        if (wallHit.wall.source === "slug") {
-          // A player-made wall breaks outright -- unlike a DM wall, there's
-          // no partial trim.
-          const nextWalls = walls.filter((w) => w.id !== wallHit.wall.id);
-          await pool.query("UPDATE encounters SET walls = $1 WHERE id = $2", [JSON.stringify(nextWalls), encounterId]);
-          log = `${attacker.name}'s ${slug.name} smashes the wall to pieces!`;
-        } else {
-          const pieces = breakWallSegment(wallHit.wall, wallHit.hit);
-          const nextWalls = walls.filter((w) => w.id !== wallHit.wall.id);
-          let nextId = row.next_wall_id;
-          for (const piece of pieces) {
-            nextWalls.push({ id: nextId, source: wallHit.wall.source || "dm", ...piece });
-            nextId += 1;
-          }
-          await pool.query("UPDATE encounters SET walls = $1, next_wall_id = $2 WHERE id = $3", [
-            JSON.stringify(nextWalls),
-            nextId,
-            encounterId,
-          ]);
-          log = `${attacker.name}'s ${slug.name} blasts a hole in the wall!`;
-        }
+        // Any wall -- a DM's or a Wall Maker's -- loses only a stretch around the impact, sized by the
+        // slug's Clash Power (see wallBreakRadius); the rest of it stays standing.
+        const { nextWalls, nextId, pieces } = wallAfterBreak(walls, wallHit.wall, wallHit.hit, slug, row.next_wall_id);
+        await pool.query("UPDATE encounters SET walls = $1, next_wall_id = $2 WHERE id = $3", [JSON.stringify(nextWalls), nextId, encounterId]);
+        log = pieces.length === 0 ? `${attacker.name}'s ${slug.name} smashes the wall to pieces!` : `${attacker.name}'s ${slug.name} blasts a hole in the wall!`;
       } else {
         const bridgeHit = bridges.find((b) => pointInBridge(finalPoint, b));
         if (bridgeHit) {
@@ -6516,7 +6693,12 @@ async function applyEnvironmentEffect({ actionType, attacker, slug, tb, attacker
     }
   } else if (actionType === "make-wall") {
     const envScale = loyaltyEnvScale(slug.loyalty_tier);
-    const seg = perpendicularSegment(attackerPos, finalPoint, Math.round(WALL_MAKER_LENGTH * envScale));
+    // A wall the shooter turned by hand keeps that facing; otherwise it squares up to the shot.
+    const wallLength = Math.round(WALL_MAKER_LENGTH * envScale);
+    const seg =
+      buildAngle !== null
+        ? perpendicularSegmentAtAngle(finalPoint, buildAngle, wallLength)
+        : perpendicularSegment(attackerPos, finalPoint, wallLength);
     const row = (await pool.query("SELECT walls, next_wall_id FROM encounters WHERE id = $1", [encounterId])).rows[0];
     const wallId = row?.next_wall_id ?? 1;
     const walls = [...(row?.walls || []), { id: wallId, source: "slug", slugType: slug.type, ...seg }];
@@ -6527,7 +6709,7 @@ async function applyEnvironmentEffect({ actionType, attacker, slug, tb, attacker
     ]);
     log = `${attacker.name}'s ${slug.name} raises a wall!`;
   } else if (actionType === "build-bridge") {
-    const angle = angleBetween(attackerPos, finalPoint);
+    const angle = buildAngle !== null ? buildAngle : angleBetween(attackerPos, finalPoint);
     const envScale = loyaltyEnvScale(slug.loyalty_tier);
     const row = (await pool.query("SELECT bridges, next_bridge_id FROM encounters WHERE id = $1", [encounterId])).rows[0];
     const bridgeId = row?.next_bridge_id ?? 1;
@@ -6602,7 +6784,7 @@ async function applyEnvironmentEffect({ actionType, attacker, slug, tb, attacker
   if (newPlant) await plantBiteNearby(newPlant);
 }
 
-async function resolveEnvironmentShot({ actionType, attacker, slug, blaster, tb, targetPoint, encounterRow, fxId, firedAt }) {
+async function resolveEnvironmentShot({ actionType, attacker, slug, blaster, tb, targetPoint, encounterRow, fxId, firedAt, buildAngle = null }) {
   const attackerPos = { x: attacker.x, y: attacker.y };
   // The weapon's own range and the slug type's own range stack -- a
   // long-ranged type in a long-ranged weapon reaches further than either
@@ -6709,7 +6891,7 @@ async function resolveEnvironmentShot({ actionType, attacker, slug, blaster, tb,
 
   const delayMs = Math.max(0, windowMs * SHOT_FLIGHT_MULTIPLIER);
   setTimeout(() => {
-    applyEnvironmentEffect({ actionType, attacker, slug, tb, attackerPos, finalPoint, hit, fxId }).catch((err) =>
+    applyEnvironmentEffect({ actionType, attacker, slug, tb, attackerPos, finalPoint, hit, fxId, buildAngle }).catch((err) =>
       console.error("Could not resolve environment shot:", err)
     );
   }, delayMs);
@@ -6878,10 +7060,17 @@ router.post("/actions/shoot", async (req, res) => {
       }
     }
 
+    // Vacuum: there's nothing to burn in, so a Fire slug (either half of a dual
+    // shot) can't be fired at all -- rejected before any AP or energy is spent.
+    if (fireBlocked(encounterRow.atmosphere, slug)) {
+      return res.status(400).json({ error: "Fire slugs can't be fired in a vacuum -- there is nothing to burn." });
+    }
+
     if (attacker.current_ap < shotApCost) return res.status(400).json({ error: "Not enough AP." });
 
     const attackerPos = { x: attacker.x, y: attacker.y };
-    const tb = slugBallistics(slug);
+    // The air shapes the slug's reach and aim (Air in vacuum, Light in haze, thin air).
+    const tb = atmosphereBallistics(slug, slugBallistics(slug), encounterRow.atmosphere);
 
     await updateCombatant(attacker.id, { current_ap: attacker.current_ap - shotApCost });
     // Every slug that flies -- both halves of a dual shot -- burns its pips
@@ -6985,7 +7174,9 @@ router.post("/actions/shoot", async (req, res) => {
     }
 
     if (actionType !== "attack") {
-      const result = await resolveEnvironmentShot({ actionType, attacker, slug, blaster, tb, targetPoint, encounterRow, fxId, firedAt });
+      // Only Make Wall / Build Bridge take an orientation; it rides along from the map's placement ghost.
+      const buildAngle = actionType === "make-wall" || actionType === "build-bridge" ? normalizeBuildAngle(req.body?.buildAngle) : null;
+      const result = await resolveEnvironmentShot({ actionType, attacker, slug, blaster, tb, targetPoint, encounterRow, fxId, firedAt, buildAngle });
       return res.json(result);
     }
 
@@ -7088,6 +7279,19 @@ router.post("/actions/shoot", async (req, res) => {
       impactPoint,
       windowMs,
       windupFraction: shotWindupFraction(dist, speed, slug),
+      // Bladier: where its bolt crosses the wall in its path (and that wall's angle), and when along the
+      // path it throws its knife (throwT) and the knife lands (landT) -- see daggerThrowPlan. Only a
+      // dagger_throw slug that is actually piercing a wall has one; with no wall in the way there is
+      // nothing for the knife to hit and the animation doesn't play.
+      piercePoint:
+        slug.dagger_throw && pierces
+          ? {
+              x: wallHit.hit.x,
+              y: wallHit.hit.y,
+              wallAngle: (Math.atan2(wallHit.wall.y2 - wallHit.wall.y1, wallHit.wall.x2 - wallHit.wall.x1) * 180) / Math.PI,
+              ...daggerThrowPlan(wallHit.hit.t, dist, shotWindupFraction(dist, speed, slug)),
+            }
+          : null,
       // Perplexus/Psi: the client's pre-fire effect picker, already narrowed
       // to whichever pool this shot's targeting actually allows -- see
       // dealHit's mind_scramble/friction_shift blocks, which each
@@ -7195,7 +7399,11 @@ router.post("/actions/shoot", async (req, res) => {
     // terrain mutation tied to a shot (see WALL_BREAK_RADIUS's comment,
     // applyEnvironmentEffect's break-wall branch, which this mirrors).
     if (pierces) {
-      scheduleAfterFlight(firedAt, windowMs, async () => {
+      // Bladier's knife is seen destroying the wall before its bolt gets there, so the wall breaks the
+      // moment the knife lands; every other piercing slug just travels through and breaks it when the
+      // flight ends.
+      const breakAtMs = offer.piercePoint ? shotTimeAtFraction(offer.piercePoint.landT, windowMs, offer.windupFraction) : windowMs;
+      scheduleAfterFlight(firedAt, breakAtMs, async () => {
         const row = (await pool.query("SELECT walls, next_wall_id, zones FROM encounters WHERE id = $1", [attacker.encounter_id])).rows[0];
         const walls = row?.walls || [];
         const stillThere = walls.find((w) => w.id === wallHit.wall.id);
@@ -7207,23 +7415,9 @@ router.post("/actions/shoot", async (req, res) => {
           await broadcastEncounter(attacker.encounter_id);
           return;
         }
-        if (stillThere.source === "slug") {
-          const nextWalls = walls.filter((w) => w.id !== stillThere.id);
-          await pool.query("UPDATE encounters SET walls = $1 WHERE id = $2", [JSON.stringify(nextWalls), attacker.encounter_id]);
-        } else {
-          const pieces = breakWallSegment(stillThere, wallHit.hit);
-          const nextWalls = walls.filter((w) => w.id !== stillThere.id);
-          let nextId = row.next_wall_id;
-          for (const piece of pieces) {
-            nextWalls.push({ id: nextId, source: stillThere.source || "dm", ...piece });
-            nextId += 1;
-          }
-          await pool.query("UPDATE encounters SET walls = $1, next_wall_id = $2 WHERE id = $3", [
-            JSON.stringify(nextWalls),
-            nextId,
-            attacker.encounter_id,
-          ]);
-        }
+        // Like the Break Wall action, the dagger only takes out a stretch of the wall, sized by its Clash Power.
+        const { nextWalls, nextId } = wallAfterBreak(walls, stillThere, wallHit.hit, slug, row.next_wall_id);
+        await pool.query("UPDATE encounters SET walls = $1, next_wall_id = $2 WHERE id = $3", [JSON.stringify(nextWalls), nextId, attacker.encounter_id]);
         await pushCombatLog(attacker.encounter_id, `${attacker.name}'s ${slug.name} punches straight through the wall!`);
         await broadcastEncounter(attacker.encounter_id);
       });
@@ -7528,7 +7722,7 @@ router.post("/actions/ram", async (req, res) => {
         });
         log = `${mecha.name} rams ${target.name} for ${riderDamage} Grit damage.${absorbNote}`;
 
-        const kb = knockbackTarget({ x: mecha.x, y: mecha.y }, { x: target.x, y: target.y }, withMapEdges(encounterRow.walls, encounterRow.map_width, encounterRow.map_height), KNOCKBACK_DISTANCE);
+        const kb = knockbackTarget({ x: mecha.x, y: mecha.y }, { x: target.x, y: target.y }, withMapEdges(encounterRow.walls, encounterRow.map_width, encounterRow.map_height), KNOCKBACK_DISTANCE * knockbackMultOf(encounterRow.atmosphere));
         await updateCombatant(target.id, { x: kb.point.x, y: kb.point.y });
         await applyPathHazards(target.id, { x: target.x, y: target.y }, kb.point, { hazards: encounterRow.hazards, verb: "is thrown through" });
         log += ` ${target.name} is thrown by the impact!`;

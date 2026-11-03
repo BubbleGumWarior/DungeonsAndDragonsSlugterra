@@ -55,9 +55,20 @@ export const WATER_MOVE_COST_MULT = 2;
 export const WATER_FOOT_COST_MULT = 4; // wading on foot (unmounted) is far slower than a mecha ploughing through
 export const waterCellId = (x, y) => Math.floor(y / WATER_CELL) * 1000 + Math.floor(x / WATER_CELL);
 export const makeWaterSet = (water) => new Set(Array.isArray(water) ? water : []);
-export const isWaterAt = (waterSet, point) => waterSet.has(waterCellId(point.x, point.y));
+// A bridge covers whatever water lies beneath it (mirrors pointInBridge in the server's combatRules.js).
+export function pointInBridge(point, bridge) {
+  const rad = (bridge.angle * Math.PI) / 180;
+  const dx = point.x - bridge.x;
+  const dy = point.y - bridge.y;
+  const along = dx * Math.cos(rad) + dy * Math.sin(rad);
+  const across = -dx * Math.sin(rad) + dy * Math.cos(rad);
+  return along >= 0 && along <= bridge.length && Math.abs(across) <= bridge.width / 2;
+}
+export const pointOnBridge = (point, bridges) => Array.isArray(bridges) && bridges.some((b) => pointInBridge(point, b));
+export const isWaterAt = (waterSet, point, bridges) =>
+  waterSet.has(waterCellId(point.x, point.y)) && !pointOnBridge(point, bridges);
 
-export function pathApCost(from, to, waterSet, speedPerAp, ignoresWater = false, waterMult = WATER_MOVE_COST_MULT) {
+export function pathApCost(from, to, waterSet, speedPerAp, ignoresWater = false, waterMult = WATER_MOVE_COST_MULT, bridges) {
   const len = Math.hypot(to.x - from.x, to.y - from.y);
   let effective = len;
   if (!ignoresWater && waterSet.size > 0 && len > 0) {
@@ -65,7 +76,7 @@ export function pathApCost(from, to, waterSet, speedPerAp, ignoresWater = false,
     let wet = 0;
     for (let i = 0; i < steps; i++) {
       const t = (i + 0.5) / steps;
-      if (isWaterAt(waterSet, { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t })) wet += 1;
+      if (isWaterAt(waterSet, { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t }, bridges)) wet += 1;
     }
     effective = len + len * (wet / steps) * (waterMult - 1);
   }

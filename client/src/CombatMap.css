@@ -404,27 +404,8 @@
   pointer-events: visiblePainted;
 }
 
-.combat-map-hazard--ice,
-.combat-map-hazard--damage {
-  vector-effect: non-scaling-stroke;
-}
-
-.combat-map-hazard--ice {
-  fill: rgba(140, 210, 255, 0.2);
-  stroke: rgba(190, 230, 255, 0.55);
-  stroke-width: 2;
-  stroke-dasharray: 3 5;
-}
-
-/* A Hazard Maker's patch -- tinted to match the slug that left it (Fire
-   reads as a scorched pool, Toxic as a sickly cloud, etc.), same dashed
-   ground-marking treatment as Ice's. */
-.combat-map-hazard--damage {
-  fill: color-mix(in srgb, var(--hazard-color, var(--danger)) 20%, transparent);
-  stroke: color-mix(in srgb, var(--hazard-color, var(--danger)) 60%, transparent);
-  stroke-width: 2;
-  stroke-dasharray: 3 5;
-}
+/* (The look of each hazard -- an ice slick or a Hazard Maker's patch -- is drawn per element by
+   HazardPatch.jsx / HazardPatch.css; only the shared grow-in is here.) */
 
 /* A hazard (Ice or Hazard Maker) grows in from nothing instead of just
    appearing at full size -- transform-box: fill-box makes the scale happen
@@ -453,7 +434,7 @@
   animation: combat-bridge-appear 0.4s var(--ease-out);
 }
 
-.combat-map-bridge rect {
+.combat-map-bridge > rect:first-child {
   fill: var(--bridge-color, var(--gold));
   fill-opacity: 0.22;
   stroke: var(--bridge-color, var(--gold));
@@ -823,6 +804,10 @@
   fill: #e0c53f;
 }
 
+.combat-token-effect-dot--adapted {
+  fill: #3ddc97;
+}
+
 .combat-token-label {
   text-anchor: middle;
   font-size: 11px;
@@ -839,6 +824,155 @@
   stroke: rgba(255, 255, 255, 0.7);
   stroke-width: 1.5;
   filter: drop-shadow(0 0 8px var(--fx-color, var(--gold)));
+  pointer-events: none;
+}
+
+/* Helixel's adaptive strain: the two twisting strands and the rungs between
+   them (geometry in CombatMap.jsx's helixShapes). */
+.shot-fx-helix-strand {
+  stroke: var(--fx-color);
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 5px var(--fx-color));
+  pointer-events: none;
+}
+
+.shot-fx-helix-rung {
+  stroke: #bfffe0;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+/* A slug's chain arc: a thin electric-blue arc with a pale core, anchored at both ends
+   (geometry in CombatMap.jsx's chainArcShapes) -- not Zeus's yellow-white flying bolt. */
+.shot-fx-chain-glow {
+  fill: none;
+  stroke: #4fb0ff;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 8px #4fb0ff);
+  pointer-events: none;
+}
+
+.shot-fx-chain-core {
+  fill: none;
+  stroke: #eaf9ff;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 3px #ffffff);
+  pointer-events: none;
+}
+
+.shot-fx-chain-dot {
+  fill: #ffffff;
+  filter: drop-shadow(0 0 6px #4fb0ff);
+  pointer-events: none;
+}
+
+/* Standard bolts: the small per-element trail pieces (geometry in CombatMap.jsx's elementShapes). */
+.shot-fx-el {
+  pointer-events: none;
+}
+
+/* The ricochet streak (Speedstinger): the steel needle, its white-hot core, the sparks it
+   sheds, and the carom ping ring (geometry in CombatMap.jsx's streakShapes). */
+.shot-fx-streak-needle {
+  fill: var(--fx-color);
+  filter: drop-shadow(0 0 7px var(--fx-color));
+  pointer-events: none;
+}
+
+.shot-fx-streak-core {
+  stroke: #ffffff;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 3px #ffffff);
+  pointer-events: none;
+}
+
+.shot-fx-streak-spark {
+  stroke: #fff3c4;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 4px #ffd27a);
+  pointer-events: none;
+}
+
+.shot-fx-streak-ring {
+  fill: none;
+  stroke: #dfeaff;
+  filter: drop-shadow(0 0 6px #9fc2ff);
+  pointer-events: none;
+}
+
+/* Zeus's lightning strike: the glowing halo and white-hot core of the jagged bolt,
+   its forks and sparks, and the arcs on impact (geometry in CombatMap.jsx's lightningShapes). */
+.shot-fx-zap-glow {
+  fill: none;
+  stroke: #ffd83d;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 10px #ffd83d);
+  pointer-events: none;
+}
+
+.shot-fx-zap-core {
+  fill: none;
+  stroke: #fffbe6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 4px #ffffff);
+  pointer-events: none;
+}
+
+/* Chronix's time skip: the clock face and ring that mark frozen time, the map dim,
+   and the burst of light where the bolt reappears (geometry in CombatMap.jsx's timeSkipShapes). */
+.shot-fx-skip-dim {
+  fill: #06101f;
+  pointer-events: none;
+}
+
+.shot-fx-skip-ring {
+  fill: none;
+  stroke: #cfe8ff;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 6px #7fbfff);
+  pointer-events: none;
+}
+
+.shot-fx-skip-flash {
+  fill: #ffffff;
+  filter: drop-shadow(0 0 16px #ffffff) drop-shadow(0 0 30px #9fd0ff);
+  pointer-events: none;
+}
+
+.shot-fx-skip-ray {
+  stroke: #ffffff;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 6px #9fd0ff);
+  pointer-events: none;
+}
+
+/* Trackjaw's pounce strike: the faint stalking afterimages, the streak it lunges
+   with, and the claw slashes on a hit (geometry in CombatMap.jsx's pounceShapes). */
+.shot-fx-pounce-ghost {
+  pointer-events: none;
+}
+
+.shot-fx-pounce-streak {
+  fill: var(--fx-color);
+  filter: drop-shadow(0 0 8px var(--fx-color));
+  pointer-events: none;
+}
+
+.shot-fx-pounce-core {
+  stroke: #fff1d6;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+.shot-fx-claw {
+  stroke: #ffb066;
+  stroke-linecap: round;
+  fill: none;
+  filter: drop-shadow(0 0 6px #ff8a3d);
   pointer-events: none;
 }
 

@@ -217,7 +217,17 @@ export function hunkerGritCap(maxGrit) {
 const RANGE_SCALE = 25;
 
 export const RANGE_PENALTY_STEP = 8 * RANGE_SCALE; // -1 accuracy per this many units past half range
-export const WALL_BREAK_RADIUS = 24; // map units of wall removed on a wall-breaking hit
+export const WALL_BREAK_RADIUS = 24; // map units either side of the impact: the break size for a Clash Power 5 slug (see wallBreakRadius)
+// How much of a wall one hit takes out scales with the slug's Clash Power: it removes this many map
+// units on each side of the impact per point of power (so power 5 = the old fixed 24-ish, power 10
+// takes out 100 units of a 140-unit slug wall). A hit can never remove more than
+// WALL_BREAK_MAX_FRACTION of a wall's length, so even a Mega Morph can't erase a whole wall in one go.
+export const WALL_BREAK_RADIUS_PER_POWER = 5;
+export const WALL_BREAK_MIN_RADIUS = 8;
+export const WALL_BREAK_MAX_FRACTION = 0.8;
+export function wallBreakRadius(clashPower) {
+  return Math.max(WALL_BREAK_MIN_RADIUS, Math.round((Number(clashPower) || 0) * WALL_BREAK_RADIUS_PER_POWER));
+}
 export const KNOCKBACK_DISTANCE = 16; // map units a knockback shove covers -- also Metal's base shove, see below
 
 // Metal always gives a short shove on hit; Earth always gives a large one --
@@ -308,6 +318,13 @@ export const BLEED_MAX_GRIT_FRACTION = 0.1;
 // is a point of damage per turn), so the poison hurts this many times as much.
 export const POTENT_POISON_MULTIPLIER = 2;
 export const SNARE_DURATION_TURNS = 2;
+// Helixel's adaptive_strain: every hit on the same enemy makes the next one from that shooter's slug
+// land ADAPT_BONUS_PER_HIT harder, up to ADAPT_MAX_STACKS hits' worth (so at most double damage).
+// Remembered on the target as `status_effects.adapted = { [shooterCombatantId]: hits }` for the rest
+// of the encounter, so it never reaches the dozens-of-stacks territory a per-turn effect could.
+export const ADAPT_BONUS_PER_HIT = 0.25;
+export const ADAPT_MAX_STACKS = 4;
+export const adaptStacksOn = (statusEffects, shooterId) => Math.min(ADAPT_MAX_STACKS, Number(statusEffects?.adapted?.[shooterId]) || 0);
 
 // -- Panaceon: random_statuses applies RANDOM_STATUS_COUNT distinct effects, drawn at
 // random from this pool, to whoever it hits (see applyRandomStatuses in routes/combat.js).
@@ -629,7 +646,9 @@ export const SLIPPERY_SLIP_CHANCE = 0.5;
 
 // Returns the first hazard (optionally filtered by `type`) whose radius
 // contains `point`, or null.
-export function findHazardAt(point, hazards, type) {
+export function findHazardAt(point, hazards, type, bridges) {
+  // A bridge is a deck over the ground: standing on one, nothing beneath it reaches you.
+  if (pointOnBridge(point, bridges)) return null;
   for (const hz of hazards || []) {
     if (type && hz.type !== type) continue;
     if (distance(point, hz) <= (hz.radius ?? 0)) return hz;
@@ -641,8 +660,20 @@ export function findHazardAt(point, hazards, type) {
 // touches -- not just where it ends. Walking through a patch counts even if
 // both endpoints are outside it. Used for walking and every forced move
 // (knockback, grapple pull, fear flee) so none can skip over terrain.
-export function hazardsAlongPath(from, to, hazards, type) {
-  return (hazards || []).filter((hz) => (!type || hz.type === type) && distanceToSegment(hz, from, to) <= (hz.radius ?? 0));
+export function hazardsAlongPath(from, to, hazards, type, bridges) {
+  const candidates = (hazards || []).filter((hz) => (!type || hz.type === type) && distanceToSegment(hz, from, to) <= (hz.radius ?? 0));
+  if (candidates.length === 0 || !bridges || bridges.length === 0) return candidates;
+  // Only the stretches of the walk that are NOT on a bridge can touch a patch --
+  // crossing over the top of one is safe.
+  const len = distance(from, to);
+  const steps = Math.max(1, Math.ceil(len / 10));
+  const ground = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const pt = { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
+    if (!pointOnBridge(pt, bridges)) ground.push(pt);
+  }
+  return candidates.filter((hz) => ground.some((pt) => distance(pt, hz) <= (hz.radius ?? 0)));
 }
 
 // ---- Damaging hazard terrain (Hazard Maker) --------------------------
@@ -705,10 +736,29 @@ export function angleBetween(from, to) {
 // Endpoints of a line segment of `length`, centered on `point`, perpendicular
 // to the direction from `shooterPos` to `point`. See WALL_MAKER_LENGTH.
 export function perpendicularSegment(shooterPos, point, length) {
-  const angleRad = (angleBetween(shooterPos, point) * Math.PI) / 180 + Math.PI / 2;
+  return perpendicularSegmentAtAngle(point, angleBetween(shooterPos, point), length);
+}
+
+// The same segment for a wall the shooter has turned by hand: `facing` is the
+// direction (degrees) the wall faces -- the line runs perpendicular to it, so
+// a facing of the shot's own direction is the default wall.
+export function perpendicularSegmentAtAngle(point, facing, length) {
+  const angleRad = (facing * Math.PI) / 180 + Math.PI / 2;
   const dx = Math.cos(angleRad) * (length / 2);
   const dy = Math.sin(angleRad) * (length / 2);
   return { x1: point.x - dx, y1: point.y - dy, x2: point.x + dx, y2: point.y + dy };
+}
+
+// A Make Wall / Build Bridge shot may carry the orientation the shooter chose
+// on the map (`buildAngle`, degrees). Anything that isn't a finite number
+// means "no choice made" -- the structure then follows the shot as it always
+// did. Returned in (-180, 180], to a tenth of a degree.
+export function normalizeBuildAngle(raw) {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return null;
+  let a = raw % 360;
+  if (a > 180) a -= 360;
+  if (a <= -180) a += 360;
+  return Math.round(a * 10) / 10;
 }
 
 // Is `point` inside the (possibly rotated) rectangle described by a bridge
@@ -724,6 +774,11 @@ export function pointInBridge(point, bridge) {
   const along = dx * Math.cos(rad) + dy * Math.sin(rad);
   const across = -dx * Math.sin(rad) + dy * Math.cos(rad);
   return along >= 0 && along <= bridge.length && Math.abs(across) <= bridge.width / 2;
+}
+
+// Is `point` standing on any of these bridges?
+export function pointOnBridge(point, bridges) {
+  return Array.isArray(bridges) && bridges.some((b) => pointInBridge(point, b));
 }
 
 // Slug type ballistics table -- see docs/combat-system-design.md §4.
@@ -910,6 +965,12 @@ export function dualShotPairError(a, b) {
     if ((s.loyalty_tier ?? 0) < DUAL_SHOT_MIN_LOYALTY) return `${s.name} isn't loyal enough -- both slugs need loyalty tier ${DUAL_SHOT_MIN_LOYALTY}+.`;
     if (s.uncounterable) return `${s.name} is uncounterable and can't be fired in a dual shot.`;
     if (s.ultra_fast) return `${s.name} is ultra-fast and can't be fired in a dual shot.`;
+    // Helixel's bolt is already drawn as a two-strand DNA helix, which a fused dual bolt can't share.
+    if (s.adaptive_strain) return `${s.name}'s bolt splits into a DNA helix and can't be fired in a dual shot.`;
+    // Trackjaw's bolt stalks and pounces -- another custom bolt a fused dual bolt can't share.
+    if (s.pounce_strike) return `${s.name}'s bolt stalks and pounces and can't be fired in a dual shot.`;
+    // Bladier is a thrown dagger that slices through a wall, not something that can be fused into a bolt.
+    if (s.dagger_throw) return `${s.name} throws a knife and can't be fired in a dual shot.`;
   }
   if (a.type === b.type) return "Both slugs share an element -- a dual shot needs two different elements.";
   const needsPicker = (s) => Boolean(s.mind_scramble || s.friction_shift);
@@ -1050,6 +1111,16 @@ export function shotFlightMs(dist, blasterSpeed, slug) {
   return Math.round(SHOT_SLOW_PHASE_MS + cruiseMs);
 }
 
+// A ricochet leg's flight time: the shot is already at full speed when it caroms off a
+// target, so there is no windup crawl -- it just cruises the whole way at
+// SHOT_CRUISE_SPEED_MULTIPLIER x the weapon's speed (and ultra_fast/Mega Morph, like every
+// cruise). Floored at SHOT_MIN_LEG_MS, the shortest a leg is ever animated for on the client.
+export const SHOT_MIN_LEG_MS = 400;
+export function shotCruiseMs(dist, blasterSpeed, slug) {
+  const cruiseMs = dist / (shotEffectiveSpeed(blasterSpeed, slug) * SHOT_CRUISE_SPEED_MULTIPLIER);
+  return Math.max(SHOT_MIN_LEG_MS, Math.round(cruiseMs));
+}
+
 // Fraction of a shot's own total distance covered during its windup --
 // used to place the bolt correctly mid-flight (shotDistanceFraction below,
 // and its client mirror in CombatMap.jsx). A far shot's windup is a small
@@ -1087,9 +1158,11 @@ export const SHOT_FLIGHT_MULTIPLIER = 1;
 export const SHOT_LAUNCH_KICK_RATIO = 0.4; // share of the windup's OWN distance covered by the instant launch kick
 export const DEFAULT_WINDUP_FRACTION = 0.2; // fallback for fx with no real weapon/distance behind them
 
-export function shotDistanceFraction(elapsedMs, flightMs, windupFraction = DEFAULT_WINDUP_FRACTION) {
+export function shotDistanceFraction(elapsedMs, flightMs, windupFraction = DEFAULT_WINDUP_FRACTION, noWindup = false) {
   if (elapsedMs <= 0) return 0;
   if (elapsedMs >= flightMs) return 1;
+  // A ricochet leg (see shotCruiseMs) has no windup: straight linear cruise.
+  if (noWindup) return elapsedMs / flightMs;
   const slowMs = Math.min(SHOT_SLOW_PHASE_MS, flightMs);
   const fastMs = flightMs - slowMs;
   const kickFraction = windupFraction * SHOT_LAUNCH_KICK_RATIO;
@@ -1100,6 +1173,38 @@ export function shotDistanceFraction(elapsedMs, flightMs, windupFraction = DEFAU
   }
   const fastElapsed = elapsedMs - slowMs;
   return windupFraction + (1 - windupFraction) * (fastElapsed / fastMs);
+}
+
+// The inverse of shotDistanceFraction: how many ms into a `flightMs` flight the bolt has covered
+// `fraction` of its distance. It lands a terrain change at the moment the bolt actually passes a
+// wall (Bladier's wall break) instead of when it reaches the target. Mirrors the client's bolt
+// position, so what the player sees and when the wall breaks agree.
+export function shotTimeAtFraction(fraction, flightMs, windupFraction = DEFAULT_WINDUP_FRACTION, noWindup = false) {
+  const f = Math.min(1, Math.max(0, fraction));
+  if (noWindup) return f * flightMs;
+  const slowMs = Math.min(SHOT_SLOW_PHASE_MS, flightMs);
+  const fastMs = flightMs - slowMs;
+  const kick = windupFraction * SHOT_LAUNCH_KICK_RATIO;
+  if (fastMs <= 0) return f * flightMs;
+  if (f <= kick) return 0;
+  if (f <= windupFraction && windupFraction - kick > 1e-9) return (slowMs * (f - kick)) / (windupFraction - kick);
+  return slowMs + ((f - windupFraction) / (1 - windupFraction)) * fastMs;
+}
+
+// Bladier's knife: shortly before its bolt reaches a wall it throws a small knife ahead of itself,
+// which flies DAGGER_KNIFE_SPEEDUP times faster than the bolt and destroys the wall on landing; the
+// bolt then passes through the gap. Both are fractions of the shot's path (attacker -> target):
+// `throwT` is where the bolt is when the knife leaves it (DAGGER_THROW_LEAD map units before the
+// wall, but never inside the windup, where the bolt hasn't transformed yet) and `landT` is where the
+// bolt is when the knife hits the wall -- the moment the wall breaks. The client draws the knife
+// from these two numbers, so the picture and the break always agree.
+export const DAGGER_THROW_LEAD = 110;
+export const DAGGER_KNIFE_SPEEDUP = 3;
+export function daggerThrowPlan(pierceT, pathLength, windupFraction = DEFAULT_WINDUP_FRACTION) {
+  const length = Math.max(1, pathLength);
+  const throwT = Math.min(pierceT, Math.max(windupFraction, pierceT - DAGGER_THROW_LEAD / length));
+  const landT = throwT + (pierceT - throwT) / DAGGER_KNIFE_SPEEDUP;
+  return { throwT, landT };
 }
 
 // Straight-line interpolation between two map points, t in 0..1.
@@ -1124,12 +1229,14 @@ export function isSupportiveSlug(slug) {
 // chain arc. Shared by dealHit and the auto-counter's damage forecast
 // (autoCounter.js) so the forecast can never drift from what really lands.
 // `ambushed`: Gloomstalk's triple-from-invisibility, decided by the caller
-// (it depends on the shooter's live status).
-export function slugBaseHitAmount(slug, { ambushed = false, half = false } = {}) {
+// (it depends on the shooter's live status). `adaptStacks`: Helixel's adaptive
+// strain -- how many times this shooter's slug has already hit this target.
+export function slugBaseHitAmount(slug, { ambushed = false, half = false, adaptStacks = 0 } = {}) {
   const tb = slugBallistics(slug);
   let amount = Math.max(0, slug.clash_power + tb.powerMod * (slug.power_doubled ? POWER_SURGE_MULTIPLIER : 1));
   if (slug.damage_tripled) amount *= CLASH_TRIPLE_MULTIPLIER;
   if (ambushed) amount *= CLASH_TRIPLE_MULTIPLIER;
+  if (slug.adaptive_strain && adaptStacks > 0) amount = Math.floor(amount * (1 + ADAPT_BONUS_PER_HIT * Math.min(adaptStacks, ADAPT_MAX_STACKS)));
   if (slug.dual?.damageMult > 1) amount = Math.floor(amount * slug.dual.damageMult);
   if (half) amount = Math.floor(amount / 2);
   return amount;
@@ -1279,10 +1386,12 @@ export function firstWallHit(from, to, walls, ignoreWallIds = []) {
   return nearest;
 }
 
-// Trims/removes a wall segment around an impact point, radius `WALL_BREAK_RADIUS`.
-// Returns the replacement list of segments for that wall id (0, 1, or 2 pieces),
-// or null if the wall is untouched (impact point not actually on it).
-export function breakWallSegment(wall, impact, radius = WALL_BREAK_RADIUS) {
+// Trims a wall segment around an impact point: `radius` map units each side of it (see
+// wallBreakRadius -- it follows the slug's Clash Power), but never more than
+// WALL_BREAK_MAX_FRACTION of the wall's length in all, so a single hit always leaves part of the
+// wall standing. Returns the replacement list of segments for that wall id (0, 1, or 2 pieces --
+// 0 only for a wall too short for any piece to survive the trim).
+export function breakWallSegment(wall, impact, radius = WALL_BREAK_RADIUS, maxFraction = WALL_BREAK_MAX_FRACTION) {
   const dx = wall.x2 - wall.x1;
   const dy = wall.y2 - wall.y1;
   const len = Math.hypot(dx, dy);
@@ -1290,6 +1399,9 @@ export function breakWallSegment(wall, impact, radius = WALL_BREAK_RADIUS) {
   const ux = dx / len;
   const uy = dy / len;
   const t = (impact.x - wall.x1) * ux + (impact.y - wall.y1) * uy; // distance along wall
+  // How much of the wall a break of this radius would remove, clipped to the wall's own ends.
+  const removed = (r) => Math.min(len, t + r) - Math.max(0, t - r);
+  while (radius > 1 && removed(radius) > len * maxFraction) radius *= 0.95;
   const segments = [];
   if (t - radius > 1) {
     segments.push({ x1: wall.x1, y1: wall.y1, x2: wall.x1 + ux * (t - radius), y2: wall.y1 + uy * (t - radius) });
@@ -1405,12 +1517,14 @@ export const WATER_MOVE_COST_MULT = 2;
 export const WATER_FOOT_COST_MULT = 4; // wading on foot (unmounted) is far slower than a mecha ploughing through // swimming/wading costs double AP unless flying or aquatic
 export const waterCellId = (x, y) => Math.floor(y / WATER_CELL) * 1000 + Math.floor(x / WATER_CELL);
 export const makeWaterSet = (water) => new Set(Array.isArray(water) ? water : []);
-export const isWaterAt = (waterSet, point) => waterSet.has(waterCellId(point.x, point.y));
+// A bridge covers whatever water lies beneath it: stepping onto one is dry land.
+export const isWaterAt = (waterSet, point, bridges) =>
+  waterSet.has(waterCellId(point.x, point.y)) && !pointOnBridge(point, bridges);
 
 // AP to walk `from` -> `to`: straight-line distance over speedPerAp, with any
 // stretch that crosses water counting WATER_MOVE_COST_MULT times (unless the
 // mover ignores water). Always at least 1.
-export function pathApCost(from, to, waterSet, speedPerAp, ignoresWater = false, waterMult = WATER_MOVE_COST_MULT) {
+export function pathApCost(from, to, waterSet, speedPerAp, ignoresWater = false, waterMult = WATER_MOVE_COST_MULT, bridges) {
   const len = distance(from, to);
   let effective = len;
   if (!ignoresWater && waterSet.size > 0 && len > 0) {
@@ -1418,7 +1532,7 @@ export function pathApCost(from, to, waterSet, speedPerAp, ignoresWater = false,
     let wet = 0;
     for (let i = 0; i < steps; i++) {
       const t = (i + 0.5) / steps;
-      if (isWaterAt(waterSet, { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t })) wet += 1;
+      if (isWaterAt(waterSet, { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t }, bridges)) wet += 1;
     }
     effective = len + len * (wet / steps) * (waterMult - 1);
   }
@@ -1426,13 +1540,13 @@ export function pathApCost(from, to, waterSet, speedPerAp, ignoresWater = false,
 }
 
 // True if any stretch of the straight path from -> to is water.
-export function pathTouchesWater(from, to, waterSet) {
+export function pathTouchesWater(from, to, waterSet, bridges) {
   if (waterSet.size === 0) return false;
   const len = distance(from, to);
   const steps = Math.max(1, Math.ceil(len / 10));
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-    if (isWaterAt(waterSet, { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t })) return true;
+    if (isWaterAt(waterSet, { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t }, bridges)) return true;
   }
   return false;
 }

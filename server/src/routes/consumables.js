@@ -122,7 +122,7 @@ router.post("/meds", playersOnly, async (req, res) => {
     const { rows } = await client.query("SELECT * FROM characters WHERE user_id = $1 FOR UPDATE", [req.user.sub]);
     const c = rows[0];
     if (!c) throw new SupplyError("You don't have a character sheet yet.", 404);
-    if (!c.ill) throw new SupplyError("You're not ill.");
+    if (!c.ill) throw new SupplyError("You're not sick.");
     if (c.meds_taken) throw new SupplyError("You've already taken today's dose -- the next one is after your next long rest.");
     if (c.meds < 1) throw new SupplyError("You're out of Meds -- buy more at the Market.");
     const streak = (c.meds_streak ?? 0) + 1;

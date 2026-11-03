@@ -100,6 +100,11 @@ export function toClientTemplate(row) {
     potentPoison: row.potent_poison,
     causesBleed: row.causes_bleed,
     lifeDrain: row.life_drain,
+    adaptiveStrain: row.adaptive_strain,
+    pounceStrike: row.pounce_strike,
+    timeSkip: row.time_skip,
+    lightningStrike: row.lightning_strike,
+    daggerThrow: row.dagger_throw,
     createdAt: row.created_at,
   };
 }
@@ -252,6 +257,11 @@ router.post("/", async (req, res) => {
     potentPoison,
     causesBleed,
     lifeDrain,
+    adaptiveStrain,
+    pounceStrike,
+    timeSkip,
+    lightningStrike,
+    daggerThrow,
   } = req.body || {};
 
   const validation = validateSlugFields({
@@ -299,8 +309,8 @@ router.post("/", async (req, res) => {
          pierces_walls, causes_chain, ricochets, ultra_fast, causes_invisible, causes_fear, causes_confusion, trail_wall, clash_tripled,
          cone_blast, spawns_pods, mirage_decoy, star_wall, anchor_zone, voids_fire_clash, clears_fire_terrain,
          causes_disarm, disarm_zone, mind_scramble, swaps_position, friction_shift, crosswind_zone, skips_reload,
-         emotion_surge, uncounterable, damage_tripled, static_mark, tempo_aura, power_surge, heal_over_time, grapple, causes_stun, stalls_slugs, amplifies_partner, pulls_metal, phases_walls, mirrors_clash, surrounds_target, ambush_tripled, summons_plant, causes_burn, massive_aoe, random_statuses, summons_ghost, potent_poison, causes_bleed, life_drain, rarity)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69)
+         emotion_surge, uncounterable, damage_tripled, static_mark, tempo_aura, power_surge, heal_over_time, grapple, causes_stun, stalls_slugs, amplifies_partner, pulls_metal, phases_walls, mirrors_clash, surrounds_target, ambush_tripled, summons_plant, causes_burn, massive_aoe, random_statuses, summons_ghost, potent_poison, causes_bleed, life_drain, adaptive_strain, pounce_strike, time_skip, lightning_strike, dagger_throw, rarity)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69, $70, $71, $72, $73, $74)
        RETURNING *`,
       [
         name.trim(),
@@ -371,6 +381,11 @@ router.post("/", async (req, res) => {
         Boolean(potentPoison),
         Boolean(causesBleed),
         Boolean(lifeDrain),
+        Boolean(adaptiveStrain),
+        Boolean(pounceStrike),
+        Boolean(timeSkip),
+        Boolean(lightningStrike),
+        Boolean(daggerThrow),
         rarity ?? null,
       ]
     );
@@ -453,6 +468,11 @@ router.patch("/:id", async (req, res) => {
     potentPoison,
     causesBleed,
     lifeDrain,
+    adaptiveStrain,
+    pounceStrike,
+    timeSkip,
+    lightningStrike,
+    daggerThrow,
   } = req.body || {};
 
   const validation = validateSlugFields({
@@ -507,8 +527,8 @@ router.patch("/:id", async (req, res) => {
         mind_scramble = $40, swaps_position = $41, friction_shift = $42, crosswind_zone = $43, skips_reload = $44,
         emotion_surge = $45, uncounterable = $46, damage_tripled = $47, static_mark = $48, tempo_aura = $49, power_surge = $50,
         heal_over_time = $51, grapple = $52,
-        causes_stun = $53, stalls_slugs = $54, amplifies_partner = $55, pulls_metal = $56, phases_walls = $57, mirrors_clash = $58, surrounds_target = $59, ambush_tripled = $60, summons_plant = $61, causes_burn = $62, massive_aoe = $63, random_statuses = $64, summons_ghost = $65, potent_poison = $66, causes_bleed = $67, life_drain = $68, rarity = $69
-       WHERE id = $70
+        causes_stun = $53, stalls_slugs = $54, amplifies_partner = $55, pulls_metal = $56, phases_walls = $57, mirrors_clash = $58, surrounds_target = $59, ambush_tripled = $60, summons_plant = $61, causes_burn = $62, massive_aoe = $63, random_statuses = $64, summons_ghost = $65, potent_poison = $66, causes_bleed = $67, life_drain = $68, adaptive_strain = $69, pounce_strike = $70, time_skip = $71, lightning_strike = $72, dagger_throw = $73, rarity = $74
+       WHERE id = $75
        RETURNING *`,
       [
         name.trim(),
@@ -579,6 +599,11 @@ router.patch("/:id", async (req, res) => {
         Boolean(potentPoison),
         Boolean(causesBleed),
         Boolean(lifeDrain),
+        Boolean(adaptiveStrain),
+        Boolean(pounceStrike),
+        Boolean(timeSkip),
+        Boolean(lightningStrike),
+        Boolean(daggerThrow),
         rarity ?? null,
         id,
       ]

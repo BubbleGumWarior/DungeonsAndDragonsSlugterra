@@ -19,6 +19,11 @@
   cursor: pointer;
 }
 
+/* Only the DM ever sees one: players get no cluster at all until a world in it is discovered. */
+.galaxy-cluster--undiscovered {
+  filter: grayscale(0.85) brightness(0.8);
+}
+
 .galaxy-cluster--back:hover .galaxy-orbit,
 .galaxy-cluster--back:focus-visible .galaxy-orbit {
   stroke: rgba(205, 214, 255, 0.32);

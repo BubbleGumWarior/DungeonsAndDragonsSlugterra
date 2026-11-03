@@ -1,0 +1,224 @@
+/* Terrain effects (see TerrainFx.jsx): a wall forming, a wall breaking, a bridge being built.
+   Top-down: pieces fly outward from the wall / origin and shrink as they "fall"; nothing has a
+   screen direction. Each effect plays once and its element is unmounted when it ends. */
+
+.tfx {
+  pointer-events: none;
+}
+
+/* ---- Wall breaking ---- */
+
+.tfx-snap {
+  stroke: #ffffff;
+  stroke-linecap: round;
+  stroke-opacity: 0.9;
+  filter: drop-shadow(0 0 8px var(--fx-color));
+  animation: tfx-fade 0.34s ease-out forwards;
+}
+
+.tfx-snap--core {
+  stroke: var(--fx-color);
+  stroke-opacity: 1;
+  animation-duration: 0.5s;
+}
+
+.tfx-chip {
+  fill: var(--fx-color);
+  stroke: rgba(0, 0, 0, 0.45);
+  stroke-width: 0.8;
+  animation: tfx-chip 0.85s cubic-bezier(0.15, 0.7, 0.3, 1) forwards;
+}
+
+.tfx-dust {
+  fill: var(--fx-color);
+  fill-opacity: 0.26;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: tfx-dust 0.9s ease-out both;
+}
+
+@keyframes tfx-fade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Flung outward (--dx/--dy), spinning, and shrinking away as if dropping from the camera. */
+@keyframes tfx-chip {
+  from {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: translate(var(--dx), var(--dy)) rotate(var(--rot)) scale(0.15);
+    opacity: 0;
+  }
+}
+
+@keyframes tfx-dust {
+  from {
+    transform: scale(0.4);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+/* ---- Wall forming ---- */
+
+.tfx-halo {
+  stroke: var(--fx-color);
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 8px var(--fx-color));
+  animation: tfx-halo 0.85s ease-out forwards;
+}
+
+.tfx-tip {
+  fill: #ffffff;
+  filter: drop-shadow(0 0 7px var(--fx-color));
+  animation: tfx-tip 0.5s linear forwards;
+}
+
+.tfx-spark {
+  fill: var(--fx-color);
+  animation: tfx-spark 0.6s ease-out forwards;
+}
+
+.tfx-ring {
+  fill: none;
+  stroke: var(--fx-color);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: tfx-ring 0.5s ease-out 0.45s both;
+}
+
+@keyframes tfx-halo {
+  0% {
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* The tip runs the wall's length in the same 0.5s the wall draws itself in. */
+@keyframes tfx-tip {
+  0% {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--dx), var(--dy));
+    opacity: 0;
+  }
+}
+
+@keyframes tfx-spark {
+  from {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: translate(var(--dx), var(--dy)) scale(0.2);
+    opacity: 0;
+  }
+}
+
+@keyframes tfx-ring {
+  from {
+    transform: scale(0.3);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+/* ---- Bridge ---- */
+
+.bridge-plank {
+  stroke: var(--bridge-color, var(--gold));
+  stroke-opacity: 0.55;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+/* Planks drop into place one after another from the near end (delays are set per plank). */
+.bridge-plank--building {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bridge-plank-in 0.26s ease-out both;
+}
+
+/* The bright bar that runs ahead of the planks, then fades at the far end. */
+.bridge-lead {
+  fill: #ffffff;
+  fill-opacity: 0.85;
+  filter: drop-shadow(0 0 8px var(--bridge-color, var(--gold)));
+  pointer-events: none;
+  animation: bridge-lead var(--bridge-ms, 500ms) linear forwards;
+}
+
+/* A bridge that is being built draws its body in alongside the planks. */
+.combat-map-bridge--building > rect:first-child {
+  animation: bridge-body-in var(--bridge-ms, 500ms) ease-out both;
+}
+
+@keyframes bridge-plank-in {
+  from {
+    opacity: 0;
+    transform: scale(0.3, 0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1, 1);
+  }
+}
+
+@keyframes bridge-lead {
+  0% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(var(--bridge-len));
+    opacity: 0;
+  }
+}
+
+@keyframes bridge-body-in {
+  from {
+    fill-opacity: 0;
+    stroke-opacity: 0;
+  }
+  to {
+    fill-opacity: 0.22;
+    stroke-opacity: 0.7;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tfx *,
+  .bridge-plank--building,
+  .bridge-lead {
+    animation: none !important;
+  }
+  .tfx {
+    display: none;
+  }
+}

@@ -1,0 +1,102 @@
+/* The placement ghost for Make Wall / Build Bridge (see PlacementGhost.jsx).
+   Tinted with the firing slug's element colour, like the real structure will be,
+   but drawn dashed and see-through so it reads as a plan, not a thing. */
+.placement-ghost {
+  --ghost-color: var(--gold);
+  animation: placement-ghost-in 0.12s var(--ease-out);
+}
+
+@keyframes placement-ghost-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.placement-ghost-aim {
+  vector-effect: non-scaling-stroke;
+  stroke: var(--ghost-color);
+  stroke-opacity: 0.45;
+  stroke-width: 1.5;
+  stroke-dasharray: 2 6;
+  stroke-linecap: round;
+}
+
+.placement-ghost-halo {
+  vector-effect: non-scaling-stroke;
+  stroke: var(--ghost-color);
+  stroke-opacity: 0.22;
+  stroke-width: 14;
+  stroke-linecap: round;
+}
+
+.placement-ghost-wall {
+  vector-effect: non-scaling-stroke;
+  stroke: var(--ghost-color);
+  stroke-width: 4;
+  stroke-dasharray: 10 6;
+  stroke-linecap: round;
+}
+
+.placement-ghost-cap {
+  fill: var(--charcoal-950);
+  stroke: var(--ghost-color);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.placement-ghost-deck {
+  fill: var(--ghost-color);
+  fill-opacity: 0.18;
+  stroke: var(--ghost-color);
+  stroke-opacity: 0.9;
+  stroke-width: 2.5;
+  stroke-dasharray: 9 6;
+  vector-effect: non-scaling-stroke;
+}
+
+.placement-ghost-plank {
+  stroke: var(--ghost-color);
+  stroke-opacity: 0.4;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.placement-ghost-arrow {
+  stroke: var(--ink);
+  stroke-opacity: 0.85;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.placement-ghost-arrowhead {
+  fill: var(--ink);
+  fill-opacity: 0.9;
+}
+
+.placement-ghost-anchor {
+  fill: var(--ink);
+  stroke: var(--charcoal-950);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.placement-ghost-label {
+  text-anchor: middle;
+  font-weight: 700;
+  fill: var(--ink);
+  stroke: rgba(0, 0, 0, 0.85);
+  stroke-width: 4px;
+  paint-order: stroke;
+  stroke-linejoin: round;
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .placement-ghost {
+    animation: none;
+  }
+}

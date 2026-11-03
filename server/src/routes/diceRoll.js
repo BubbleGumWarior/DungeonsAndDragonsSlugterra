@@ -2,7 +2,14 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { broadcastAll, notifyUser } from "../ws.js";
-import { PROFICIENCY_KEYS, PROFICIENCY_LABELS, PROFICIENCY_STATS, skillModifier } from "../characterRules.js";
+import {
+  PROFICIENCY_KEYS,
+  PROFICIENCY_LABELS,
+  PROFICIENCY_STATS,
+  STAT_KEYS,
+  skillModifier,
+  statModifier,
+} from "../characterRules.js";
 
 const router = Router();
 
@@ -36,6 +43,39 @@ function describeRoll(roll) {
 
   const parts = roll.results.map((r) => r.total).join(", ");
   return `${roll.targetName} rolled ${roll.skillLabel}${typeSuffix} ×${roll.diceCount}: ${parts} (d20 ${mod} each)`;
+}
+
+// body is a plain-text fallback; meta carries the structured shape the chat
+// UI actually renders (dice tiles, not a formula string).
+async function logRollToChat(userId, roll) {
+  const meta = {
+    type: "dice-roll",
+    targetName: roll.targetName,
+    skillLabel: roll.skillLabel,
+    rollType: roll.rollType,
+    diceCount: roll.diceCount,
+    modifier: roll.modifier,
+    results: roll.results,
+  };
+
+  const { rows } = await pool.query(
+    `INSERT INTO messages (user_id, username, role, body, meta)
+     VALUES ($1, $2, 'System', $3, $4)
+     RETURNING id, user_id, username, role, body, meta, created_at`,
+    [userId, "Dice Roll", describeRoll(roll), JSON.stringify(meta)]
+  );
+  broadcastAll({
+    type: "chat-message",
+    message: {
+      id: rows[0].id,
+      userId: rows[0].user_id,
+      username: rows[0].username,
+      role: rows[0].role,
+      body: rows[0].body,
+      meta: rows[0].meta,
+      createdAt: rows[0].created_at,
+    },
+  });
 }
 
 // Pending roll requests, keyed by offer id. In-memory and short-lived: a
@@ -119,6 +159,73 @@ router.post("/", requireDungeonMaster, async (req, res) => {
   }
 });
 
+const STAT_LABELS = {
+  strength: "Strength",
+  dexterity: "Dexterity",
+  constitution: "Constitution",
+  intelligence: "Intelligence",
+  wisdom: "Wisdom",
+  charisma: "Charisma",
+};
+
+// Until the party learns what world they're on, two skills go by their
+// modern-Earth names (mirrors hiddenLabel in the client's characterData.js).
+const VEILED_LABELS = { astrogation: "Navigation", creatureHandling: "Animal Handling" };
+
+// A player clicks a stat or skill on their own sheet: one plain d20 plus that
+// modifier, logged to the Events feed. Deliberately nothing else -- advantage,
+// disadvantage and multi-dice rolls stay DM-called (POST / above). Always the
+// caller's own character, so no id is taken from the client.
+router.post("/self", async (req, res) => {
+  const kind = req.body?.kind;
+  const key = req.body?.key;
+  const isStat = kind === "stat" && STAT_KEYS.includes(key);
+  const isSkill = kind === "skill" && PROFICIENCY_KEYS.includes(key);
+  if (!isStat && !isSkill) {
+    return res.status(400).json({ error: "Pick a stat or skill to roll." });
+  }
+
+  try {
+    const { rows: charRows } = await pool.query(
+      "SELECT name, stats, proficiencies FROM characters WHERE user_id = $1",
+      [req.user.sub]
+    );
+    const character = charRows[0];
+    if (!character) {
+      return res.status(400).json({ error: "You don't have a character sheet yet." });
+    }
+
+    let skillLabel;
+    let modifier;
+    if (isStat) {
+      skillLabel = STAT_LABELS[key];
+      modifier = statModifier(character.stats[key]);
+    } else {
+      const { rows } = await pool.query("SELECT slugterra_hidden FROM campaign_settings WHERE id = 1");
+      const revealed = !rows[0]?.slugterra_hidden;
+      skillLabel = (!revealed && VEILED_LABELS[key]) || PROFICIENCY_LABELS[key];
+      modifier = skillModifier(character.stats, character.proficiencies, key);
+    }
+
+    const value = rollD20();
+    const roll = {
+      targetName: character.name,
+      skillLabel,
+      rollType: "normal",
+      diceCount: 1,
+      modifier,
+      results: [{ values: [value], kept: value, total: value + modifier }],
+      at: Date.now(),
+    };
+
+    await logRollToChat(req.user.sub, roll);
+    res.json({ roll });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not roll." });
+  }
+});
+
 // The target player resolves their own pending roll. Single-use: the offer
 // is deleted the moment it's claimed, computed fresh server-side (never
 // trusting the client for dice values), and logged to chat immediately --
@@ -179,36 +286,7 @@ router.post("/:id/resolve", async (req, res) => {
       at: Date.now(),
     };
 
-    // body is a plain-text fallback; meta carries the structured shape the
-    // chat UI actually renders (dice tiles, not a formula string).
-    const meta = {
-      type: "dice-roll",
-      targetName: roll.targetName,
-      skillLabel: roll.skillLabel,
-      rollType: roll.rollType,
-      diceCount: roll.diceCount,
-      modifier: roll.modifier,
-      results: roll.results,
-    };
-
-    const { rows: msgRows } = await pool.query(
-      `INSERT INTO messages (user_id, username, role, body, meta)
-       VALUES ($1, $2, 'System', $3, $4)
-       RETURNING id, user_id, username, role, body, meta, created_at`,
-      [req.user.sub, "Dice Roll", describeRoll(roll), JSON.stringify(meta)]
-    );
-    broadcastAll({
-      type: "chat-message",
-      message: {
-        id: msgRows[0].id,
-        userId: msgRows[0].user_id,
-        username: msgRows[0].username,
-        role: msgRows[0].role,
-        body: msgRows[0].body,
-        meta: msgRows[0].meta,
-        createdAt: msgRows[0].created_at,
-      },
-    });
+    await logRollToChat(req.user.sub, roll);
 
     res.json({ roll });
   } catch (err) {

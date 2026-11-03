@@ -18,6 +18,7 @@ import {
   slugHasTrait,
   slugHasType,
   splitRiderDamage,
+  adaptStacksOn,
   CLASH_TRIPLE_MULTIPLIER,
   METAL_UNCOUNTERED_MULTIPLIER,
   SHOT_SLOW_PHASE_MS,
@@ -126,10 +127,12 @@ export function evaluateAutoCounter({ incoming, attacker, defender, counters, ca
   const attackerHp = hpOf(attacker);
   const ambushed = Boolean(incoming.ambush_tripled && attacker?.status_effects?.invisible);
   const incomingRiders = slugRiderCount(incoming) * AUTO_COUNTER_RIDER_HARM;
+  // Helixel: how many times this attacker has already sampled the defender.
+  const adaptStacks = incoming.adaptive_strain ? adaptStacksOn(defender?.status_effects, attacker?.id) : 0;
 
   // Do nothing: the shot lands as a plain, uncountered hit (Metal's bonus applies).
   const uncounteredAmount = Math.round(
-    slugBaseHitAmount(incoming, { ambushed }) * (slugHasType(incoming, "Metal") ? METAL_UNCOUNTERED_MULTIPLIER : 1)
+    slugBaseHitAmount(incoming, { ambushed, adaptStacks }) * (slugHasType(incoming, "Metal") ? METAL_UNCOUNTERED_MULTIPLIER : 1)
   );
   const uncounteredHarm = harm(gritLossFor(defender, uncounteredAmount), defenderHp) + incomingRiders;
   const baseline = -uncounteredHarm;
@@ -166,7 +169,7 @@ export function evaluateAutoCounter({ incoming, attacker, defender, counters, ca
         label = `reflects for ${reflected}`;
       } else if (outcome === "attacker-wins") {
         // Smashed through: the hit still lands (no Metal bonus once countered) and the counter slug is lost.
-        const landed = slugBaseHitAmount({ ...incoming, clash_power: incoming.clash_power * incomingMult }, { ambushed });
+        const landed = slugBaseHitAmount({ ...incoming, clash_power: incoming.clash_power * incomingMult }, { ambushed, adaptStacks });
         swing = -(harm(gritLossFor(defender, landed), defenderHp) + incomingRiders) - cost - AUTO_COUNTER_SLUG_LOSS;
         label = "would be smashed through";
       } else if (outcome === "double-break") {

@@ -3,6 +3,8 @@ import { AuthProvider, useAuth } from "./AuthContext.jsx";
 import AccessSocket, { useLiveState } from "./AccessSocket.jsx";
 import VoiceChatProvider from "./VoiceChatContext.jsx";
 import VoiceWidget from "./VoiceWidget.jsx";
+import AmbientProvider from "./AmbientPlayer.jsx";
+import SoundDesk from "./SoundDesk.jsx";
 import ChallengeResultOverlay from "./ChallengeResultOverlay.jsx";
 import LongRestOverlay from "./LongRestOverlay.jsx";
 import DiceRollPrompt from "./DiceRollPrompt.jsx";
@@ -19,6 +21,7 @@ import CharacterCreate from "./CharacterCreate.jsx";
 import CharacterSheet from "./CharacterSheet.jsx";
 import Inventory from "./Inventory.jsx";
 import Consumables from "./Consumables.jsx";
+import Notes from "./Notes.jsx";
 import Market from "./Market.jsx";
 import { ToastProvider } from "./Toast.jsx";
 import TradeToasts from "./TradeToasts.jsx";
@@ -89,6 +92,7 @@ function App() {
         <CounterClashPrompt />
         <KnockoutRollPrompt />
         <AuthedVoiceChat />
+        <AmbientProvider>
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route
@@ -116,6 +120,7 @@ function App() {
             <Route path="/character" element={<CharacterSheet />} />
             <Route element={<SlugterraGate />}>
               <Route path="/inventory" element={<Inventory />} />
+              <Route path="/notes" element={<Notes />} />
               <Route path="/consumables" element={<Consumables />} />
               <Route path="/market" element={<Market />} />
               <Route path="/slugs" element={<Slugs />} />
@@ -128,11 +133,13 @@ function App() {
               <Route path="/npcs" element={<Navigate to="/chronicle" replace />} />
             </Route>
             <Route path="/admin" element={<Admin />} />
+            <Route path="/sound-desk" element={<SoundDesk />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
+        </AmbientProvider>
        </ToastProvider>
       </AccessSocket>
     </AuthProvider>

@@ -1,58 +1,99 @@
 import { useEffect, useMemo, useState } from "react";
-import { PlusIcon, TrashIcon, UserPlusIcon, DownloadSimpleIcon, CaretDownIcon, SparkleIcon, ShuffleIcon } from "@phosphor-icons/react";
+import { MagnifyingGlassIcon, SparkleIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import SlugCard from "./SlugCard.jsx";
 import SlugForm from "./SlugForm.jsx";
-import SlugToolbar, { filterTemplates, sortTemplates } from "./SlugToolbar.jsx";
+import SlugCatalog from "./SlugCatalog.jsx";
+import { NarrowSwitch, QuickRemove, RecipientRail, useRecipient, useStatus } from "./DeskParts.jsx";
+import { defaultSlugFields } from "./slugData.js";
 import "./SlugManagement.css";
+import "./InventoryDesk.css";
 
+// One player's slugs, with the per-slug Mega Morph permission on each card.
+function PlayerSlugPanel({ recipient, slugs, onEdit, onToggleMega, onRemove }) {
+  const [query, setQuery] = useState("");
+
+  if (!recipient) {
+    return (
+      <section className="desk-satchel desk-satchel--empty" aria-label="Slugs">
+        <p className="desk-satchel-hint">No players yet. Once someone joins, you can hand them slugs from the catalog.</p>
+      </section>
+    );
+  }
+
+  const q = query.trim().toLowerCase();
+  const shown = q ? slugs.filter((s) => s.name.toLowerCase().includes(q) || s.type.toLowerCase().includes(q)) : slugs;
+  const megaCount = slugs.filter((s) => s.megaMorphAllowed).length;
+
+  return (
+    <section className="desk-satchel" aria-label={`${recipient.name}'s slugs`}>
+      <header className="desk-satchel-head">
+        <div className="desk-satchel-who">
+          <h2>{recipient.name}</h2>
+        </div>
+        {slugs.length > 6 && (
+          <label className="desk-search desk-search--head">
+            <MagnifyingGlassIcon weight="bold" aria-hidden="true" />
+            <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find one of theirs" aria-label={`Search ${recipient.name}'s slugs`} />
+          </label>
+        )}
+        <p className="desk-satchel-meta">
+          {slugs.length === 0 ? "No slugs yet" : `${slugs.length} ${slugs.length === 1 ? "slug" : "slugs"}`}
+          {megaCount > 0 && ` · ${megaCount} can Mega Morph`}
+        </p>
+      </header>
+
+      {slugs.length === 0 ? (
+        <div className="desk-empty desk-empty--big">
+          <p>{recipient.name} has no slugs.</p>
+          <p>Pick one from the catalog and press Give.</p>
+        </div>
+      ) : shown.length === 0 ? (
+        <div className="desk-empty">
+          <p>None of {recipient.name}'s slugs match "{query.trim()}".</p>
+        </div>
+      ) : (
+        <div className="desk-cards">
+          {shown.map((slug) => (
+            <SlugCard
+              key={slug.id}
+              slug={slug}
+              onClick={() => onEdit(slug)}
+              actions={
+                <div className="desk-card-actions">
+                  <QuickRemove name={slug.name} onRemove={() => onRemove(slug)} />
+                  <button
+                    type="button"
+                    className={`slug-management-mega-toggle ${slug.megaMorphAllowed ? "slug-management-mega-toggle--on" : ""}`}
+                    aria-pressed={Boolean(slug.megaMorphAllowed)}
+                    onClick={() => onToggleMega(slug)}
+                    title={slug.megaMorphAllowed ? "This slug can Mega Morph in combat -- click to revoke" : "Allow this slug to Mega Morph in combat"}
+                  >
+                    <SparkleIcon weight={slug.megaMorphAllowed ? "fill" : "bold"} />
+                    {slug.megaMorphAllowed ? "Can Mega Morph" : "Allow Mega Morph"}
+                  </button>
+                </div>
+              }
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// The DM's slug desk: pick who you are giving to, hand them slugs from the
+// catalog in one click, and see their roster beside it.
 export default function SlugManagement() {
   const { token } = useAuth();
   const [templates, setTemplates] = useState([]);
   const [players, setPlayers] = useState([]);
   const [slugs, setSlugs] = useState([]);
   const [modal, setModal] = useState(null);
-  const [query, setQuery] = useState("");
-  const [selectedTypes, setSelectedTypes] = useState(() => new Set());
-  const [selectedFlags, setSelectedFlags] = useState(() => new Set());
-  const [sortKey, setSortKey] = useState("name-asc");
   const [bulkBusy, setBulkBusy] = useState(false);
-  const [bulkStatus, setBulkStatus] = useState(null);
-  // The default roster can run to dozens of templates -- collapsed by
-  // default so the page opens on the (usually much shorter) player roster
-  // below instead of a wall of cards, with a toggle for the DM to expand it
-  // back out when they actually need to browse/edit templates.
-  const [templatesOpen, setTemplatesOpen] = useState(false);
-
-  function toggleType(type) {
-    setSelectedTypes((prev) => {
-      const next = new Set(prev);
-      if (next.has(type)) next.delete(type);
-      else next.add(type);
-      return next;
-    });
-  }
-
-  function toggleFlag(flag) {
-    setSelectedFlags((prev) => {
-      const next = new Set(prev);
-      if (next.has(flag)) next.delete(flag);
-      else next.add(flag);
-      return next;
-    });
-  }
-
-  function clearFilters() {
-    setQuery("");
-    setSelectedTypes(new Set());
-    setSelectedFlags(new Set());
-  }
-
-  const visibleTemplates = useMemo(() => {
-    const filtered = filterTemplates(templates, { query, types: selectedTypes, flags: selectedFlags });
-    return sortTemplates(filtered, sortKey);
-  }, [templates, query, selectedTypes, selectedFlags, sortKey]);
+  const [narrowView, setNarrowView] = useState("catalog");
+  const [status, setStatus] = useStatus();
 
   function authHeaders(extra) {
     return { Authorization: `Bearer ${token}`, ...extra };
@@ -122,8 +163,8 @@ export default function SlugManagement() {
     setSlugs((prev) => prev.map((s) => (s.id === data.slug.id ? data.slug : s)));
   }
 
-  async function deleteTemplate(id) {
-    await fetch(`/api/slug-templates/${id}`, {
+  async function deleteTemplate(template) {
+    await fetch(`/api/slug-templates/${template.id}`, {
       method: "DELETE",
       headers: authHeaders(),
     });
@@ -139,20 +180,21 @@ export default function SlugManagement() {
     );
     if (!confirmed) return;
     setBulkBusy(true);
-    setBulkStatus(null);
+    setStatus(null);
     try {
       const res = await fetch("/api/slug-templates", { method: "DELETE", headers: authHeaders() });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not remove templates.");
       const slugCount = data.slugsDeletedCount ?? 0;
-      setBulkStatus(
-        `Removed ${data.deletedCount} template${data.deletedCount === 1 ? "" : "s"} and ` +
-          `${slugCount} player slug${slugCount === 1 ? "" : "s"}.`
-      );
+      setStatus({
+        text:
+          `Removed ${data.deletedCount} template${data.deletedCount === 1 ? "" : "s"} and ` +
+          `${slugCount} player slug${slugCount === 1 ? "" : "s"}.`,
+      });
       loadTemplates();
       loadSlugs();
     } catch (err) {
-      setBulkStatus(err.message || "Could not remove templates.");
+      setStatus({ text: err.message || "Could not remove templates.", error: true });
     } finally {
       setBulkBusy(false);
     }
@@ -161,19 +203,17 @@ export default function SlugManagement() {
   async function importDefaultTemplates() {
     if (bulkBusy) return;
     setBulkBusy(true);
-    setBulkStatus(null);
+    setStatus(null);
     try {
       const res = await fetch("/api/slug-templates/import-defaults", { method: "POST", headers: authHeaders() });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not import default slugs.");
-      setBulkStatus(
-        data.seeded > 0
-          ? `Imported ${data.seeded} of ${data.total} default slugs.`
-          : `All ${data.total} default slugs are already here.`
-      );
+      setStatus({
+        text: data.seeded > 0 ? `Imported ${data.seeded} of ${data.total} default slugs.` : `All ${data.total} default slugs are already here.`,
+      });
       setTemplates(data.templates);
     } catch (err) {
-      setBulkStatus(err.message || "Could not import default slugs.");
+      setStatus({ text: err.message || "Could not import default slugs.", error: true });
     } finally {
       setBulkBusy(false);
     }
@@ -183,19 +223,20 @@ export default function SlugManagement() {
   async function giveRandomSlugs() {
     if (bulkBusy || players.length === 0) return;
     setBulkBusy(true);
-    setBulkStatus(null);
+    setStatus(null);
     try {
       const res = await fetch("/api/slugs/test/give-random", { method: "POST", headers: authHeaders() });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not give random slugs.");
-      setBulkStatus(
-        data.given > 0
-          ? `Gave ${data.given} random slug${data.given === 1 ? "" : "s"} to ${data.players} player${data.players === 1 ? "" : "s"}.`
-          : "Every equipped blaster slot is already full."
-      );
+      setStatus({
+        text:
+          data.given > 0
+            ? `Gave ${data.given} random slug${data.given === 1 ? "" : "s"} to ${data.players} player${data.players === 1 ? "" : "s"}.`
+            : "Every equipped blaster slot is already full.",
+      });
       loadSlugs();
     } catch (err) {
-      setBulkStatus(err.message || "Could not give random slugs.");
+      setStatus({ text: err.message || "Could not give random slugs.", error: true });
     } finally {
       setBulkBusy(false);
     }
@@ -206,21 +247,21 @@ export default function SlugManagement() {
     if (bulkBusy || slugs.length === 0) return;
     if (!window.confirm(`Remove all ${slugs.length} slugs from every player? This can't be undone.`)) return;
     setBulkBusy(true);
-    setBulkStatus(null);
+    setStatus(null);
     try {
       const res = await fetch("/api/slugs/test/player-slugs", { method: "DELETE", headers: authHeaders() });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not remove player slugs.");
-      setBulkStatus(`Removed ${data.deletedCount} player slug${data.deletedCount === 1 ? "" : "s"}.`);
+      setStatus({ text: `Removed ${data.deletedCount} player slug${data.deletedCount === 1 ? "" : "s"}.` });
       loadSlugs();
     } catch (err) {
-      setBulkStatus(err.message || "Could not remove player slugs.");
+      setStatus({ text: err.message || "Could not remove player slugs.", error: true });
     } finally {
       setBulkBusy(false);
     }
   }
 
-  async function assignSlug(payload) {
+  async function postSlug(payload) {
     const res = await fetch("/api/slugs", {
       method: "POST",
       headers: authHeaders({ "Content-Type": "application/json" }),
@@ -228,8 +269,12 @@ export default function SlugManagement() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Could not assign slug.");
-    setModal(null);
     loadSlugs();
+  }
+
+  async function assignSlug(payload) {
+    await postSlug(payload);
+    setModal(null);
   }
 
   async function updateSlugInstance(id, payload) {
@@ -244,185 +289,70 @@ export default function SlugManagement() {
     loadSlugs();
   }
 
-  async function deleteSlugInstance(id) {
-    await fetch(`/api/slugs/${id}`, {
+  async function removeSlug(slug) {
+    await fetch(`/api/slugs/${slug.id}`, {
       method: "DELETE",
       headers: authHeaders(),
     });
-    setModal(null);
     loadSlugs();
+    setStatus({ text: `Took ${slug.name} from ${recipient?.name ?? "the player"}.` });
   }
 
-  const slugsByPlayer = players.map((player) => ({
-    player,
-    slugs: slugs.filter((s) => s.userId === player.id),
-  }));
+  const roster = players.map((player) => ({ id: player.id, name: player.characterName || player.username }));
+  const [recipient, chooseRecipient] = useRecipient(roster);
+  const heldCount = (id) => slugs.filter((s) => s.userId === id).length;
+  const held = useMemo(() => (recipient ? slugs.filter((s) => s.userId === recipient.id) : []), [slugs, recipient]);
+  const heldByTemplate = useMemo(() => {
+    const counts = new Map();
+    for (const s of held) if (s.templateId != null) counts.set(s.templateId, (counts.get(s.templateId) ?? 0) + 1);
+    return counts;
+  }, [held]);
+
+  // One click: hand a template to the chosen player exactly as it is.
+  async function give(template) {
+    if (!recipient) return false;
+    try {
+      await postSlug({ ...defaultSlugFields(), ...template, templateId: template.id, userId: recipient.id });
+      setStatus({ text: `Gave ${template.name} to ${recipient.name}.` });
+      return true;
+    } catch (err) {
+      setStatus({ text: err.message || "Could not give that slug.", error: true });
+      return false;
+    }
+  }
 
   return (
-    <div className="slug-management">
-      <section className="slug-management-section">
-        <div className="slug-management-section-header">
-          <button
-            type="button"
-            className="slug-management-collapse-toggle"
-            onClick={() => setTemplatesOpen((v) => !v)}
-            aria-expanded={templatesOpen}
-          >
-            <CaretDownIcon weight="bold" className={`slug-management-collapse-caret ${templatesOpen ? "slug-management-collapse-caret--open" : ""}`} />
-            <h2>Slug Templates</h2>
-            <span className="slug-management-count">{templates.length}</span>
-          </button>
-          <div className="slug-management-header-actions">
-            <button
-              type="button"
-              className="slug-management-ghost-btn"
-              onClick={importDefaultTemplates}
-              disabled={bulkBusy}
-            >
-              <DownloadSimpleIcon weight="bold" />
-              Import Default Slugs
-            </button>
-            <button
-              type="button"
-              className="slug-management-ghost-btn slug-management-ghost-btn--danger"
-              onClick={removeAllTemplates}
-              disabled={bulkBusy || templates.length === 0}
-            >
-              <TrashIcon weight="bold" />
-              Remove All
-            </button>
-            <button type="button" className="slug-management-new" onClick={() => setModal({ type: "new-template" })}>
-              <PlusIcon weight="bold" />
-              New Template
-            </button>
-          </div>
+    <div className="slug-management desk">
+      <RecipientRail roster={roster} recipient={recipient} countFor={heldCount} onChoose={chooseRecipient} />
+      <NarrowSwitch view={narrowView} onView={setNarrowView} recipient={recipient} count={held.length} noun="slugs" />
+
+      <div className="desk-layout">
+        <div className={`desk-pane desk-pane--catalog ${narrowView !== "catalog" ? "desk-pane--away" : ""}`}>
+          <SlugCatalog
+            templates={templates}
+            recipient={recipient}
+            heldByTemplate={heldByTemplate}
+            status={status}
+            bulk={{
+              busy: bulkBusy,
+              canGiveRandom: players.length > 0 && templates.length > 0,
+              canRemovePlayerSlugs: slugs.length > 0,
+              importDefaults: importDefaultTemplates,
+              removeAll: removeAllTemplates,
+              giveRandom: giveRandomSlugs,
+              removePlayerSlugs: removeAllPlayerSlugs,
+            }}
+            onGive={give}
+            onCustomize={(template) => setModal({ type: "assign", template })}
+            onEdit={(template) => setModal({ type: "edit-template", template })}
+            onDelete={deleteTemplate}
+            onNew={() => setModal({ type: "new-template" })}
+          />
         </div>
-
-        {bulkStatus && <p className="slug-management-bulk-status">{bulkStatus}</p>}
-
-        {templatesOpen &&
-          (templates.length === 0 ? (
-            <p className="slug-management-empty">No templates yet. Create one to start assigning slugs.</p>
-          ) : (
-            <>
-              <SlugToolbar
-                query={query}
-                onQueryChange={setQuery}
-                selectedTypes={selectedTypes}
-                onToggleType={toggleType}
-                selectedFlags={selectedFlags}
-                onToggleFlag={toggleFlag}
-                sortKey={sortKey}
-                onSortChange={setSortKey}
-                resultCount={visibleTemplates.length}
-                totalCount={templates.length}
-                onClear={clearFilters}
-              />
-              {visibleTemplates.length === 0 ? (
-                <p className="slug-management-empty">No slugs match those filters.</p>
-              ) : (
-                <div className="slug-management-grid">
-                  {visibleTemplates.map((template) => (
-                    <SlugCard
-                      key={template.id}
-                      slug={template}
-                      onClick={() => setModal({ type: "edit-template", template })}
-                      actions={
-                        <>
-                          <button
-                            type="button"
-                            className="slug-management-icon-btn"
-                            onClick={() => setModal({ type: "assign", template })}
-                            title="Assign to player"
-                          >
-                            <UserPlusIcon weight="bold" />
-                          </button>
-                          <button
-                            type="button"
-                            className="slug-management-icon-btn slug-management-icon-btn--danger"
-                            onClick={() => deleteTemplate(template.id)}
-                            title="Delete template"
-                          >
-                            <TrashIcon weight="bold" />
-                          </button>
-                        </>
-                      }
-                    />
-                  ))}
-                </div>
-              )}
-            </>
-          ))}
-      </section>
-
-      <section className="slug-management-section">
-        <div className="slug-management-section-header">
-          <h2>Players &amp; Their Slugs</h2>
-          {/* TEST-ONLY buttons -- remove before production. */}
-          <div className="slug-management-header-actions">
-            <button
-              type="button"
-              className="slug-management-ghost-btn"
-              onClick={giveRandomSlugs}
-              disabled={bulkBusy || players.length === 0 || templates.length === 0}
-              title="Test: fill every empty slot on each player's equipped blasters with a random slug"
-            >
-              <ShuffleIcon weight="bold" />
-              Give Random to Players
-            </button>
-            <button
-              type="button"
-              className="slug-management-ghost-btn slug-management-ghost-btn--danger"
-              onClick={removeAllPlayerSlugs}
-              disabled={bulkBusy || slugs.length === 0}
-              title="Test: delete every slug owned by a player"
-            >
-              <TrashIcon weight="bold" />
-              Remove Player Slugs
-            </button>
-          </div>
+        <div className={`desk-pane desk-pane--gear ${narrowView !== "gear" ? "desk-pane--away" : ""}`}>
+          <PlayerSlugPanel key={recipient?.id} recipient={recipient} slugs={held} onEdit={(slug) => setModal({ type: "edit-instance", slug })} onToggleMega={toggleMegaMorph} onRemove={removeSlug} />
         </div>
-        {players.length === 0 ? (
-          <p className="slug-management-empty">No players yet.</p>
-        ) : (
-          <div className="slug-management-players">
-            {slugsByPlayer.map(({ player, slugs: playerSlugs }) => (
-              <div className="slug-management-player" key={player.id}>
-                <h3>{player.characterName || player.username}</h3>
-                {playerSlugs.length === 0 ? (
-                  <p className="slug-management-empty">No slugs assigned.</p>
-                ) : (
-                  <div className="slug-management-grid">
-                    {playerSlugs.map((slug) => (
-                      <SlugCard
-                        key={slug.id}
-                        slug={slug}
-                        onClick={() => setModal({ type: "edit-instance", slug })}
-                        actions={
-                          <button
-                            type="button"
-                            className={`slug-management-mega-toggle ${slug.megaMorphAllowed ? "slug-management-mega-toggle--on" : ""}`}
-                            aria-pressed={Boolean(slug.megaMorphAllowed)}
-                            onClick={() => toggleMegaMorph(slug)}
-                            title={
-                              slug.megaMorphAllowed
-                                ? "This slug can Mega Morph in combat -- click to revoke"
-                                : "Allow this slug to Mega Morph in combat"
-                            }
-                          >
-                            <SparkleIcon weight={slug.megaMorphAllowed ? "fill" : "bold"} />
-                            {slug.megaMorphAllowed ? "Can Mega Morph" : "Allow Mega Morph"}
-                          </button>
-                        }
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      </div>
 
       {modal && (
         <div className="slug-modal-backdrop" onClick={() => setModal(null)}>
@@ -451,30 +381,21 @@ export default function SlugManagement() {
                 mode="assign"
                 initialValues={{ ...modal.template, templateId: modal.template.id }}
                 players={players}
+                defaultPlayerId={recipient?.id}
                 onSubmit={assignSlug}
                 onCancel={() => setModal(null)}
                 submitLabel="Assign Slug"
               />
             )}
             {modal.type === "edit-instance" && (
-              <>
-                <SlugForm
-                  mode="instance"
-                  initialValues={modal.slug}
-                  slugId={modal.slug.id}
-                  onSubmit={(payload) => updateSlugInstance(modal.slug.id, payload)}
-                  onCancel={() => setModal(null)}
-                  submitLabel="Save Slug"
-                />
-                <button
-                  type="button"
-                  className="slug-management-remove"
-                  onClick={() => deleteSlugInstance(modal.slug.id)}
-                >
-                  <TrashIcon weight="bold" />
-                  Remove from Player
-                </button>
-              </>
+              <SlugForm
+                mode="instance"
+                initialValues={modal.slug}
+                slugId={modal.slug.id}
+                onSubmit={(payload) => updateSlugInstance(modal.slug.id, payload)}
+                onCancel={() => setModal(null)}
+                submitLabel="Save Slug"
+              />
             )}
           </div>
         </div>

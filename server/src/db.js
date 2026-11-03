@@ -2,6 +2,7 @@ import pg from "pg";
 import "dotenv/config";
 import { computeMaxGrit } from "./characterRules.js";
 import { BASE_TYPES, BASE_TYPE_KEYS, QUALITY_TIERS } from "./itemRules.js";
+import { BASE_FLAG_COLUMNS, EXTRA_FLAG_COLUMNS } from "./slugpediaTraits.js";
 
 export const pool = new pg.Pool({
   host: process.env.PGHOST,
@@ -595,6 +596,12 @@ export async function initSchema() {
   await pool.query(`
     INSERT INTO campaign_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
   `);
+  // The DM's "Hide Slugterra" switch: while true the whole Slugterra side of the
+  // app is veiled for everyone, even players who have a character. Stored (not
+  // in memory) so it survives a server restart.
+  await pool.query(`
+    ALTER TABLE campaign_settings ADD COLUMN IF NOT EXISTS slugterra_hidden BOOLEAN NOT NULL DEFAULT false;
+  `);
 
   // The party's current planet for the dashboard Slug Hunt panel -- a flat
   // world index (see slugHuntOdds.json). A fresh campaign starts on The
@@ -926,6 +933,11 @@ export async function initSchema() {
     "potent_poison", // Plaguebell -- every poisoning hit (and its hazard patch) adds twice the poison stacks, so the poison is twice as effective
     "causes_bleed", // Madicus -- a hit leaves a bleeding status: 10% of the target's max Grit per turn for 3 turns
     "life_drain", // Duskfang -- a vampiric hit heals its own shooter by this slug's flat clash_power, same moment the damage lands
+    "adaptive_strain", // Helixel -- each hit on the same enemy makes this shooter's next hit on them land 25% harder (max 4 hits' worth); the bolt is drawn as a twisting DNA double helix
+    "pounce_strike", // Trackjaw -- visual only: the bolt stalks along its path as a faint ghost, then lunges into view as a streak and claws the target on a hit
+    "time_skip", // Chronix -- visual only: shortly after transforming the bolt vanishes for everyone, then reappears in a burst of light right in front of the target and finishes the flight (pair with Uncounterable)
+    "lightning_strike", // Zeus -- visual only: the bolt flies as a jagged, crackling lightning bolt with forks and arcs out on impact
+    "dagger_throw", // Bladier -- visual only: when a wall is in its path, the dagger is shown being thrown and slicing a gap through it (pair with Pierces Walls; barred from dual shots)
     "random_statuses", // Panaceon -- a hit applies 3 random distinct status effects: harmful ones (burn, fear, jam, blind...) at an enemy, helpful ones (regeneration, invisibility...) at an ally (3) or yourself (2); it attacks instead of healing
   ];
   for (const col of bespokeFlags) {
@@ -1394,6 +1406,11 @@ export async function initSchema() {
   await pool.query(`
     ALTER TABLE messages ALTER COLUMN user_id DROP NOT NULL;
   `);
+  // Pictures attached to a Party Chat message: a JSON array of re-encoded
+  // webp data URLs (see routes/chat.js). Null for plain-text and system rows.
+  await pool.query(`
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS images JSONB;
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS challenges (
@@ -1507,6 +1524,11 @@ export async function initSchema() {
   await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS next_hazard_id INTEGER NOT NULL DEFAULT 1;`);
   // Water terrain the DM paints in setup (cell ids, see waterCellId in combatRules.js).
   await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS water JSONB NOT NULL DEFAULT '[]';`);
+  // Aboard/offboard (atmosphereRules.js): `aboard` is the DM's setup toggle (a
+  // fight inside the ship, in plain ship air); `atmosphere` is the finished
+  // snapshot of the air the fight is fought in, refreshed in setup and frozen at /start.
+  await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS aboard BOOLEAN NOT NULL DEFAULT false;`);
+  await pool.query(`ALTER TABLE encounters ADD COLUMN IF NOT EXISTS atmosphere JSONB;`);
 
   // Player-made bridges (Bridge Maker slugs) -- rectangles {id, x, y, angle,
   // width, length, slugType}, see pointInBridge()/BRIDGE_WIDTH/BRIDGE_LENGTH
@@ -1720,6 +1742,34 @@ export async function initSchema() {
     ALTER TABLE slugpedia_entries ADD COLUMN IF NOT EXISTS discovered BOOLEAN NOT NULL DEFAULT true;
   `);
 
+  // The later ability flags (Cone Blast, Life Drain, ...) are recorded too, so
+  // the book can list them as traits and tell variants apart by them (see
+  // slugpediaTraits.js). Entries written before this have none of them, so
+  // `traits_v2` marks which rows have been brought up to date: new rows are
+  // born true, the column starts false on existing rows, and the one-time
+  // backfill below copies the flags from the entry's own catalog template --
+  // but only when the entry is still that template as-is (same stat block and
+  // flags), so a per-slug edit isn't overwritten with the template's flags.
+  for (const col of EXTRA_FLAG_COLUMNS) {
+    await pool.query(`ALTER TABLE slugpedia_entries ADD COLUMN IF NOT EXISTS ${col} BOOLEAN NOT NULL DEFAULT false;`);
+  }
+  await pool.query(`ALTER TABLE slugpedia_entries ADD COLUMN IF NOT EXISTS traits_v2 BOOLEAN NOT NULL DEFAULT false;`);
+  await pool.query(`ALTER TABLE slugpedia_entries ALTER COLUMN traits_v2 SET DEFAULT true;`);
+  const sameAsTemplate = [
+    ...["name", "type", "clash_power", "clash_defense", "ap_cost", "max_energy_pips", ...BASE_FLAG_COLUMNS].map(
+      (col) => `e.${col} = t.${col}`
+    ),
+    "e.velocity_ability IS NOT DISTINCT FROM t.velocity_ability",
+    "e.protoform_utility IS NOT DISTINCT FROM t.protoform_utility",
+  ].join(" AND ");
+  await pool.query(`
+    UPDATE slugpedia_entries e
+    SET ${EXTRA_FLAG_COLUMNS.map((col) => `${col} = t.${col}`).join(", ")}
+    FROM slug_templates t
+    WHERE e.traits_v2 = false AND e.template_id = t.id AND ${sameAsTemplate};
+  `);
+  await pool.query(`UPDATE slugpedia_entries SET traits_v2 = true WHERE traits_v2 = false;`);
+
   // Skill list changes: Religion is gone and Investigation became Splicing.
   // Characters that already hold either are brought across (a Religion pick is
   // simply dropped, so that character is one proficiency short until the DM
@@ -1784,5 +1834,67 @@ export async function initSchema() {
     ALTER TABLE characters ADD COLUMN IF NOT EXISTS meds INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE characters ADD COLUMN IF NOT EXISTS meds_streak INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE characters ADD COLUMN IF NOT EXISTS meds_taken BOOLEAN NOT NULL DEFAULT false;
+  `);
+
+  // Player notes (routes/notes.js). Private to the author: `body` is markdown,
+  // and references to owned things are ordinary links with a `ref:` scheme
+  // ([Name](ref:blaster/12)) so a note keeps its text if the target goes away.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notes (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      title TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS notes_user_updated ON notes (user_id, updated_at DESC);
+  `);
+
+  // Sound desk (routes/sounds.js). `sounds` is the DM's uploaded library: the
+  // audio itself lives on disk under server/uploads/sounds (file_id is the
+  // on-disk name), this row is its metadata. kind 'ambient' is a looping bed
+  // everyone hears in sync, 'effect' a one-shot the DM fires from the
+  // soundboard. `bank` is an optional DM-chosen label that groups sounds
+  // ("Ship", "Combat"); `volume` is that sound's own level, so a loud sample
+  // can be tamed once instead of on every play.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS sounds (
+      id SERIAL PRIMARY KEY,
+      kind TEXT NOT NULL CHECK (kind IN ('ambient', 'effect')),
+      name TEXT NOT NULL,
+      bank TEXT NOT NULL DEFAULT '',
+      file_id TEXT NOT NULL UNIQUE,
+      mime TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      duration_ms INTEGER,
+      volume REAL NOT NULL DEFAULT 1,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS ambient_state (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      sound_id INTEGER REFERENCES sounds(id) ON DELETE SET NULL,
+      playing BOOLEAN NOT NULL DEFAULT false,
+      started_at_ms BIGINT NOT NULL DEFAULT 0,
+      paused_at_ms BIGINT NOT NULL DEFAULT 0,
+      volume REAL NOT NULL DEFAULT 0.8,
+      version INTEGER NOT NULL DEFAULT 0,
+      CONSTRAINT ambient_single_row CHECK (id = 1)
+    );
+    INSERT INTO ambient_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+  `);
+  // Sounds listed from server/default-sounds (defaultSounds.js) rather than
+  // uploaded: library_path is the file's path inside that folder, and sizes
+  // can pass 2 GB for a multi-hour track, so size_bytes is a BIGINT.
+  await pool.query(`
+    ALTER TABLE sounds ADD COLUMN IF NOT EXISTS library_path TEXT;
+    ALTER TABLE sounds ALTER COLUMN size_bytes TYPE BIGINT;
+    CREATE UNIQUE INDEX IF NOT EXISTS sounds_library_path_key ON sounds (library_path);
+  `);
+  // How loud each person hears the ambient bed and the soundboard effects,
+  // set in Settings.jsx. Per account like every other listening level.
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS ambient_volume REAL NOT NULL DEFAULT 0.7;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS soundboard_volume REAL NOT NULL DEFAULT 0.8;
   `);
 }

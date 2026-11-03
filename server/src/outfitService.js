@@ -3,7 +3,8 @@
 // themselves are pure and live in outfitRules.js / planetRules.js.
 import { pool } from "./db.js";
 import { broadcastAll } from "./ws.js";
-import { climateTemperature } from "./planetRules.js";
+import { climateTemperature, restTemperature, restsAboard, worldFacts } from "./planetRules.js";
+import { buildAtmosphere } from "./atmosphereRules.js";
 
 export function toClientOutfit(row) {
   return {
@@ -49,13 +50,28 @@ export async function getWornOutfit(db, userId) {
 }
 
 // The temperature the party is standing in right now: the world they are on, or
-// the ship's own air while it is under way.
+// the ship's own air while it is under way. `restTemp` is the air they sleep in,
+// which differs on a world with no surface (see REST_ABOARD_WORLDS).
 export async function getClimate(db = pool) {
   const { rows: area } = await db.query("SELECT slug_hunt_area FROM campaign_settings WHERE id = 1");
   const { rows: travel } = await db.query("SELECT traveling FROM travel_state WHERE id = 1");
   const index = area[0]?.slug_hunt_area ?? 0;
   const traveling = Boolean(travel[0]?.traveling);
-  return { area: index, traveling, temp: climateTemperature(index, traveling) };
+  return {
+    area: index,
+    traveling,
+    temp: climateTemperature(index, traveling),
+    restTemp: restTemperature(index, traveling),
+    restAboard: !traveling && restsAboard(index),
+  };
+}
+
+// The air a fight here would be fought in: the world's own when offboard (the
+// default), plain ship air when the DM marks it aboard -- or whenever the ship
+// is under way, since everyone is inside it then.
+export async function currentAtmosphere({ aboard = false } = {}, db = pool) {
+  const climate = await getClimate(db);
+  return buildAtmosphere({ facts: worldFacts(climate.area), aboard: aboard || climate.traveling });
 }
 
 // One bare "it happened" nudge -- views refetch (see single-slot signals).

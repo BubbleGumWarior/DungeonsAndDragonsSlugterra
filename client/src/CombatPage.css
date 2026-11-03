@@ -220,3 +220,7 @@
 .combat-topbar-actions .panel-btn {
   text-decoration: none;
 }
+
+.combat-page-atmosphere {
+  margin: 0 0 12px;
+}

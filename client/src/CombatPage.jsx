@@ -40,9 +40,12 @@ import {
   WATER_FOOT_COST_MULT,
   hunkerGritCap,
 } from "./combatSkills.js";
-import { typeRange } from "./slugData.js";
+import { atmosphereTypeRange, fireBlocked, walkMultOf } from "./atmosphereData.js";
+import AtmosphereNote from "./AtmosphereNote.jsx";
 import { effectiveReloadApCost, meleeDamageFor } from "./itemData.js";
 import { combatantNameColor } from "./combatDisplay.js";
+import { typeColor } from "./slugData.js";
+import { PLACEMENT_KINDS, ROTATE_STEP, ROTATE_FINE_STEP, ROTATE_QUARTER, facingFor, normalizeAngle } from "./buildPlacement.js";
 import "./Panel.css";
 import "./CombatPage.css";
 
@@ -584,9 +587,9 @@ export default function CombatPage() {
     const hasRangeFinder = allMods.some((m) => m.equippedBlasterId === blaster.id && m.grantsRangeFinder);
     if (!isDM && !hasRangeFinder) return null;
     // Mirrors the server's combinedRange = blaster.range + type's range --
-    // the two stack.
-    return { x: actingCombatant.x, y: actingCombatant.y, r: blaster.range + typeRange(slug.type) };
-  }, [actingCombatant, mode, meleeInfo, allSlugs, allBlasters, allMods, isDM]);
+    // the two stack. The air can trim the type's part (vacuum Air, thin air).
+    return { x: actingCombatant.x, y: actingCombatant.y, r: blaster.range + atmosphereTypeRange(slug.type, encounter?.atmosphere) };
+  }, [actingCombatant, mode, meleeInfo, allSlugs, allBlasters, allMods, isDM, encounter?.atmosphere]);
 
   // While "Mount" is armed, show how close you have to be -- a ring at
   // MOUNT_RANGE around the character, with every in-range mecha highlighted
@@ -595,6 +598,52 @@ export default function CombatPage() {
     if (!actingCombatant || mode?.type !== "mount") return null;
     return { x: actingCombatant.x, y: actingCombatant.y, r: MOUNT_RANGE };
   }, [actingCombatant, mode]);
+
+  // Make Wall / Build Bridge are placed, not just aimed: while one is armed the map shows a
+  // ghost of the structure at the cursor, which can be turned (Q / E / R, the hotbar buttons,
+  // Shift + wheel) before the shot is fired. `mode.rotation` is the turn in degrees on top of
+  // the way the shot travels -- see buildPlacement.js.
+  const placement = useMemo(() => {
+    const kind = mode?.type === "shoot" ? PLACEMENT_KINDS[mode.actionType] : null;
+    if (!kind || !actingCombatant) return null;
+    const slug = allSlugs.find((s) => s.id === mode.slugId);
+    return {
+      kind,
+      shooter: { x: actingCombatant.x, y: actingCombatant.y },
+      tier: slug?.loyaltyTier ?? 1,
+      color: typeColor(slug?.type),
+      // Only clamp to the weapon's reach when this viewer is allowed to see it (the DM, or a Range Finder).
+      range: rangeRing?.r ?? null,
+      rotation: mode.rotation || 0,
+    };
+  }, [mode, actingCombatant, allSlugs, rangeRing]);
+
+  const rotatePlacement = useCallback((deltaDeg) => {
+    setMode((m) => {
+      if (m?.type !== "shoot" || !PLACEMENT_KINDS[m.actionType]) return m;
+      return { ...m, rotation: deltaDeg === null ? 0 : normalizeAngle((m.rotation || 0) + deltaDeg) };
+    });
+  }, []);
+
+  const placementActive = Boolean(placement);
+  useEffect(() => {
+    if (!placementActive) return undefined;
+    function onKey(e) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target;
+      if (t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      const step = e.shiftKey ? ROTATE_FINE_STEP : ROTATE_STEP;
+      const key = e.key.toLowerCase();
+      if (key === "q") rotatePlacement(-step);
+      else if (key === "e") rotatePlacement(step);
+      else if (key === "r") rotatePlacement(ROTATE_QUARTER);
+      else if (key === "0") rotatePlacement(null);
+      else return;
+      e.preventDefault();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [placementActive, rotatePlacement]);
 
   // The mecha the acting character is riding, if any -- drives the hotbar's
   // dual AP display and the Ram button's enable state.
@@ -663,12 +712,12 @@ export default function CombatPage() {
       let mode = null;
       if (vehicle) {
         mode = vehicle.data?.mode ?? null;
-        const inWater = isWaterAt(water, { x: vehicle.x, y: vehicle.y });
+        const inWater = isWaterAt(water, { x: vehicle.x, y: vehicle.y }, encounter?.bridges);
         speedPerAp = MOVE_SPEED_PER_AP * Math.max(1, vehicle.data?.speed || 1) * modeMechaSpeedFactor(mode, inWater);
       } else {
-        speedPerAp = moveSpeedPerAp(combatantSkillMod(combatant, "athletics")) * gearMoveMult(combatant);
+        speedPerAp = moveSpeedPerAp(combatantSkillMod(combatant, "athletics")) * gearMoveMult(combatant) * walkMultOf(encounter?.atmosphere);
       }
-      if (from && to) return pathApCost(from, to, water, speedPerAp, modeIgnoresWater(mode), vehicle ? undefined : WATER_FOOT_COST_MULT);
+      if (from && to) return pathApCost(from, to, water, speedPerAp, modeIgnoresWater(mode), vehicle ? undefined : WATER_FOOT_COST_MULT, encounter?.bridges);
       return Math.max(1, Math.ceil(dist / speedPerAp));
     },
     [encounter]
@@ -753,6 +802,16 @@ export default function CombatPage() {
       applyEncounter(await patchJson(token, `/api/combat/encounters/${encounter.id}/map`, patch));
     } catch (err) {
       setError(err.message);
+    }
+  }
+
+  async function handleSetAboard(aboard) {
+    setError(null);
+    try {
+      applyEncounter(await patchJson(token, `/api/combat/encounters/${encounter.id}/aboard`, { aboard }));
+    } catch (err) {
+      setError(err.message);
+      throw err;
     }
   }
 
@@ -957,6 +1016,7 @@ export default function CombatPage() {
             slugId: mode.slugId,
             actionType: mode.actionType,
             targetPoint: point,
+            ...(placement ? { buildAngle: facingFor(placement.shooter, point, placement.rotation) } : {}),
           })
         );
       } catch (err) {
@@ -1018,6 +1078,7 @@ export default function CombatPage() {
             slugId: mode.slugId,
             actionType: mode.actionType || "attack",
             ...(isEnvAction ? { targetPoint: { x: target.x, y: target.y } } : { targetId: target.id }),
+            ...(placement ? { buildAngle: facingFor(placement.shooter, { x: target.x, y: target.y }, placement.rotation) } : {}),
             ...(mode.effectChoice ? { effectChoice: mode.effectChoice } : {}),
             ...(mode.megaMorph ? { megaMorph: true } : {}),
             ...(mode.partnerSlugId ? { partnerSlugId: mode.partnerSlugId } : {}),
@@ -1093,6 +1154,12 @@ export default function CombatPage() {
       setMode(null);
       return;
     }
+    // Vacuum: nothing to burn in. The server refuses it too; this just says so first.
+    if (fireBlocked(encounter?.atmosphere, slug)) {
+      setError("Fire slugs can't be fired in a vacuum -- there is nothing to burn.");
+      setMode(null);
+      return;
+    }
     announceArmedSlug(slug);
     // A slug that can also break/make a wall or build a bridge gets a
     // picker for which of those (plus the always-available Attack) it's
@@ -1158,7 +1225,7 @@ export default function CombatPage() {
     const base = Math.max(1, blaster.speed + bonus);
     const mode = effectiveMode(actingCombatant);
     if (!mode) return base;
-    const inWater = isWaterAt(makeWaterSet(encounter?.water), { x: actingCombatant.x, y: actingCombatant.y });
+    const inWater = isWaterAt(makeWaterSet(encounter?.water), { x: actingCombatant.x, y: actingCombatant.y }, encounter?.bridges);
     return Math.max(1, Math.round(base * modeBlasterSpeedFactor(mode, inWater)));
   }
 
@@ -1252,6 +1319,7 @@ export default function CombatPage() {
             tool={setupTool}
             onToolChange={handleToolChange}
             onResizeMap={handleResizeMap}
+            onSetAboard={handleSetAboard}
             onAddCombatant={handleAddCombatant}
             onPullNpc={handlePullNpc}
             onPullGrunt={handlePullGrunt}
@@ -1319,6 +1387,12 @@ export default function CombatPage() {
         />
       )}
 
+      {encounter.status === "active" && encounter.atmosphere?.effects?.length > 0 && (
+        <div className="combat-page-atmosphere">
+          <AtmosphereNote atmosphere={encounter.atmosphere} title={encounter.atmosphere.aboard ? "Aboard the ship" : "The air here"} />
+        </div>
+      )}
+
       <div className="combat-page-columns">
         <div className="combat-page-left">
           <CombatSlugPanel
@@ -1346,6 +1420,8 @@ export default function CombatPage() {
             activeCombatantIds={activeIds}
             actingCombatantId={actingCombatant?.id}
             rangeRing={rangeRing}
+            placement={placement}
+            onRotatePlacement={rotatePlacement}
             mountRing={mountRing}
             wallRunId={wallRunId}
             isDraggable={isDraggable}
@@ -1370,6 +1446,8 @@ export default function CombatPage() {
             mountedMecha={mountedMecha}
             hasMountableMecha={hasMountableMecha}
             onArmMode={setMode}
+            placement={placement}
+            onRotatePlacement={rotatePlacement}
             onCancelMode={cancelMode}
             onAction={runAction}
           />

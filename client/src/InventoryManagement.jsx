@@ -1,25 +1,15 @@
 import { useEffect, useState } from "react";
-import { TrashIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import EquipmentForm from "./EquipmentForm.jsx";
 import BlasterForm from "./BlasterForm.jsx";
 import ModForm from "./ModForm.jsx";
 import GiftCatalog from "./GiftCatalog.jsx";
 import PlayerSatchel from "./PlayerSatchel.jsx";
+import { NarrowSwitch, RecipientRail, useRecipient, useStatus } from "./DeskParts.jsx";
 import useDmOutfits from "./useDmOutfits.js";
 import { defaultBlasterFields, defaultEquipmentFields, defaultModFields } from "./itemData.js";
 import "./SlugManagement.css";
 import "./InventoryDesk.css";
-
-const RECIPIENT_KEY = "dm-inventory-recipient";
-
-function readSavedRecipient() {
-  try {
-    return Number(localStorage.getItem(RECIPIENT_KEY)) || null;
-  } catch {
-    return null;
-  }
-}
 
 // The DM's handout desk: pick who you are giving to, then hand them things from
 // the catalog with one click. Their inventory sits beside it so the result is
@@ -34,9 +24,8 @@ export default function InventoryManagement() {
   const [equipment, setEquipment] = useState([]);
   const [equipmentTemplates, setEquipmentTemplates] = useState([]);
   const [modal, setModal] = useState(null);
-  const [recipientId, setRecipientId] = useState(readSavedRecipient);
   const [narrowView, setNarrowView] = useState("catalog");
-  const [status, setStatus] = useState(null);
+  const [status, setStatus] = useStatus();
   const outfitDesk = useDmOutfits();
 
   function authHeaders(extra) {
@@ -223,28 +212,13 @@ export default function InventoryManagement() {
     loadBlasters();
   }
 
-  useEffect(() => {
-    if (!status) return undefined;
-    const timer = setTimeout(() => setStatus(null), 4500);
-    return () => clearTimeout(timer);
-  }, [status]);
-
   const characterByUser = new Map(outfitDesk.characters.map((c) => [c.userId, c]));
   const roster = players.map((player) => ({
     id: player.id,
     name: player.characterName || player.username,
     ill: Boolean(characterByUser.get(player.id)?.ill),
   }));
-  const recipient = roster.find((p) => p.id === recipientId) ?? roster[0] ?? null;
-
-  function chooseRecipient(id) {
-    setRecipientId(id);
-    try {
-      localStorage.setItem(RECIPIENT_KEY, String(id));
-    } catch {
-      // Remembering the pick is a convenience; the page works without it.
-    }
-  }
+  const [recipient, chooseRecipient] = useRecipient(roster);
 
   const inventoryFor = (id) => ({
     blasters: blasters.filter((b) => b.userId === id),
@@ -293,6 +267,17 @@ export default function InventoryManagement() {
     }
   }
 
+  // Card-level Remove: take one held item back and say so under the catalog.
+  async function takeBack(type, item) {
+    const remove = { blaster: deleteBlasterInstance, mod: deleteModInstance, equipment: deleteEquipmentInstance }[type];
+    try {
+      await remove(item.id);
+      setStatus({ text: `Took ${item.name} from ${recipient?.name ?? "them"}.` });
+    } catch (err) {
+      setStatus({ text: err.message || "Could not remove that.", error: true });
+    }
+  }
+
   const openNew = (type) => setModal({ type: `new-${type}-template` });
   const openEdit = (type, template) => setModal({ type: `edit-${type}-template`, template });
   const openTweak = (type, template) => setModal({ type: `assign-${type}`, template });
@@ -301,39 +286,9 @@ export default function InventoryManagement() {
 
   return (
     <div className="slug-management desk">
-      <section className="desk-rail" aria-label="Giving to">
-        <span className="desk-rail-label">Giving to</span>
-        {roster.length === 0 ? (
-          <span className="desk-rail-none">No players yet.</span>
-        ) : (
-          <div className="desk-rail-list" role="group" aria-label="Choose who receives items">
-            {roster.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className={`desk-person ${recipient?.id === p.id ? "desk-person--on" : ""}`}
-                aria-pressed={recipient?.id === p.id}
-                onClick={() => chooseRecipient(p.id)}
-              >
-                <span className="desk-person-name">{p.name}</span>
-                <span className="desk-person-count" aria-label={`${heldCount(p.id)} items held`}>
-                  {heldCount(p.id)}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
+      <RecipientRail roster={roster} recipient={recipient} countFor={heldCount} onChoose={chooseRecipient} />
+      <NarrowSwitch view={narrowView} onView={setNarrowView} recipient={recipient} count={recipient ? heldCount(recipient.id) : 0} />
 
-      <div className="desk-switch" role="group" aria-label="Show">
-        <button type="button" className={narrowView === "catalog" ? "desk-switch--on" : ""} aria-pressed={narrowView === "catalog"} onClick={() => setNarrowView("catalog")}>
-          Catalog
-        </button>
-        <button type="button" className={narrowView === "gear" ? "desk-switch--on" : ""} aria-pressed={narrowView === "gear"} onClick={() => setNarrowView("gear")}>
-          {recipient ? `${recipient.name.split(" ")[0]}'s gear` : "Gear"}
-          {recipient && <span className="desk-tab-count">{heldCount(recipient.id)}</span>}
-        </button>
-      </div>
 
       <div className="desk-layout">
         <div className={`desk-pane desk-pane--catalog ${narrowView !== "catalog" ? "desk-pane--away" : ""}`}>
@@ -362,6 +317,7 @@ export default function InventoryManagement() {
             onEditMod={(mod) => setModal({ type: "edit-mod-instance", mod })}
             onEditEquipment={(item) => setModal({ type: "edit-equipment-instance", item })}
             onRestoreBlaster={restoreBlaster}
+            onRemoveItem={takeBack}
             onRemoveOutfit={removeOutfit}
           />
         </div>
@@ -409,19 +365,13 @@ export default function InventoryManagement() {
               />
             )}
             {modal.type === "edit-blaster-instance" && (
-              <>
-                <BlasterForm
-                  mode="instance"
-                  initialValues={modal.blaster}
-                  onSubmit={(payload) => updateBlasterInstance(modal.blaster.id, payload)}
-                  onCancel={() => setModal(null)}
-                  submitLabel="Save Blaster"
-                />
-                <button type="button" className="slug-management-remove" onClick={() => deleteBlasterInstance(modal.blaster.id)}>
-                  <TrashIcon weight="bold" />
-                  Remove from Player
-                </button>
-              </>
+              <BlasterForm
+                mode="instance"
+                initialValues={modal.blaster}
+                onSubmit={(payload) => updateBlasterInstance(modal.blaster.id, payload)}
+                onCancel={() => setModal(null)}
+                submitLabel="Save Blaster"
+              />
             )}
 
             {modal.type === "new-mod-template" && (
@@ -448,19 +398,13 @@ export default function InventoryManagement() {
               />
             )}
             {modal.type === "edit-mod-instance" && (
-              <>
-                <ModForm
-                  mode="instance"
-                  initialValues={modal.mod}
-                  onSubmit={(payload) => updateModInstance(modal.mod.id, payload)}
-                  onCancel={() => setModal(null)}
-                  submitLabel="Save Mod"
-                />
-                <button type="button" className="slug-management-remove" onClick={() => deleteModInstance(modal.mod.id)}>
-                  <TrashIcon weight="bold" />
-                  Remove from Player
-                </button>
-              </>
+              <ModForm
+                mode="instance"
+                initialValues={modal.mod}
+                onSubmit={(payload) => updateModInstance(modal.mod.id, payload)}
+                onCancel={() => setModal(null)}
+                submitLabel="Save Mod"
+              />
             )}
 
             {modal.type === "new-equipment-template" && (
@@ -487,19 +431,13 @@ export default function InventoryManagement() {
               />
             )}
             {modal.type === "edit-equipment-instance" && (
-              <>
-                <EquipmentForm
-                  mode="instance"
-                  initialValues={modal.item}
-                  onSubmit={(payload) => updateEquipmentInstance(modal.item.id, payload)}
-                  onCancel={() => setModal(null)}
-                  submitLabel="Save Equipment"
-                />
-                <button type="button" className="slug-management-remove" onClick={() => deleteEquipmentInstance(modal.item.id)}>
-                  <TrashIcon weight="bold" />
-                  Remove from Player
-                </button>
-              </>
+              <EquipmentForm
+                mode="instance"
+                initialValues={modal.item}
+                onSubmit={(payload) => updateEquipmentInstance(modal.item.id, payload)}
+                onCancel={() => setModal(null)}
+                submitLabel="Save Equipment"
+              />
             )}
           </div>
         </div>

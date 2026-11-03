@@ -1,4 +1,7 @@
 import http from "http";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import express from "express";
 import cors from "cors";
 import "dotenv/config";
@@ -28,10 +31,13 @@ import npcTemplatesRouter from "./routes/npcTemplates.js";
 import gruntTemplatesRouter from "./routes/gruntTemplates.js";
 import chronicleRouter from "./routes/chronicle.js";
 import slugpediaRouter from "./routes/slugpedia.js";
+import notesRouter from "./routes/notes.js";
 import slugHuntRouter from "./routes/slugHunt.js";
 import shipsRouter from "./routes/ships.js";
 import travelRouter from "./routes/travel.js";
 import voiceRouter from "./routes/voice.js";
+import soundsRouter from "./routes/sounds.js";
+import { syncDefaultSounds } from "./defaultSounds.js";
 import marketRouter from "./routes/market.js";
 import tradesRouter from "./routes/trades.js";
 import consumablesRouter from "./routes/consumables.js";
@@ -77,10 +83,12 @@ app.use("/api/npc-templates", npcTemplatesRouter);
 app.use("/api/grunt-templates", gruntTemplatesRouter);
 app.use("/api/chronicle", chronicleRouter);
 app.use("/api/slugpedia", slugpediaRouter);
+app.use("/api/notes", notesRouter);
 app.use("/api/slug-hunt", slugHuntRouter);
 app.use("/api/ships", shipsRouter);
 app.use("/api/travel", travelRouter);
 app.use("/api/voice", voiceRouter);
+app.use("/api/sounds", soundsRouter);
 app.use("/api/market", marketRouter);
 app.use("/api/trades", tradesRouter);
 app.use("/api/consumables", consumablesRouter);
@@ -93,7 +101,7 @@ app.get("/api/presence/online", requireAuth, (req, res) => {
 app.get("/api/me", requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT id, username, role, status, must_change_password, theme, sound_volume, voice_input_mode, voice_peer_volumes, voice_cue_volume, master_volume, combat_sfx_volumes FROM users WHERE id = $1",
+      "SELECT id, username, role, status, must_change_password, theme, sound_volume, voice_input_mode, voice_peer_volumes, voice_cue_volume, master_volume, combat_sfx_volumes, ambient_volume, soundboard_volume FROM users WHERE id = $1",
       [req.user.sub]
     );
     const row = rows[0];
@@ -114,6 +122,8 @@ app.get("/api/me", requireAuth, async (req, res) => {
         voiceCueVolume: row.voice_cue_volume,
         masterVolume: row.master_volume,
         combatSfxVolumes: row.combat_sfx_volumes,
+        ambientVolume: row.ambient_volume,
+        soundboardVolume: row.soundboard_volume,
       },
     });
   } catch (err) {
@@ -121,6 +131,33 @@ app.get("/api/me", requireAuth, async (req, res) => {
     res.status(500).json({ error: "Could not load user." });
   }
 });
+
+// Serves the built client (client/dist) when it exists, so the Cloudflare
+// Tunnel can point straight at this process (port 4000) with no Vite dev
+// server or its /api + /ws proxy in the path. Without a build (plain
+// `npm run dev` in client/) this is skipped and Vite keeps serving the UI.
+// Hashed /assets files never change, so they cache hard; index.html must
+// always be revalidated so a new build is picked up on the next load.
+const clientDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../client/dist");
+if (fs.existsSync(path.join(clientDist, "index.html"))) {
+  app.use(
+    express.static(clientDist, {
+      index: false,
+      setHeaders(res, filePath) {
+        if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        } else {
+          res.setHeader("Cache-Control", "no-cache");
+        }
+      },
+    })
+  );
+  app.get(/^\/(?!api(\/|$)|ws(\/|$)|assets\/).*/, (req, res) => {
+    res.setHeader("Cache-Control", "no-cache");
+    res.sendFile(path.join(clientDist, "index.html"));
+  });
+  console.log(`Serving built client from ${clientDist}`);
+}
 
 const port = process.env.PORT || 4000;
 const server = http.createServer(app);
@@ -134,6 +171,13 @@ initSchema()
   .then(() => backfillMechanicFlags())
   .then(() => seedDefaultShip())
   .then(() => seedDefaultOutfits())
+  .then(() =>
+    syncDefaultSounds()
+      .then(({ added, removed }) => {
+        if (added || removed) console.log(`Default sounds folder: ${added} added, ${removed} removed.`);
+      })
+      .catch((err) => console.warn("Could not read the default sounds folder:", err.message))
+  )
   .then(() => {
     server.listen(port, () => console.log(`Server listening on port ${port}`));
   })

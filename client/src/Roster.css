@@ -175,7 +175,7 @@
   object-fit: cover;
 }
 
-.roster-portrait svg:not(.grit-ring) {
+.roster-portrait svg:not(.grit-ring, .roster-offline-icon, .roster-ill-icon) {
   width: 30px;
   height: 30px;
   color: var(--gold-dim);
@@ -213,6 +213,89 @@
   color: var(--gold);
 }
 
+/* Nobody home: the portrait and name fade back and a disconnected icon hovers
+   over the image. The badge is a sibling of the faded pieces, not a child, so
+   it stays at full strength. */
+.roster-chip--offline .roster-portrait img,
+.roster-chip--offline .roster-portrait svg:not(.grit-ring, .roster-offline-icon, .roster-ill-icon),
+.roster-chip--offline .roster-name,
+.roster-chip--offline .roster-heat {
+  opacity: 0.4;
+  transition: opacity 0.3s var(--ease-out), filter 0.3s var(--ease-out);
+}
+
+.roster-chip--offline .roster-portrait img {
+  filter: grayscale(0.8);
+}
+
+.roster-offline-mark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: rgba(255, 255, 255, 0.9);
+  user-select: none;
+}
+
+.roster-offline-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Sick: a fever badge perches on the portrait's upper-right rim. Like the
+   offline mark it is a sibling of the faded pieces, so it stays at full
+   strength, and the two never collide (offline sits dead centre). */
+.roster-ill-mark {
+  position: absolute;
+  top: -3px;
+  right: -5px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid var(--danger);
+  border-radius: 50%;
+  background: var(--charcoal-900);
+  color: var(--danger);
+  box-shadow: 0 0 0 2px var(--charcoal-900), 0 0 10px rgba(255, 122, 107, 0.45);
+  cursor: help;
+  user-select: none;
+  animation: roster-ill-in 0.28s var(--ease-out) backwards, roster-fever 2.8s ease-in-out 0.3s infinite;
+}
+
+.roster-ill-icon {
+  width: 14px;
+  height: 14px;
+}
+
+@keyframes roster-ill-in {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+}
+
+@keyframes roster-fever {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px var(--charcoal-900), 0 0 6px rgba(255, 122, 107, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 2px var(--charcoal-900), 0 0 13px rgba(255, 122, 107, 0.7);
+  }
+}
+
 .roster-heat {
   display: inline-flex;
   align-items: center;
@@ -236,6 +319,10 @@
   .roster-chip--online .roster-portrait {
     animation: none;
   }
+
+  .roster-ill-mark {
+    animation: none;
+  }
 }
 
 @media (min-width: 1300px) {
@@ -253,7 +340,7 @@
     height: 88px;
   }
 
-  .roster-portrait svg:not(.grit-ring) {
+  .roster-portrait svg:not(.grit-ring, .roster-offline-icon, .roster-ill-icon) {
     width: 36px;
     height: 36px;
   }
@@ -261,13 +348,26 @@
   .roster-name {
     font-size: 13.5px;
   }
-}
 
-.roster-ill {
-  padding: 0 6px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--danger);
-  border: 1px solid var(--danger);
+  .roster-offline-mark {
+    width: 34px;
+    height: 34px;
+  }
+
+  .roster-offline-icon {
+    width: 19px;
+    height: 19px;
+  }
+
+  .roster-ill-mark {
+    top: -2px;
+    right: -6px;
+    width: 28px;
+    height: 28px;
+  }
+
+  .roster-ill-icon {
+    width: 16px;
+    height: 16px;
+  }
 }

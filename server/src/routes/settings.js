@@ -25,7 +25,7 @@ const VOICE_INPUT_MODES = ["live", "push_to_talk"];
 const COMBAT_SFX_KEYS = ["fail", "miss", "hit", "break", "hazard", "geyser", "zeus", "self"];
 
 router.post("/preferences", async (req, res) => {
-  const { theme, soundVolume, voiceInputMode, voiceCueVolume, masterVolume, combatSfxVolumes } = req.body ?? {};
+  const { theme, soundVolume, voiceInputMode, voiceCueVolume, masterVolume, combatSfxVolumes, ambientVolume, soundboardVolume } = req.body ?? {};
   const updates = [];
   const values = [];
 
@@ -61,6 +61,20 @@ router.post("/preferences", async (req, res) => {
     }
     values.push(volume);
     updates.push(`voice_cue_volume = $${values.length}`);
+  }
+
+  // How loud this listener hears the DM's sound desk (routes/sounds.js).
+  for (const [value, label, column] of [
+    [ambientVolume, "Ambience volume", "ambient_volume"],
+    [soundboardVolume, "Soundboard volume", "soundboard_volume"],
+  ]) {
+    if (value === undefined) continue;
+    const volume = Number(value);
+    if (!Number.isFinite(volume) || volume < 0 || volume > 1) {
+      return res.status(400).json({ error: `${label} must be between 0 and 1.` });
+    }
+    values.push(volume);
+    updates.push(`${column} = $${values.length}`);
   }
 
   if (masterVolume !== undefined) {
@@ -103,7 +117,7 @@ router.post("/preferences", async (req, res) => {
   values.push(req.user.sub);
   try {
     const { rows } = await pool.query(
-      `UPDATE users SET ${updates.join(", ")} WHERE id = $${values.length} RETURNING theme, sound_volume, voice_input_mode, voice_cue_volume, master_volume, combat_sfx_volumes`,
+      `UPDATE users SET ${updates.join(", ")} WHERE id = $${values.length} RETURNING theme, sound_volume, voice_input_mode, voice_cue_volume, master_volume, combat_sfx_volumes, ambient_volume, soundboard_volume`,
       values
     );
     const row = rows[0];
@@ -114,6 +128,8 @@ router.post("/preferences", async (req, res) => {
       voiceCueVolume: row.voice_cue_volume,
       masterVolume: row.master_volume,
       combatSfxVolumes: row.combat_sfx_volumes,
+      ambientVolume: row.ambient_volume,
+      soundboardVolume: row.soundboard_volume,
     });
   } catch (err) {
     console.error(err);
@@ -132,8 +148,9 @@ router.post("/voice-peer-volume", async (req, res) => {
   if (!Number.isInteger(peerId) || peerId <= 0) {
     return res.status(400).json({ error: "A valid peerUserId is required." });
   }
-  if (!Number.isFinite(vol) || vol < 0 || vol > 1) {
-    return res.status(400).json({ error: "Volume must be between 0 and 1." });
+  // 0-2: above 1 is the mixer's boost range (see voiceVolumeToGain in the client).
+  if (!Number.isFinite(vol) || vol < 0 || vol > 2) {
+    return res.status(400).json({ error: "Volume must be between 0 and 2." });
   }
 
   try {
@@ -155,11 +172,12 @@ router.post("/voice-peer-volume", async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT slug_hunt_area, active_ship_id FROM campaign_settings WHERE id = 1"
+      "SELECT slug_hunt_area, active_ship_id, slugterra_hidden FROM campaign_settings WHERE id = 1"
     );
     res.json({
       slugHuntArea: rows[0]?.slug_hunt_area ?? 0,
       activeShipId: rows[0]?.active_ship_id ?? null,
+      slugterraHidden: rows[0]?.slugterra_hidden ?? false,
     });
   } catch (err) {
     console.error(err);
@@ -185,6 +203,21 @@ router.post("/slug-hunt-area", requireDungeonMaster, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not update the party's location." });
+  }
+});
+
+// The DM hides or reveals Slugterra for the whole party. Persisted so it holds
+// across server restarts; the broadcast carries the full state (not a delta),
+// so a missed message is corrected by the next one or the next page load.
+router.post("/slugterra", requireDungeonMaster, async (req, res) => {
+  const hidden = Boolean(req.body?.hidden);
+  try {
+    await pool.query("UPDATE campaign_settings SET slugterra_hidden = $1 WHERE id = 1", [hidden]);
+    broadcastAll({ type: "slugterra-visibility", hidden });
+    res.json({ slugterraHidden: hidden });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not update settings." });
   }
 });
 

@@ -5,7 +5,7 @@ import { broadcastAll } from "../ws.js";
 import { skillModifier } from "../characterRules.js";
 import { syncArmorGrit } from "../ammoBelt.js";
 import { toClientCharacter } from "./characters.js";
-import { announceOutfitsChanged, getClimate, getWornOutfit, grantOutfit, toClientOutfit } from "../outfitService.js";
+import { announceOutfitsChanged, currentAtmosphere, getClimate, getWornOutfit, grantOutfit, toClientOutfit } from "../outfitService.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -49,6 +49,8 @@ router.get("/me", async (req, res) => {
     res.json({
       outfits: rows.map(toClientOutfit),
       climate,
+      // What a fight here would be like (offboard, the default) -- the Wardrobe lists it.
+      atmosphere: await currentAtmosphere(),
       fortitudeMod: chars[0] ? skillModifier(chars[0].stats, chars[0].proficiencies, "fortitude") : 0,
     });
   } catch (err) {

@@ -1,17 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  CheckIcon,
-  GiftIcon,
-  MagnifyingGlassIcon,
-  PencilSimpleIcon,
-  PlusIcon,
-  SlidersHorizontalIcon,
-  TargetIcon,
-  TShirtIcon,
-  TrashIcon,
-  WrenchIcon,
-  XIcon,
-} from "@phosphor-icons/react";
+import { useMemo, useState } from "react";
+import { MagnifyingGlassIcon, PlusIcon, TargetIcon, TShirtIcon, WrenchIcon } from "@phosphor-icons/react";
 import {
   BASE_TYPE_KEYS,
   EQUIPMENT_KINDS,
@@ -25,6 +13,7 @@ import {
 import { EQUIPMENT_ICONS } from "./EquipmentCard.jsx";
 import { formatRange, outfitChips } from "./outfitData.js";
 import { CLIMATE_GROUPS, climateOf } from "./useDmOutfits.js";
+import { Bits, DeskRow } from "./DeskParts.jsx";
 import "./InventoryDesk.css";
 
 // Each catalog tab: how its rows read, what the filter chips split on, and
@@ -68,14 +57,6 @@ const TABS = [
   },
 ];
 
-function Bits({ items }) {
-  return items.filter(Boolean).map((bit, i) => (
-    <span key={i} className="desk-bit" style={bit.color ? { color: bit.color } : undefined}>
-      {bit.text ?? bit}
-    </span>
-  ));
-}
-
 // The one-line stat read-out under each name, so the DM can pick without
 // opening anything.
 function summarize(type, t) {
@@ -99,91 +80,24 @@ function summarize(type, t) {
 }
 
 function CatalogRow({ type, tab, item, recipient, owned, onGive, onCustomize, onEdit, onDelete }) {
-  const [phase, setPhase] = useState("idle"); // idle | busy | done
-  const [confirming, setConfirming] = useState(false);
   const Icon = tab.icon(item);
-
-  useEffect(() => {
-    if (phase !== "done") return undefined;
-    const timer = setTimeout(() => setPhase("idle"), 1700);
-    return () => clearTimeout(timer);
-  }, [phase]);
-
-  useEffect(() => {
-    if (!confirming) return undefined;
-    const timer = setTimeout(() => setConfirming(false), 3200);
-    return () => clearTimeout(timer);
-  }, [confirming]);
-
-  async function give() {
-    setPhase("busy");
-    const ok = await onGive(type, item);
-    setPhase(ok ? "done" : "idle");
-  }
-
-  const blocked = !recipient || owned;
-  const label =
-    phase === "done" ? "Given" : phase === "busy" ? "Giving" : owned ? "Owned" : "Give";
-
   return (
-    <li className={`desk-row ${confirming ? "desk-row--confirming" : ""}`}>
-      <span className="desk-row-icon" aria-hidden="true">
-        <Icon weight="duotone" />
-      </span>
-      <div className="desk-row-text">
-        <span className="desk-row-name">{item.name}</span>
-        <span className="desk-row-sub">
-          <Bits items={summarize(type, item)} />
+    <DeskRow
+      lead={
+        <span className="desk-row-icon" aria-hidden="true">
+          <Icon weight="duotone" />
         </span>
-      </div>
-
-      <div className="desk-row-tools">
-        {tab.editable && !confirming && (
-          <>
-            <button type="button" className="desk-tool" onClick={() => onCustomize(type, item)} title="Tweak, then give" aria-label={`Tweak ${item.name} before giving`}>
-              <SlidersHorizontalIcon weight="bold" />
-            </button>
-            <button type="button" className="desk-tool" onClick={() => onEdit(type, item)} title="Edit template" aria-label={`Edit ${item.name}`}>
-              <PencilSimpleIcon weight="bold" />
-            </button>
-          </>
-        )}
-        {tab.editable &&
-          (confirming ? (
-            <>
-              <button
-                type="button"
-                className="desk-tool desk-tool--danger-solid"
-                onClick={() => {
-                  setConfirming(false);
-                  onDelete(type, item);
-                }}
-              >
-                <TrashIcon weight="bold" />
-                Delete
-              </button>
-              <button type="button" className="desk-tool" onClick={() => setConfirming(false)} aria-label="Keep it">
-                <XIcon weight="bold" />
-              </button>
-            </>
-          ) : (
-            <button type="button" className="desk-tool desk-tool--danger" onClick={() => setConfirming(true)} title="Delete template" aria-label={`Delete ${item.name}`}>
-              <TrashIcon weight="bold" />
-            </button>
-          ))}
-      </div>
-
-      <button
-        type="button"
-        className={`desk-give ${phase === "done" ? "desk-give--done" : ""}`}
-        disabled={blocked || phase === "busy"}
-        onClick={give}
-        title={!recipient ? "Pick who you are giving to first" : owned ? `${recipient.name} already has this` : `Give to ${recipient.name}`}
-      >
-        {phase === "done" ? <CheckIcon weight="bold" /> : <GiftIcon weight="bold" />}
-        {label}
-      </button>
-    </li>
+      }
+      name={item.name}
+      sub={<Bits items={summarize(type, item)} />}
+      recipient={recipient}
+      blockedLabel={owned ? "Owned" : undefined}
+      onGive={() => onGive(type, item)}
+      onCustomize={tab.editable ? () => onCustomize(type, item) : undefined}
+      onEdit={tab.editable ? () => onEdit(type, item) : undefined}
+      onDelete={tab.editable ? () => onDelete(type, item) : undefined}
+      kind="template"
+    />
   );
 }
 

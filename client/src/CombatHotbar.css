@@ -163,3 +163,116 @@
   border-color: var(--gold-dim);
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(201, 162, 75, 0.3), 0 0 22px rgba(201, 162, 75, 0.18);
 }
+
+/* Make Wall / Build Bridge: turn the ghost on the map before firing. */
+.combat-hotbar-place {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.combat-hotbar-hint--quiet {
+  color: var(--ink-dim);
+  font-size: 11px;
+}
+
+.combat-hotbar-rotate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.combat-hotbar-rotate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--charcoal-600);
+  background: var(--charcoal-900);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
+}
+
+.combat-hotbar-rotate-btn svg {
+  width: 16px;
+  height: 16px;
+  color: var(--gold-soft);
+}
+
+.combat-hotbar-rotate-btn kbd {
+  padding: 0 4px;
+  border-radius: 4px;
+  border: 1px solid var(--charcoal-600);
+  background: var(--charcoal-800);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .combat-hotbar-rotate-btn:hover:not(:disabled) {
+    border-color: var(--gold-dim);
+  }
+}
+
+.combat-hotbar-rotate-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.combat-hotbar-rotate-btn:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.combat-hotbar-rotate-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.combat-hotbar-rotate-read {
+  margin-left: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gold-soft);
+}
+
+/* "Show locked" -- reveals the actions that can't be used right now. */
+.combat-hotbar-locked-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px dashed var(--charcoal-600);
+  background: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition: color 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+}
+
+.combat-hotbar-locked-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .combat-hotbar-locked-toggle:hover {
+    color: var(--ink);
+    border-color: var(--gold-dim);
+  }
+}
+
+.combat-hotbar-locked-toggle:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}

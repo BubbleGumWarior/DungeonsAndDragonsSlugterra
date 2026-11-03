@@ -202,8 +202,15 @@ Attack, but resolve differently:
   action below.
 - **Break a Wall**: the slug flies to the clicked point (clamped to range) and
   breaks the *first* wall or bridge its path actually crosses, stopping exactly
-  there. A DM-drawn wall only loses a `WALL_BREAK_RADIUS` chunk (same as before);
-  a **player-made wall breaks entirely**. If the path is clear, it also checks
+  there. **Any wall -- a DM's or a Wall Maker's -- only loses a stretch around the impact, sized by the
+  slug's Clash Power**: `wallBreakRadius(clashPower)` = `WALL_BREAK_RADIUS_PER_POWER` (5) map units either side of
+  the impact per point of power (minimum `WALL_BREAK_MIN_RADIUS`, 8), using the slug's *effective* Clash Power
+  (loyalty, Cannon and Mega Morph included). The rest of the wall stays standing as up to two pieces that keep the
+  wall's source and element tint. A single hit never removes more than `WALL_BREAK_MAX_FRACTION` (80%) of a wall's
+  length, so a wall is never erased in one hit however strong it is (a standard 140-unit Wall Maker wall loses 36% to a
+  power-5 hit, 71% to power 10, at most ~80% to anything above that); repeated hits whittle a wall down, each leaving
+  at least ~20% of the wall it hits (small stubs at the end). Bladier's pierce breaks walls the same way
+  (`wallAfterBreak` in `routes/combat.js`). If the path is clear, it also checks
   whether the landing point falls inside a bridge and collapses that instead. Dark
   slugs always phase through and never break anything, even if flagged.
 - **Make a Wall**: places a `WALL_MAKER_LENGTH`-long line segment at the target
@@ -213,6 +220,20 @@ Attack, but resolve differently:
 - **Build a Bridge**: places a `BRIDGE_WIDTH` × `BRIDGE_LENGTH` rounded rectangle
   at the target point — width runs parallel to the shooter (same orientation as a
   wall), length extends onward, away from the shooter, past the impact point.
+  Anyone standing on or walking over a bridge is untouched by what lies beneath
+  it: DM-painted water (no wading cost, no dousing, no aquatic-mode change) and
+  hazard patches (Ice slips, damaging terrain) are skipped for the stretch of the
+  path that is on the deck (`pointOnBridge`, used by `isWaterAt`, `pathApCost`,
+  `pathTouchesWater`, `findHazardAt`, `hazardsAlongPath`). Stepping off the side
+  into a patch still hurts.
+- **Placing and turning**: Make a Wall / Build a Bridge show a ghost of the
+  structure at the cursor (`PlacementGhost`, geometry in `client/src/buildPlacement.js`).
+  It defaults to the shot's own direction and can be turned before firing — Q / E
+  (15°, Shift = 5°), R (90°), 0 to reset, the hotbar buttons, or Shift + wheel. The
+  client sends the result as `buildAngle` (degrees, the facing: a wall runs
+  perpendicular to it, a bridge extends along it); the server normalizes it
+  (`normalizeBuildAngle`) and falls back to the shot direction when it is absent.
+  A miss still moves the *position*, not the chosen facing.
 
 All three roll accuracy against a flat `ENV_ACTION_DC` (12) instead of a target's
 DEX-based DC (there's no defender here) — normal accuracy formula, just a fixed
@@ -243,6 +264,39 @@ The client sizes an AOE Blast's explosion burst to `AOE_RADIUS` itself (its own
 copy of the number, kept in sync) — visually, the burst *is* the blast radius —
 and grows it in from nothing over a short window instead of popping it in at full
 size, on a hit **or** a miss, since either way something real just detonated there.
+
+### Terrain effects: walls forming, walls breaking, bridges forming
+
+Three effects (`TerrainFx.jsx` / `TerrainFx.css`, mounted from `CombatMap.jsx`), all tinted by the slug that made or broke the terrain
+(a DM wall uses a neutral stone colour), all top-down (pieces fly outward from the wall and shrink -- nothing has a screen direction), and
+all CSS-driven so they play once and cost nothing afterwards (`prefers-reduced-motion` skips the wall effects and the bridge animation).
+The server already delays a wall, hazard or bridge change until its shot's burst would have played, so each effect starts at that moment.
+
+- **Wall forming** (a slug-made wall that appears mid-encounter): the wall still draws itself in over 0.5 s, now with a glow halo that fades,
+  a bright tip racing along it as it grows, a burst of sparks at the base and a ring where the tip arrives (`WallFormFx`).
+- **Wall breaking** (`diffWalls`, `WallBreakFx`): the client compares the walls before and after an update to work out *which stretch* broke.
+  A wall that vanished whole was destroyed along its length (only a wall too short for any piece to survive the trim); a wall replaced by
+  one or two collinear pieces (any wall, via `breakWallSegment`) broke only in the gap between them. That stretch gets a bright snap along it, chips of the wall flung
+  out to both sides (spinning and shrinking away as if dropping from the camera) and puffs of dust. The surviving pieces of a broken wall
+  are recognised as such, so they never replay the grow-in. Up to 8 breaks play at once -- more than that (a whole encounter's walls
+  clearing) is not a fight's break and plays only the sound.
+- **Bridge forming** (`BridgePiece`): the planks lay down one after another from the near end while a bright bar runs ahead of them and the
+  bridge body draws in. Every bridge, new or old, now shows its planks (one per ~38 units) so it reads as a plank bridge.
+
+### Hazard patches are drawn per element
+
+Every hazard on the map (Hazard Maker's damaging patch, carrying `slugType`, and Ice's slick, `type: "ice"`) is drawn by `HazardPatch.jsx` /
+`HazardPatch.css` as a top-down piece of ground with its own outline shape, texture and gentle ambient motion, so patches can be told
+apart at a glance: Fire a spiky scorched crust with glowing cracks and embers; Water a rippling blue puddle; Ice a cracked pale
+faceted sheet; Plant a thorny overgrowth with vines and swaying leaves; Earth angular rubble with fissures and rocks; Air a dotted disc with
+slowly turning spiral arms; Electricity a blue field of flickering arcs round a bright core; Energy a purple rune circle (turning dashed rings,
+ticks, a spreading pulse); Light a pale sunburst of slowly turning rays; Dark a black void with spiralling tendrils and rings collapsing
+inward; Metal an angular plate of scattered scrap shards and nuts (static); Healing a soft green glow with pulsing crosses; Psychic warped
+wavy rings turning at different speeds; Toxic a bubbling lime sludge; Unique a dotted ring with twinkling coloured sparkles; anything else
+(None) the old dashed gold disc. A damaging patch also gets a thin dashed hazard rim in its element's colour (an ice slick doesn't).
+The map is top-down, so no motion has a screen direction: pieces spin, pulse, spread or collapse around the patch's own centre.
+Each patch's scatter is seeded by its id, so it looks identical on every client. `prefers-reduced-motion` turns the motion off. The hover
+tooltip (`hazardDescription`) is unchanged.
 
 ### Hazard Maker
 
@@ -401,6 +455,109 @@ each of the target's next `BLEED_DURATION_TURNS` (3) turns they lose `BLEED_MAX_
 alongside burn and poison, doesn't stack (a fresh bleed just resets the duration), shows as a red dot / "Bleeding" chip,
 and First Aid cures it. Mechas (Structure-only) don't bleed.
 
+**Adaptive Strain** (`adaptiveStrain`, Helixel): each time the slug lands on the same enemy, that shooter's *next* hit on
+them from an adaptive slug deals `ADAPT_BONUS_PER_HIT` (25%) more, up to `ADAPT_MAX_STACKS` (4) earlier hits -- so
+8 → 10 → 12 → 14 → 16 at most, double. The memory lives on the target as `status_effects.adapted = { [shooterCombatantId]: hits }`
+for the rest of the encounter (keyed by shooter, so two Helixel owners don't share a count). Only a landed hit on an enemy
+counts: misses, hits on allies and yourself, and mechas (Structure-only, no status memory) never advance it. The bonus lives in
+`slugBaseHitAmount` (`adaptStacks` option), which the auto-counter forecast shares, so an NPC defender sees the real damage.
+The target gets a green "Sampled +N%" roster chip / token dot. The animation (`helixShapes` in `CombatMap.jsx`, `fx.helix`) is
+purely visual: the bolt leaves as one, peels into two strands that twist around each other like a DNA double helix with
+rungs between them, and fuses back into one on arrival. The server still resolves a single shot. Because the bolt already
+has that shape, an adaptive slug can't join a dual shot (barred in `dualShotPairError` and `canJoinDualShot`, like Uncounterable
+and Ultra Fast).
+
+**Pounce Strike** (`pounceStrike`, Trackjaw): purely a visual, like Surround Strike and Helixel's helix. For the first 66% of its
+flight the bolt is a faint ghost that sways side to side with a few fading afterimages (it is stalking); over the next 10% it
+snaps into view and lunges as a bright streak, and on a hit three claw slashes rake across the target (`pounceShapes` and the
+`claws` burst in `CombatMap.jsx`, `fx.pounce`). The server still resolves one ordinary shot, so Trackjaw's actual effects are its
+own flags: Causes Fear, Grapple (hauls the prey in) and Causes Bleed. Like Helixel it can't join a dual shot.
+
+**Time Skip** (`timeSkip`, Chronix): purely a visual, paired with **Uncounterable** (so nobody gets a counter or Dodge window, and the
+shot is just an accuracy roll). The bolt flies as an ordinary bolt through its windup, then `SKIP_VANISH_AFTER` (4% of the trip)
+later it stops time: it vanishes for everyone, a clock face (ticks and a sweeping hand) blooms where it was and the whole map dims
+while a ring closes on a spot `SKIP_LAND_GAP` (120 map units) in front of the target; halfway through the rest of the flight it
+reappears there in a burst of light and makes a quick final leg to the target (`timeSkipShapes` in `CombatMap.jsx`, `fx.timeSkip`).
+All timing is in flight-fraction space on the same cruise clock as every other bolt, so the shot still lands exactly when the
+server resolves it. The server resolves one ordinary shot.
+
+**Custom bolts only appear after the windup.** Helixel's helix, Trackjaw's stalk, Chronix's time skip, Zeus's lightning and the
+ricochet streak all fly as the ordinary neutral grey bolt through the 830 ms windup (`inWindup` in `ShotEffect`), exactly like any other
+shot, and only transform into their unique look when the windup ends. The effects that grow from nothing -- the helix splitting
+open, the lightning body, the stalk -- start from the point where the windup ended (`transformPoint` in `CombatMap.jsx`), so each one
+visibly begins at the transform. A ricochet bounce leg has no windup, so its streak is there from its first frame.
+
+**Standard bolts have a small effect per element.** A slug with no animation of its own (and that isn't a dual shot or a Mega Morph)
+flies with a modest, deliberately basic effect for its element, in the element's colour (`elementShapes` in `CombatMap.jsx`, chosen from
+`fx.slugType`): Fire a teardrop with falling embers, Water a droplet with a wavering string of drops, Ice a spinning crystal shedding shards,
+Plant a seed with leaves spiralling off it, Earth a tumbling rock trailing pebbles, Air a pale puff with wind streaks and a swirl,
+Electricity a white-hot core with a short thin crackle in the same electric blue as the chain arc (nothing like Zeus's yellow lightning),
+Energy a pulsing core with a breathing ring and two orbiting motes, Light a glow with four slow rays, Dark a shadowy core with drifting
+smoke, Metal a steel hex nut turning steadily with two parallel speed lines (nothing flashes),
+Healing a breathing soft glow that sheds little crosses and sparkles (each is born at the head, then stays where it was left, drifting out to one side of the bolt's line of flight, turning, shrinking and fading), Psychic a core with spreading ripples, Toxic a core with rising bubbles and
+Unique a white core with twinkling multicoloured sparkles. "None" stays a plain bolt. Like the custom bolts, each is the plain neutral bolt
+through the windup and eases in from the transform point; the trail pieces are seeded by distance travelled so they shimmer at any speed.
+
+**Standard bolts explode in their own way, by element.** The impact burst of a standard bolt (the same bolts that get an element effect in
+flight: no custom animation, not a dual shot or a Mega Morph, not "None") replaces the flat coloured disc with an element explosion
+(`elementBurst` in `CombatMap.jsx`, played from the moment the bolt lands over `BURST_LINGER_MS`; a miss plays a half-size version, and an
+area blast keeps its blast-radius disc with the explosion on top). **The map is a top-down view, so no effect has a screen direction:**
+nothing falls south or rises north (that would read as a magnet or a wind, not gravity). Pieces burst outward evenly in every direction;
+"falling" is shown by shrinking (as if dropping away from the camera) and "rising" by swelling slightly toward it. Fire a fireball with
+embers thrown out that shrink as they burn out; Water ripples with drops that burst outward and shrink; Ice a frost ring with spinning
+shards; Plant a bloom with spinning leaves; Earth dust and rock chunks that fly outward and shrink; Air swirling
+arcs and wind streaks; Electricity a flash with electric-blue crackles (the same blue as the bolt and chain arc); Energy concentric
+shockwaves; Light a white flash with long rays; Dark a ring collapsing inward with curling tendrils; Metal a steel shockwave with straight
+sparks (nothing flashes); Healing a gentle green pulse with crosses floating outward, swelling slightly; Psychic wobbling rings; Toxic bubbles that spread out, swell and
+pop; Unique a shower of multicoloured sparkles. Custom bolts keep their own impacts (Zeus's arcs, Trackjaw's claws, the ricochet shards).
+
+**Mega Morphs use the same animations, scaled up.** A Mega Morph shot (`fx.mega`) flies with its slug's own animation -- the custom bolt
+(Helixel's helix, Trackjaw, Chronix, Zeus, the ricochet streak) or the element effect -- and, on impact, the element explosion or the custom
+impact (claws, arcs, shards), all drawn `MEGA_ANIM_SCALE` (1.7x) bigger so the extra damage reads at a glance, instead of the old plain
+teardrop. Only a Mega Morph of a "None" slug or a dual shot still draws the teardrop / two-colour pair. The server needed no change: it
+already broadcasts `mega` together with the slug's animation flags.
+
+**Ricochet legs have no windup.** After the first hit a ricochet shot is already at full speed, so each bounce leg (`fireSecondaryShot`)
+skips the 830 ms windup crawl: its flight is `shotCruiseMs` (distance over twice the weapon's speed, floored at 400 ms), the offer
+carries `noWindup: true`, `shotDistanceFraction` is linear for it, and the client (`fx.noWindup`) skips the neutral windup colour,
+the crawl and the launch sound. The defender's counter slug still needs its own windup, so a leg is a tighter counter window than
+before (a leg shorter than about 150 units can't be countered at all).
+
+**Ricochet streak** (any slug with `ricochets`, i.e. Speedstinger and Rubblerunt; `fx.ricochet`): the bolt is drawn as a steel needle
+(`streakShapes` in `CombatMap.jsx`) -- a tapered streak in the slug's element colour with a white-hot core, a spinning glint at the
+head and sparks shed along its tail. Each bounce leg opens with a spark ping ring where it left the last target, and on a hit the
+target throws eight steel shards (the `shards` burst).
+
+**Lightning Strike** (`lightningStrike`, Zeus): purely a visual. The bolt is drawn as real lightning (`lightningShapes` in
+`CombatMap.jsx`, `fx.lightning`): a jagged body of 16 kinks trailing up to 150 map units behind a white-hot head, pinched to a
+point at both ends, with four forks and a few sparks around the head; on a hit seven jagged arcs crack out of the target (the
+`arcs` burst). The kinks are seeded by distance travelled rather than the clock, so the bolt crackles at any speed (Zeus is
+ultra-fast, so its flight is short) and a frozen frame is always the same shape. It stacks with Ultra Fast's shorter window, and
+Zeus's thunderclap sound is unchanged.
+
+**Dagger Throw** (`daggerThrow` / `dagger_throw`, Bladier only; CSV column "Dagger Throw"): Bladier stays the ordinary Metal bolt --
+same transformation, same element effect and burst. The extra only happens when a wall is in its path (it pierces walls, see above).
+Shortly before the wall the bolt throws a small knife ahead of itself; the knife tumbles in (two full turns, so it lands blade-first),
+cuts the wall open in a flash of light and sparks along the wall, and the bolt then flies through the gap (`knifeShapes` in
+`CombatMap.jsx`; a Mega Morph is the same, scaled up). With no wall in the way nothing is thrown and it is just the Metal bolt. Other
+piercing slugs (Beaconel) are untouched: they travel through and the wall breaks when the flight ends.
+The server makes this exact: `daggerThrowPlan` (`combatRules.js`) gives `throwT` (the bolt's place on its path when the knife leaves,
+`DAGGER_THROW_LEAD` = 110 map units before the wall but never inside the windup) and `landT` (where the bolt is when the knife lands;
+the knife flies `DAGGER_KNIFE_SPEEDUP` = 3x as fast as the bolt). They ride in the shot's fx as `piercePoint` `{ x, y, wallAngle, throwT,
+landT }` (null with no wall, or for any other slug), and the wall's partial break (Clash Power, see above) is scheduled at
+`shotTimeAtFraction(landT)` -- the moment the knife lands, before the bolt gets there -- instead of when the flight ends. The picture
+and the break use the same two numbers, so they always agree. Because of the throw, Bladier is barred from dual shots (server
+`dualShotPairError`, client `dualShot.js`).
+
+**Chain arcs have their own electric-arc look and a fixed 0.25 s travel.** The arc a chain slug throws to the nearest other target
+(every Electricity slug, plus Cumulonid and Stormpetrel's Causes Chain) takes a fixed `CHAIN_ARC_MS` (250 ms) whatever the distance, so a
+far arc simply moves faster (`broadcastChainFx({ lightning: true })` in `routes/combat.js`; the client doesn't apply its usual 400 ms
+floor to a chain fx). It is drawn as a thin, tight electric-blue arc anchored at the target it just struck that whips out to the next
+one, holds for ~0.2 s crackling as a connection between the two, then fades with a ring of blue spark where it lands (`chainArcShapes`
+in `CombatMap.jsx`). It is deliberately unlike Zeus's lightning strike, which is a flying yellow-white bolt with a bright head, a long
+jagged tail and forks -- so a normal slug's arc never reads as a second Zeus shot. It needs no flag. The melee slash flash shares the
+broadcast but keeps the plain 350 ms dart.
+
 ### Slug return-to-hand cooldown
 
 A fired slug (shot, or used as a counter) is away in flight/recovering — it can't
@@ -463,8 +620,8 @@ the encounter re-loads everything along with clearing cooldowns.
    as the misfire's red border flash, minus the screen shake, since a clean
    whiff isn't a mechanical failure.
 5. If the slug's wall-breaking flag is set and the shot's path crosses a wall: the
-   wall segment is removed within `WALL_BREAK_RADIUS` (default 24 units) of the
-   impact point, and the shot continues to its target at half power. The break
+   wall segment is removed within `wallBreakRadius(clashPower)` of the
+   impact point (see "Break a Wall" above -- sized by Clash Power, never the whole wall), and the shot continues to its target at half power. The break
    itself (mutation + broadcast + its own Combat Log line) is deliberately
    **delayed** to match how long the projectile's flight animation would take to
    actually reach that point in space (`windowMs * SHOT_FLIGHT_MULTIPLIER *`

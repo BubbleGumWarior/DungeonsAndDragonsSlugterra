@@ -130,7 +130,7 @@ export default function LongRestOverlay() {
           text: `${isDM ? `${f.name} foraged` : "You foraged"} ${f.scoops} ${f.scoops === 1 ? "scoop" : "scoops"} of Slug Kibble (d6 ${f.roll} + ${f.modifier}).`,
         }))
     : [];
-  // Anyone who woke up ill. These hold the overlay open like a hungry slug does.
+  // Anyone who woke up sick. These hold the overlay open like a hungry slug does.
   const illnessRows = shown
     ? (shown.illness || [])
         .filter((e) => isDM || e.userId === user?.id)
@@ -138,7 +138,7 @@ export default function LongRestOverlay() {
           key: `ill-${e.userId}`,
           tone: "bad",
           icon: <ThermometerIcon weight="fill" />,
-          text: `${isDM ? `${e.name} woke` : "You woke"} up ill. ${e.temp} °C was ${e.outside} °C too ${e.side === "cold" ? "cold" : "hot"} for ${e.outfit ?? "their clothes"}. ${isDM ? "They need" : "Take"} Meds ${MEDS_DOSES_NEEDED} rests in a row.`,
+          text: `${isDM ? `${e.name} woke` : "You woke"} up sick. ${e.temp} °C was ${e.outside} °C too ${e.side === "cold" ? "cold" : "hot"} for ${e.outfit ?? "their clothes"}. ${isDM ? "They need" : "Take"} Meds ${MEDS_DOSES_NEEDED} rests in a row.`,
         }))
     : [];
   const mood = shown?.marketMood;

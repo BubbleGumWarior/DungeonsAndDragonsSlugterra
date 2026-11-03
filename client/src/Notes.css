@@ -1,0 +1,1086 @@
+/* The Notes book borrows the Slugpedia's binding (Slugpedia.css supplies the
+   cover, the page block, the index rows and the page-turn controls) and sits in
+   the page instead of over it. Pages stay parchment whatever the app theme;
+   only the cover and the ink accents follow --maroon-*. */
+.nb-stage {
+  --sp-paper: #e9ddc1;
+  --sp-paper-deep: #d8c7a0;
+  --sp-ink: #2a2017;
+  --sp-ink-soft: #5e4c37;
+  --sp-rule: rgba(70, 48, 22, 0.28);
+  --sp-accent: var(--maroon-600);
+  --sp-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --nb-line: 28px;
+
+  display: grid;
+  place-items: center;
+  padding: 24px 20px 32px;
+}
+
+.nb-stage .sp-book {
+  height: min(780px, calc(100dvh - 68px - 56px));
+  min-height: 520px;
+}
+
+/* A long index excerpt must never push the gutter off centre. */
+.nb-stage .sp-pages {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.nb-stage .sp-page {
+  min-width: 0;
+}
+
+.nb-stage ::selection {
+  background: color-mix(in srgb, var(--sp-accent) 28%, transparent);
+  color: inherit;
+}
+
+/* ---- Index page ---------------------------------------------------------- */
+
+.nb-new {
+  margin-top: 10px;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid color-mix(in srgb, var(--sp-accent) 70%, #1a1208);
+  border-radius: 999px;
+  background: var(--sp-accent);
+  color: #fff8e8;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  box-shadow: 0 1px 0 rgba(255, 250, 235, 0.3) inset, 0 2px 6px rgba(40, 24, 8, 0.35);
+  cursor: pointer;
+  transition: transform 0.16s var(--ease-out), filter 0.15s var(--ease-out);
+}
+
+.nb-new:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+.nb-new:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.nb-new:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.nb-new svg {
+  width: 14px;
+  height: 14px;
+}
+
+.nb-stage .sp-index-head h1 {
+  margin: 0;
+}
+
+.nb-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1px;
+}
+
+.nb-row-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.nb-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nb-row-excerpt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-style: italic;
+  color: var(--sp-ink-soft);
+}
+
+.nb-stage button:focus-visible,
+.nb-stage input:focus-visible,
+.nb-stage textarea:focus-visible {
+  outline: 2px solid var(--sp-accent);
+  outline-offset: 2px;
+}
+
+/* Search boxes show focus on the pill (sp-search:focus-within), not the input. */
+.nb-stage .sp-search input:focus-visible {
+  outline: none;
+}
+
+/* DM only: whose pages the index shows. */
+.nb-authors {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+}
+
+.nb-author-chip {
+  max-width: 100%;
+  padding: 2px 11px;
+  border: 1px solid var(--sp-rule);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sp-ink-soft);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .nb-author-chip:hover:not([aria-pressed="true"]) {
+    background: rgba(255, 250, 235, 0.6);
+  }
+}
+
+.nb-author-chip[aria-pressed="true"] {
+  background: var(--sp-accent);
+  border-color: var(--sp-accent);
+  color: #fff8e8;
+}
+
+/* The author's name, stamped like the Slugpedia's element seal. */
+.nb-seal {
+  max-width: 11em;
+  padding: 0 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fff8e8;
+  background: color-mix(in srgb, var(--sp-accent) 70%, #1a1208);
+  border: 1px solid color-mix(in srgb, var(--sp-accent) 85%, #1a1208);
+  box-shadow: 0 1px 0 rgba(255, 250, 235, 0.4) inset, 0 1px 3px rgba(40, 24, 8, 0.4);
+}
+
+/* ---- The open page ------------------------------------------------------- */
+
+.nb-sheet {
+  padding: 0 0 12px;
+}
+
+.nb-sheet-head {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  padding: 24px 34px 0 30px;
+}
+
+.nb-title {
+  width: 100%;
+  padding: 2px 6px;
+  border: 0;
+  border-bottom: 1px dotted transparent;
+  border-radius: 0;
+  background: transparent;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.15;
+  color: var(--sp-accent);
+  caret-color: var(--sp-accent);
+  text-overflow: ellipsis;
+  transition: border-color 0.15s var(--ease-out);
+}
+
+.nb-title::placeholder {
+  color: var(--sp-ink-soft);
+  opacity: 0.55;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .nb-title:hover:not(:read-only) {
+    border-bottom-color: var(--sp-rule);
+  }
+}
+
+.nb-title:read-only {
+  cursor: default;
+}
+
+.nb-title:focus {
+  border-bottom-color: var(--sp-accent);
+}
+
+/* The heavier rule under the title is its focus mark. */
+.nb-stage .nb-title:focus-visible {
+  outline: none;
+  border-bottom: 2px solid var(--sp-accent);
+}
+
+.nb-meta {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 8px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--sp-ink-soft);
+}
+
+.nb-save--error {
+  color: #8f2418;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.nb-save--dirty,
+.nb-save--saving {
+  opacity: 0.8;
+}
+
+.nb-retry,
+.nb-inline-btn {
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--sp-accent);
+  font: inherit;
+  font-style: normal;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.nb-ribbons {
+  margin-top: 6px;
+}
+
+.nb-ribbons .sp-ribbon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 14px 14px;
+}
+
+.nb-ribbons .sp-ribbon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.nb-back {
+  display: none;
+}
+
+.nb-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 34px 4px 30px;
+  animation: sp-turn 0.34s var(--ease-out);
+  transform-origin: left center;
+}
+
+.nb-read {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 6px 16px 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(90, 62, 30, 0.45) transparent;
+}
+
+.nb-blank {
+  margin: 28px 0;
+  text-align: center;
+  font-style: italic;
+  color: var(--sp-ink-soft);
+}
+
+.nb-error {
+  margin: 0 34px 6px 30px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #8f2418;
+}
+
+/* ---- Rendered note ------------------------------------------------------- */
+
+.nb-prose {
+  max-width: 68ch;
+  margin: 0 auto;
+  font-size: 15.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.nb-prose > :first-child {
+  margin-top: 0;
+}
+
+.nb-prose p {
+  margin: 0 0 0.85em;
+  /* Not justified: chips are inline boxes and would gap the line open. */
+  text-align: left;
+  hyphens: auto;
+}
+
+.nb-prose strong {
+  font-weight: 800;
+}
+
+.nb-h1,
+.nb-h2,
+.nb-h3 {
+  margin: 1.3em 0 0.5em;
+  font-family: var(--font-display);
+  color: var(--sp-accent);
+  text-wrap: balance;
+}
+
+.nb-h1 {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-align: center;
+  padding-bottom: 4px;
+  border-bottom: 2px double var(--sp-rule);
+}
+
+.nb-h2 {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--sp-rule);
+}
+
+.nb-h3 {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant: small-caps;
+  letter-spacing: 0.04em;
+}
+
+.nb-prose ul,
+.nb-prose ol {
+  margin: 0 0 0.85em;
+  padding-left: 1.4em;
+}
+
+.nb-prose li {
+  margin: 0.15em 0;
+  padding-left: 0.2em;
+}
+
+.nb-prose li::marker {
+  color: var(--sp-accent);
+  font-weight: 700;
+}
+
+.nb-prose blockquote {
+  margin: 0 0 0.85em;
+  padding: 2px 18px;
+  font-style: italic;
+  color: var(--sp-ink-soft);
+  border-top: 1px solid var(--sp-rule);
+  border-bottom: 1px solid var(--sp-rule);
+}
+
+.nb-prose blockquote p {
+  margin: 0.4em 0;
+  text-align: left;
+}
+
+/* A page divider drawn like the index leader. */
+.nb-prose hr {
+  height: 0;
+  margin: 1.2em 12%;
+  border: 0;
+  border-bottom: 2px dotted var(--sp-rule);
+}
+
+.nb-prose a {
+  color: var(--sp-accent);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.nb-prose a:hover {
+  text-decoration-thickness: 2px;
+}
+
+.nb-table-wrap {
+  margin: 0 0 0.9em;
+  overflow-x: auto;
+}
+
+.nb-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.nb-prose th,
+.nb-prose td {
+  padding: 5px 8px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--sp-rule);
+}
+
+.nb-prose th {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--sp-accent);
+}
+
+/* ---- Link chips ---------------------------------------------------------- */
+
+.nb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 0 9px 0 6px;
+  border: 1px solid color-mix(in srgb, var(--sp-accent) 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sp-accent) 10%, rgba(255, 250, 235, 0.55));
+  color: color-mix(in srgb, var(--sp-accent) 80%, #1a1208);
+  font: inherit;
+  font-size: 0.94em;
+  font-weight: 700;
+  line-height: 1.5;
+  vertical-align: baseline;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), transform 0.16s var(--ease-out);
+}
+
+.nb-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nb-chip svg {
+  flex-shrink: 0;
+}
+
+.nb-chip .slug-icon {
+  flex-shrink: 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .nb-chip:hover {
+    background: color-mix(in srgb, var(--sp-accent) 20%, rgba(255, 250, 235, 0.7));
+  }
+}
+
+.nb-chip:active {
+  transform: scale(0.97);
+}
+
+/* A link whose target has gone: still readable, plainly no longer live. */
+.nb-chip--lost {
+  border-style: dashed;
+  background: transparent;
+  color: var(--sp-ink-soft);
+  font-weight: 600;
+}
+
+/* ---- The card a chip opens ------------------------------------------------ */
+
+.nb-card {
+  position: fixed;
+  z-index: 40;
+  padding: 14px;
+  border: 1px solid rgba(70, 48, 22, 0.55);
+  border-radius: 8px;
+  color: var(--sp-ink);
+  font-family: var(--sp-serif);
+  background:
+    radial-gradient(130% 100% at 50% 40%, transparent 55%, rgba(120, 88, 40, 0.22)),
+    linear-gradient(180deg, var(--sp-paper), var(--sp-paper-deep));
+  box-shadow: 0 14px 30px rgba(30, 18, 6, 0.5), 0 2px 4px rgba(30, 18, 6, 0.3);
+  animation: nb-pop 0.18s var(--ease-out);
+}
+
+.nb-card-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.nb-card-art {
+  flex-shrink: 0;
+  width: 52px;
+  height: 68px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 3px;
+  background: #f4ecd6;
+  border: 1px solid rgba(70, 48, 22, 0.5);
+  box-shadow: 0 2px 6px rgba(60, 38, 14, 0.3);
+  color: var(--sp-accent);
+}
+
+.nb-card-art img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.nb-card-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.nb-card-kind {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sp-ink-soft);
+}
+
+.nb-card-name {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  color: var(--sp-accent);
+  overflow-wrap: anywhere;
+}
+
+.nb-card-sub {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--sp-ink-soft);
+}
+
+.nb-card-open {
+  margin-top: 12px;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid color-mix(in srgb, var(--sp-accent) 70%, #1a1208);
+  border-radius: 999px;
+  background: var(--sp-accent);
+  color: #fff8e8;
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 0.16s var(--ease-out), filter 0.15s var(--ease-out);
+}
+
+.nb-card-open:hover {
+  filter: brightness(1.12);
+}
+
+.nb-card-open:active {
+  transform: scale(0.97);
+}
+
+.nb-card-open svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* ---- Editor -------------------------------------------------------------- */
+
+.nb-editor {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nb-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--sp-rule);
+}
+
+.nb-tool-group {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.nb-tool {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sp-accent);
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), transform 0.16s var(--ease-out);
+}
+
+.nb-tool svg {
+  width: 16px;
+  height: 16px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .nb-tool:hover {
+    background: rgba(255, 250, 235, 0.75);
+    border-color: var(--sp-rule);
+  }
+}
+
+.nb-tool:active {
+  transform: scale(0.92);
+}
+
+.nb-linkbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 14px 0 10px;
+  border: 1px solid color-mix(in srgb, var(--sp-accent) 70%, #1a1208);
+  border-radius: 999px;
+  background: var(--sp-accent);
+  color: #fff8e8;
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: transform 0.16s var(--ease-out), filter 0.15s var(--ease-out);
+}
+
+.nb-linkbtn:hover {
+  filter: brightness(1.12);
+}
+
+.nb-linkbtn:active {
+  transform: scale(0.97);
+}
+
+.nb-linkbtn svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Ruled paper: the lines sit on the text baseline grid and scroll with it. */
+.nb-textarea {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  resize: none;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--nb-line) - 1px),
+    rgba(70, 48, 22, 0.17) calc(var(--nb-line) - 1px),
+    rgba(70, 48, 22, 0.17) var(--nb-line)
+  );
+  background-attachment: local;
+  color: var(--sp-ink);
+  caret-color: var(--sp-accent);
+  font-family: var(--sp-serif);
+  font-size: 16px;
+  line-height: var(--nb-line);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(90, 62, 30, 0.45) transparent;
+}
+
+.nb-textarea::placeholder {
+  color: var(--sp-ink-soft);
+  opacity: 0.7;
+  font-style: italic;
+}
+
+/* Ruled paper takes a soft ring; the caret does the rest. */
+.nb-stage .nb-textarea:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--sp-accent) 35%, transparent);
+  outline-offset: 4px;
+}
+
+.nb-editor-foot {
+  margin: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--sp-ink-soft);
+}
+
+/* ---- Link picker --------------------------------------------------------- */
+
+.nb-picker {
+  position: absolute;
+  top: 42px;
+  left: 0;
+  z-index: 10;
+  width: min(380px, 100%);
+  max-height: min(380px, calc(100% - 52px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(70, 48, 22, 0.55);
+  border-radius: 8px;
+  color: var(--sp-ink);
+  background:
+    radial-gradient(130% 100% at 50% 40%, transparent 55%, rgba(120, 88, 40, 0.22)),
+    linear-gradient(180deg, var(--sp-paper), var(--sp-paper-deep));
+  box-shadow: 0 14px 30px rgba(30, 18, 6, 0.5), 0 2px 4px rgba(30, 18, 6, 0.3);
+  animation: nb-pop 0.18s var(--ease-out);
+}
+
+.nb-picker-groups {
+  display: flex;
+  gap: 4px;
+}
+
+.nb-picker-group {
+  padding: 3px 12px;
+  border: 1px solid var(--sp-rule);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sp-ink-soft);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+
+.nb-picker-group[aria-pressed="true"] {
+  background: var(--sp-accent);
+  border-color: var(--sp-accent);
+  color: #fff8e8;
+}
+
+.nb-picker-list {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(90, 62, 30, 0.45) transparent;
+}
+
+.nb-picker-empty {
+  margin: 14px 8px;
+  text-align: center;
+  font-size: 13.5px;
+  font-style: italic;
+  color: var(--sp-ink-soft);
+}
+
+.nb-pick {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nb-pick--on {
+  background: rgba(120, 80, 30, 0.2);
+  box-shadow: inset 3px 0 0 var(--sp-accent);
+}
+
+.nb-pick-art {
+  flex-shrink: 0;
+  width: 28px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(70, 48, 22, 0.14);
+  border: 1px solid var(--sp-rule);
+  color: var(--sp-accent);
+}
+
+.nb-pick-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.nb-pick-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14.5px;
+  font-weight: 700;
+}
+
+.nb-pick-kind {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--sp-ink-soft);
+}
+
+/* ---- Footer, delete, empty ----------------------------------------------- */
+
+.nb-turn {
+  flex-shrink: 0;
+}
+
+.nb-turn-spacer {
+  flex: 1;
+}
+
+.nb-delete,
+.nb-confirm button {
+  cursor: pointer;
+}
+
+.nb-stage .sp-turn .nb-delete {
+  color: var(--sp-ink-soft);
+}
+
+.nb-stage .sp-turn .nb-delete:hover {
+  color: #8f2418;
+}
+
+/* Asking "tear it out?" takes the whole footer; the page counter can wait. */
+.nb-turn--confirming > :not(.nb-turn-spacer):not(.nb-confirm) {
+  display: none;
+}
+
+.nb-confirm {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-style: italic;
+}
+
+.nb-stage .sp-turn .nb-confirm button {
+  width: auto;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.nb-stage .sp-turn .nb-confirm-yes {
+  background: #8f2418;
+  border-color: #8f2418;
+  color: #fff8e8;
+}
+
+.nb-welcome {
+  margin: auto;
+  max-width: 360px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--sp-ink-soft);
+}
+
+.nb-welcome > svg {
+  width: 44px;
+  height: 44px;
+  color: var(--sp-accent);
+}
+
+.nb-welcome h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--sp-accent);
+}
+
+.nb-welcome p {
+  margin: 0 0 8px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.nb-welcome .nb-new {
+  width: auto;
+}
+
+/* ---- Motion -------------------------------------------------------------- */
+
+@keyframes nb-pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nb-body,
+  .nb-card,
+  .nb-picker,
+  .nb-stage .sp-book {
+    animation: none;
+  }
+  .nb-chip,
+  .nb-tool,
+  .nb-new,
+  .nb-linkbtn {
+    transition: none;
+  }
+}
+
+/* ---- Narrow screens: one page at a time ----------------------------------- */
+
+@media (max-width: 760px) {
+  .nb-stage {
+    padding: 10px 10px 16px;
+  }
+
+  .nb-stage .sp-book {
+    height: calc(100dvh - 68px - 26px);
+    min-height: 0;
+  }
+
+  .nb-stage .sp-pages {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .nb-stage[data-view="index"] .sp-page--entry,
+  .nb-stage[data-view="entry"] .sp-page--index {
+    display: none;
+  }
+
+  .nb-stage .sp-page--index,
+  .nb-stage .sp-page--entry {
+    border-radius: 4px;
+  }
+
+  .nb-stage .sp-page--index {
+    padding: 18px 18px 10px;
+  }
+
+  .nb-sheet-head {
+    padding: 44px 18px 0;
+  }
+
+  .nb-back {
+    position: absolute;
+    top: 12px;
+    left: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px 4px 6px;
+    border: 1px solid var(--sp-rule);
+    border-radius: 999px;
+    background: rgba(255, 250, 235, 0.5);
+    color: var(--sp-accent);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .nb-back svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .nb-title {
+    font-size: 24px;
+  }
+
+  .nb-body {
+    padding: 8px 18px 4px;
+  }
+
+  /* Clear of the floating voice button in the corner. */
+  .nb-turn {
+    margin: 0 18px;
+    padding-inline: 0 52px;
+  }
+
+  .nb-error {
+    margin-inline: 18px;
+  }
+
+  .nb-picker {
+    top: 78px;
+  }
+
+  .nb-textarea {
+    font-size: 16px;
+  }
+}

@@ -15,6 +15,7 @@ import {
 import { COMBAT_TEAMS, teamById } from "./combatTeams.js";
 import { combatSide } from "./combatSkills.js";
 import { MAP_SIZE_PRESETS, MIN_MAP_METERS, MAX_MAP_METERS, mapMeters } from "./mapScale.js";
+import AtmosphereNote from "./AtmosphereNote.jsx";
 import "./CombatSetup.css";
 
 // Where each team musters on a fresh map, as fractions of its width/height --
@@ -281,6 +282,7 @@ export default function CombatSetup({
   tool,
   onToolChange,
   onResizeMap,
+  onSetAboard,
   onAddCombatant,
   onPullNpc,
   onPullGrunt,
@@ -357,6 +359,7 @@ export default function CombatSetup({
           <p className="setup-summary num-tabular">
             {combatants.length} {combatants.length === 1 ? "combatant" : "combatants"} · {teamsInPlay} {teamsInPlay === 1 ? "team" : "teams"}
           </p>
+          <AtmosphereNote atmosphere={encounter.atmosphere} title={encounter.atmosphere?.aboard ? "Aboard the ship" : "Offboard"} />
         </div>
         {isDM ? (
           <div className="setup-start">
@@ -381,8 +384,24 @@ export default function CombatSetup({
         <aside className="setup-rail">
           {isDM && (
             <>
-              <TeamPicker value={deployTeam} onChange={setDeployTeam} counts={counts} />
+              <div className="setup-block">
+                <div className="setup-block-head">
+                  <h3>Where is the fight?</h3>
+                </div>
+                <div className="setup-tabs setup-tabs--two" role="group" aria-label="Where the fight takes place">
+                  <button type="button" className={encounter.aboard ? "" : "is-on"} aria-pressed={!encounter.aboard} disabled={busy} onClick={() => run(() => onSetAboard(false))}>
+                    Offboard
+                  </button>
+                  <button type="button" className={encounter.aboard ? "is-on" : ""} aria-pressed={encounter.aboard} disabled={busy} onClick={() => run(() => onSetAboard(true))}>
+                    Aboard
+                  </button>
+                </div>
+                <p className="setup-block-note">
+                  Offboard fights in the world's own air and gravity. Aboard is plain ship air, 21 °C and 1 g. Fixed once the fight starts.
+                </p>
+              </div>
 
+              <TeamPicker value={deployTeam} onChange={setDeployTeam} counts={counts} />
               <div className="setup-block">
                 <div className="setup-block-head">
                   <h3>Add to the map</h3>

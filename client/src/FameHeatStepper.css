@@ -1,5 +1,6 @@
 .fame-heat-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -84,6 +85,50 @@
   font-family: var(--font-display);
   font-size: 14px;
   text-align: center;
+}
+
+/* Full-width scale under the stepper. The track background (Heat's blue-to-red
+   gauge) is set inline; the thumb is a plain light dot that reads on any colour. */
+.fame-heat-slider {
+  flex: 1 0 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  margin: 2px 0 4px;
+  border-radius: 999px;
+  outline: none;
+  cursor: pointer;
+}
+
+.fame-heat-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--gold-soft);
+  border: 2px solid var(--charcoal-950);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  transition: transform 0.12s var(--ease-out);
+}
+
+.fame-heat-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.12);
+}
+
+.fame-heat-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--gold-soft);
+  border: 2px solid var(--charcoal-950);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
+.fame-heat-slider:focus-visible {
+  box-shadow: 0 0 0 2px var(--gold);
 }
 
 .fame-heat-input:focus {

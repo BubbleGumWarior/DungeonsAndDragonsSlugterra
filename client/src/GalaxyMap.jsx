@@ -333,6 +333,9 @@ function Dossier({
       {isDungeonMaster && detail.type === "planet" && !detail.playersKnow && (
         <p className="holo-dm-note">Players still see this world as ???.</p>
       )}
+      {isDungeonMaster && detail.type === "cluster" && !detail.playersKnow && (
+        <p className="holo-dm-note">Players can't see this cluster at all until they discover one of its worlds.</p>
+      )}
 
       <p className={`holo-dossier-body ${detail.known ? "" : "holo-dossier-body--unknown"}`}>
         {detail.known ? detail.body : "???"}
@@ -439,8 +442,10 @@ export default function GalaxyMap({
   const visited = useMemo(() => new Set(travel?.visited ?? []), [travel?.visited]);
   const clusterFlatBase = (ci) => CLUSTERS.slice(0, ci).reduce((sum, c) => sum + c.worlds.length, 0);
   const isKnown = (flatIndex) => isDungeonMaster || visited.has(flatIndex);
-  const isClusterKnown = (ci) =>
-    isDungeonMaster || CLUSTERS[ci].worlds.some((_, wi) => visited.has(clusterFlatBase(ci) + wi));
+  // A cluster no one has set foot in is invisible to players -- not even its
+  // star shows. The DM always sees all of them.
+  const clusterPlayersKnow = (ci) => CLUSTERS[ci].worlds.some((_, wi) => visited.has(clusterFlatBase(ci) + wi));
+  const isClusterKnown = (ci) => isDungeonMaster || clusterPlayersKnow(ci);
 
   const stars = useMemo(() => starField(1100), []);
   const debris = useMemo(() => debrisField(UNCLAIMED.worlds[0].sizeR, 11), []);
@@ -476,8 +481,17 @@ export default function GalaxyMap({
     return () => cancelAnimationFrame(raf);
   }, [targetDay, reduceMotion]);
 
-  const [focusedCluster, setFocusedCluster] = useState(0);
-  const [clusterAngles, setClusterAngles] = useState([FRONT_ANGLE, FRONT_ANGLE + 120, FRONT_ANGLE + 240]);
+  // The ring starts with the party's own cluster in front (or the first one
+  // anyone has seen), so a player never opens the map onto an empty slot.
+  const initialFocus = useMemo(() => {
+    const known = CLUSTERS.map((_, i) => i).filter(isClusterKnown);
+    return known.includes(party.clusterIndex) ? party.clusterIndex : known[0] ?? 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [focusedCluster, setFocusedCluster] = useState(initialFocus);
+  const [clusterAngles, setClusterAngles] = useState(() =>
+    CLUSTERS.map((_, i) => FRONT_ANGLE + normalizeDelta((i - initialFocus) * 120))
+  );
   const rotationRaf = useRef(null);
   useEffect(() => () => cancelAnimationFrame(rotationRaf.current), []);
 
@@ -503,6 +517,15 @@ export default function GalaxyMap({
     }
     rotationRaf.current = requestAnimationFrame(frame);
   }
+
+  // If the focused cluster drops out of sight (the DM hid its last world),
+  // swing the ring round to one the players can still see.
+  useEffect(() => {
+    if (isClusterKnown(focusedCluster)) return;
+    const next = CLUSTERS.findIndex((_, i) => isClusterKnown(i));
+    if (next !== -1) focusCluster(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visited, isDungeonMaster]);
 
   // selected is either a flat-planet detail ({ type: "planet", flatIndex })
   // or a cluster-lore detail ({ type: "cluster", clusterIndex }).
@@ -557,9 +580,15 @@ export default function GalaxyMap({
   );
 
   let selectedDetail = null;
-  if (selected?.type === "planet") {
+  const selectedLoc = selected?.type === "planet" ? locateFlatIndex(selected.flatIndex) : null;
+  const selectionHidden =
+    (selected?.type === "cluster" && !isClusterKnown(selected.clusterIndex)) ||
+    (selectedLoc && selectedLoc.clusterIndex !== -1 && !isClusterKnown(selectedLoc.clusterIndex));
+  if (selectionHidden) {
+    selectedDetail = null;
+  } else if (selected?.type === "planet") {
     const p = PLANETS[selected.flatIndex];
-    const loc = locateFlatIndex(selected.flatIndex);
+    const loc = selectedLoc;
     selectedDetail = {
       type: "planet",
       name: p.name,
@@ -584,6 +613,7 @@ export default function GalaxyMap({
       name: c.name,
       color: null,
       known: isClusterKnown(selected.clusterIndex),
+      playersKnow: clusterPlayersKnow(selected.clusterIndex),
       where: c.subtitle ? `Orbiting ${c.subtitle}` : "Star system",
       body: c.blurb,
       image: starImageUrl(c.key),
@@ -730,13 +760,16 @@ export default function GalaxyMap({
 
         {/* The three clusters, drawn back-to-front so the focused one is on top */}
         {clusterOrder.map((ci) => {
+          if (!isClusterKnown(ci)) return null;
           const cluster = CLUSTERS[ci];
           const slot = clusterSlot(clusterAngles[ci], ringRx, look);
           const isFocused = ci === focusedCluster;
           return (
             <g
               key={cluster.key}
-              className={`galaxy-cluster ${isFocused ? "galaxy-cluster--focused" : "galaxy-cluster--back"}`}
+              className={`galaxy-cluster ${isFocused ? "galaxy-cluster--focused" : "galaxy-cluster--back"} ${
+                clusterPlayersKnow(ci) ? "" : "galaxy-cluster--undiscovered"
+              }`}
               transform={`translate(${slot.x} ${slot.y}) scale(${slot.scale})`}
               style={{ opacity: slot.opacity }}
               onClick={
@@ -869,6 +902,7 @@ export default function GalaxyMap({
             themselves -- the focused one drifts to center and grows, the
             other two settle to the sides and shrink. */}
         {CLUSTERS.map((cluster, ci) => {
+          if (!isClusterKnown(ci)) return null;
           const slot = clusterSlot(clusterAngles[ci], ringRx, look);
           const rad = (clusterAngles[ci] * Math.PI) / 180;
           const x = RING_CX + (ringRx + (LABEL_SPREAD_X - RING_RX)) * Math.cos(rad);

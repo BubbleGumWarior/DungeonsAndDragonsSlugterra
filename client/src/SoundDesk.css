@@ -1,0 +1,996 @@
+.sd-page {
+  min-height: 100vh;
+  scrollbar-color: var(--charcoal-600) transparent;
+}
+
+/* The bits of the page the browser would otherwise draw itself. */
+.sd-page ::selection {
+  background: var(--maroon-600);
+  color: var(--ink);
+}
+
+.sd-page input {
+  caret-color: var(--gold);
+}
+
+.sd-page :is(button, input, select):focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.sd-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 36px 24px 72px;
+}
+
+/* ---------------------------------------------------------------- header */
+.sd-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px 24px;
+}
+
+.sd-title {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 28px;
+  color: var(--gold-soft);
+}
+
+.sd-subtitle {
+  margin: 0;
+  max-width: 56ch;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.sd-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sd-btn--on {
+  border-color: var(--gold);
+  color: var(--gold-soft);
+  background: rgba(201, 162, 75, 0.1);
+}
+
+.sd-status {
+  margin: -4px 0 -6px;
+  min-height: 1.3em;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+
+.sd-status--error {
+  color: var(--danger);
+}
+
+/* ---------------------------------------------------------------- bank tabs */
+.sd-banks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sd-bank {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px 7px 14px;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-600);
+  border-radius: 999px;
+  color: var(--ink-dim);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), color 0.15s var(--ease-out), background 0.15s var(--ease-out);
+}
+
+.sd-bank:hover {
+  border-color: var(--gold);
+  color: var(--ink);
+}
+
+.sd-bank--active {
+  background: var(--maroon-700);
+  border-color: var(--maroon-500);
+  color: var(--ink);
+}
+
+.sd-bank-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  text-align: center;
+}
+
+/* ---------------------------------------------------------------- now playing band */
+.sd-band {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px 32px;
+  padding: 20px 24px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+  border-radius: 16px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+}
+
+.sd-band::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 22px;
+  right: 22px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
+}
+
+.sd-band-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.sd-band-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+.sd-band-title {
+  margin: 0;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 22px;
+  line-height: 1.2;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.sd-band-title--idle {
+  color: var(--ink-dim);
+}
+
+.sd-band-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px 3px 8px;
+  border: 1px solid var(--charcoal-600);
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink-dim);
+}
+
+.sd-band-state svg {
+  width: 13px;
+  height: 13px;
+}
+
+.sd-band-state--playing {
+  border-color: var(--gold);
+  color: var(--gold-soft);
+  background: rgba(201, 162, 75, 0.1);
+}
+
+.sd-band-hint {
+  margin: 0;
+  max-width: 52ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.sd-progress {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.sd-progress-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--charcoal-700);
+  overflow: hidden;
+}
+
+.sd-progress-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--ink-dim);
+  transform-origin: left center;
+  transition: transform 0.5s linear;
+}
+
+.sd-band--playing .sd-progress-fill {
+  background: var(--gold);
+}
+
+.sd-progress-time {
+  flex-shrink: 0;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+
+.sd-band-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sd-transport {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, var(--maroon-600), var(--maroon-700));
+  border: 1px solid var(--maroon-500);
+  border-radius: 50%;
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 0.12s var(--ease-out), border-color 0.15s var(--ease-out), filter 0.15s var(--ease-out);
+}
+
+.sd-transport svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sd-transport:hover:not(:disabled) {
+  border-color: var(--gold);
+  filter: brightness(1.08);
+}
+
+.sd-transport:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.sd-transport:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sd-transport--quiet {
+  background: transparent;
+  border-color: var(--charcoal-600);
+  color: var(--ink-dim);
+}
+
+.sd-level {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 190px;
+  margin-left: 6px;
+}
+
+.sd-level > svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--gold-dim);
+}
+
+.sd-level-value {
+  min-width: 34px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+.sd-level--field {
+  margin-left: 0;
+}
+
+/* Same gold-on-charcoal slider recipe as Settings.css's .volume-slider and
+   VoicePanel.css's .voice-slider, kept local so this page needs neither. */
+.sd-slider {
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gold) var(--fill, 100%), var(--charcoal-700) var(--fill, 100%));
+  outline: none;
+  cursor: pointer;
+}
+
+.sd-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--gold-soft);
+  border: 2px solid var(--charcoal-950);
+  cursor: pointer;
+}
+
+.sd-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--gold-soft);
+  border: 2px solid var(--charcoal-950);
+  cursor: pointer;
+}
+
+.sd-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.sd-slider::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--gold);
+}
+
+/* ---------------------------------------------------------------- columns */
+.sd-cols {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  align-items: start;
+  gap: 24px;
+}
+
+.sd-cols--editing {
+  grid-template-columns: 280px minmax(0, 1fr) 300px;
+}
+
+.sd-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  min-height: 36px;
+}
+
+.sd-section-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--gold-soft);
+}
+
+.sd-stop-effects {
+  padding: 7px 12px;
+  font-size: 12.5px;
+}
+
+.sd-empty {
+  min-height: 160px;
+}
+
+.sd-hint {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+/* ---------------------------------------------------------------- ambience rows */
+.sd-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sd-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 12px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+  border-radius: 10px;
+  color: var(--ink);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), background 0.15s var(--ease-out), transform 0.12s var(--ease-out);
+}
+
+.sd-row:hover {
+  border-color: var(--gold);
+}
+
+.sd-row:active {
+  transform: scale(0.985);
+}
+
+.sd-row-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--charcoal-950);
+  color: var(--ink-dim);
+}
+
+.sd-row-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.sd-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.sd-row-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sd-row-bank {
+  font-size: 11.5px;
+  color: var(--ink-dim);
+}
+
+.sd-row-time {
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+.sd-row--current {
+  border-color: var(--gold-dim);
+  background: rgba(201, 162, 75, 0.07);
+}
+
+.sd-row--current .sd-row-icon {
+  color: var(--gold);
+}
+
+.sd-row--selected {
+  border-color: var(--maroon-400);
+}
+
+.sd-row--skeleton {
+  display: block;
+  height: 52px;
+  cursor: default;
+  border-style: dashed;
+}
+
+/* ---------------------------------------------------------------- effect pads */
+.sd-pads {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+  gap: 10px;
+}
+
+.sd-pad {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  aspect-ratio: 1 / 1;
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--charcoal-900), var(--charcoal-950));
+  border: 1px solid var(--charcoal-600);
+  border-radius: 12px;
+  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.55), 0 1px 0 rgba(255, 255, 255, 0.03);
+  color: var(--ink);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 0.1s var(--ease-out), border-color 0.15s var(--ease-out), background 0.15s var(--ease-out);
+}
+
+.sd-pad:hover {
+  border-color: var(--gold-dim);
+}
+
+.sd-pad:active {
+  transform: scale(0.96);
+}
+
+.sd-pad-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.sd-pad-key,
+.sd-pad-time {
+  position: absolute;
+  top: 10px;
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+
+.sd-pad-key {
+  left: 10px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--charcoal-600);
+  border-radius: 6px;
+  font-weight: 700;
+  background: var(--charcoal-950);
+}
+
+.sd-pad-time {
+  right: 12px;
+  top: 14px;
+}
+
+.sd-pad--fired {
+  border-color: var(--gold);
+  background: linear-gradient(180deg, rgba(201, 162, 75, 0.16), var(--charcoal-950));
+}
+
+.sd-pad--fired .sd-pad-name {
+  color: var(--gold-soft);
+}
+
+.sd-pad-sweep {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: var(--gold);
+  transform-origin: left center;
+  animation: sd-sweep var(--sweep, 900ms) linear forwards;
+}
+
+@keyframes sd-sweep {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.sd-pad,
+.sd-row {
+  scroll-margin-top: 16px;
+}
+
+.sd-pad--selected {
+  outline: 2px solid var(--maroon-400);
+  outline-offset: 1px;
+}
+
+.sd-pad--add {
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: transparent;
+  border-style: dashed;
+  box-shadow: none;
+  color: var(--ink-dim);
+}
+
+.sd-pad--add svg {
+  width: 20px;
+  height: 20px;
+}
+
+.sd-pad--add .sd-pad-name {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.sd-pad--add:hover {
+  border-color: var(--gold);
+  color: var(--ink);
+}
+
+.sd-pad--skeleton {
+  cursor: default;
+  border-style: dashed;
+  box-shadow: none;
+}
+
+/* ---------------------------------------------------------------- inspector */
+.sd-inspector {
+  position: sticky;
+  /* Clears the pinned Now Playing band above it (see "pinned band" below). */
+  top: 144px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-700);
+  border-radius: 16px;
+}
+
+.sd-inspector--empty {
+  align-items: center;
+  gap: 8px;
+  padding: 28px 18px;
+  border-style: dashed;
+  text-align: center;
+  color: var(--ink-dim);
+  font-size: 13px;
+}
+
+.sd-inspector--empty svg {
+  width: 22px;
+  height: 22px;
+  color: var(--gold-dim);
+}
+
+.sd-inspector--empty p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.sd-inspector-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.sd-inspector-meta {
+  margin: -8px 0 0;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+.sd-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sd-field > label {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.sd-field-hint {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+}
+
+.sd-field input[type="text"],
+.sd-draft input[type="text"] {
+  min-width: 0;
+  padding: 9px 11px;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-600);
+  border-radius: 8px;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13.5px;
+  outline: none;
+  transition: border-color 0.15s var(--ease-out);
+}
+
+.sd-field input[type="text"]:focus,
+.sd-draft input[type="text"]:focus {
+  border-color: var(--gold);
+}
+
+.sd-field input::placeholder,
+.sd-draft input::placeholder {
+  color: var(--ink-dim);
+  opacity: 0.8;
+}
+
+.sd-inspector-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sd-danger {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--charcoal-700);
+  font-size: 13px;
+}
+
+.sd-danger-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.sd-danger-actions .panel-btn {
+  flex: 1;
+}
+
+.sd-btn--danger-ghost {
+  border-color: var(--charcoal-600);
+  color: var(--danger);
+}
+
+.sd-btn--danger-ghost:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.sd-btn--danger {
+  background: rgba(255, 122, 107, 0.16);
+  border-color: var(--danger);
+  color: var(--ink);
+}
+
+/* ---------------------------------------------------------------- upload tray */
+.sd-upload {
+  padding: 18px 20px 20px;
+  gap: 14px;
+  animation: none;
+}
+
+.sd-upload-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sd-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 16px;
+  border: 1px dashed var(--charcoal-600);
+  border-radius: 12px;
+  text-align: center;
+  color: var(--ink-dim);
+  font-size: 13px;
+  transition: border-color 0.15s var(--ease-out), background 0.15s var(--ease-out);
+}
+
+.sd-drop p {
+  margin: 0;
+}
+
+.sd-drop > svg {
+  width: 26px;
+  height: 26px;
+  color: var(--gold-dim);
+}
+
+.sd-drop--over {
+  border-color: var(--gold);
+  background: rgba(201, 162, 75, 0.07);
+}
+
+.sd-rescan {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.sd-rescan p {
+  flex: 1 1 280px;
+}
+
+.sd-rescan code,
+.sd-field-hint code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--charcoal-950);
+  color: var(--ink);
+  font-size: 11.5px;
+}
+
+.sd-drafts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sd-draft {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-700);
+  border-radius: 10px;
+}
+
+.sd-draft-name {
+  flex: 1 1 160px;
+}
+
+.sd-draft-bank {
+  flex: 0 1 130px;
+  width: 130px;
+}
+
+.sd-draft-state {
+  flex: 0 1 auto;
+  min-width: 56px;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+.sd-draft--done .sd-draft-state {
+  color: var(--success);
+}
+
+.sd-draft--error .sd-draft-state,
+.sd-draft--failed .sd-draft-state {
+  flex-basis: 100%;
+  order: 9; /* the message drops under the row, so the remove button stays beside the name */
+  color: var(--danger);
+}
+
+.sd-upload-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ---------------------------------------------------------------- pinned band */
+/* What the table is hearing stays in view however long the pad bank runs. The
+   nav bar isn't sticky, so the band pins to the top of the viewport. Phones
+   keep it in flow: at ~190px it is too tall to pin there. */
+@media (min-width: 960px) {
+  .sd-band {
+    position: sticky;
+    top: 8px;
+    z-index: 6;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 12px 24px rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* ---------------------------------------------------------------- narrow screens */
+@media (max-width: 959px) {
+  .sd-body {
+    padding: 24px 16px 72px;
+  }
+
+  .sd-cols,
+  .sd-cols--editing {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Editing on a phone: the inspector docks to the bottom edge instead of
+     being a column nobody could see without scrolling past every pad. */
+  .sd-cols--editing {
+    padding-bottom: 60vh;
+  }
+
+  /* The pads are the thing the DM reaches for mid-scene; on a phone they
+     come before the ambience list instead of below all of it. */
+  .sd-effects {
+    order: -1;
+  }
+
+  .sd-inspector {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    z-index: 45;
+    max-height: 58vh;
+    overflow-y: auto;
+    border-radius: 16px 16px 0 0;
+    /* Room to scroll the last row clear of the always-on-top voice button. */
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+    box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.6);
+  }
+
+  .sd-inspector--empty {
+    padding: 14px 18px;
+    flex-direction: row;
+    text-align: left;
+  }
+}
+
+@media (max-width: 719px) {
+  .sd-band {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sd-level {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .sd-pads {
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 8px;
+  }
+
+  .sd-draft-bank {
+    flex: 1 1 100px;
+  }
+}
+
+/* Number keys and Esc mean nothing on a touch screen. */
+@media (hover: none) {
+  .sd-hint {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-pad,
+  .sd-row,
+  .sd-transport {
+    transition: none;
+  }
+
+  .sd-pad:active,
+  .sd-row:active,
+  .sd-transport:active:not(:disabled) {
+    transform: none;
+  }
+
+  /* No travelling bar: show the sounding state as a full, static one. */
+  .sd-pad-sweep {
+    animation: none;
+  }
+
+  .sd-progress-fill {
+    transition: none;
+  }
+}

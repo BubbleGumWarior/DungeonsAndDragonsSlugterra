@@ -1,5 +1,5 @@
 @echo off
-echo Starting Dungeon Lair backend, frontend, and Cloudflare Tunnel...
+echo Starting Dungeon Lair (built client + backend) and Cloudflare Tunnel...
 echo.
 echo Everyone (including you) connects at:
 echo   https://play.dungeonlair.co.za
@@ -10,22 +10,33 @@ echo certificate for the domain, so voice chat's mic access works
 echo cleanly for everyone. This replaces run_public.bat and its
 echo self-signed-cert / port-forwarding setup.
 echo.
+echo The client is built once and served by the backend itself on port 4000,
+echo so there is no Vite dev server in the path. Your
+echo %%USERPROFILE%%\.cloudflared\config.yml ingress must point at
+echo http://localhost:4000 (see CLOUDFLARE_TUNNEL_SETUP.md).
+echo.
 echo One-time setup required before this works -- see
 echo CLOUDFLARE_TUNNEL_SETUP.md if you haven't done it yet.
+echo.
+
+echo Building the client (re-run this bat after any client code change)...
+pushd "%~dp0client"
+call npm run build
+if errorlevel 1 (
+  echo.
+  echo Client build FAILED -- not starting anything. Fix the error above first.
+  popd
+  pause
+  exit /b 1
+)
+popd
 
 start "Dungeon Lair - Server" cmd /k "cd /d %~dp0server && npm start"
-
-echo.
-echo Waiting 5 seconds for the server to initialize the database and bind
-echo port 4000 before starting the client -- otherwise Vite's /ws proxy
-echo logs a burst of harmless ECONNREFUSED errors on first load.
-timeout /t 5 /nobreak >nul
-
-start "Dungeon Lair - Client" cmd /k "cd /d %~dp0client && npm run dev"
 start "Dungeon Lair - Tunnel" cmd /k "cloudflared tunnel run dungeonlair"
 
 echo.
-echo Three windows are starting: server, client, and the Cloudflare Tunnel.
+echo Two windows are starting: the server (API + websocket + built client)
+echo and the Cloudflare Tunnel.
 echo Give them a few seconds to settle, then open the URL above.
-echo Close all three windows (or Ctrl+C in each) when you're done for the night.
+echo Close both windows (or Ctrl+C in each) when you're done for the night.
 pause

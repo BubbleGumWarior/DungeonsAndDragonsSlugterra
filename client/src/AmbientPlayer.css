@@ -1,0 +1,119 @@
+/* The listener's small corner of the Sound Desk: shown only while the DM has
+   ambience playing, and only asks for attention when the browser is blocking
+   the audio. Bottom-left keeps clear of the voice widget (bottom-right). */
+.amb-chip {
+  position: fixed;
+  left: max(16px, env(safe-area-inset-left));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(280px, calc(100vw - 32px));
+  padding: 6px 8px 6px 12px;
+  background: var(--charcoal-900);
+  border: 1px solid var(--charcoal-600);
+  border-radius: 999px;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  animation: amb-chip-in 0.3s var(--ease-out);
+}
+
+@keyframes amb-chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.amb-chip svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.amb-chip-icon {
+  color: var(--gold);
+}
+
+.amb-chip-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  text-align: left;
+}
+
+.amb-chip-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.amb-chip-action {
+  font-weight: 700;
+  color: var(--gold-soft);
+}
+
+.amb-chip--blocked {
+  padding: 8px 14px 8px 12px;
+  border-color: var(--gold);
+  cursor: pointer;
+  transition: transform 0.12s var(--ease-out), background 0.15s var(--ease-out);
+}
+
+.amb-chip--blocked svg {
+  color: var(--gold);
+}
+
+.amb-chip--blocked .amb-chip-title {
+  color: var(--ink-dim);
+  font-weight: 500;
+}
+
+.amb-chip--blocked:hover {
+  background: var(--charcoal-800);
+}
+
+.amb-chip--blocked:active {
+  transform: scale(0.97);
+}
+
+.amb-chip-mute {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--charcoal-600);
+  border-radius: 50%;
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+
+.amb-chip-mute:hover {
+  border-color: var(--gold);
+  color: var(--ink);
+}
+
+.amb-chip-mute[aria-pressed="true"] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.amb-chip button:focus-visible,
+.amb-chip--blocked:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .amb-chip {
+    animation: none;
+  }
+}

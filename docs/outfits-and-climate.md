@@ -2,7 +2,7 @@
 
 Clothes matter now. Every world has a surface temperature; every outfit has a
 range it is comfortable in. Stand outside that range and combat gets harder, and
-sleeping there can make you ill.
+sleeping there can make you sick.
 
 ## Outfits
 
@@ -53,6 +53,15 @@ World temperatures are `PLANET_TEMPS` in `planetRules.js` (a mirror of each worl
 While the ship is under way everyone is at 21 C. **Fortitude** (CON skill) stretches
 every outfit's range by 5 C at both ends per point of modifier (never narrows).
 
+**Sleeping aboard.** A world with no surface to bed down on (just The Threshold, a
+vacuum field of derelict hulls) is listed in `REST_ABOARD_WORLDS` in `planetRules.js`.
+There the long rest's illness roll uses the ship's air (21 C, `restTemperature()`), so
+nobody falls ill from sleeping. Fights are unchanged: they still use the world's
+temperature (-170 C), so the EVA Space Suit is still what a salvage run needs.
+`getClimate()` returns both `temp` (fights) and `restTemp` / `restAboard` (sleep); the
+Wardrobe banner says so. Every other world, including the cold Kaeth ones, still has the
+party sleeping in the local climate.
+
 Combat plumbing: `characterGearSnapshot()` in `routes/combat.js` builds `max_ap`,
 `max_grit` and `data.gear` when a character is added to the lobby **and** again at
 `/start`. `gearMoveMult` / `gearAccuracyMod` / `gearReloadAp` / `gearDisadvantage`
@@ -65,10 +74,10 @@ fight leaves `current_grit` at 1 until the next long rest.
 - **Long rest** (`routes/characters.js`, after `advanceDay()`): each rested, healthy
   character rolls the tier's illness chance for the world (or ship) they are on. Failing
   sets `characters.ill`. The sleep overlay tells them.
-- **Ill in a fight:** max Grit, AP **and** accuracy are halved when the fight begins
+- **Sick in a fight:** max Grit, AP **and** accuracy are halved when the fight begins
   (accuracy = every attack roll at disadvantage, cancelling keen vision's advantage).
   Outside a fight nothing changes.
 - **Meds** (a market supply, `characters.meds`): one dose per long rest from the
-  Consumables page, only while ill, three rests in a row (`meds_streak`). The third dose
+  Consumables page, only while sick, three rests in a row (`meds_streak`). The third dose
   clears the illness at once. A long rest with no dose resets the run to 0
   (`meds_taken` marks today's dose and is cleared at every rest).

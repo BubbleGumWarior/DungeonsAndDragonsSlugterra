@@ -13,6 +13,7 @@ import {
   HandPalmIcon,
   BellRingingIcon,
   FadersIcon,
+  MusicNotesIcon,
 } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
@@ -20,6 +21,7 @@ import NavBar from "./NavBar.jsx";
 import { THEMES, DEFAULT_THEME } from "./theme.js";
 import { volumeToGain } from "./soundVolume.js";
 import { useMicLevel } from "./useMicLevel.js";
+import { loadInputDeviceId, micConstraints } from "./voiceAudio.js";
 import "./Panel.css";
 import "./Settings.css";
 
@@ -90,6 +92,15 @@ export default function Settings() {
   const cueSaveTimer = useRef(null);
   const cueTestTimer = useRef(null);
 
+  // How loud this listener hears the DM's Sound Desk (AmbientPlayer.jsx):
+  // the looping ambience bed and the one-shot soundboard effects.
+  const [listenVolumes, setListenVolumes] = useState({
+    ambientVolume: typeof user?.ambientVolume === "number" ? user.ambientVolume : 0.7,
+    soundboardVolume: typeof user?.soundboardVolume === "number" ? user.soundboardVolume : 0.8,
+  });
+  const [listenStatus, setListenStatus] = useState({});
+  const listenSaveTimers = useRef({});
+
   // One entry per COMBAT_SFX id. sfxVolumes is the sparse { id: 0-1 } map
   // (missing id => SFX_DEFAULT_VOLUME); sfxStatus tracks each row's save
   // state; testingSfx is the id whose preview is currently playing (only one
@@ -128,7 +139,15 @@ export default function Settings() {
   }, [user?.combatSfxVolumes]);
 
   useEffect(() => {
+    setListenVolumes((prev) => ({
+      ambientVolume: typeof user?.ambientVolume === "number" ? user.ambientVolume : prev.ambientVolume,
+      soundboardVolume: typeof user?.soundboardVolume === "number" ? user.soundboardVolume : prev.soundboardVolume,
+    }));
+  }, [user?.ambientVolume, user?.soundboardVolume]);
+
+  useEffect(() => {
     return () => {
+      Object.values(listenSaveTimers.current).forEach(clearTimeout);
       clearTimeout(masterSaveTimer.current);
       clearTimeout(saveTimer.current);
       clearTimeout(testTimer.current);
@@ -183,18 +202,29 @@ export default function Settings() {
     setVolume(next);
     setCueVolume(next);
     setSfxVolumes(sfxNext);
+    setListenVolumes({ ambientVolume: next, soundboardVolume: next });
     setMasterStatus("pending");
     setVolumeStatus("idle");
     setCueVolumeStatus("idle");
     setSfxStatus({});
+    setListenStatus({});
     clearTimeout(saveTimer.current);
     clearTimeout(cueSaveTimer.current);
     clearTimeout(masterSaveTimer.current);
     Object.values(sfxSaveTimers.current).forEach(clearTimeout);
+    Object.values(listenSaveTimers.current).forEach(clearTimeout);
     sfxSaveTimers.current = {};
+    listenSaveTimers.current = {};
     masterSaveTimer.current = setTimeout(async () => {
       setMasterStatus("saving");
-      const patch = { masterVolume: next, soundVolume: next, voiceCueVolume: next, combatSfxVolumes: sfxNext };
+      const patch = {
+        masterVolume: next,
+        soundVolume: next,
+        voiceCueVolume: next,
+        combatSfxVolumes: sfxNext,
+        ambientVolume: next,
+        soundboardVolume: next,
+      };
       updateUser({ ...user, ...patch });
       const result = await savePreferences(patch);
       setMasterStatus(result ? "saved" : "idle");
@@ -263,6 +293,21 @@ export default function Settings() {
     }, 500);
   }
 
+  // `key` is the preference name (ambientVolume | soundboardVolume), the same
+  // in state, in the user object and in the preferences patch.
+  function handleListenInput(key, e) {
+    const next = Number(e.target.value) / 100;
+    setListenVolumes((prev) => ({ ...prev, [key]: next }));
+    setListenStatus((prev) => ({ ...prev, [key]: "pending" }));
+    clearTimeout(listenSaveTimers.current[key]);
+    listenSaveTimers.current[key] = setTimeout(async () => {
+      setListenStatus((prev) => ({ ...prev, [key]: "saving" }));
+      updateUser({ ...user, [key]: next });
+      const result = await savePreferences({ [key]: next });
+      setListenStatus((prev) => ({ ...prev, [key]: result ? "saved" : "idle" }));
+    }, 500);
+  }
+
   function handleTestSfx(id, src) {
     if (testingSfx) return;
     setTestingSfx(id);
@@ -301,7 +346,7 @@ export default function Settings() {
     }
     setMicError("");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia(micConstraints(loadInputDeviceId()));
       setMicStream(stream);
     } catch {
       setMicError("Couldn't access your microphone. Check your browser's site permissions.");
@@ -496,6 +541,44 @@ export default function Settings() {
                     </div>
                   );
                 })}
+
+              {[
+                { key: "ambientVolume", label: "Ambience", sub: "The Dungeon Master's looping background music.", icon: MusicNotesIcon },
+                { key: "soundboardVolume", label: "Soundboard effects", sub: "One-shot sounds the Dungeon Master plays for the table.", icon: WaveformIcon },
+              ].map((row) => {
+                const pct = Math.round(listenVolumes[row.key] * 100);
+                const RowIcon = row.icon;
+                const rowStatus = listenStatus[row.key];
+                return (
+                  <div key={row.key} className="volume-control volume-control--divided">
+                    <span className="voice-mode-label">{row.label}</span>
+                    <p className="volume-sub">{row.sub}</p>
+                    <div className="volume-row">
+                      <RowIcon weight="bold" className="volume-icon" />
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={pct}
+                        onChange={(e) => handleListenInput(row.key, e)}
+                        aria-label={`${row.label} volume`}
+                        className="volume-slider"
+                        style={{ "--volume-fill": `${pct}%` }}
+                      />
+                      <span className="volume-value num-tabular">{pct}%</span>
+                    </div>
+                    <div className="volume-footer">
+                      <span className="volume-status">
+                        {rowStatus === "pending" && "Adjusting…"}
+                        {rowStatus === "saving" && "Saving…"}
+                        {rowStatus === "saved" && "Saved"}
+                        {!rowStatus && " "}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
 
               <div className="volume-control volume-control--divided">
                 <span className="voice-mode-label">Voice chat join / leave</span>

@@ -130,7 +130,7 @@ export function typeRange(type) {
 // on a hit. SlugForm's checkboxes and SlugToolbar's filter chips carry their
 // own copy of the labels; this list drives the hover panel on SlugCard.
 export const SLUG_TRAITS = [
-  { key: "breaksWalls", label: "Wall Breaker", description: "The dedicated Break a Wall action can punch through terrain." },
+  { key: "breaksWalls", label: "Wall Breaker", description: "The dedicated Break a Wall action can punch a hole in terrain: the stronger the slug's Clash Power, the bigger the hole -- but it never takes out a whole wall in one hit." },
   { key: "causesKnockback", label: "Knockback", description: "Doubles Earth/Metal's shove, or gives any other type a short one." },
   { key: "wallMaker", label: "Wall Maker", description: "Can raise a barrier on the field (ice or crystal wall)." },
   { key: "bridgeMaker", label: "Bridge Maker", description: "Can create a crossable path (ice bridge, vine swing)." },
@@ -187,6 +187,11 @@ export const SLUG_TRAITS = [
   { key: "causesBleed", label: "Causes Bleed", description: "A hit leaves the target bleeding: 10% of their max Grit at the start of each of their next 3 turns, whatever the slug's power." },
   { key: "powerSurge", label: "Power Surge", description: "Once shot, every other shot you fire that turn has its power doubled, after all other modifiers." },
   { key: "lifeDrain", label: "Life Drain", description: "Whenever this slug lands real damage -- in a clash or on a direct hit -- it heals its own slinger by the slug's flat Clash Power, capped at their max Grit." },
+  { key: "adaptiveStrain", label: "Adaptive Strain", description: "Samples whoever it hits and rewrites itself to beat them: each earlier hit on the same enemy makes your next hit on them land 25% harder (up to 4 hits' worth, so at most double). In flight the bolt splits in two and twists around itself like a DNA strand, so it can't be fired in a dual shot." },
+  { key: "pounceStrike", label: "Pounce Strike", description: "Visual only: the bolt stalks along its path as a faint, swaying ghost, then snaps into view and lunges as a streak, clawing the target on a hit. Because the bolt has its own shape, it can't be fired in a dual shot." },
+  { key: "timeSkip", label: "Time Skip", description: "Visual only: shortly after transforming the bolt vanishes for everyone while time stands still, then reappears in a burst of light right in front of the target and finishes the flight. Pair it with Uncounterable." },
+  { key: "lightningStrike", label: "Lightning Strike", description: "Visual only: the bolt flies as a jagged, crackling lightning bolt with forks and sparks around a white-hot head, and arcs out of the target on a hit." },
+  { key: "daggerThrow", label: "Dagger Throw", description: "Visual only: Bladier flies as its ordinary bolt, but when a wall is in its path it throws a small knife ahead of itself that tumbles in and cuts the wall open before the bolt passes through the gap (with no wall in the way nothing is thrown). Because of the throw it can't be fired in a dual shot." },
 ];
 
 export function defaultSlugFields() {
@@ -260,5 +265,10 @@ export function defaultSlugFields() {
     potentPoison: false,
     causesBleed: false,
     lifeDrain: false,
+    adaptiveStrain: false,
+    pounceStrike: false,
+    timeSkip: false,
+    lightningStrike: false,
+    daggerThrow: false,
   };
 }

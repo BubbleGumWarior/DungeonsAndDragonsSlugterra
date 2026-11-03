@@ -361,6 +361,7 @@ router.post(["/long-rest", "/heal-all"], requireDungeonMaster, async (req, res) 
     // Illness. Sleeping in clothes that don't suit the climate (after the night's
     // travel, so an arrival counts) can make a healthy character ill; an ill one
     // who skipped today's Meds loses their run of doses. Doses reset for the new day.
+    // They sleep in `restTemp`: the ship's air on a world with no surface.
     const climate = await getClimate();
     const illness = [];
     for (const c of characters) {
@@ -370,16 +371,16 @@ router.post(["/long-rest", "/heal-all"], requireDungeonMaster, async (req, res) 
       }
       const outfit = await getWornOutfit(pool, c.user_id);
       const range = effectiveRange(outfit, skillModifier(c.stats, c.proficiencies, "fortitude"));
-      const outside = degreesOutside(range, climate.temp);
+      const outside = degreesOutside(range, climate.restTemp);
       if (outside > 0 && Math.random() < illnessChance(outside)) {
         await pool.query("UPDATE characters SET ill = true, meds_streak = 0 WHERE user_id = $1", [c.user_id]);
         illness.push({
           userId: c.user_id,
           name: c.name,
           outfit: outfit?.name ?? null,
-          temp: climate.temp,
+          temp: climate.restTemp,
           outside,
-          side: climateSide(range, climate.temp),
+          side: climateSide(range, climate.restTemp),
         });
       }
     }

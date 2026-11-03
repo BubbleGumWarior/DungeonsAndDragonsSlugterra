@@ -100,14 +100,15 @@ credentials-file: C:\Users\sebas\.cloudflared\<UUID>.json
 
 ingress:
   - hostname: play.dungeonlair.co.za
-    service: http://localhost:5173
+    service: http://localhost:4000
   - service: http_status:404
 ```
 
 Replace `<UUID>` with the value from step 2. `service` points at plain
-`http://localhost:5173` (not https) — the client's Vite dev server no
-longer serves HTTPS itself (see the comment in `client/vite.config.js`),
-since Cloudflare now handles that at the edge with a real cert.
+`http://localhost:4000` (not https) — the Express server serves the built
+client (`client/dist`), the `/api` routes and the `/ws` socket all on that
+one port, so the tunnel talks to it directly with no Vite dev server in
+between. Cloudflare handles HTTPS at the edge with a real cert.
 
 ## 5. Run it
 
@@ -115,8 +116,9 @@ since Cloudflare now handles that at the edge with a real cert.
 run_tunnel.bat
 ```
 
-Starts the server, client, and `cloudflared tunnel run dungeonlair` in three
-windows. Once all three windows settle, everyone (including you, from any
+Builds the client (`npm run build`), then starts the server and
+`cloudflared tunnel run dungeonlair` in two windows. Re-run the bat after any
+client code change so the build is fresh. Once both windows settle, everyone (including you, from any
 network) connects at `https://play.dungeonlair.co.za` — no port forwarding,
 no router changes, no cert warnings.
 
@@ -167,6 +169,20 @@ briefly pointed at nothing:
    redeploying later just needs a new deployment from the same repo/image.
    Deleting the whole project is the only step that's hard to reverse —
    skip that unless you're certain you're done with it for good.
+
+## Voice chat TURN relay (Cloudflare Realtime)
+
+Voice audio goes browser-to-browser, but players on awkward NATs need a TURN
+relay as a fallback. Cloudflare's is free for the first 1,000 GB/month:
+
+1. `dash.cloudflare.com` → **Realtime** → **TURN Server** → **Create**.
+2. Copy the **Turn Token ID** and the **API token** into `server/.env`:
+   ```
+   CLOUDFLARE_TURN_KEY_ID=...
+   CLOUDFLARE_TURN_API_TOKEN=...
+   ```
+3. Restart the server. The old `METERED_TURN_CREDENTIALS_URL` is only used as
+   a fallback if those two are unset.
 
 ## Notes
 

@@ -14,12 +14,16 @@ export const SPEAKING_THRESHOLD = 0.08;
 // up to 8 remote) instead of one rAF loop per stream. useMicLevel below is
 // a thin per-component hook wrapper around the same primitive for the
 // single-stream case (the Settings mic-check meter).
-export function createLevelSampler(stream) {
+//
+// Pass `sharedContext` to reuse an existing AudioContext (voice chat shares
+// one across every participant); without it the sampler makes -- and on
+// dispose closes -- its own, as the Settings mic-check does.
+export function createLevelSampler(stream, sharedContext) {
   if (!stream || stream.getAudioTracks().length === 0) return null;
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) return null;
+  if (!sharedContext && !AudioContextClass) return null;
 
-  const audioContext = new AudioContextClass();
+  const audioContext = sharedContext || new AudioContextClass();
   const source = audioContext.createMediaStreamSource(stream);
   const analyser = audioContext.createAnalyser();
   analyser.fftSize = 512;
@@ -44,7 +48,7 @@ export function createLevelSampler(stream) {
     dispose() {
       source.disconnect();
       analyser.disconnect();
-      audioContext.close().catch(() => {});
+      if (!sharedContext) audioContext.close().catch(() => {});
     },
   };
 }

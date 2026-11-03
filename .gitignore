@@ -24,3 +24,13 @@ Thumbs.db
 
 # Claude Code worktrees (full duplicate checkouts)
 .claude/worktrees/
+
+# DM-uploaded sound desk audio (see server/src/routes/sounds.js)
+server/uploads/
+
+# Sound Desk audio is never committed: DM uploads (server/uploads, above) and
+# the drop-in folder server/default-sounds (plus its _originals backups).
+# Other audio, such as the combat sounds in client/public, commits normally.
+server/default-sounds/ambient/*
+server/default-sounds/effects/*
+server/default-sounds/_originals/

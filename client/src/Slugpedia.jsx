@@ -114,6 +114,7 @@ function StatLine({ label, value, max, sealed }) {
 // How a variant departs from the first one on record, as short phrases.
 function otherDifferences(v, base) {
   const out = [];
+  if (v.type !== base.type) out.push(`Element (${v.type})`);
   if (v.protoformImage !== base.protoformImage || v.velocityImage !== base.velocityImage) out.push("Different art");
   if (v.protoformUtility !== base.protoformUtility) out.push("Protoform notes");
   if (v.velocityAbility !== base.velocityAbility) out.push("Velocity notes");

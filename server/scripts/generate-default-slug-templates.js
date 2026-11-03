@@ -186,6 +186,11 @@ async function main() {
       potentPoison: toBool(r[col("Potent Poison")]),
       causesBleed: toBool(r[col("Causes Bleed")]),
       lifeDrain: toBool(r[col("Causes Life Drain")]),
+      adaptiveStrain: toBool(r[col("Adaptive Strain")]),
+      pounceStrike: toBool(r[col("Pounce Strike")]),
+      timeSkip: toBool(r[col("Time Skip")]),
+      lightningStrike: toBool(r[col("Lightning Strike")]),
+      daggerThrow: toBool(r[col("Dagger Throw")]),
       protoformImage,
       velocityImage,
     });

@@ -8,6 +8,10 @@ import { teamById } from "./combatTeams.js";
 import { useAuth } from "./AuthContext.jsx";
 import { volumeToGain } from "./soundVolume.js";
 import { downscaleImageFile } from "./imageDownscale.js";
+import HazardPatch from "./HazardPatch.jsx";
+import PlacementGhost from "./PlacementGhost.jsx";
+import { ROTATE_STEP } from "./buildPlacement.js";
+import { diffWalls, WallBreakFx, WallFormFx, BridgePiece, WALL_BREAK_FX_MS, WALL_FORM_FX_MS } from "./TerrainFx.jsx";
 import "./CombatMap.css";
 
 // Launch sound for a fired slug -- shared by the fresh-shot and counter-shot
@@ -142,10 +146,1137 @@ function headingDeg(a, b) {
   return (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
 }
 
+// Helixel's adaptive strain: the bolt leaves the blaster as one, peels apart into
+// two strands over its first HELIX_SPLIT_DISTANCE of travel, and the pair twist
+// around each other like a DNA double helix (one twist per HELIX_PITCH, each
+// strand swinging HELIX_RADIUS to either side of the line of flight, with a rung
+// joining them every HELIX_RUNG_SPACING), fusing back into one on arrival. The
+// phase is tied to distance travelled, not time, so the twist keeps its shape
+// whatever the shot's speed. Like Pentalux's split it is purely visual. All
+// lengths are map units, scaled by `vs` like every other bolt dimension.
+const HELIX_RADIUS = 13;
+const HELIX_PITCH = 78;
+const HELIX_SPLIT_DISTANCE = 70;
+const HELIX_TRAIL = 150;
+const HELIX_STEP = 7;
+const HELIX_RUNG_SPACING = 18;
+const HELIX_COLORS = ["#4dffa6", "#eafff3"];
+function helixShapes(b, vs, key) {
+  const rad = (b.angle * Math.PI) / 180;
+  const ux = Math.cos(rad);
+  const uy = Math.sin(rad);
+  const nx = -uy;
+  const ny = ux;
+  const travelled = Math.hypot(b.pos.x - b.helixFrom.x, b.pos.y - b.helixFrom.y);
+  const remaining = Math.hypot(b.helixTo.x - b.pos.x, b.helixTo.y - b.pos.y);
+  const radius = HELIX_RADIUS * vs;
+  const pitch = HELIX_PITCH * vs;
+  const split = HELIX_SPLIT_DISTANCE * vs;
+  const trail = Math.min(travelled, HELIX_TRAIL * vs);
+  // Where strand `sign` (+1/-1) is when it is `back` map units behind the head.
+  const at = (back, sign) => {
+    const s = travelled - back;
+    const open = Math.min(1, s / split);
+    // The head fuses shut over the same distance on arrival; the tail keeps the shape it was drawn with.
+    const fuse = back === 0 ? Math.min(1, remaining / split) : 1;
+    const off = sign * radius * open * fuse * Math.sin((2 * Math.PI * s) / pitch);
+    return { x: b.pos.x - ux * back + nx * off, y: b.pos.y - uy * back + ny * off };
+  };
+  const out = [];
+  const step = HELIX_STEP * vs;
+  for (let back = 0; back < trail; back += step) {
+    const fade = 1 - back / Math.max(1, trail);
+    for (let j = 0; j < 2; j++) {
+      const sign = j === 0 ? 1 : -1;
+      const p0 = at(back, sign);
+      const p1 = at(Math.min(trail, back + step), sign);
+      out.push(
+        <line
+          key={`${key}-s${j}-${back}`}
+          className="shot-fx-helix-strand"
+          x1={p0.x}
+          y1={p0.y}
+          x2={p1.x}
+          y2={p1.y}
+          strokeWidth={3.2 * vs}
+          style={{ "--fx-color": HELIX_COLORS[j], opacity: fade }}
+        />
+      );
+    }
+  }
+  const rungSpacing = HELIX_RUNG_SPACING * vs;
+  for (let back = 0; back < trail; back += rungSpacing) {
+    if (travelled - back < split * 0.35) break;
+    const a = at(back, 1);
+    const c = at(back, -1);
+    out.push(
+      <line
+        key={`${key}-r-${back}`}
+        className="shot-fx-helix-rung"
+        x1={a.x}
+        y1={a.y}
+        x2={c.x}
+        y2={c.y}
+        strokeWidth={1.6 * vs}
+        style={{ opacity: 0.75 * (1 - back / Math.max(1, trail)) }}
+      />
+    );
+  }
+  for (let j = 0; j < 2; j++) {
+    const head = at(0, j === 0 ? 1 : -1);
+    out.push(<circle key={`${key}-h${j}`} className="shot-fx-bolt" cx={head.x} cy={head.y} r={5 * vs} style={{ "--fx-color": HELIX_COLORS[j] }} />);
+  }
+  return out;
+}
+
+// Trackjaw's pounce strike: for the first POUNCE_START of its flight the slug is only a
+// faint ghost, crouched low and swaying side to side with a few fading afterimages (it is
+// stalking); then over the next POUNCE_RAMP it snaps into view and lunges, a bright streak
+// stretching out behind it, and on a hit it claws the target (see the `claws` burst).
+// Purely visual -- the server still resolves one ordinary shot. Lengths are map units,
+// scaled by `vs` like every other bolt dimension.
+const POUNCE_START = 0.66;
+const POUNCE_RAMP = 0.1;
+const POUNCE_STREAK = 90;
+const POUNCE_SWAY = 7;
+const POUNCE_SWAY_PERIOD = 26;
+const POUNCE_COLORS = ["#ff8a3d", "#ffe3b8"];
+const CLAW_DRAW_MS = 190;
+function pounceShapes(b, vs, key) {
+  const rad = (b.angle * Math.PI) / 180;
+  const ux = Math.cos(rad);
+  const uy = Math.sin(rad);
+  const nx = -uy;
+  const ny = ux;
+  const total = Math.hypot(b.pounceTo.x - b.pounceFrom.x, b.pounceTo.y - b.pounceFrom.y) || 1;
+  const travelled = Math.hypot(b.pos.x - b.pounceFrom.x, b.pos.y - b.pounceFrom.y);
+  const reveal = Math.min(1, Math.max(0, (travelled / total - POUNCE_START) / POUNCE_RAMP));
+  const stalk = 1 - reveal;
+  const swayAt = (dist) => POUNCE_SWAY * vs * stalk * Math.sin(dist / (POUNCE_SWAY_PERIOD * vs));
+  const head = { x: b.pos.x + nx * swayAt(travelled), y: b.pos.y + ny * swayAt(travelled) };
+  const out = [];
+  if (stalk > 0) {
+    for (let i = 1; i <= 4; i++) {
+      const back = i * 14 * vs;
+      const off = swayAt(travelled - back);
+      out.push(
+        <circle
+          key={`${key}-g${i}`}
+          cx={b.pos.x - ux * back + nx * off}
+          cy={b.pos.y - uy * back + ny * off}
+          r={(4 - i * 0.6) * vs}
+          style={{ fill: POUNCE_COLORS[0], opacity: 0.3 * (1 - i / 5) * stalk }}
+          className="shot-fx-pounce-ghost"
+        />
+      );
+    }
+  }
+  if (reveal > 0) {
+    const len = POUNCE_STREAK * vs * reveal;
+    const wide = 6.5 * vs;
+    const tail = { x: head.x - ux * len, y: head.y - uy * len };
+    const shoulder = { x: head.x - ux * 5 * vs, y: head.y - uy * 5 * vs };
+    out.push(
+      <path
+        key={`${key}-streak`}
+        className="shot-fx-pounce-streak"
+        d={`M ${tail.x} ${tail.y} L ${shoulder.x + nx * wide} ${shoulder.y + ny * wide} L ${head.x + ux * 3 * vs} ${head.y + uy * 3 * vs} L ${shoulder.x - nx * wide} ${shoulder.y - ny * wide} Z`}
+        style={{ "--fx-color": POUNCE_COLORS[0], opacity: 0.55 * reveal }}
+      />,
+      <line
+        key={`${key}-core`}
+        className="shot-fx-pounce-core"
+        x1={tail.x}
+        y1={tail.y}
+        x2={head.x}
+        y2={head.y}
+        strokeWidth={2.2 * vs}
+        style={{ opacity: 0.9 * reveal }}
+      />
+    );
+  }
+  out.push(
+    <circle
+      key={`${key}-head`}
+      className="shot-fx-bolt"
+      cx={head.x}
+      cy={head.y}
+      r={(4.5 + 2.5 * reveal) * vs}
+      style={{ "--fx-color": POUNCE_COLORS[reveal > 0.5 ? 1 : 0], opacity: 0.38 + 0.62 * reveal }}
+    />
+  );
+  return out;
+}
+
+// Chronix's time skip: the slug transforms and flies for a beat as an ordinary bolt, then --
+// SKIP_VANISH_AFTER of the trip past the end of its windup -- it stops time. It vanishes for
+// everyone: a clock face blooms where it was (ticks, a sweeping hand) and the whole map dims
+// while time is frozen. A converging ring then closes in on a spot SKIP_LAND_GAP map units in
+// front of the target, bursts into light there, and the bolt reappears and finishes the flight
+// in a quick final leg. All timing is in flight-fraction space (`f`, the bolt's progress along
+// from -> to), so it rides the same cruise clock as every other bolt and the shot still lands
+// exactly when the server resolves it. Purely visual -- pair it with Uncounterable.
+const SKIP_VANISH_AFTER = 0.04;
+const SKIP_LAND_GAP = 120;
+const SKIP_DIM_OPACITY = 0.26;
+const SKIP_COLORS = { glow: "#9fd0ff", ring: "#cfe8ff", white: "#ffffff" };
+function timeSkipShapes(b, vs, key) {
+  const { skipFrom: from, skipTo: to } = b;
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const clamp01 = (n) => Math.min(1, Math.max(0, n));
+  const at = (t) => ({ x: from.x + dx * t, y: from.y + dy * t });
+  const f = clamp01(((b.pos.x - from.x) * dx + (b.pos.y - from.y) * dy) / (len * len));
+  const fVanish = Math.min(0.4, b.skipWindup + SKIP_VANISH_AFTER);
+  const fLand = Math.min(0.9, Math.max(fVanish + 0.15, 1 - Math.min(SKIP_LAND_GAP / len, 0.45)));
+  const fReturn = Math.min(0.8, fVanish + 0.5 * (1 - fVanish));
+  const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+  const out = [];
+
+  if (f < fVanish) {
+    // The ordinary bolt, with a faint halo -- the calm just before time stops.
+    out.push(
+      <circle key={`${key}-halo`} cx={b.pos.x} cy={b.pos.y} r={12 * vs} fill="none" stroke={SKIP_COLORS.ring} strokeWidth={1.4 * vs} style={{ opacity: 0.45 }} />,
+      <circle key={`${key}-bolt`} className="shot-fx-bolt" cx={b.pos.x} cy={b.pos.y} r={7 * vs} style={{ "--fx-color": b.color }} />
+    );
+    return out;
+  }
+
+  if (f < fReturn) {
+    // Time is stopped: nothing flies. A clock face where it vanished, the map dimmed, and a ring closing on the landing spot.
+    const h = clamp01((f - fVanish) / (fReturn - fVanish));
+    const envelope = Math.min(1, h / 0.12, (1 - h) / 0.12);
+    const v = at(fVanish);
+    const r = (16 + 34 * easeOut(h)) * vs;
+    out.push(
+      <rect key={`${key}-dim`} className="shot-fx-skip-dim" x={-100000} y={-100000} width={200000} height={200000} style={{ opacity: SKIP_DIM_OPACITY * envelope }} />,
+      <circle key={`${key}-face`} className="shot-fx-skip-ring" cx={v.x} cy={v.y} r={r} strokeWidth={2.2 * vs} style={{ opacity: 0.9 * (1 - h * 0.6) }} />
+    );
+    for (let k = 0; k < 12; k++) {
+      const a = (k * Math.PI) / 6;
+      const long = k % 3 === 0;
+      out.push(
+        <line
+          key={`${key}-tick${k}`}
+          className="shot-fx-skip-ring"
+          x1={v.x + Math.cos(a) * (r - (long ? 9 : 5) * vs)}
+          y1={v.y + Math.sin(a) * (r - (long ? 9 : 5) * vs)}
+          x2={v.x + Math.cos(a) * r}
+          y2={v.y + Math.sin(a) * r}
+          strokeWidth={(long ? 2.2 : 1.4) * vs}
+          style={{ opacity: 0.85 * (1 - h * 0.6) }}
+        />
+      );
+    }
+    const hand = -Math.PI / 2 + h * Math.PI * 3;
+    out.push(
+      <line
+        key={`${key}-hand`}
+        className="shot-fx-skip-ring"
+        x1={v.x}
+        y1={v.y}
+        x2={v.x + Math.cos(hand) * r * 0.72}
+        y2={v.y + Math.sin(hand) * r * 0.72}
+        strokeWidth={2.4 * vs}
+        style={{ opacity: 0.9 * (1 - h * 0.5) }}
+      />
+    );
+    if (h > 0.55) {
+      const g = (h - 0.55) / 0.45;
+      const land = at(fLand);
+      out.push(
+        <circle key={`${key}-converge`} className="shot-fx-skip-ring" cx={land.x} cy={land.y} r={(70 - 62 * easeOut(g)) * vs} strokeWidth={2 * vs} style={{ opacity: 0.85 * g }} />
+      );
+    }
+    return out;
+  }
+
+  // Time resumes: a burst of light where it reappears, then the quick final leg to the target.
+  const g = clamp01((f - fReturn) / (1 - fReturn));
+  const land = at(fLand);
+  const q = clamp01(g / 0.2);
+  const flashR = (10 + 44 * easeOut(q)) * vs;
+  if (q < 1) {
+    out.push(
+      <circle key={`${key}-flash`} className="shot-fx-skip-flash" cx={land.x} cy={land.y} r={flashR} style={{ opacity: Math.pow(1 - q, 1.2) }} />
+    );
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      out.push(
+        <line
+          key={`${key}-ray${k}`}
+          className="shot-fx-skip-ray"
+          x1={land.x + Math.cos(a) * flashR * 0.6}
+          y1={land.y + Math.sin(a) * flashR * 0.6}
+          x2={land.x + Math.cos(a) * flashR * 1.55}
+          y2={land.y + Math.sin(a) * flashR * 1.55}
+          strokeWidth={2.2 * vs}
+          style={{ opacity: 1 - q }}
+        />
+      );
+    }
+  }
+  const t = easeOut(g);
+  const head = { x: land.x + (to.x - land.x) * t, y: land.y + (to.y - land.y) * t };
+  const travelled = Math.hypot(head.x - land.x, head.y - land.y);
+  const dirLen = Math.hypot(to.x - land.x, to.y - land.y) || 1;
+  const tailLen = Math.min(travelled, 70 * vs);
+  out.push(
+    <line
+      key={`${key}-trail`}
+      className="shot-fx-skip-ring"
+      x1={head.x - ((to.x - land.x) / dirLen) * tailLen}
+      y1={head.y - ((to.y - land.y) / dirLen) * tailLen}
+      x2={head.x}
+      y2={head.y}
+      strokeWidth={4 * vs}
+      style={{ opacity: 0.6 }}
+    />,
+    <circle key={`${key}-bolt`} className="shot-fx-bolt" cx={head.x} cy={head.y} r={7 * vs} style={{ "--fx-color": SKIP_COLORS.white }} />
+  );
+  return out;
+}
+
+// Zeus's lightning strike: the bolt is a real lightning bolt -- a jagged, crackling body
+// (ZAP_SEGMENTS kinks, up to ZAP_AMPLITUDE off the line of flight and pinched to a point at
+// both ends) trailing up to ZAP_BODY behind a white-hot head, with forks branching off it and
+// sparks around the head; on a hit it arcs out of the target (see the `arcs` burst).
+// The kinks are re-rolled as the bolt travels (the noise is seeded by distance travelled, not
+// by the clock), so it crackles and shifts at any flight speed -- Zeus is ultra-fast, so its
+// whole flight is short -- and a frozen frame is always the same shape. Purely visual.
+// Lengths are map units, scaled by `vs` like every other bolt dimension.
+const ZAP_BODY = 150;
+const ZAP_SEGMENTS = 16;
+const ZAP_AMPLITUDE = 11;
+const ZAP_STEP = 9;
+const ZAP_FORKS = [3, 7, 10, 13];
+const ARC_DRAW_MS = 150;
+const zapNoise = (i, tick) => {
+  const s = Math.sin(i * 12.9898 + tick * 78.233) * 43758.5453;
+  return (s - Math.floor(s)) * 2 - 1;
+};
+const zapPath = (pts) => pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+function lightningShapes(b, vs, key) {
+  const rad = (b.angle * Math.PI) / 180;
+  const ux = Math.cos(rad);
+  const uy = Math.sin(rad);
+  const nx = -uy;
+  const ny = ux;
+  const travelled = Math.hypot(b.pos.x - b.zapFrom.x, b.pos.y - b.zapFrom.y);
+  const tick = Math.floor(travelled / (ZAP_STEP * vs));
+  const len = Math.min(travelled, ZAP_BODY * vs);
+  const pts = [];
+  for (let i = 0; i <= ZAP_SEGMENTS; i++) {
+    const t = i / ZAP_SEGMENTS; // 0 at the tail, 1 at the head
+    const back = len * (1 - t);
+    const off = zapNoise(i, tick) * ZAP_AMPLITUDE * vs * Math.sin(Math.PI * t);
+    pts.push({ x: b.pos.x - ux * back + nx * off, y: b.pos.y - uy * back + ny * off });
+  }
+  const body = zapPath(pts);
+  const out = [
+    <path key={`${key}-glow`} className="shot-fx-zap-glow" d={body} strokeWidth={8 * vs} style={{ opacity: 0.5 }} />,
+    <path key={`${key}-core`} className="shot-fx-zap-core" d={body} strokeWidth={2.8 * vs} />,
+  ];
+  for (const i of ZAP_FORKS) {
+    const base = pts[i];
+    const side = zapNoise(i + 50, tick) > 0 ? 1 : -1;
+    const spread = 0.55 + 0.5 * Math.abs(zapNoise(i + 99, tick));
+    const dirx = ux * Math.cos(spread) + side * nx * Math.sin(spread);
+    const diry = uy * Math.cos(spread) + side * ny * Math.sin(spread);
+    const forkLen = (20 + 20 * Math.abs(zapNoise(i + 7, tick))) * vs;
+    const kink = zapNoise(i + 13, tick) * 7 * vs;
+    const mid = { x: base.x + dirx * forkLen * 0.5 - diry * kink, y: base.y + diry * forkLen * 0.5 + dirx * kink };
+    const tip = { x: base.x + dirx * forkLen, y: base.y + diry * forkLen };
+    out.push(<path key={`${key}-fork${i}`} className="shot-fx-zap-core" d={zapPath([base, mid, tip])} strokeWidth={1.7 * vs} style={{ opacity: 0.85 }} />);
+  }
+  for (let k = 0; k < 4; k++) {
+    const a = zapNoise(k + 31, tick) * Math.PI;
+    const r0 = 6 * vs;
+    const r1 = (11 + 6 * Math.abs(zapNoise(k + 41, tick))) * vs;
+    out.push(
+      <line
+        key={`${key}-spark${k}`}
+        className="shot-fx-zap-core"
+        x1={b.pos.x + Math.cos(a) * r0}
+        y1={b.pos.y + Math.sin(a) * r0}
+        x2={b.pos.x + Math.cos(a) * r1}
+        y2={b.pos.y + Math.sin(a) * r1}
+        strokeWidth={1.6 * vs}
+      />
+    );
+  }
+  out.push(<circle key={`${key}-head`} className="shot-fx-bolt" cx={b.pos.x} cy={b.pos.y} r={5.5 * vs} style={{ "--fx-color": "#ffd83d" }} />);
+  return out;
+}
+
+// The ricochet streak (Speedstinger, and any slug with Ricochets): the bolt is a steel needle --
+// a tapered streak up to STREAK_LEN long in the slug's element colour with a white-hot core,
+// a spinning four-point glint at its head and sparks shed along its tail. A bounce leg (see
+// fx.noWindup) also opens with a spark ping where it left the last target. The sparks are
+// seeded by distance travelled (like Zeus's lightning), so they flicker at any speed. On a hit
+// it shatters into steel shards (the `shards` burst). Purely visual. Lengths are map units,
+// scaled by `vs` like every other bolt dimension.
+const STREAK_LEN = 90;
+const STREAK_SPARKS = 6;
+const STREAK_PING_MS_DISTANCE = 70;
+const SHARD_DRAW_MS = 130;
+function streakShapes(b, vs, key) {
+  const rad = (b.angle * Math.PI) / 180;
+  const ux = Math.cos(rad);
+  const uy = Math.sin(rad);
+  const nx = -uy;
+  const ny = ux;
+  const travelled = Math.hypot(b.pos.x - b.streakFrom.x, b.pos.y - b.streakFrom.y);
+  const tick = Math.floor(travelled / (8 * vs));
+  const len = Math.min(travelled, STREAK_LEN * vs);
+  const out = [];
+  if (b.streakPing && travelled < STREAK_PING_MS_DISTANCE * vs) {
+    // The carom ping: a ring and a handful of rays where the shot just bounced off the last target.
+    const t = travelled / (STREAK_PING_MS_DISTANCE * vs);
+    const o = b.streakFrom;
+    out.push(<circle key={`${key}-ping`} className="shot-fx-streak-ring" cx={o.x} cy={o.y} r={(8 + 30 * t) * vs} strokeWidth={2.4 * vs} style={{ opacity: 1 - t }} />);
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4 + 0.2;
+      out.push(
+        <line
+          key={`${key}-pr${k}`}
+          className="shot-fx-streak-spark"
+          x1={o.x + Math.cos(a) * (10 + 12 * t) * vs}
+          y1={o.y + Math.sin(a) * (10 + 12 * t) * vs}
+          x2={o.x + Math.cos(a) * (18 + 26 * t) * vs}
+          y2={o.y + Math.sin(a) * (18 + 26 * t) * vs}
+          strokeWidth={2 * vs}
+          style={{ opacity: 1 - t }}
+        />
+      );
+    }
+  }
+  if (len > 1) {
+    const tail = { x: b.pos.x - ux * len, y: b.pos.y - uy * len };
+    const wide = 5.5 * vs;
+    out.push(
+      <path
+        key={`${key}-needle`}
+        className="shot-fx-streak-needle"
+        d={`M ${tail.x} ${tail.y} L ${b.pos.x - ux * 3 * vs + nx * wide} ${b.pos.y - uy * 3 * vs + ny * wide} L ${b.pos.x + ux * 4 * vs} ${b.pos.y + uy * 4 * vs} L ${b.pos.x - ux * 3 * vs - nx * wide} ${b.pos.y - uy * 3 * vs - ny * wide} Z`}
+        style={{ "--fx-color": b.color, opacity: 0.8 }}
+      />,
+      <line key={`${key}-core`} className="shot-fx-streak-core" x1={tail.x} y1={tail.y} x2={b.pos.x} y2={b.pos.y} strokeWidth={2 * vs} />
+    );
+    for (let k = 0; k < STREAK_SPARKS; k++) {
+      const back = (10 + k * (STREAK_LEN / STREAK_SPARKS) * 0.85) * vs;
+      if (back > len) break;
+      const side = zapNoise(k, tick) > 0 ? 1 : -1;
+      const sl = (5 + 7 * Math.abs(zapNoise(k + 20, tick))) * vs;
+      const sx = b.pos.x - ux * back;
+      const sy = b.pos.y - uy * back;
+      out.push(
+        <line
+          key={`${key}-sp${k}`}
+          className="shot-fx-streak-spark"
+          x1={sx}
+          y1={sy}
+          x2={sx + (-ux * 0.5 + nx * side * 0.85) * sl}
+          y2={sy + (-uy * 0.5 + ny * side * 0.85) * sl}
+          strokeWidth={1.7 * vs}
+          style={{ opacity: 1 - back / (STREAK_LEN * vs) }}
+        />
+      );
+    }
+  }
+  // The glint: a four-point star at the head, spinning as it travels.
+  const spin = travelled / (34 * vs);
+  for (let k = 0; k < 2; k++) {
+    const a = spin + (k * Math.PI) / 2;
+    out.push(
+      <line
+        key={`${key}-gl${k}`}
+        className="shot-fx-streak-core"
+        x1={b.pos.x - Math.cos(a) * 11 * vs}
+        y1={b.pos.y - Math.sin(a) * 11 * vs}
+        x2={b.pos.x + Math.cos(a) * 11 * vs}
+        y2={b.pos.y + Math.sin(a) * 11 * vs}
+        strokeWidth={1.8 * vs}
+      />
+    );
+  }
+  out.push(<circle key={`${key}-head`} className="shot-fx-bolt" cx={b.pos.x} cy={b.pos.y} r={4.5 * vs} style={{ "--fx-color": "#ffffff" }} />);
+  return out;
+}
+
+// The jagged arcs that crack out of a target a lightning bolt just struck, each drawing itself
+// outward over ARC_DRAW_MS (staggered a little). Positions are relative to the impact point --
+// the caller translates a <g> there -- and `sinceMs` is how long ago the bolt landed. Shared by
+// a lightning-strike hit and a lightning chain arc.
+function zapArcs(vs, sinceMs) {
+  return Array.from({ length: 7 }, (_, k) => {
+    const p = Math.min(1, Math.max(0, sinceMs / ARC_DRAW_MS - (k % 3) * 0.1));
+    const a = (k * 2 * Math.PI) / 7 + zapNoise(k, 5) * 0.25;
+    const pts = [0, 1, 2, 3].map((s) => {
+      const r = (8 + s * 13) * vs;
+      const wob = s === 0 ? 0 : zapNoise(k * 4 + s, 9) * 7 * vs;
+      return { x: Math.cos(a) * r - Math.sin(a) * wob, y: Math.sin(a) * r + Math.cos(a) * wob };
+    });
+    return <path key={k} className="shot-fx-zap-core" d={zapPath(pts)} pathLength={1} strokeWidth={2.4 * vs} style={{ strokeDasharray: 1, strokeDashoffset: 1 - p }} />;
+  });
+}
+
+// Standard bolts: every slug that has no animation of its own flies with a small, deliberately
+// modest effect for its element -- a head shape plus a short trail (EL_REACH long at most) of a
+// few fading pieces, drawn in the element's own colour (`b.color`). It is the plain neutral
+// bolt through the windup and only appears at the transform, easing in over the first
+// EL_EASE_IN of travel. Trail pieces are seeded by distance travelled (like the lightning), so
+// they shimmer at any speed. Dual shots keep their own look, a Mega Morph draws the same effect
+// scaled up (MEGA_ANIM_SCALE), and "None" stays a plain bolt. Lengths are map units, scaled by `vs` like every other bolt dimension.
+const EL_REACH = 56;
+const EL_EASE_IN = 30;
+const elPoly = (cx, cy, r, sides, rot, noise) =>
+  Array.from({ length: sides }, (_, k) => {
+    const a = rot + (k * 2 * Math.PI) / sides;
+    const rr = r * (1 + (noise ? zapNoise(k + 3, 1) * 0.28 : 0));
+    return `${cx + Math.cos(a) * rr},${cy + Math.sin(a) * rr}`;
+  }).join(" ");
+function elementShapes(b, vs, key) {
+  const rad = (b.angle * Math.PI) / 180;
+  const ux = Math.cos(rad);
+  const uy = Math.sin(rad);
+  const nx = -uy;
+  const ny = ux;
+  const travelled = Math.hypot(b.pos.x - b.elementFrom.x, b.pos.y - b.elementFrom.y);
+  const tick = Math.floor(travelled / (8 * vs));
+  const ease = Math.min(1, travelled / (EL_EASE_IN * vs));
+  const col = b.color;
+  const out = [];
+  // A point `back` units behind the head and `off` units to the side (both unscaled).
+  const at = (back, off = 0) => ({ x: b.pos.x - ux * back * vs + nx * off * vs, y: b.pos.y - uy * back * vs + ny * off * vs });
+  // Whether a trail piece that far back has been drawn yet (nothing exists behind the transform point).
+  const has = (back) => back * vs <= travelled && back <= EL_REACH;
+  const fade = (i, n) => ease * (1 - i / (n + 1));
+  const dot = (id, p, r, fill, o) => out.push(<circle key={`${key}-${id}`} className="shot-fx-el" cx={p.x} cy={p.y} r={Math.max(0.5, r) * vs} style={{ fill, opacity: o }} />);
+  const ring = (id, p, r, stroke, o, w = 1.4) =>
+    out.push(<circle key={`${key}-${id}`} className="shot-fx-el" cx={p.x} cy={p.y} r={r * vs} fill="none" stroke={stroke} strokeWidth={w * vs} style={{ opacity: o }} />);
+  const line = (id, a, c, stroke, o, w = 1.5) =>
+    out.push(<line key={`${key}-${id}`} className="shot-fx-el" x1={a.x} y1={a.y} x2={c.x} y2={c.y} stroke={stroke} strokeWidth={w * vs} strokeLinecap="round" style={{ opacity: o }} />);
+  const star = (id, p, r, stroke, o) => {
+    line(`${id}a`, { x: p.x - r * vs, y: p.y }, { x: p.x + r * vs, y: p.y }, stroke, o, 1.4);
+    line(`${id}b`, { x: p.x, y: p.y - r * vs }, { x: p.x, y: p.y + r * vs }, stroke, o, 1.4);
+  };
+  // A cross turned by `ang` radians.
+  const starRot = (id, p, r, ang, stroke, o) => {
+    const c = Math.cos(ang) * r * vs;
+    const s = Math.sin(ang) * r * vs;
+    line(`${id}a`, { x: p.x - c, y: p.y - s }, { x: p.x + c, y: p.y + s }, stroke, o, 1.4);
+    line(`${id}b`, { x: p.x + s, y: p.y - c }, { x: p.x - s, y: p.y + c }, stroke, o, 1.4);
+  };
+  const head = (r, fill = col) => out.push(<circle key={`${key}-head`} className="shot-fx-bolt" cx={b.pos.x} cy={b.pos.y} r={r * vs} style={{ "--fx-color": fill }} />);
+  const spin = travelled / (40 * vs);
+
+  switch (b.element) {
+    case "Fire": {
+      // A flickering flame: embers fall away behind a teardrop head.
+      for (let i = 1; i <= 6; i++) {
+        if (!has(i * 8)) break;
+        dot(`e${i}`, at(i * 8, zapNoise(i, tick) * 2.6), 5.2 - i * 0.65, i < 3 ? "#ffb347" : col, 0.85 * fade(i, 6));
+      }
+      out.push(<path key={`${key}-flame`} className="shot-fx-bolt" d={MEGA_BOLT_PATH} transform={`translate(${b.pos.x} ${b.pos.y}) rotate(${b.angle}) scale(${0.42 * vs})`} style={{ "--fx-color": col }} />);
+      dot("core", b.pos, 2.2, "#ffe9a0", 0.95);
+      break;
+    }
+    case "Water": {
+      // A droplet with a wavering string of drops behind it.
+      for (let i = 1; i <= 5; i++) {
+        if (!has(i * 9)) break;
+        dot(`d${i}`, at(i * 9, Math.sin(i * 1.2 + travelled / (16 * vs)) * 3.5), 3.4 - i * 0.5, col, 0.75 * fade(i, 5));
+      }
+      head(5.2);
+      dot("hi", at(-1, -1.6), 1.5, "#ffffff", 0.85);
+      break;
+    }
+    case "Ice": {
+      // A spinning crystal shedding a few small shards.
+      for (let i = 1; i <= 4; i++) {
+        if (!has(i * 11)) break;
+        const p = at(i * 11, zapNoise(i + 3, tick) * 5);
+        out.push(<polygon key={`${key}-s${i}`} className="shot-fx-el" points={elPoly(p.x, p.y, (3.6 - i * 0.45) * vs, 4, spin + i, false)} style={{ fill: "#e8fbff", opacity: 0.85 * fade(i, 4) }} />);
+      }
+      out.push(<polygon key={`${key}-head`} className="shot-fx-bolt" points={elPoly(b.pos.x, b.pos.y, 7 * vs, 4, spin, false)} style={{ "--fx-color": col }} />);
+      break;
+    }
+    case "Plant": {
+      // A seed with a couple of leaves spiralling off it.
+      for (let i = 1; i <= 4; i++) {
+        if (!has(i * 11)) break;
+        const side = i % 2 ? 1 : -1;
+        const p = at(i * 11, side * (4 + Math.sin(travelled / (18 * vs) + i)));
+        out.push(
+          <ellipse key={`${key}-l${i}`} className="shot-fx-el" cx={p.x} cy={p.y} rx={4.5 * vs} ry={2.2 * vs} transform={`rotate(${b.angle + side * 40 + i * 10} ${p.x} ${p.y})`} style={{ fill: i % 2 ? "#7ddc6a" : col, opacity: 0.85 * fade(i, 4) }} />
+        );
+      }
+      head(4.8);
+      break;
+    }
+    case "Earth": {
+      // A tumbling rock trailing pebbles and dust.
+      for (let i = 1; i <= 5; i++) {
+        if (!has(i * 9)) break;
+        const p = at(i * 9, zapNoise(i + 7, tick) * 5 + i * 0.8);
+        const s = (3.2 - i * 0.4) * vs;
+        out.push(<rect key={`${key}-p${i}`} className="shot-fx-el" x={p.x - s} y={p.y - s} width={s * 2} height={s * 2} transform={`rotate(${i * 40 + travelled} ${p.x} ${p.y})`} style={{ fill: "#c9a97a", opacity: 0.8 * fade(i, 5) }} />);
+      }
+      out.push(<polygon key={`${key}-head`} className="shot-fx-bolt" points={elPoly(b.pos.x, b.pos.y, 6 * vs, 7, spin * 1.4, true)} style={{ "--fx-color": col }} />);
+      break;
+    }
+    case "Air": {
+      // A pale puff with a few streaks of wind and a swirl round it.
+      for (const s of [-1, 0, 1]) {
+        if (!has(14)) break;
+        const a = at(8, s * 5);
+        const m = at(22, s * 9 + Math.sin(travelled / (14 * vs) + s) * 2.5);
+        const e = at(Math.min(46, travelled / vs), s * 5);
+        out.push(<path key={`${key}-w${s}`} className="shot-fx-el" d={`M ${a.x} ${a.y} Q ${m.x} ${m.y} ${e.x} ${e.y}`} fill="none" stroke="#ffffff" strokeWidth={1.5 * vs} strokeLinecap="round" style={{ opacity: 0.42 * ease }} />);
+      }
+      out.push(
+        <circle key={`${key}-swirl`} className="shot-fx-el" cx={b.pos.x} cy={b.pos.y} r={10 * vs} fill="none" stroke="#ffffff" strokeWidth={1.6 * vs} strokeLinecap="round" strokeDasharray={`${9 * vs} ${44 * vs}`} transform={`rotate(${spin * 180} ${b.pos.x} ${b.pos.y})`} style={{ opacity: 0.6 * ease }} />
+      );
+      head(3.8, "#ffffff");
+      break;
+    }
+    case "Electricity": {
+      // A white-hot core in the same electric blue as the chain arc, with a small, thin crackle
+      // behind it -- nothing like Zeus's yellow lightning bolt.
+      const pts = [];
+      for (let i = 0; i <= 7; i++) {
+        const back = Math.min(40, travelled / vs) * (i / 7);
+        pts.push(at(back, i === 0 ? 0 : zapNoise(i, tick) * 3.6 * Math.sin((Math.PI * i) / 7)));
+      }
+      const zig = zapPath(pts);
+      out.push(
+        <path key={`${key}-zig-glow`} className="shot-fx-chain-glow" d={zig} strokeWidth={4 * vs} style={{ opacity: 0.5 * ease }} />,
+        <path key={`${key}-zig`} className="shot-fx-chain-core" d={zig} strokeWidth={1.5 * vs} style={{ opacity: 0.95 * ease }} />
+      );
+      for (let k = 0; k < 2; k++) {
+        const a = zapNoise(k + 31, tick) * Math.PI;
+        line(`sp${k}`, { x: b.pos.x + Math.cos(a) * 5 * vs, y: b.pos.y + Math.sin(a) * 5 * vs }, { x: b.pos.x + Math.cos(a) * 11 * vs, y: b.pos.y + Math.sin(a) * 11 * vs }, "#cfeaff", 0.9 * ease, 1.3);
+      }
+      out.push(<circle key={`${key}-head`} className="shot-fx-chain-dot" cx={b.pos.x} cy={b.pos.y} r={4.4 * vs} />);
+      break;
+    }
+    case "Energy": {
+      // A pulsing core with a ring breathing round it and two small orbiting motes.
+      ring("pulse", b.pos, 8 + 3 * Math.sin(travelled / (10 * vs)), col, 0.7 * ease);
+      for (let k = 0; k < 2; k++) {
+        const a = travelled / (14 * vs) + k * Math.PI;
+        dot(`m${k}`, { x: b.pos.x + Math.cos(a) * 10 * vs, y: b.pos.y + Math.sin(a) * 10 * vs }, 1.8, "#ffffff", 0.9 * ease);
+      }
+      for (let i = 1; i <= 3; i++) {
+        if (!has(i * 10)) break;
+        dot(`t${i}`, at(i * 10), 2.4 - i * 0.4, col, 0.55 * fade(i, 3));
+      }
+      head(4.5);
+      break;
+    }
+    case "Light": {
+      // A bright core with a soft glow and four slow rays.
+      dot("glow", b.pos, 12, col, 0.22 * ease);
+      for (let k = 0; k < 4; k++) {
+        const a = spin * 0.8 + (k * Math.PI) / 2;
+        line(`r${k}`, { x: b.pos.x + Math.cos(a) * 5 * vs, y: b.pos.y + Math.sin(a) * 5 * vs }, { x: b.pos.x + Math.cos(a) * 13 * vs, y: b.pos.y + Math.sin(a) * 13 * vs }, "#fffbe0", 0.8 * ease, 1.5);
+      }
+      for (let i = 1; i <= 3; i++) {
+        if (!has(i * 9)) break;
+        dot(`t${i}`, at(i * 9), 3.6 - i * 0.7, col, 0.5 * fade(i, 3));
+      }
+      head(4.6, "#fffbe0");
+      break;
+    }
+    case "Dark": {
+      // A shadowy core leaving a thin drifting smoke.
+      for (let i = 1; i <= 6; i++) {
+        if (!has(i * 8)) break;
+        dot(`s${i}`, at(i * 8, zapNoise(i + 11, tick) * 3.5), 4 + i * 0.9, col, 0.42 * fade(i, 6));
+      }
+      out.push(<circle key={`${key}-head`} className="shot-fx-bolt" cx={b.pos.x} cy={b.pos.y} r={5 * vs} style={{ "--fx-color": col, fill: "#241b30" }} />);
+      break;
+    }
+    case "Metal": {
+      // A steel hex nut turning steadily as it flies, with two clean parallel speed lines behind it.
+      // (Nothing flashes or flickers.)
+      const reach = Math.min(32, travelled / vs);
+      if (reach > 8) {
+        line("rail1", at(7, 2.7), at(reach, 2.7), col, 0.65 * ease, 1.4);
+        line("rail2", at(7, -2.7), at(reach, -2.7), col, 0.65 * ease, 1.4);
+      }
+      out.push(<polygon key={`${key}-head`} className="shot-fx-bolt" points={elPoly(b.pos.x, b.pos.y, 6.6 * vs, 6, spin * 0.9, false)} style={{ "--fx-color": col }} />);
+      out.push(<polygon key={`${key}-inner`} className="shot-fx-el" points={elPoly(b.pos.x, b.pos.y, 3.4 * vs, 6, spin * 0.9 + Math.PI / 6, false)} style={{ fill: "#e3e9ed", opacity: 0.92 }} />);
+      break;
+    }
+    case "Healing": {
+      // A soft, breathing green glow that sheds little crosses and sparkles as it flies. Each piece is
+      // born at the head and then stays where it was left: it drifts out to one side of the bolt's own
+      // line of flight (never toward a screen direction -- the view is top-down), turns, shrinks and
+      // fades -- so the trail is always moving. (Seeded by distance travelled, like every trail, so it
+      // keeps pace with the bolt at any speed.)
+      const HEAL_LIFE = 64;
+      const HEAL_SPACING = 9;
+      dot("halo", b.pos, 9 + 1.6 * Math.sin(travelled / (9 * vs)), col, 0.22 * ease);
+      const newest = Math.floor(travelled / vs / HEAL_SPACING);
+      for (let k = newest; k >= 1 && k > newest - Math.ceil(HEAL_LIFE / HEAL_SPACING); k--) {
+        const age = travelled / vs - k * HEAL_SPACING;
+        if (age < 0 || age > HEAL_LIFE) continue;
+        const life = age / HEAL_LIFE;
+        const side = zapNoise(k, 7) > 0 ? 1 : -1;
+        const born = at(age);
+        const lateral = side * (1.5 + age * 0.15 + 2.2 * Math.sin(age / 9 + k));
+        const p = { x: born.x + nx * lateral * vs, y: born.y + ny * lateral * vs };
+        const o = Math.min(1, age / 5) * (1 - life) * ease;
+        if (k % 3 === 0) dot(`h${k}`, p, 2.2 * (1 - life * 0.5), "#e6ffe9", 0.9 * o);
+        else starRot(`c${k}`, p, 4.2 * (1 - life * 0.55), age * 0.06 + k, "#e6ffe9", 0.9 * o);
+      }
+      head(4.8);
+      break;
+    }
+    case "Psychic": {
+      // A core with ripples spreading out behind it.
+      for (let i = 1; i <= 3; i++) {
+        if (!has(i * 10)) break;
+        ring(`rp${i}`, at(i * 10), 5 + i * 3.5 + Math.sin(travelled / (12 * vs) + i) * 1.2, col, 0.55 * fade(i, 3));
+      }
+      head(4.8);
+      break;
+    }
+    case "Toxic": {
+      // A sickly core with bubbles rising away behind it.
+      for (let i = 1; i <= 5; i++) {
+        if (!has(i * 8)) break;
+        const p = at(i * 8, zapNoise(i + 5, tick) * 3 + i * 1.1);
+        out.push(<circle key={`${key}-b${i}`} className="shot-fx-el" cx={p.x} cy={p.y} r={(3.4 - i * 0.4) * vs} stroke={col} strokeWidth={1.2 * vs} style={{ fill: col, fillOpacity: 0.22, opacity: 0.85 * fade(i, 5) }} />);
+      }
+      head(5);
+      break;
+    }
+    case "Unique": {
+      // A white core with twinkling multicoloured sparkles in its wake.
+      const palette = ["#ff9ad5", "#8fe9ff", "#ffe27a"];
+      for (let i = 1; i <= 5; i++) {
+        if (!has(i * 9)) break;
+        star(`sp${i}`, at(i * 9, zapNoise(i + 9, tick) * 6), (3.6 - i * 0.4) * (0.55 + 0.45 * Math.abs(Math.sin(travelled / (7 * vs) + i))), palette[i % 3], 0.9 * fade(i, 5));
+      }
+      head(4.6, "#ffffff");
+      break;
+    }
+    default:
+      head(5.5);
+  }
+  return out;
+}
+
+// A slug's chain arc -- the electric arc that leaps from the target it struck to the next one.
+// Deliberately NOT drawn like Zeus's lightning strike (a bright yellow-white head dragging a long
+// jagged tail, with forks): this is a thin, tight electric-blue arc anchored at the target it
+// struck that whips out to the next one over `totalMs` (CHAIN_ARC_MS on the server, a fixed
+// quarter of a second whatever the distance), then holds for CHAIN_ARC_HOLD_MS, crackling,
+// joining the two before it fades, with a ring of blue spark flashing where it lands. The kinks
+// re-roll on the clock (the arc is anchored, not travelling, so distance can't seed them).
+const CHAIN_ARC_HOLD_MS = 220;
+function chainArcShapes(fx, elapsed, totalMs, vs) {
+  const from = fx.attackerPos;
+  const to = fx.impactPoint;
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const nx = -uy;
+  const ny = ux;
+  const t = Math.min(1, elapsed / totalMs);
+  const reach = 1 - Math.pow(1 - t, 2); // whips out fast, then settles
+  const since = Math.max(0, elapsed - totalMs);
+  const op = Math.max(0, 1 - since / CHAIN_ARC_HOLD_MS);
+  const tick = Math.floor(elapsed / 38);
+  const reachLen = len * reach;
+  const n = Math.max(5, Math.round(reachLen / (12 * vs)));
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const f = i / n;
+    const off = zapNoise(i, tick) * 7 * vs * Math.sin(Math.PI * f); // pinned at both ends
+    pts.push({ x: from.x + ux * reachLen * f + nx * off, y: from.y + uy * reachLen * f + ny * off });
+  }
+  const d = zapPath(pts);
+  const tip = pts[pts.length - 1];
+  const out = [
+    <path key="arc-glow" className="shot-fx-chain-glow" d={d} strokeWidth={6 * vs} style={{ opacity: 0.5 * op }} />,
+    <path key="arc-core" className="shot-fx-chain-core" d={d} strokeWidth={1.8 * vs} style={{ opacity: op }} />,
+    <circle key="arc-origin" className="shot-fx-chain-core" cx={from.x} cy={from.y} r={5 * vs} style={{ opacity: 0.8 * op }} />,
+  ];
+  if (since === 0) {
+    out.push(<circle key="arc-tip" className="shot-fx-chain-dot" cx={tip.x} cy={tip.y} r={2.6 * vs} />);
+  } else {
+    const k = Math.min(1, since / CHAIN_ARC_HOLD_MS);
+    out.push(<circle key="arc-land" className="shot-fx-chain-glow" cx={to.x} cy={to.y} r={(6 + 22 * k) * vs} strokeWidth={2 * vs} style={{ opacity: 0.9 * op }} />);
+  }
+  return out;
+}
+
+// Standard bolts explode in their own way, by element -- the impact burst that replaces the flat
+// coloured disc. `since` is how long ago the bolt landed; it plays out over BURST_LINGER_MS (a
+// miss plays a half-size version). Everything is drawn around the impact point (the caller puts
+// a <g> there) and driven by progress alone, so it is the same at any frame rate, and nothing
+// pops or flickers: every piece grows, moves and fades monotonically (Electricity's crackle
+// re-rolls a few times, as lightning should).
+function elementBurst(type, since, vs, col, key) {
+  const p = Math.min(1, since / BURST_LINGER_MS);
+  const e = 1 - Math.pow(1 - p, 3); // bursts out fast, then settles
+  const f = 1 - p;
+  const out = [];
+  let id = 0;
+  const nextKey = () => `${key}-${id++}`;
+  const S = (n) => n * vs;
+  const clamp01 = (v) => Math.min(1, Math.max(0, v));
+  const ang = (k, n, jitter = 0.3) => (k * 2 * Math.PI) / n + zapNoise(k, 2) * jitter;
+  const disc = (x, y, r, fill, o) => out.push(<circle key={nextKey()} className="shot-fx-el" cx={S(x)} cy={S(y)} r={Math.max(0.1, S(r))} style={{ fill, opacity: o }} />);
+  const ringC = (x, y, r, stroke, o, w = 2) =>
+    out.push(<circle key={nextKey()} className="shot-fx-el" cx={S(x)} cy={S(y)} r={Math.max(0.1, S(r))} fill="none" stroke={stroke} strokeWidth={S(w)} style={{ opacity: o }} />);
+  const seg = (x1, y1, x2, y2, stroke, o, w = 2) =>
+    out.push(<line key={nextKey()} className="shot-fx-el" x1={S(x1)} y1={S(y1)} x2={S(x2)} y2={S(y2)} stroke={stroke} strokeWidth={S(w)} strokeLinecap="round" style={{ opacity: o }} />);
+  const poly = (x, y, r, sides, rot, style) =>
+    out.push(<polygon key={nextKey()} className="shot-fx-el" points={elPoly(S(x), S(y), S(r), sides, rot, false)} style={style} />);
+  const cross = (x, y, r, rot, stroke, o, w = 1.6) => {
+    seg(x - Math.cos(rot) * r, y - Math.sin(rot) * r, x + Math.cos(rot) * r, y + Math.sin(rot) * r, stroke, o, w);
+    seg(x + Math.sin(rot) * r, y - Math.cos(rot) * r, x - Math.sin(rot) * r, y + Math.cos(rot) * r, stroke, o, w);
+  };
+
+  switch (type) {
+    case "Fire": {
+      // A fireball with a hot core, throwing embers out evenly in every direction that shrink as they burn out.
+      disc(0, 0, 12 + 22 * e, "#ff6a2b", 0.55 * f);
+      disc(0, 0, 8 + 14 * e, "#ffb347", 0.7 * f);
+      disc(0, 0, 4 + 7 * e, "#fff0b0", 0.9 * f);
+      for (let k = 0; k < 8; k++) {
+        const a = ang(k, 8);
+        const d = 14 + 36 * e * (0.7 + 0.3 * Math.abs(zapNoise(k + 9, 2)));
+        disc(Math.cos(a) * d, Math.sin(a) * d, 2.6 * (1 - p * 0.7), k % 2 ? "#ffb347" : col, 0.9 * f);
+      }
+      break;
+    }
+    case "Water": {
+      // A splash: ripples spread out while drops burst outward evenly in every direction and shrink,
+      // as if falling away from the camera under gravity (the view is top-down, so "down" is not a
+      // screen direction: nothing may drift north or south).
+      ringC(0, 0, 8 + 30 * e, "#d8efff", 0.8 * f, 2.2);
+      ringC(0, 0, 4 + 18 * e, col, 0.7 * f, 2);
+      disc(0, 0, 6 * (1 - p), "#ffffff", 0.6 * f);
+      for (let k = 0; k < 10; k++) {
+        const a = ang(k, 10);
+        const v = 30 + 10 * Math.abs(zapNoise(k + 4, 2));
+        disc(Math.cos(a) * v * e * 1.2, Math.sin(a) * v * e * 1.2, 2.8 * (1 - p * 0.75), col, 0.9 * (1 - p * 0.9));
+      }
+      break;
+    }
+    case "Ice": {
+      // A frozen shatter: a frost ring snaps outward and spinning shards fly off.
+      ringC(0, 0, 6 + 34 * e, "#ffffff", 0.75 * f, 2);
+      disc(0, 0, 10 * (1 - e) + 2, "#e8fbff", 0.7 * f);
+      for (let k = 0; k < 9; k++) {
+        const a = ang(k, 9);
+        const d = 10 + 34 * e;
+        poly(Math.cos(a) * d, Math.sin(a) * d, 5 * (1 - p * 0.5), 3, a + p * 3, { fill: "#bfefff", stroke: "#ffffff", strokeWidth: S(0.8), opacity: 0.95 * f });
+      }
+      break;
+    }
+    case "Plant": {
+      // A bloom: a green pulse with leaves spinning off it.
+      disc(0, 0, 8 + 22 * e, col, 0.35 * f);
+      ringC(0, 0, 6 + 26 * e, "#7ddc6a", 0.6 * f, 2);
+      for (let k = 0; k < 8; k++) {
+        const a = ang(k, 8);
+        const d = 10 + 32 * e;
+        const x = S(Math.cos(a) * d);
+        const y = S(Math.sin(a) * d);
+        out.push(
+          <ellipse key={nextKey()} className="shot-fx-el" cx={x} cy={y} rx={S(5)} ry={S(2.4)} transform={`rotate(${(a * 180) / Math.PI + p * 120} ${x} ${y})`} style={{ fill: k % 2 ? "#7ddc6a" : col, opacity: 0.9 * f }} />
+        );
+      }
+      break;
+    }
+    case "Earth": {
+      // A rock burst: a puff of dust and chunks that fly outward in every direction and shrink, as if
+      // dropping away from the camera (top-down view: no screen-direction fall).
+      for (let k = 0; k < 5; k++) {
+        const a = ang(k, 5);
+        disc(Math.cos(a) * (6 + 16 * e), Math.sin(a) * (6 + 16 * e), 7 + 10 * e, "#c9a97a", 0.28 * f);
+      }
+      for (let k = 0; k < 8; k++) {
+        const a = ang(k, 8);
+        const v = 14 + 30 * Math.abs(zapNoise(k + 2, 3));
+        poly(Math.cos(a) * v * e * 1.1, Math.sin(a) * v * e * 1.1, 4 * (1 - p * 0.7), 4, k + p * 5, { fill: "#a97c50", stroke: "#5d4630", strokeWidth: S(0.8), opacity: 0.95 * (1 - p * 0.8) });
+      }
+      break;
+    }
+    case "Air": {
+      // A gust: swirling arcs turn outward with a few streaks of wind.
+      for (let k = 0; k < 3; k++) {
+        const r = 10 + 28 * e * (0.6 + k * 0.2);
+        out.push(
+          <circle key={nextKey()} className="shot-fx-el" cx={0} cy={0} r={S(r)} fill="none" stroke="#ffffff" strokeWidth={S(2.2)} strokeLinecap="round" strokeDasharray={`${S(r * 0.9)} ${S(r * 2.2)}`} transform={`rotate(${p * 200 + k * 120})`} style={{ opacity: 0.6 * f }} />
+        );
+      }
+      for (let k = 0; k < 6; k++) {
+        const a = ang(k, 6);
+        const r0 = 12 + 20 * e;
+        seg(Math.cos(a) * r0, Math.sin(a) * r0, Math.cos(a) * (r0 + 10), Math.sin(a) * (r0 + 10), "#ffffff", 0.45 * f, 1.6);
+      }
+      break;
+    }
+    case "Electricity": {
+      // A flash with electric-blue crackles forking out of it (the same blue as the bolt and chain arc).
+      disc(0, 0, 6 + 12 * e, "#cfeaff", 0.8 * f);
+      ringC(0, 0, 6 + 30 * e, "#4fb0ff", 0.7 * f, 2);
+      const tick = Math.floor(p * 8);
+      for (let k = 0; k < 6; k++) {
+        const a = ang(k, 6, 0.2);
+        const reach = 10 + 34 * e;
+        const pts = [];
+        for (let s = 0; s <= 3; s++) {
+          const r = 6 + (reach - 6) * (s / 3);
+          const wob = s === 0 || s === 3 ? 0 : zapNoise(k * 4 + s, tick) * 5;
+          pts.push({ x: S(Math.cos(a) * r - Math.sin(a) * wob), y: S(Math.sin(a) * r + Math.cos(a) * wob) });
+        }
+        out.push(<path key={nextKey()} className="shot-fx-chain-core" d={zapPath(pts)} strokeWidth={S(1.8)} style={{ opacity: f }} />);
+      }
+      break;
+    }
+    case "Energy": {
+      // Concentric shockwaves roll out from a bright core.
+      for (let k = 0; k < 3; k++) {
+        const pk = clamp01(p * 1.6 - k * 0.25);
+        ringC(0, 0, 6 + 34 * pk, col, 0.8 * (1 - pk), 2.4);
+      }
+      disc(0, 0, 8 * (1 - p) + 2, "#ffffff", 0.9 * f);
+      for (let k = 0; k < 6; k++) {
+        const a = ang(k, 6, 0.1);
+        const d = 10 + 30 * e;
+        disc(Math.cos(a) * d, Math.sin(a) * d, 1.8, "#ffffff", 0.8 * f);
+      }
+      break;
+    }
+    case "Light": {
+      // A flash of white with rays shooting out and a soft glow.
+      disc(0, 0, 26 * e, col, 0.25 * f);
+      disc(0, 0, 10 + 14 * e, "#fffbe0", 0.9 * Math.pow(f, 1.5));
+      for (let k = 0; k < 8; k++) {
+        const a = (k * Math.PI) / 4 + 0.2;
+        seg(Math.cos(a) * 6, Math.sin(a) * 6, Math.cos(a) * (14 + 44 * e), Math.sin(a) * (14 + 44 * e), "#fffbe0", 0.85 * f, 2.2);
+      }
+      break;
+    }
+    case "Dark": {
+      // A collapse into the void: a ring pulls inward while dark tendrils curl out of a black core.
+      ringC(0, 0, 36 * (1 - p) + 4, col, 0.8 * f, 2.4);
+      disc(0, 0, 5 + 12 * e, "#241b30", 0.85 * f);
+      for (let k = 0; k < 6; k++) {
+        const a = ang(k, 6);
+        const d = 10 + 30 * e;
+        const c = a + 0.6;
+        out.push(
+          <path
+            key={nextKey()}
+            className="shot-fx-el"
+            d={`M ${S(Math.cos(a) * 6)} ${S(Math.sin(a) * 6)} Q ${S(Math.cos(c) * d * 0.6)} ${S(Math.sin(c) * d * 0.6)} ${S(Math.cos(a) * d)} ${S(Math.sin(a) * d)}`}
+            fill="none"
+            stroke={col}
+            strokeWidth={S(2.4)}
+            strokeLinecap="round"
+            style={{ opacity: 0.6 * f }}
+          />
+        );
+      }
+      break;
+    }
+    case "Metal": {
+      // A clang: a steel shockwave and a few straight sparks, all fading smoothly (no flashing).
+      ringC(0, 0, 6 + 30 * e, "#dfe6ea", 0.75 * f, 2.2);
+      ringC(0, 0, 3 + 14 * e, col, 0.8 * f, 3);
+      for (let k = 0; k < 6; k++) {
+        const a = ang(k, 6, 0.15);
+        seg(Math.cos(a) * (8 + 22 * e), Math.sin(a) * (8 + 22 * e), Math.cos(a) * (16 + 34 * e), Math.sin(a) * (16 + 34 * e), "#f4f7f9", 0.85 * f, 2);
+      }
+      break;
+    }
+    case "Healing": {
+      // A gentle pulse of green light with little crosses floating outward in every direction, swelling
+      // slightly as they rise toward the camera (top-down view: nothing drifts north).
+      disc(0, 0, 8 + 22 * e, col, 0.3 * f);
+      ringC(0, 0, 6 + 26 * e, "#e6ffe9", 0.65 * f, 2);
+      for (let k = 0; k < 6; k++) {
+        const a = ang(k, 6, 0.2);
+        cross(Math.cos(a) * (10 + 18 * e), Math.sin(a) * (10 + 18 * e), 4 * (1 + p * 0.3), p * 2 + k, "#f2fff4", 0.9 * f);
+      }
+      break;
+    }
+    case "Psychic": {
+      // Rippling mind-waves: wobbling rings roll outward from a violet core.
+      for (let k = 0; k < 3; k++) {
+        const pk = clamp01(p * 1.5 - k * 0.2);
+        const r = 6 + 34 * pk;
+        const pts = Array.from({ length: 29 }, (_, j) => {
+          const a = (j / 28) * 2 * Math.PI;
+          const rr = r + Math.sin(a * 5 + pk * 10) * 2.2;
+          return { x: S(Math.cos(a) * rr), y: S(Math.sin(a) * rr) };
+        });
+        out.push(<path key={nextKey()} className="shot-fx-el" d={`${zapPath(pts)} Z`} fill="none" stroke={col} strokeWidth={S(2)} style={{ opacity: 0.7 * (1 - pk) }} />);
+      }
+      disc(0, 0, 6 * (1 - p) + 1, "#e7c5ff", 0.8 * f);
+      break;
+    }
+    case "Toxic": {
+      // A noxious cloud: bubbles spread out evenly in every direction, swelling as they rise toward the
+      // camera, then pop (top-down view: nothing drifts north).
+      disc(0, 0, 10 + 24 * e, col, 0.25 * f);
+      for (let k = 0; k < 8; k++) {
+        const a = ang(k, 8);
+        const d = 8 + 24 * e * (0.6 + 0.4 * Math.abs(zapNoise(k + 6, 2)));
+        const o = p < 0.75 ? 0.9 : ((1 - p) / 0.25) * 0.9;
+        out.push(
+          <circle key={nextKey()} className="shot-fx-el" cx={S(Math.cos(a) * d)} cy={S(Math.sin(a) * d)} r={S(2.5 + 3 * p)} stroke={col} strokeWidth={S(1.2)} style={{ fill: col, fillOpacity: 0.2, opacity: o }} />
+        );
+      }
+      break;
+    }
+    case "Unique": {
+      // A shower of multicoloured sparkles.
+      ringC(0, 0, 6 + 30 * e, "#ffffff", 0.5 * f, 1.6);
+      const palette = ["#ff9ad5", "#8fe9ff", "#ffe27a"];
+      for (let k = 0; k < 10; k++) {
+        const a = ang(k, 10);
+        const d = 8 + 38 * e;
+        const r = 4 * (0.5 + 0.5 * Math.abs(Math.sin(p * 14 + k))) * (1 - p * 0.4);
+        cross(Math.cos(a) * d, Math.sin(a) * d, r, 0, palette[k % 3], 0.95 * f, 1.5);
+      }
+      break;
+    }
+    default:
+      break;
+  }
+  return out;
+}
+
+// Bladier's knife throw: Bladier is the ordinary Metal bolt, transformation and all. When there is a
+// wall in its path the bolt throws a small knife ahead of itself shortly before the wall (the server
+// says where: `throwT`, and `landT` where the bolt is when the knife lands -- see daggerThrowPlan).
+// The knife tumbles to the wall blade-first (a whole number of turns), the wall is cut in a flash of
+// light and sparks along its length, and the bolt then flies through the gap it made. With no wall in
+// the way nothing is thrown. The knife's place is a function of how far the bolt has flown, so there
+// are no timers and it rides the same clock as every other bolt. The server breaks the wall at the
+// moment the knife lands. Purely visual.
+const KNIFE_TURNS = 2;
+const KNIFE_SLICE_ZONE = 90;
+const KNIFE_COLORS = { blade: "#dfe8f2", edge: "#ffffff", shade: "#8798ad", grip: "#6a5240", glow: "#a9c4e2" };
+function knifeShapes(b, vs, key) {
+  const { from, to, pierce } = b.knife;
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const at = (t) => ({ x: from.x + dx * t, y: from.y + dy * t });
+  const f = Math.min(1, Math.max(0, ((b.pos.x - from.x) * dx + (b.pos.y - from.y) * dy) / (len * len)));
+  const fPierce = Math.hypot(pierce.x - from.x, pierce.y - from.y) / len;
+  const { throwT, landT } = pierce;
+  const heading = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const ux = dx / len;
+  const uy = dy / len;
+  const out = [];
+  if (f < throwT) return out;
+
+  if (f < landT) {
+    // In the air: faster than the bolt, so it pulls away from it and reaches the wall first.
+    const flown = (f - throwT) / (landT - throwT);
+    const kf = throwT + (fPierce - throwT) * flown;
+    const pos = at(kf);
+    for (let i = 0; i < 3; i++) {
+      const back = (14 + i * 12) * vs;
+      out.push(
+        <line
+          key={`${key}-streak${i}`}
+          x1={pos.x - ux * back}
+          y1={pos.y - uy * back}
+          x2={pos.x - ux * 3 * vs}
+          y2={pos.y - uy * 3 * vs}
+          style={{ stroke: KNIFE_COLORS.glow, strokeLinecap: "round", strokeWidth: (2.6 - i * 0.7) * vs, opacity: 0.2 + 0.1 * (2 - i) }}
+        />
+      );
+    }
+    // A small ring where it left the bolt.
+    if (flown < 0.3) {
+      const r = (4 + 14 * (flown / 0.3)) * vs;
+      const origin = at(throwT);
+      out.push(<circle key={`${key}-release`} cx={origin.x} cy={origin.y} r={r} style={{ fill: "none", stroke: KNIFE_COLORS.edge, strokeWidth: 1.4 * vs, opacity: 0.8 * (1 - flown / 0.3) }} />);
+    }
+    // The knife, pointing along +x and then turned onto its heading plus the tumble. It's a fraction
+    // of a dagger's size: the bolt throws it, it isn't the bolt.
+    out.push(
+      <g key={`${key}-knife`} transform={`translate(${pos.x} ${pos.y}) rotate(${heading + 360 * KNIFE_TURNS * flown}) scale(${vs * 0.62})`}>
+        <path d="M 15 0 L 3 -3.4 L -5 -3 L -5 3 L 3 3.4 Z" style={{ fill: KNIFE_COLORS.blade, stroke: KNIFE_COLORS.shade, strokeWidth: 0.9, strokeLinejoin: "round" }} />
+        <line x1="14" y1="0" x2="-5" y2="0" style={{ stroke: KNIFE_COLORS.edge, strokeWidth: 0.9, opacity: 0.9 }} />
+        <rect x="-7.4" y="-6" width="2.6" height="12" rx="1" style={{ fill: KNIFE_COLORS.shade }} />
+        <rect x="-14" y="-1.6" width="7" height="3.2" rx="1" style={{ fill: KNIFE_COLORS.grip }} />
+        <circle cx="-15" cy="0" r="2.3" style={{ fill: KNIFE_COLORS.shade }} />
+      </g>
+    );
+    return out;
+  }
+
+  // The cut: a flash along the wall and sparks thrown off it, driven by how far the bolt has got
+  // since the knife landed.
+  const p = ((f - landT) * len) / (KNIFE_SLICE_ZONE * vs);
+  if (p < 1) {
+    const ease = 1 - Math.pow(1 - Math.min(1, p * 2.4), 3);
+    const wall = (pierce.wallAngle * Math.PI) / 180;
+    const wx = Math.cos(wall);
+    const wy = Math.sin(wall);
+    const half = (8 + 36 * ease) * vs;
+    const fade = 1 - p;
+    out.push(
+      <line key={`${key}-cut-glow`} x1={pierce.x - wx * half} y1={pierce.y - wy * half} x2={pierce.x + wx * half} y2={pierce.y + wy * half} style={{ stroke: KNIFE_COLORS.glow, strokeLinecap: "round", strokeWidth: 7 * vs * fade, opacity: 0.55 * fade }} />,
+      <line key={`${key}-cut-core`} x1={pierce.x - wx * half} y1={pierce.y - wy * half} x2={pierce.x + wx * half} y2={pierce.y + wy * half} style={{ stroke: KNIFE_COLORS.edge, strokeLinecap: "round", strokeWidth: 2.2 * vs * fade, opacity: 0.95 * fade }} />
+    );
+    // Sparks: mostly along the wall both ways, a few kicked back toward the slinger.
+    const back = Math.atan2(-dy, -dx);
+    const sparks = [
+      { a: wall, r: 1 },
+      { a: wall + Math.PI, r: 1 },
+      { a: wall + 0.35, r: 0.7 },
+      { a: wall + Math.PI - 0.35, r: 0.7 },
+      { a: wall - 0.35, r: 0.8 },
+      { a: wall + Math.PI + 0.35, r: 0.8 },
+      { a: back + 0.5, r: 0.9 },
+      { a: back - 0.5, r: 0.9 },
+    ];
+    sparks.forEach((s, i) => {
+      const reach = (10 + 44 * s.r * ease) * vs;
+      const sx = pierce.x + Math.cos(s.a) * reach;
+      const sy = pierce.y + Math.sin(s.a) * reach;
+      const tail = 7 * s.r * (1 - ease * 0.6) * vs;
+      out.push(
+        <line
+          key={`${key}-spark${i}`}
+          x1={sx - Math.cos(s.a) * tail}
+          y1={sy - Math.sin(s.a) * tail}
+          x2={sx}
+          y2={sy}
+          style={{ stroke: i % 2 ? KNIFE_COLORS.blade : KNIFE_COLORS.edge, strokeLinecap: "round", strokeWidth: 1.6 * vs, opacity: fade }}
+        />
+      );
+    });
+  }
+  return out;
+}
+
 // A Mega Morph bolt: a teardrop instead of the ordinary round bolt. Drawn
 // pointing along +x (round head leading at the origin, tapering tail behind)
 // and rotated into place by the caller.
-const MEGA_BOLT_PATH = "M -30 0 C -18 -3 -8 -10 0 -10 A 10 10 0 0 1 0 10 C -8 10 -18 3 -30 0 Z";
+// How much bigger a Mega Morph draws its slug's animation (bolt effects and impact effects alike).
+const MEGA_ANIM_SCALE = 1.7;
+const MEGA_BOLT_PATH ="M -30 0 C -18 -3 -8 -10 0 -10 A 10 10 0 0 1 0 10 C -8 10 -18 3 -30 0 Z";
 
 // A shot's flight: attacker -> impactPoint over `windowMs * SHOT_FLIGHT_MULTIPLIER`.
 // The reaction window now runs the *entire* flight -- a defender can wait
@@ -254,8 +1385,12 @@ function phasedFraction(elapsedMs, legMs, windupFraction = SLOW_PHASE_DISTANCE_F
 
 // `vs` resizes the bolts/bursts for the map's size (see markerScale) -- the
 // AOE burst is a true blast radius and is never scaled.
-function ShotEffect({ fx, vs = 1, onDone }) {
+export function ShotEffect({ fx, vs = 1, onDone }) {
   const [elapsed, setElapsed] = useState(0);
+  // Fraction of this leg's distance covered after `e` ms of its `t`-ms flight. A ricochet leg
+  // (fx.noWindup) is already at full speed, so it cruises linearly the whole way -- no slow
+  // windup crawl; every other shot gets the usual two-phase profile.
+  const shotFraction = (e, t) => (fx.noWindup ? Math.min(1, Math.max(0, e / t)) : phasedFraction(e, t, fx.windupFraction));
   const startRef = useRef(null);
   const rafRef = useRef(null);
   const doneRef = useRef(false);
@@ -273,7 +1408,9 @@ function ShotEffect({ fx, vs = 1, onDone }) {
   // arrive as a single self-contained combat-shot-fx with the outcome
   // already set, no flight, no counter.
   const isJam = fx.outcome === "jam" || fx.outcome === "too-close";
-  const totalMs = Math.max(400, (fx.windowMs || SHOT_FLIGHT_MS) * SHOT_FLIGHT_MULTIPLIER);
+  // A chain arc has its own fixed, very short travel time (a quarter of a second for a slug's arc),
+  // so unlike a real shot it isn't floored at 400 ms.
+  const totalMs = fx.chain && fx.windowMs ? fx.windowMs : Math.max(400, (fx.windowMs || SHOT_FLIGHT_MS) * SHOT_FLIGHT_MULTIPLIER);
 
   // Freeze the reveal state the first frame the outcome is known (for an
   // ordinary, uncontested shot -- a jam/too-close failure is self-contained,
@@ -294,7 +1431,12 @@ function ShotEffect({ fx, vs = 1, onDone }) {
         Math.min(RESOLVE_SETTLE_MAX_MS, Math.hypot(fx.impactPoint.x - settleFrom.x, fx.impactPoint.y - settleFrom.y) * RESOLVE_SETTLE_PX_MS)
       )
     : RESOLVE_SETTLE_MIN_MS;
-  const skidMode = revealElapsed != null && settleFrom != null && revealElapsed > totalMs - settleMs;
+  // A shot whose accuracy roll already passed (fx.expectHit) flies straight in
+  // and bursts as a hit on arrival, whether or not the server's confirmation
+  // has landed yet -- so a late "hit" reveal never needs a skid.
+  const pendingHit = Boolean(fx.expectHit) && !isJam && !fx.countered && fx.outcome == null;
+  const optimisticHit = Boolean(fx.expectHit) && !isJam && !fx.countered && (fx.outcome == null || fx.outcome === "hit");
+  const skidMode = !optimisticHit && revealElapsed != null && settleFrom != null && revealElapsed > totalMs - settleMs;
   const burstAt = skidMode ? revealElapsed + settleMs : totalMs;
   // The clash (if any) always lands right at the end of the approach leg --
   // see SHOT_FLIGHT_MULTIPLIER's comment. Both bolts meet at the geometric
@@ -311,7 +1453,7 @@ function ShotEffect({ fx, vs = 1, onDone }) {
   // goes out, with no guarantee they beat the client's own rAF timer. Don't
   // let the effect end (or fall back to guessing "hit") before it's known;
   // wait up to RESOLUTION_GRACE_MS past totalMs for the real outcome.
-  const stillWaiting = !isJam && !fx.countered && fx.outcome == null;
+  const stillWaiting = !isJam && !fx.countered && fx.outcome == null && !pendingHit;
   const lifetimeMs = isJam
     ? 450
     : fx.countered && (fx.outcome === "attacker-wins" || fx.outcome === "defender-wins")
@@ -356,7 +1498,7 @@ function ShotEffect({ fx, vs = 1, onDone }) {
   // windup ends. A dual shot keeps both bolts through the windup (both neutral)
   // -- collapsing the pair to one made short flights, which spend most of their
   // visible travel in the windup, look like a single projectile.
-  const inWindup = elapsed < SLOW_PHASE_MS;
+  const inWindup = !fx.noWindup && elapsed < SLOW_PHASE_MS;
   const boltColor = inWindup ? WINDUP_BOLT_COLOR : color;
   const boltColor2 = color2 ? (inWindup ? WINDUP_BOLT_COLOR : color2) : null;
 
@@ -384,6 +1526,9 @@ function ShotEffect({ fx, vs = 1, onDone }) {
   // clash branch to handle -- outcome is always already "hit" by the time
   // this ever renders.
   if (fx.chain) {
+    // A slug's chain arc is its own electric arc (see chainArcShapes -- deliberately nothing like
+    // Zeus's flying lightning bolt); only the melee slash flash keeps the plain dart below.
+    if (fx.lightning) return <>{chainArcShapes(fx, elapsed, totalMs, vs)}</>;
     const chainColor = "#ffe066";
     if (elapsed < totalMs) {
       const pos = lerp(fx.attackerPos, fx.impactPoint, Math.min(1, elapsed / totalMs));
@@ -431,11 +1576,56 @@ function ShotEffect({ fx, vs = 1, onDone }) {
 
   const bolts = [];
   const bursts = [];
+  // Marks the shooter's own bolt as one of the custom bolts: Helixel's double helix (see
+  // helixShapes), Trackjaw's stalk-and-pounce (pounceShapes), Chronix's time skip
+  // (timeSkipShapes), Zeus's lightning (lightningShapes) or the ricochet streak (streakShapes);
+  // Bladier is an ordinary element bolt that also throws a knife at a wall (knifeShapes).
+  // `to` is where this leg of the flight ends -- the helix fuses shut and the pounce lands as they
+  // arrive. Every one of them is just the ordinary neutral bolt through the windup: the unique
+  // look only begins at the transform, and the effects that grow from nothing (the helix
+  // splitting, the lightning body, the stalk) start from the point where the windup ended.
+  const transformPoint = lerp(fx.attackerPos, fx.impactPoint, fx.noWindup ? 0 : Math.min(1, fx.windupFraction ?? SLOW_PHASE_DISTANCE_FRACTION));
+  // A standard bolt: no animation of its own (not one of the custom bolts or a dual shot) and not
+  // "None" -- a Mega Morph counts, drawn the same but bigger. It gets a small effect for its element in flight (elementShapes) and
+  // explodes in its element's own way on impact (elementBurst).
+  const standardElement =
+    fx.slugType && fx.slugType !== "None" && !fx.secondaryType && !fx.helix && !fx.pounce && !fx.timeSkip && !fx.lightning && !fx.ricochet
+      ? fx.slugType
+      : null;
+  // A Mega Morph keeps its slug's animation -- custom or element, in flight and on impact -- just
+  // scaled up (MEGA_ANIM_SCALE) so the bigger hit reads at a glance. `mvs` is the scale the impact
+  // effects below are drawn at.
+  const mvs = vs * (fx.mega ? MEGA_ANIM_SCALE : 1);
+  const boltShapeOf = (to) => {
+    if (inWindup) return {};
+    if (fx.helix) return { helixFrom: transformPoint, helixTo: to };
+    if (fx.pounce) return { pounceFrom: transformPoint, pounceTo: to };
+    if (fx.timeSkip) return { skipFrom: fx.attackerPos, skipTo: to, skipWindup: fx.windupFraction ?? SLOW_PHASE_DISTANCE_FRACTION };
+    if (fx.lightning) return { zapFrom: transformPoint, zapTo: to };
+    if (fx.ricochet) return { streakFrom: transformPoint, streakTo: to, streakPing: Boolean(fx.noWindup) };
+    // A standard bolt: a small effect for its element (a dual shot keeps its own look; a Mega Morph is the same, scaled up).
+    // Bladier is the ordinary Metal bolt; with a wall in its path (the server sends no piercePoint
+    // otherwise) it also throws a knife at it -- see knifeShapes.
+    if (standardElement) {
+      const knife = fx.dagger && fx.piercePoint ? { from: fx.attackerPos, to: fx.targetPos ?? fx.impactPoint, pierce: fx.piercePoint } : null;
+      return { elementFrom: transformPoint, element: standardElement, knife };
+    }
+    return {};
+  };
 
   if (!fx.countered) {
     let boltPos = null;
     let styleBolt = false;
-    if (!fx.outcome) {
+    if (pendingHit) {
+      // Hit already rolled, only a counter/dodge could change it (and those
+      // are revealed the moment they happen, mid-flight): no reason to hold the
+      // bolt back. Fly it the whole way, then burst as a hit on arrival.
+      if (elapsed < totalMs) {
+        boltPos = lerp(fx.attackerPos, fx.impactPoint, shotFraction(elapsed, totalMs));
+      } else {
+        bursts.push({ pos: fx.impactPoint, color, kind: "hit", opacity: fadeAfter(totalMs), aoe: fx.aoe, aoeScale: fx.aoeScale ?? 1, growAt: totalMs, style: false, element: standardElement, elScale: 1 });
+      }
+    } else if (!fx.outcome) {
       // The resolve update hasn't landed yet -- ride the phased curve toward
       // the last known impact point, but never quite finish the approach
       // (phasedFraction saturates at 1 past totalMs, which would park the
@@ -452,7 +1642,7 @@ function ShotEffect({ fx, vs = 1, onDone }) {
       boltPos = lerp(
         fx.attackerPos,
         fx.impactPoint,
-        Math.min(PENDING_MAX_FRACTION, phasedFraction(elapsed, totalMs, fx.windupFraction))
+        Math.min(PENDING_MAX_FRACTION, shotFraction(elapsed, totalMs))
       );
     } else if (skidMode && elapsed < burstAt) {
       // The outcome arrived too late for the bolt to reach the real impact
@@ -466,13 +1656,13 @@ function ShotEffect({ fx, vs = 1, onDone }) {
       // but bend its aim from the target toward the wide point over the rest
       // of the flight -- a smooth veer, not the sideways snap onto the new
       // deflected line that read as the bolt teleporting.
-      const f = phasedFraction(elapsed, totalMs, fx.windupFraction);
+      const f = shotFraction(elapsed, totalMs);
       const bend = Math.min(1, (elapsed - revealElapsed) / Math.max(1, burstAt - revealElapsed));
       boltPos = lerp(lerp(fx.attackerPos, fx.targetPos, f), lerp(fx.attackerPos, fx.impactPoint, f), bend);
     } else if (elapsed < burstAt) {
-      boltPos = lerp(fx.attackerPos, fx.impactPoint, phasedFraction(elapsed, totalMs, fx.windupFraction));
+      boltPos = lerp(fx.attackerPos, fx.impactPoint, shotFraction(elapsed, totalMs));
     } else {
-      bursts.push({ pos: fx.impactPoint, color, kind: fx.outcome, opacity: fadeAfter(burstAt), aoe: fx.aoe && fx.outcome !== "out-of-range", aoeScale: fx.aoeScale ?? 1, growAt: burstAt, style: fx.style && fx.outcome === "hit" });
+      bursts.push({ pos: fx.impactPoint, color, kind: fx.outcome, opacity: fadeAfter(burstAt), aoe: fx.aoe && fx.outcome !== "out-of-range", aoeScale: fx.aoeScale ?? 1, growAt: burstAt, style: fx.style && fx.outcome === "hit", claws: Boolean(fx.pounce) && fx.outcome === "hit", arcs: Boolean(fx.lightning) && fx.outcome === "hit", shards: Boolean(fx.ricochet) && fx.outcome === "hit", element: fx.outcome === "hit" || fx.outcome === "miss" ? standardElement : null, elScale: fx.outcome === "hit" ? 1 : 0.5 });
     }
     if (boltPos) {
       lastBoltPosRef.current = boltPos;
@@ -493,13 +1683,13 @@ function ShotEffect({ fx, vs = 1, onDone }) {
         angle = base + angle;
         styleBolt = true;
       }
-      const splitF = fx.split && fx.outcome === "hit" && !skidMode ? phasedFraction(elapsed, totalMs, fx.windupFraction) : 0;
+      const splitF = fx.split && (fx.outcome === "hit" || pendingHit) && !skidMode ? shotFraction(elapsed, totalMs) : 0;
       if (splitF >= SPLIT_START_FRACTION) {
         for (const sb of surroundBolts(fx.attackerPos, fx.impactPoint, splitF)) {
           bolts.push({ pos: sb.pos, color: boltColor, color2: null, mega: false, angle: sb.angle, style: false });
         }
       } else {
-        bolts.push({ pos: boltPos, color: boltColor, color2: boltColor2, mega: fx.mega, angle, style: styleBolt });
+        bolts.push({ pos: boltPos, color: boltColor, color2: boltColor2, mega: fx.mega, angle, style: styleBolt, ...boltShapeOf(fx.impactPoint) });
       }
     }
   } else {
@@ -513,21 +1703,22 @@ function ShotEffect({ fx, vs = 1, onDone }) {
     const counterColor = typeColor(fx.counterSlugType);
     const counterAtMs = Math.max(0, Math.min(clashAt, fx.counterAtMs ?? clashAt / 2));
     const mid = fx.clashPoint ?? lerp(fx.attackerPos, fx.impactPoint, 0.5);
-    const shotPosAtCounter = lerp(fx.attackerPos, fx.impactPoint, phasedFraction(counterAtMs, totalMs, fx.windupFraction));
+    const shotPosAtCounter = lerp(fx.attackerPos, fx.impactPoint, shotFraction(counterAtMs, totalMs));
     if (elapsed < clashAt) {
       if (elapsed < counterAtMs) {
         bolts.push({
-          pos: lerp(fx.attackerPos, fx.impactPoint, phasedFraction(elapsed, totalMs, fx.windupFraction)),
+          pos: lerp(fx.attackerPos, fx.impactPoint, shotFraction(elapsed, totalMs)),
           color: boltColor,
           color2: boltColor2,
           mega: fx.mega,
           angle: headingDeg(fx.attackerPos, fx.impactPoint),
+          ...boltShapeOf(fx.impactPoint),
         });
       } else {
         // Linear from each bolt's position when the counter fired -- both are
         // up to speed by now, no slow launch-out to reproduce.
         const t = (elapsed - counterAtMs) / Math.max(1, clashAt - counterAtMs);
-        bolts.push({ pos: lerp(shotPosAtCounter, mid, t), color: boltColor, color2: boltColor2, mega: fx.mega, angle: headingDeg(shotPosAtCounter, mid) });
+        bolts.push({ pos: lerp(shotPosAtCounter, mid, t), color: boltColor, color2: boltColor2, mega: fx.mega, angle: headingDeg(shotPosAtCounter, mid), ...boltShapeOf(mid) });
         bolts.push({ pos: lerp(fx.targetPos, mid, t), color: counterColor });
       }
     } else {
@@ -543,6 +1734,7 @@ function ShotEffect({ fx, vs = 1, onDone }) {
             color2,
             mega: fx.mega,
             angle: headingDeg(mid, fx.impactPoint),
+            ...boltShapeOf(fx.impactPoint),
           });
         } else {
           bursts.push({
@@ -553,6 +1745,8 @@ function ShotEffect({ fx, vs = 1, onDone }) {
             aoe: fx.aoe,
             aoeScale: fx.aoeScale ?? 1,
             growAt: clashAt + aftermathMs,
+            element: standardElement,
+            elScale: 1,
           });
         }
       } else if (fx.outcome === "defender-wins") {
@@ -596,6 +1790,14 @@ function ShotEffect({ fx, vs = 1, onDone }) {
     <>
       {styleTrail}
       {bolts.flatMap((b, i) => {
+        // A Mega Morph flies with the very same animation, simply scaled up to show the mega damage.
+        const bvs = b.mega ? vs * MEGA_ANIM_SCALE : vs;
+        if (b.helixFrom) return helixShapes(b, bvs, `helix-${i}`);
+        if (b.pounceFrom) return pounceShapes(b, bvs, `pounce-${i}`);
+        if (b.skipFrom) return timeSkipShapes(b, bvs, `skip-${i}`);
+        if (b.zapFrom) return lightningShapes(b, bvs, `zap-${i}`);
+        if (b.streakFrom) return streakShapes(b, bvs, `streak-${i}`);
+        if (b.elementFrom) return b.knife ? [...elementShapes(b, bvs, `el-${i}`), ...knifeShapes(b, bvs, `knife-${i}`)] : elementShapes(b, bvs, `el-${i}`);
         // A dual shot flies as a side-by-side pair, one bolt per element
         // colour, offset across its line of travel; a Mega Morph's bolts are
         // teardrops instead of circles (both can combine).
@@ -646,7 +1848,9 @@ function ShotEffect({ fx, vs = 1, onDone }) {
             <circle className="shot-fx-burst shot-fx-burst--clash" cx={b.pos.x} cy={b.pos.y} r={20 * vs} style={{ "--fx-color": b.color }} />
             <circle className="shot-fx-burst shot-fx-burst--clash" cx={b.pos.x} cy={b.pos.y} r={20 * vs} style={{ "--fx-color": b.mixColor }} />
           </g>
-        ) : (
+        ) : b.element && !b.aoe ? null : (
+          // (A standard bolt's element explosion replaces this flat disc -- see elementBurst below.
+          // An area blast keeps it, since it shows the blast radius.)
           <circle
             key={`burst-${i}`}
             className={`shot-fx-burst shot-fx-burst--${b.kind} ${b.aoe ? "shot-fx-burst--aoe" : ""}`}
@@ -669,6 +1873,65 @@ function ShotEffect({ fx, vs = 1, onDone }) {
           <g key={`style-burst-${i}`} className="shot-fx-style-burst" style={{ opacity: b.opacity }}>
             <circle cx={b.pos.x} cy={b.pos.y} r={(HIT_BURST_RADIUS + 14 * (1 - b.opacity)) * vs} />
             <circle cx={b.pos.x} cy={b.pos.y} r={(HIT_BURST_RADIUS * 0.6 + 26 * (1 - b.opacity)) * vs} />
+          </g>
+        ))}
+      {/* Trackjaw's pounce: three claw slashes rake across the target, each drawing itself in a beat after the last. */}
+      {bursts
+        .filter((b) => b.claws)
+        .map((b, i) => (
+          <g key={`claws-${i}`} transform={`translate(${b.pos.x} ${b.pos.y})`} style={{ opacity: b.opacity }}>
+            {[-1, 0, 1].map((k, j) => {
+              const p = Math.min(1, Math.max(0, ((elapsed - b.growAt) / CLAW_DRAW_MS) * 1.5 - j * 0.25));
+              return (
+                <path
+                  key={k}
+                  className="shot-fx-claw"
+                  d={`M ${(k * 13 - 9) * mvs} ${-24 * mvs} L ${(k * 13 + 9) * mvs} ${24 * mvs}`}
+                  pathLength={1}
+                  strokeWidth={3.4 * mvs}
+                  style={{ strokeDasharray: 1, strokeDashoffset: 1 - p }}
+                />
+              );
+            })}
+          </g>
+        ))}
+      {/* Standard bolts: each element explodes in its own way (see elementBurst). */}
+      {bursts
+        .filter((b) => b.element)
+        .map((b, i) => (
+          <g key={`elburst-${i}`} transform={`translate(${b.pos.x} ${b.pos.y}) scale(${b.elScale ?? 1})`}>
+            {elementBurst(b.element, Math.max(0, elapsed - b.growAt), mvs, typeColor(b.element), `eb${i}`)}
+          </g>
+        ))}
+      {/* The ricochet streak's impact: eight steel shards fly straight out of the target. */}
+      {bursts
+        .filter((b) => b.shards)
+        .map((b, i) => (
+          <g key={`shards-${i}`} transform={`translate(${b.pos.x} ${b.pos.y})`} style={{ opacity: b.opacity }}>
+            {Array.from({ length: 8 }, (_, k) => {
+              const p = Math.min(1, Math.max(0, (elapsed - b.growAt) / SHARD_DRAW_MS));
+              const a = (k * Math.PI) / 4 + zapNoise(k, 3) * 0.2;
+              const r0 = 9 * mvs;
+              const r1 = (22 + 16 * Math.abs(zapNoise(k + 8, 3))) * mvs;
+              return (
+                <path
+                  key={k}
+                  className="shot-fx-streak-spark"
+                  d={`M ${Math.cos(a) * r0} ${Math.sin(a) * r0} L ${Math.cos(a) * r1} ${Math.sin(a) * r1}`}
+                  pathLength={1}
+                  strokeWidth={2.6 * mvs}
+                  style={{ strokeDasharray: 1, strokeDashoffset: 1 - p }}
+                />
+              );
+            })}
+          </g>
+        ))}
+      {/* Zeus's lightning strike: jagged arcs crack out of the target, each drawing itself outward. */}
+      {bursts
+        .filter((b) => b.arcs)
+        .map((b, i) => (
+          <g key={`arcs-${i}`} transform={`translate(${b.pos.x} ${b.pos.y})`} style={{ opacity: b.opacity }}>
+            {zapArcs(mvs, elapsed - b.growAt)}
           </g>
         ))}
     </>
@@ -858,6 +2121,8 @@ function statusEffectBadges(statusEffects) {
     badges.push({ key: "regen", label: `Regenerating -- heals ${statusEffects.regen.amount} Grit at the start of each of their next ${statusEffects.regen.turnsLeft} turns` });
   }
   if (statusEffects.marked) badges.push({ key: "marked", label: "Marked -- takes splash damage from Arcling's static arcs" });
+  const adaptedHits = Math.max(0, ...Object.values(statusEffects.adapted || {}).map(Number));
+  if (adaptedHits > 0) badges.push({ key: "adapted", label: `Sampled -- the next hit from a Helixel lands ${adaptedHits * 25}% harder` });
   if (statusEffects.powerSurge) badges.push({ key: "power-surge", label: "Power surge -- every other shot this turn has its power doubled" });
   return badges;
 }
@@ -963,6 +2228,8 @@ export default function CombatMap({
   activeCombatantIds,
   actingCombatantId,
   rangeRing,
+  placement = null,
+  onRotatePlacement,
   mountRing,
   wallRunId,
   isDraggable,
@@ -1010,28 +2277,48 @@ export default function CombatMap({
   // lands, instead of flashing the outcome while the shot is still crossing
   // the map. Keyed by shot id; cleared in removeShot.
   const shotFlightMeta = useRef(new Map());
+  // shot id -> timer for the hit sound of a shot expected to land (see the shotFx effect)
+  const optimisticHitSfx = useRef(new Map());
 
   // A Wall Maker's wall grows in instead of just popping up. Only walls that
   // *appear* after this component has already rendered once get the
   // animation -- walls already on the map when the page loads (or drawn by
   // the DM) render statically from the start.
   const knownWallIds = useRef(null);
+  const prevWalls = useRef(null);
   const [growingWallIds, setGrowingWallIds] = useState(() => new Set());
+  // Terrain effects (a wall forming, a wall breaking -- see TerrainFx.jsx): mounted for a moment, then removed.
+  const [terrainFx, setTerrainFx] = useState([]);
+  const terrainFxTimers = useRef([]);
+  useEffect(() => () => terrainFxTimers.current.forEach(clearTimeout), []);
+  function playTerrainFx(items, ms) {
+    const keys = new Set(items.map((i) => i.key));
+    setTerrainFx((prev) => [...prev, ...items]);
+    terrainFxTimers.current.push(setTimeout(() => setTerrainFx((prev) => prev.filter((i) => !keys.has(i.key))), ms));
+  }
   useEffect(() => {
     const currentIds = new Set(encounter.walls.map((w) => w.id));
     if (knownWallIds.current !== null) {
+      // Which stretches of wall were broken, and which new walls are only the surviving pieces of one.
+      const { breaks, pieceIds } = diffWalls(prevWalls.current || [], encounter.walls);
       // A wall (or a segment of one -- a partial break drops the old id and
       // adds up to two new pieces) that was here and now isn't just broke.
       // The server holds this update back until the shot's burst would have
       // played (scheduleAfterFlight), so "now" is the moment of the break.
       // Skipped while the DM is drawing/erasing walls by hand.
       const broke = [...knownWallIds.current].some((id) => !currentIds.has(id));
-      if (broke && !drawMode) playCombatSfx("break", sfxVolume("break"));
+      if (broke && !drawMode) {
+        playCombatSfx("break", sfxVolume("break"));
+        // (A whole encounter's walls vanishing at once -- a new encounter -- is not a fight's break.)
+        if (breaks.length > 0 && breaks.length <= 8) {
+          playTerrainFx(breaks.map((b) => ({ kind: "break", key: `break-${b.id}-${Date.now()}`, ...b })), WALL_BREAK_FX_MS);
+        }
+      }
 
-      const newSlugWallIds = encounter.walls
-        .filter((w) => w.source === "slug" && !knownWallIds.current.has(w.id))
-        .map((w) => w.id);
+      const newSlugWalls = encounter.walls.filter((w) => w.source === "slug" && !knownWallIds.current.has(w.id) && !pieceIds.has(w.id));
+      const newSlugWallIds = newSlugWalls.map((w) => w.id);
       if (newSlugWallIds.length > 0) {
+        playTerrainFx(newSlugWalls.map((w) => ({ kind: "form", key: `form-${w.id}-${Date.now()}`, ...w })), WALL_FORM_FX_MS);
         setGrowingWallIds((prev) => new Set([...prev, ...newSlugWallIds]));
         const timer = setTimeout(() => {
           setGrowingWallIds((prev) => {
@@ -1041,11 +2328,37 @@ export default function CombatMap({
           });
         }, 550);
         knownWallIds.current = currentIds;
+        prevWalls.current = encounter.walls;
         return () => clearTimeout(timer);
       }
     }
     knownWallIds.current = currentIds;
+    prevWalls.current = encounter.walls;
   }, [encounter.walls]);
+
+  // A bridge that is built mid-encounter lays its planks down (see BridgePiece); ones already there
+  // on first render (or restored on reconnect) just show.
+  const knownBridgeIds = useRef(null);
+  const [growingBridgeIds, setGrowingBridgeIds] = useState(() => new Set());
+  useEffect(() => {
+    const currentIds = new Set((encounter.bridges || []).map((b) => b.id));
+    if (knownBridgeIds.current !== null) {
+      const newIds = (encounter.bridges || []).filter((b) => !knownBridgeIds.current.has(b.id)).map((b) => b.id);
+      if (newIds.length > 0) {
+        setGrowingBridgeIds((prev) => new Set([...prev, ...newIds]));
+        const timer = setTimeout(() => {
+          setGrowingBridgeIds((prev) => {
+            const next = new Set(prev);
+            newIds.forEach((id) => next.delete(id));
+            return next;
+          });
+        }, 700);
+        knownBridgeIds.current = currentIds;
+        return () => clearTimeout(timer);
+      }
+    }
+    knownBridgeIds.current = currentIds;
+  }, [encounter.bridges]);
 
   // Same idea for hazards (Ice patches, Hazard Maker's damaging terrain) --
   // one that appears mid-encounter grows in from nothing instead of just
@@ -1115,6 +2428,16 @@ export default function CombatMap({
       at: performance.now(),
       totalMs: Math.max(400, (shotFx.windowMs || SHOT_FLIGHT_MS) * SHOT_FLIGHT_MULTIPLIER),
     });
+    // Hit already rolled but unconfirmed until the reaction window closes: play
+    // the hit sound with the burst on arrival rather than whenever that late
+    // confirmation shows up. A reaction that changes the outcome cancels it.
+    if (shotFx.expectHit && shotFx.outcome == null) {
+      const flightMs = Math.max(400, (shotFx.windowMs || SHOT_FLIGHT_MS) * SHOT_FLIGHT_MULTIPLIER);
+      optimisticHitSfx.current.set(
+        shotFx.id,
+        setTimeout(() => playCombatSfx("hit", sfxVolume("hit")), flightMs)
+      );
+    }
     if (shotFx.outcome === "jam" || shotFx.outcome === "too-close") {
       setMisfireFlash(true);
       setTimeout(() => setMisfireFlash(false), 3000);
@@ -1134,7 +2457,8 @@ export default function CombatMap({
       // not an attack, so it gets its own distinct cue instead.
       if (shotFx.attackerId != null && shotFx.attackerId === shotFx.targetId) {
         playCombatSfx("self", sfxVolume("self"));
-      } else {
+      } else if (!shotFx.noWindup) {
+        // (A ricochet bounce is already at full speed -- no transform beat, so no launch sound.)
         playShotSound(soundVolume);
       }
       // Zeus flies as a blur -- its own thunderclap follows once the launch
@@ -1162,6 +2486,15 @@ export default function CombatMap({
     // ShotEffect's clashAt + aftermathMs).
     const meta = shotFlightMeta.current.get(shotResolved.id);
     const remaining = meta ? Math.max(0, meta.totalMs - (performance.now() - meta.at)) : 0;
+    // A shot that was already expected to hit had its hit sound scheduled for
+    // the burst at launch (see the shotFx effect) -- a plain "hit" confirmation
+    // has nothing left to play; anything else cancels it and plays as usual.
+    const optimisticSfx = optimisticHitSfx.current.get(shotResolved.id);
+    if (optimisticSfx) {
+      optimisticHitSfx.current.delete(shotResolved.id);
+      if (shotResolved.outcome !== "hit" || shotResolved.countered) clearTimeout(optimisticSfx);
+    }
+    const hitSfxAlreadyScheduled = Boolean(optimisticSfx) && shotResolved.outcome === "hit" && !shotResolved.countered;
     const atBurst = (fn, extraDelay = 0) => {
       const delay = remaining + extraDelay;
       if (delay <= 0) fn();
@@ -1180,7 +2513,7 @@ export default function CombatMap({
       // (that's reserved for a true accuracy miss).
       atBurst(() => playCombatSfx("miss", sfxVolume("miss")));
     } else if (shotResolved.outcome === "hit") {
-      atBurst(() => playCombatSfx("hit", sfxVolume("hit")));
+      if (!hitSfxAlreadyScheduled) atBurst(() => playCombatSfx("hit", sfxVolume("hit")));
     } else if (shotResolved.outcome === "attacker-wins" || shotResolved.outcome === "defender-wins") {
       // A clash one side won -- the winning bolt carries on and lands a hit
       // burst a half-flight after the clash itself.
@@ -1264,6 +2597,11 @@ export default function CombatMap({
   const suppressClickRef = useRef(false); // a pan-drag's mouseup must not also count as a click on the map
   const viewRef = useRef(view);
   viewRef.current = view;
+  // Shift + wheel turns a wall / bridge being placed instead of zooming (read through refs: the wheel listener is bound once).
+  const placementRef = useRef(placement);
+  placementRef.current = placement;
+  const rotatePlacementRef = useRef(onRotatePlacement);
+  rotatePlacementRef.current = onRotatePlacement;
   const viewW = mapWidth / view.zoom;
   const viewH = mapHeight / view.zoom;
   const markerS = markerScale(mapWidth);
@@ -1304,6 +2642,12 @@ export default function CombatMap({
     if (!el) return undefined;
     function onWheel(e) {
       e.preventDefault();
+      if (e.shiftKey && placementRef.current && rotatePlacementRef.current) {
+        // Some browsers report a Shift + wheel as horizontal scroll.
+        const d = e.deltaY || e.deltaX;
+        rotatePlacementRef.current(d < 0 ? -ROTATE_STEP : ROTATE_STEP);
+        return;
+      }
       const rect = el.getBoundingClientRect();
       const fx = (e.clientX - rect.left) / rect.width;
       const fy = (e.clientY - rect.top) / rect.height;
@@ -1536,23 +2880,13 @@ export default function CombatMap({
           />
         )}
 
+        {/* Each hazard is drawn per element (see HazardPatch.jsx) so they can be told apart at a glance. */}
         {(encounter.hazards || []).map((hz) => (
-          <circle
-            key={hz.id}
-            className={`combat-map-hazard combat-map-hazard--${hz.type} ${growingHazardIds.has(hz.id) ? "combat-map-hazard--growing" : ""}`}
-            cx={hz.x}
-            cy={hz.y}
-            r={hz.radius}
-            style={hz.type === "damage" ? { "--hazard-color": typeColor(hz.slugType) } : undefined}
-          >
-            <title>{hazardDescription(hz)}</title>
-          </circle>
+          <HazardPatch key={hz.id} hz={hz} growing={growingHazardIds.has(hz.id)} title={hazardDescription(hz)} />
         ))}
 
         {(encounter.bridges || []).map((b) => (
-          <g key={b.id} className="combat-map-bridge" transform={`translate(${b.x} ${b.y}) rotate(${b.angle})`} style={{ "--bridge-color": typeColor(b.slugType) }}>
-            <rect x={0} y={-b.width / 2} width={b.length} height={b.width} rx={18} ry={18} />
-          </g>
+          <BridgePiece key={b.id} b={b} growing={growingBridgeIds.has(b.id)} />
         ))}
 
         {/* Anchorage's zones -- a shimmering field suppressing knockback and
@@ -1663,6 +2997,13 @@ export default function CombatMap({
             />
           );
         })}
+
+        {/* A wall forming or breaking (see TerrainFx.jsx), over the walls. */}
+        {terrainFx.map((fx) =>
+          fx.kind === "break" ? <WallBreakFx key={fx.key} fx={fx} vs={markerS} /> : <WallFormFx key={fx.key} fx={fx} vs={markerS} />
+        )}
+
+        {placement && <PlacementGhost svgRef={svgRef} getPoint={pointFor} placement={placement} markerS={markerS} />}
 
         {drawing && (
           <line className="combat-map-wall combat-map-wall--pending" x1={drawing.x1} y1={drawing.y1} x2={drawing.x2} y2={drawing.y2} />

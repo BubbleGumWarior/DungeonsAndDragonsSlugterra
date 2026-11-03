@@ -2,6 +2,7 @@ import { ThermometerHotIcon, TrashIcon, WrenchIcon } from "@phosphor-icons/react
 import BlasterCard from "./BlasterCard.jsx";
 import ModCard from "./ModCard.jsx";
 import EquipmentCard from "./EquipmentCard.jsx";
+import { QuickRemove } from "./DeskParts.jsx";
 import { formatRange, outfitChips } from "./outfitData.js";
 import "./InventoryDesk.css";
 
@@ -31,6 +32,7 @@ export default function PlayerSatchel({
   onEditMod,
   onEditEquipment,
   onRestoreBlaster,
+  onRemoveItem,
   onRemoveOutfit,
 }) {
   if (!recipient) {
@@ -57,7 +59,7 @@ export default function PlayerSatchel({
           <h2>{recipient.name}</h2>
           {recipient.ill && (
             <span className="desk-ill">
-              <ThermometerHotIcon weight="fill" aria-hidden="true" /> Ill
+              <ThermometerHotIcon weight="fill" aria-hidden="true" /> Sick
             </span>
           )}
         </div>
@@ -88,17 +90,20 @@ export default function PlayerSatchel({
               equippedMods={allMods.filter((m) => m.equippedBlasterId === blaster.id)}
               onClick={() => onEditBlaster(blaster)}
               actions={
-                (blaster.durability ?? 100) < 100 ? (
-                  <button
-                    type="button"
-                    className="slug-management-icon-btn"
-                    onClick={() => onRestoreBlaster(blaster.id)}
-                    title="Expert repair: restore to 100%"
-                    aria-label={`Restore ${blaster.name} to 100%`}
-                  >
-                    <WrenchIcon weight="bold" />
-                  </button>
-                ) : undefined
+                <div className="desk-card-actions">
+                  {(blaster.durability ?? 100) < 100 && (
+                    <button
+                      type="button"
+                      className="slug-management-icon-btn"
+                      onClick={() => onRestoreBlaster(blaster.id)}
+                      title="Expert repair: restore to 100%"
+                      aria-label={`Restore ${blaster.name} to 100%`}
+                    >
+                      <WrenchIcon weight="bold" />
+                    </button>
+                  )}
+                  <QuickRemove name={blaster.name} onRemove={() => onRemoveItem("blaster", blaster)} />
+                </div>
               }
             />
           ))}
@@ -108,7 +113,17 @@ export default function PlayerSatchel({
       <Section title="Mods" count={mods.length}>
         <div className="desk-cards">
           {mods.map((mod) => (
-            <ModCard key={mod.id} mod={mod} blasters={blasters} onClick={() => onEditMod(mod)} />
+            <ModCard
+              key={mod.id}
+              mod={mod}
+              blasters={blasters}
+              onClick={() => onEditMod(mod)}
+              actions={
+                <div className="desk-card-actions">
+                  <QuickRemove name={mod.name} onRemove={() => onRemoveItem("mod", mod)} />
+                </div>
+              }
+            />
           ))}
         </div>
       </Section>
@@ -116,7 +131,16 @@ export default function PlayerSatchel({
       <Section title="Equipment" count={equipment.length}>
         <div className="desk-cards">
           {equipment.map((item) => (
-            <EquipmentCard key={item.id} item={item} onClick={() => onEditEquipment(item)} />
+            <EquipmentCard
+              key={item.id}
+              item={item}
+              onClick={() => onEditEquipment(item)}
+              actions={
+                <div className="desk-card-actions">
+                  <QuickRemove name={item.name} onRemove={() => onRemoveItem("equipment", item)} />
+                </div>
+              }
+            />
           ))}
         </div>
       </Section>

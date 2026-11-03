@@ -13,3 +13,15 @@ export function volumeToGain(sliderFraction) {
   const clamped = Math.min(1, Math.max(0, typeof sliderFraction === "number" ? sliderFraction : 0.5));
   return Math.pow(clamped, TAPER_EXPONENT);
 }
+
+// Voice chat's per-player mixer runs 0-2: up to 1 it is the normal taper
+// above; past 1 it is a straight boost (2 = 4x gain, about +12dB) for a
+// friend who's just quiet, with the shared limiter in voiceAudio.js keeping
+// it from clipping. Values stored before the boost existed are all <= 1 and
+// map exactly as they did.
+export const MAX_VOICE_VOLUME = 2;
+
+export function voiceVolumeToGain(sliderFraction) {
+  const value = Math.min(MAX_VOICE_VOLUME, Math.max(0, typeof sliderFraction === "number" ? sliderFraction : 1));
+  return value <= 1 ? volumeToGain(value) : 1 + (value - 1) * 3;
+}

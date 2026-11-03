@@ -55,6 +55,11 @@ import {
   SkullIcon,
   DropHalfIcon,
   HeartIcon,
+  DnaIcon,
+  PawPrintIcon,
+  ClockCountdownIcon,
+  LightningAIcon,
+  ScissorsIcon,
 } from "@phosphor-icons/react";
 import { SLUG_TRAITS } from "./slugData.js";
 
@@ -122,6 +127,11 @@ const TRAIT_ICONS = {
   causesBleed: DropHalfIcon,
   summonsGhost: GhostIcon,
   lifeDrain: HeartIcon,
+  adaptiveStrain: DnaIcon,
+  pounceStrike: PawPrintIcon,
+  timeSkip: ClockCountdownIcon,
+  lightningStrike: LightningAIcon,
+  daggerThrow: ScissorsIcon,
 };
 
 // Ordered authoring buckets. Every trait key appears in exactly one group;
@@ -180,13 +190,13 @@ const GROUP_DEFS = [
     key: "flight",
     label: "Shot Behavior",
     blurb: "Changes how the bolt travels and connects.",
-    keys: ["breaksWalls", "causesKnockback", "piercesWalls", "ultraFast", "uncounterable", "grapple", "phasesWalls", "surroundsTarget"],
+    keys: ["breaksWalls", "causesKnockback", "piercesWalls", "ultraFast", "uncounterable", "grapple", "phasesWalls", "surroundsTarget", "pounceStrike", "timeSkip", "lightningStrike", "daggerThrow"],
   },
   {
     key: "multiplier",
     label: "Power Multipliers",
     blurb: "Scales this slug's own damage or clash.",
-    keys: ["clashTripled", "damageTripled", "powerSurge", "amplifiesPartner", "ambushTripled"],
+    keys: ["clashTripled", "damageTripled", "powerSurge", "amplifiesPartner", "ambushTripled", "adaptiveStrain"],
   },
   {
     key: "support",

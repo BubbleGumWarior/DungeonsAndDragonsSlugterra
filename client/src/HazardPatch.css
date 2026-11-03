@@ -1,0 +1,178 @@
+/* Hazard patches (see HazardPatch.jsx): per-element ground art with gentle ambient motion.
+   The map is top-down, so nothing drifts in a screen direction -- everything spins, pulses,
+   spreads or collapses around the patch's own centre (the group's local origin). */
+
+/* Only the outline takes hover (for the <title> tooltip); the texture on top is decoration.
+   Clicks still bubble up to the map. */
+.combat-map-hazard.hz {
+  pointer-events: none;
+}
+
+.combat-map-hazard.hz .hz-outline {
+  pointer-events: visiblePainted;
+}
+
+.hz-spin,
+.hz-ripple,
+.hz-implode {
+  transform-box: view-box;
+  transform-origin: 0 0;
+}
+
+.hz-spin {
+  animation: hz-spin 14s linear infinite;
+}
+
+.hz-slow {
+  animation-duration: 28s;
+}
+
+.hz-rev {
+  animation-direction: reverse;
+}
+
+.hz-pulse {
+  animation: hz-pulse 2.6s ease-in-out infinite;
+}
+
+.hz-twinkle {
+  animation: hz-twinkle 2.2s ease-in-out infinite;
+}
+
+.hz-slowtw {
+  animation-duration: 4s;
+}
+
+.hz-ripple {
+  animation: hz-ripple 3.3s ease-out infinite;
+}
+
+.hz-implode {
+  animation: hz-implode 3.3s ease-in infinite;
+}
+
+.hz-flicker {
+  animation: hz-flicker 1.2s steps(1, end) infinite;
+}
+
+.hz-bubble {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hz-bubble 3.2s ease-in-out infinite;
+}
+
+.hz-sway {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hz-sway 3.4s ease-in-out infinite;
+}
+
+@keyframes hz-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes hz-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes hz-twinkle {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* A ring that spreads from the centre and fades. */
+@keyframes hz-ripple {
+  0% {
+    transform: scale(0.15);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+/* A ring that collapses into the centre. */
+@keyframes hz-implode {
+  0% {
+    transform: scale(1);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(0.15);
+    opacity: 0;
+  }
+}
+
+/* Electric arcs blink on and off in irregular bursts. */
+@keyframes hz-flicker {
+  0% {
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  22% {
+    opacity: 0.15;
+  }
+  34% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes hz-bubble {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  35% {
+    opacity: 1;
+  }
+  85% {
+    transform: scale(1.15);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.3);
+    opacity: 0;
+  }
+}
+
+@keyframes hz-sway {
+  0%,
+  100% {
+    transform: rotate(-9deg);
+  }
+  50% {
+    transform: rotate(9deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hz *,
+  .hz {
+    animation: none !important;
+  }
+}

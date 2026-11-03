@@ -1,7 +1,8 @@
 import { PROFICIENCIES, STATS, describeEntry, entryLabel, formatModifier, skillModifier } from "./characterData.js";
+import { rollableProps } from "./rollableProps.js";
 import "./SkillList.css";
 
-export default function SkillList({ stats, proficiencies, revealed = true }) {
+export default function SkillList({ stats, proficiencies, revealed = true, onRoll }) {
   return (
     <div className="skill-list">
       {STATS.filter(({ key: statKey }) => PROFICIENCIES.some((p) => p.stat === statKey)).map(({ key: statKey, label, abbr }) => (
@@ -16,9 +17,10 @@ export default function SkillList({ stats, proficiencies, revealed = true }) {
               const modifier = skillModifier(stats[statKey], isProficient);
               return (
                 <div
-                  className={`skill-row ${isProficient ? "skill-row--proficient" : ""}`}
+                  className={`skill-row ${isProficient ? "skill-row--proficient" : ""}${onRoll ? " skill-row--rollable" : ""}`}
                   key={p.key}
                   data-tooltip={describeEntry(p, revealed)}
+                  {...rollableProps(onRoll, "skill", p.key, entryLabel(p, revealed), modifier)}
                 >
                   <span className="skill-row-label">{entryLabel(p, revealed)}</span>
                   <span className="skill-row-badge-slot">
