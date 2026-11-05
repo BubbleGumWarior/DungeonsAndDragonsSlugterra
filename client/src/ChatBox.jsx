@@ -6,12 +6,14 @@ import {
   MagnifyingGlassIcon,
   ScrollIcon,
   SparkleIcon,
+  WrenchIcon,
   XIcon,
 } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import Die, { keptIndex } from "./Die.jsx";
 import { formatModifier } from "./characterData.js";
+import { describeShipWork } from "./shipData.js";
 import ChatComposer from "./ChatComposer.jsx";
 import ChatRichText from "./ChatRichText.jsx";
 import "./Panel.css";
@@ -23,7 +25,7 @@ const TAB_KEY = "chatbox-tab";
 
 const TABS = [
   { id: "chat", label: "Chat", Icon: ChatCircleDotsIcon, subtitle: "Talk with everyone at the table" },
-  { id: "events", label: "Events", Icon: ScrollIcon, subtitle: "Rolls and slug hunts, as they happen" },
+  { id: "events", label: "Events", Icon: ScrollIcon, subtitle: "Rolls, slug hunts and ship works, as they happen" },
 ];
 
 // Slug hunts and dice rolls are written by the server with no sender (or as
@@ -202,6 +204,31 @@ function HuntEvent({ msg, isFresh }) {
   );
 }
 
+// An engineering roll to build or upgrade a ship compartment.
+function ShipBuildEvent({ msg, isFresh }) {
+  const text = describeShipWork(msg.meta);
+  return (
+    <li
+      className={`chat-event chat-event--ship${msg.meta.success ? " chat-event--ship-good" : " chat-event--ship-bad"}${
+        isFresh ? " chat-event--enter" : ""
+      }`}
+    >
+      <span className="chat-event-node" aria-hidden="true">
+        <WrenchIcon weight="bold" />
+      </span>
+      <div className="chat-event-main">
+        <div className="chat-event-head">
+          <span className="chat-event-title">{text.title}</span>
+          <time className="chat-event-time" dateTime={msg.createdAt}>
+            {formatStamp(msg.createdAt)}
+          </time>
+        </div>
+        <p className="chat-event-text">{text.detail}</p>
+      </div>
+    </li>
+  );
+}
+
 function GenericEvent({ msg, isFresh }) {
   return (
     <li className={`chat-event${isFresh ? " chat-event--enter" : ""}`}>
@@ -223,6 +250,7 @@ function GenericEvent({ msg, isFresh }) {
 
 function EventEntry({ msg, isFresh }) {
   if (msg.meta?.type === "dice-roll") return <DiceRollEvent msg={msg} isFresh={isFresh} />;
+  if (msg.meta?.type === "ship-build") return <ShipBuildEvent msg={msg} isFresh={isFresh} />;
   if (msg.username === "Slug Hunt") return <HuntEvent msg={msg} isFresh={isFresh} />;
   return <GenericEvent msg={msg} isFresh={isFresh} />;
 }

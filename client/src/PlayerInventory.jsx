@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { InfoIcon, TargetIcon, WarningIcon, WrenchIcon, XIcon } from "@phosphor-icons/react";
+import { HammerIcon, InfoIcon, TargetIcon, WarningIcon, WrenchIcon, XIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import BlasterCard from "./BlasterCard.jsx";
@@ -7,6 +7,8 @@ import EquipmentCard, { EQUIPMENT_DRAG_TYPE, EQUIPMENT_ICONS } from "./Equipment
 import { ARMOR_SLOT, SECONDARY_SLOT, equipmentSummary, qualityInfo, slotForKind } from "./itemData.js";
 import ModCard from "./ModCard.jsx";
 import RepairModal from "./RepairModal.jsx";
+import BlasterUpgradeModal from "./BlasterUpgradeModal.jsx";
+import { blasterUpgradeFor, repairPartsFor } from "./careData.js";
 import Wardrobe from "./Wardrobe.jsx";
 import Hint from "./Hint.jsx";
 import { useDragScrollRestore } from "./useDragScrollRestore.js";
@@ -38,7 +40,9 @@ export default function PlayerInventory() {
   const [mods, setMods] = useState([]);
   const [equipment, setEquipment] = useState([]);
   const [repairKits, setRepairKits] = useState(0);
+  const [weaponParts, setWeaponParts] = useState(0);
   const [repairing, setRepairing] = useState(null);
+  const [upgrading, setUpgrading] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [equipError, setEquipError] = useState(null);
   const [reloadTick, setReloadTick] = useState(0);
@@ -79,6 +83,7 @@ export default function PlayerInventory() {
         setEquipment(equipmentData.equipment || []);
         setOutfitCount(outfitData.outfits?.length ?? 0);
         if (Number.isInteger(charData.character?.repairKits)) setRepairKits(charData.character.repairKits);
+        if (Number.isInteger(charData.character?.weaponParts)) setWeaponParts(charData.character.weaponParts);
         setLoaded(true);
       })
       .catch(() => setLoaded(true));
@@ -244,7 +249,26 @@ export default function PlayerInventory() {
   // (once it hits 0%) a plain statement that only an expert can help.
   function blasterRepairAction(blaster) {
     const durability = blaster.durability ?? 100;
-    if (durability >= 100) return null;
+    const upgrade = blasterUpgradeFor(blaster.quality);
+    // Lifting a blaster to its next quality tier: parts and an Engineering roll.
+    const upgradeButton =
+      upgrade && durability > 0 ? (
+        <button
+          type="button"
+          className="panel-btn blaster-repair-btn"
+          disabled={weaponParts < upgrade.parts}
+          title={
+            weaponParts < upgrade.parts
+              ? `Upgrading needs ${upgrade.parts} Weapon Parts -- the Market stocks them when a merchant has some`
+              : `Upgrade to the next quality tier (${upgrade.parts} Weapon Parts)`
+          }
+          onClick={() => setUpgrading(blaster)}
+        >
+          <HammerIcon weight="bold" />
+          Upgrade ({upgrade.parts} parts)
+        </button>
+      ) : null;
+    if (durability >= 100) return upgradeButton;
     if (durability <= 0) {
       return (
         <Hint align="end" title="Beyond a kit" tip={<p>This blaster is broken. A Repair Kit can't mend it -- visit an expert and ask your DM to have it restored.</p>}>
@@ -254,17 +278,22 @@ export default function PlayerInventory() {
         </Hint>
       );
     }
+    const partsNeeded = repairPartsFor(blaster.quality);
+    const missing = repairKits < 1 ? "You need a Repair Kit -- buy one at the Market" : weaponParts < partsNeeded ? `Repairs need ${partsNeeded} Weapon Parts -- the Market stocks them when a merchant has some` : undefined;
     return (
-      <button
-        type="button"
-        className="panel-btn blaster-repair-btn"
-        disabled={repairKits < 1}
-        title={repairKits < 1 ? "You need a Repair Kit -- buy one at the Market" : undefined}
-        onClick={() => setRepairing(blaster)}
-      >
-        <WrenchIcon weight="bold" />
-        Repair{repairKits > 0 ? ` (${repairKits} ${repairKits === 1 ? "kit" : "kits"})` : ""}
-      </button>
+      <>
+        <button
+          type="button"
+          className="panel-btn blaster-repair-btn"
+          disabled={Boolean(missing)}
+          title={missing}
+          onClick={() => setRepairing(blaster)}
+        >
+          <WrenchIcon weight="bold" />
+          Repair{repairKits > 0 ? ` (${repairKits} ${repairKits === 1 ? "kit" : "kits"}, ${partsNeeded} parts)` : ""}
+        </button>
+        {upgradeButton}
+      </>
     );
   }
 
@@ -455,6 +484,12 @@ export default function PlayerInventory() {
               <span className="num-tabular">{repairKits}</span> Repair {repairKits === 1 ? "Kit" : "Kits"}
             </span>
           )}
+          {blasters.length > 0 && (
+            <span className={`inv-kits ${weaponParts < 1 ? "inv-kits--none" : ""}`}>
+              <HammerIcon weight="bold" aria-hidden="true" />
+              <span className="num-tabular">{weaponParts}</span> Weapon {weaponParts === 1 ? "Part" : "Parts"}
+            </span>
+          )}
         </div>
 
         <div
@@ -541,9 +576,23 @@ export default function PlayerInventory() {
         <RepairModal
           blaster={blasters.find((b) => b.id === repairing.id) || repairing}
           kits={repairKits}
+          parts={weaponParts}
           onClose={() => setRepairing(null)}
           onResolved={(data) => {
             setRepairKits(data.repairKits);
+            setWeaponParts(data.weaponParts);
+            setBlasters((prev) => prev.map((b) => (b.id === data.blaster.id ? data.blaster : b)));
+          }}
+        />
+      )}
+
+      {upgrading && (
+        <BlasterUpgradeModal
+          blaster={blasters.find((b) => b.id === upgrading.id) || upgrading}
+          parts={weaponParts}
+          onClose={() => setUpgrading(null)}
+          onResolved={(data) => {
+            setWeaponParts(data.weaponParts);
             setBlasters((prev) => prev.map((b) => (b.id === data.blaster.id ? data.blaster : b)));
           }}
         />

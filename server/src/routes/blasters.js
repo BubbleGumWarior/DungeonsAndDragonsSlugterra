@@ -8,7 +8,8 @@ import { syncTempoAura } from "../slugAura.js";
 import { syncAmmoBelt, announceEquipmentChange } from "../ammoBelt.js";
 import { EQUIPMENT_SLOT } from "../equipmentRules.js";
 import { skillModifier } from "../characterRules.js";
-import { DURABILITY_MAX, REPAIR_DC, REPAIR_FAIL_DAMAGE } from "../careRules.js";
+import { DURABILITY_MAX, REPAIR_DC, REPAIR_FAIL_DAMAGE, blasterUpgradeFor, repairPartsFor } from "../careRules.js";
+import { getShipEffects } from "../travelService.js";
 
 const router = Router();
 
@@ -283,7 +284,7 @@ router.post("/:id/repair", async (req, res) => {
   try {
     await client.query("BEGIN");
     const { rows: chars } = await client.query(
-      "SELECT stats, proficiencies, repair_kits FROM characters WHERE user_id = $1 FOR UPDATE",
+      "SELECT stats, proficiencies, repair_kits, weapon_parts FROM characters WHERE user_id = $1 FOR UPDATE",
       [req.user.sub]
     );
     const character = chars[0];
@@ -306,17 +307,26 @@ router.post("/:id/repair", async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "You don't have a Repair Kit -- buy one at the Market." });
     }
+    const partsNeeded = repairPartsFor(blaster.quality);
+    if (character.weapon_parts < partsNeeded) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        error: `This repair needs ${partsNeeded} Weapon Parts and you have ${character.weapon_parts}. The Market stocks them when a merchant has some.`,
+      });
+    }
 
     const die = 1 + Math.floor(Math.random() * 20);
-    const modifier = skillModifier(character.stats, character.proficiencies, "engineering");
+    // A Workshop aboard adds to the roll.
+    const workshopBonus = (await getShipEffects()).repairBonus ?? 0;
+    const modifier = skillModifier(character.stats, character.proficiencies, "engineering") + workshopBonus;
     const total = die + modifier;
     const success = total > REPAIR_DC;
     const next = success ? DURABILITY_MAX : Math.max(0, durability - REPAIR_FAIL_DAMAGE);
 
     const { rows } = await client.query("UPDATE blasters SET durability = $1 WHERE id = $2 RETURNING *", [next, id]);
     const { rows: left } = await client.query(
-      "UPDATE characters SET repair_kits = repair_kits - 1 WHERE user_id = $1 RETURNING repair_kits",
-      [req.user.sub]
+      "UPDATE characters SET repair_kits = repair_kits - 1, weapon_parts = weapon_parts - $2 WHERE user_id = $1 RETURNING repair_kits, weapon_parts",
+      [req.user.sub, partsNeeded]
     );
     await client.query("COMMIT");
 
@@ -325,12 +335,102 @@ router.post("/:id/repair", async (req, res) => {
     res.json({
       blaster: updated,
       repairKits: left[0].repair_kits,
-      roll: { die, modifier, total, dc: REPAIR_DC, success, before: durability, after: next },
+      weaponParts: left[0].weapon_parts,
+      roll: { die, modifier, workshopBonus, total, dc: REPAIR_DC, success, parts: partsNeeded, before: durability, after: next },
     });
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
     console.error(err);
     res.status(500).json({ error: "Could not repair that blaster." });
+  } finally {
+    client.release();
+  }
+});
+
+// A player lifts their own blaster to the next quality tier with Weapon Parts and
+// an Engineering roll (d20 + Engineering + any Workshop bonus, against the tier's
+// DC; a natural 20 always lands). A hit spends all the parts and raises the
+// quality (better accuracy, fewer misfires, slower wear); a miss spends half of
+// them, rounded up, and changes nothing. A broken blaster has to be mended first,
+// and gear in a live fight can't be reworked.
+router.post("/:id/upgrade", async (req, res) => {
+  const id = Number(req.params.id);
+  if (req.user.role === "Dungeon Master") {
+    return res.status(403).json({ error: "Only players upgrade with parts -- edit the blaster directly instead." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows: chars } = await client.query(
+      "SELECT stats, proficiencies, weapon_parts FROM characters WHERE user_id = $1 FOR UPDATE",
+      [req.user.sub]
+    );
+    const character = chars[0];
+    const { rows: found } = await client.query("SELECT * FROM blasters WHERE id = $1 FOR UPDATE", [id]);
+    const blaster = found[0];
+    if (!character || !blaster || blaster.user_id !== req.user.sub) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Blaster not found." });
+    }
+    const upgrade = blasterUpgradeFor(blaster.quality);
+    const refuse = async (message) => {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: message });
+    };
+    if (!upgrade) return refuse("This blaster is already Legendary.");
+    if ((blaster.durability ?? DURABILITY_MAX) <= 0) return refuse("Mend this blaster first -- a broken one can't be reworked.");
+    const { rows: inFight } = await client.query(
+      `SELECT 1 FROM combatants c JOIN encounters e ON e.id = c.encounter_id
+       WHERE e.status = 'active' AND c.kind = 'character' AND c.ref_user_id = $1 LIMIT 1`,
+      [req.user.sub]
+    );
+    if (inFight[0]) return refuse("You can't rework a weapon mid-fight.");
+    if (character.weapon_parts < upgrade.parts) {
+      return refuse(`This upgrade needs ${upgrade.parts} Weapon Parts and you have ${character.weapon_parts}.`);
+    }
+
+    const die = 1 + Math.floor(Math.random() * 20);
+    const workshopBonus = (await getShipEffects()).repairBonus ?? 0;
+    const modifier = skillModifier(character.stats, character.proficiencies, "engineering") + workshopBonus;
+    const total = die + modifier;
+    const crit = die === 20;
+    const success = crit || total >= upgrade.dc;
+    const spent = success ? upgrade.parts : Math.ceil(upgrade.parts / 2);
+
+    const { rows } = await client.query("UPDATE blasters SET quality = $1 WHERE id = $2 RETURNING *", [
+      success ? upgrade.to : blaster.quality,
+      id,
+    ]);
+    const { rows: left } = await client.query(
+      "UPDATE characters SET weapon_parts = weapon_parts - $1 WHERE user_id = $2 RETURNING weapon_parts",
+      [spent, req.user.sub]
+    );
+    await client.query("COMMIT");
+
+    const updated = toClientBlaster(rows[0]);
+    broadcastAll({ type: "blaster-updated", userId: updated.userId, blaster: updated });
+    res.json({
+      blaster: updated,
+      weaponParts: left[0].weapon_parts,
+      roll: {
+        die,
+        modifier,
+        workshopBonus,
+        total,
+        dc: upgrade.dc,
+        crit,
+        success,
+        parts: upgrade.parts,
+        spent,
+        fromQuality: blaster.quality,
+        toQuality: success ? upgrade.to : blaster.quality,
+      },
+    });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error(err);
+    res.status(500).json({ error: "Could not upgrade that blaster." });
   } finally {
     client.release();
   }

@@ -8,6 +8,7 @@ import {
   EyeSlashIcon,
   FirstAidKitIcon,
   FlaskIcon,
+  HammerIcon,
   HandshakeIcon,
   PawPrintIcon,
   PlusIcon,
@@ -17,6 +18,7 @@ import {
   WrenchIcon,
   PackageIcon,
   PillIcon,
+  RocketIcon,
   ToolboxIcon,
   TShirtIcon,
 } from "@phosphor-icons/react";
@@ -34,6 +36,7 @@ import "./MarketShop.css";
 
 const CATEGORIES = [
   { key: "supply", label: "Supplies", icon: <PackageIcon weight="bold" /> },
+  { key: "ship_supply", label: "Parts", icon: <RocketIcon weight="bold" /> },
   { key: "mod", label: "Blaster Mods", icon: <WrenchIcon weight="bold" /> },
   { key: "mecha_mod", label: "Mecha Mods", icon: <CubeIcon weight="bold" /> },
   { key: "blaster", label: "Blasters", icon: <TargetIcon weight="bold" /> },
@@ -54,11 +57,16 @@ const SUPPLY_ICONS = {
   meds: <PillIcon weight="duotone" />,
 };
 
+// Goods bought by the handful, with a quantity box.
+const BULK_KINDS = new Set(["supply", "ship_supply", "weapon_supply"]);
+
 // Supply key -> the field on the player's `me` counts.
 const SUPPLY_FIELD = Object.fromEntries(SUPPLIES.map((s) => [s.key, s.field]));
 
 const KIND_LABELS = {
   supply: "Supply",
+  ship_supply: "Ship Supply",
+  weapon_supply: "Weapon Parts",
   mod: "Blaster Mod",
   mecha_mod: "Mecha Mod",
   blaster: "Blaster",
@@ -114,7 +122,8 @@ export default function MarketShop() {
   const grouped = useMemo(() => {
     const out = {};
     for (const c of CATEGORIES) out[c.key] = [];
-    for (const it of data?.items ?? []) (out[it.kind] ??= []).push(it);
+    // Weapon Parts sit beside the ship's supplies on the Parts tab.
+    for (const it of data?.items ?? []) (out[it.kind === "weapon_supply" ? "ship_supply" : it.kind] ??= []).push(it);
     return out;
   }, [data]);
 
@@ -269,7 +278,7 @@ export default function MarketShop() {
             return (
               <article key={item.key} className={`market-item${item.hidden ? " market-item--hidden" : ""}`}>
                 <div className="market-item-art">
-                  {item.image ? <img src={item.image} alt="" loading="lazy" /> : SUPPLY_ICONS[item.key] ?? equipmentIcon(item) ?? kindIcon(item.kind)}
+                  {item.image ? <img src={item.image} alt="" loading="lazy" /> : item.kind === "weapon_supply" ? <HammerIcon weight="duotone" /> : SUPPLY_ICONS[item.key] ?? equipmentIcon(item) ?? kindIcon(item.kind)}
                 </div>
                 <div className="market-item-body">
                   <div className="market-item-top">
@@ -277,6 +286,20 @@ export default function MarketShop() {
                     <span className="market-item-kind">{KIND_LABELS[item.kind]}</span>
                   </div>
                   {item.description && <p className="market-item-desc">{item.description}</p>}
+                  {item.kind === "ship_supply" && data.stores && (
+                    <p className="market-owned">
+                      In the ship's stores{" "}
+                      <strong className="num-tabular">
+                        {data.stores.used} of {data.stores.capacity}
+                      </strong>{" "}
+                      held
+                    </p>
+                  )}
+                  {item.kind === "weapon_supply" && !isDM && (
+                    <p className="market-owned">
+                      In your pack <strong className="num-tabular">×{data.me?.weaponParts ?? 0}</strong>
+                    </p>
+                  )}
                   {item.kind === "supply" && !isDM && (
                     <p className="market-owned">
                       In your pack <strong className="num-tabular">×{data.me?.[SUPPLY_FIELD[item.key]] ?? 0}</strong>
@@ -296,7 +319,7 @@ export default function MarketShop() {
                   <div className="market-price">
                     <CoinsIcon weight="fill" />
                     <span className={`market-price-now num-tabular${reduced ? " market-price-now--good" : dearer ? " market-price-now--bad" : ""}`}>
-                      {item.kind === "supply" && !isDM ? item.price * qtyOf(item) : item.price}
+                      {BULK_KINDS.has(item.kind) && !isDM ? item.price * qtyOf(item) : item.price}
                     </span>
                     {(reduced || dearer) && <s className="market-price-was num-tabular">{item.basePrice}</s>}
                     {item.quantity != null && <span className="market-stock">{item.quantity} left</span>}
@@ -304,7 +327,7 @@ export default function MarketShop() {
 
                   {!isDM && (
                     <div className="market-buy">
-                      {item.kind === "supply" && (
+                      {BULK_KINDS.has(item.kind) && (
                         <input
                           type="number"
                           className="market-qty"
@@ -321,7 +344,7 @@ export default function MarketShop() {
                         type="button"
                         className="panel-btn"
                         disabled={busyKey === item.key || item.owned}
-                        onClick={() => buy(item, item.kind === "supply" ? qtyOf(item) : 1)}
+                        onClick={() => buy(item, BULK_KINDS.has(item.kind) ? qtyOf(item) : 1)}
                       >
                         {item.owned ? "Owned" : "Buy"}
                       </button>

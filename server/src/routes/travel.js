@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
-import { isValidArea } from "../shipRules.js";
+import { isValidArea, navCanReach } from "../shipRules.js";
 import {
   buildTravelView,
   clearProposal,
   getActiveShip,
-  navComputerWorking,
+  navReach,
   notifyTravelUpdated,
   resetTravel,
   settleProposal,
@@ -56,8 +56,14 @@ router.post("/propose", async (req, res) => {
     }
     if (area === (await partyArea())) return res.status(400).json({ error: "The party is already there." });
     if (!(await getActiveShip())) return res.status(409).json({ error: "The party has no ship to travel in." });
-    if (!(await navComputerWorking())) {
+    const reach = await navReach();
+    if (!reach.working) {
       return res.status(409).json({ error: "The ship's Nav Computer isn't working, so the party can't plot a course." });
+    }
+    if (!navCanReach(reach.range, await partyArea(), area)) {
+      return res.status(409).json({
+        error: "That world is beyond the Nav Computer's range. Upgrade it to chart farther.",
+      });
     }
 
     await pool.query("UPDATE travel_state SET proposal_area = $1, proposer_id = $2 WHERE id = 1", [area, req.user.sub]);

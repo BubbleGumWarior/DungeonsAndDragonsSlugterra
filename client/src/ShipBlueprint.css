@@ -737,3 +737,73 @@
   line-height: 1.3;
   pointer-events: none;
 }
+
+/* ---- building and upgrading ---------------------------------------------- */
+
+/* An online compartment being lifted to its next tier keeps its colour but
+   wears a slow gold ring, so the crew can see work is under way. */
+.ship-node--upgrading .ship-node-dot {
+  animation: ship-node-upgrade 1.8s ease-in-out infinite;
+}
+
+@keyframes ship-node-upgrade {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px var(--flag), 0 1px 4px rgba(0, 0, 0, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 1px var(--flag), 0 0 0 4px rgba(224, 165, 60, 0.55);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ship-node--upgrading .ship-node-dot {
+    animation: none;
+    box-shadow: 0 0 0 1px var(--flag), 0 0 0 3px rgba(224, 165, 60, 0.55);
+  }
+}
+
+.ship-quote {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.ship-quote strong {
+  color: var(--gold-soft);
+}
+
+.ship-quote-short,
+.ship-quote-short strong {
+  color: #ff7a6b;
+}
+
+.ship-result {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--charcoal-600);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: rgba(7, 7, 11, 0.5);
+}
+
+.ship-result--good {
+  border-color: #49b675;
+}
+
+.ship-result--bad {
+  border-color: #ff7a6b;
+}
+
+.ship-stores-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}

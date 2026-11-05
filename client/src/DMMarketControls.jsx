@@ -164,6 +164,8 @@ export default function DMMarketControls({ data, planetName, dmCall, token }) {
               <option value="equipment">Equipment</option>
               <option value="mecha">Mecha-Beast</option>
               <option value="slug">Slug</option>
+              <option value="ship_supply">Ship Supplies</option>
+              <option value="weapon_supply">Weapon Parts</option>
             </select>
           </label>
           <label className="dmm-field dmm-field--grow">

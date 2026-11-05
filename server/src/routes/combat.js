@@ -8,6 +8,7 @@ import { TIER_LABELS as MECHA_TIER_LABELS, effectiveMechaStats } from "../mechaR
 import { LOYALTY_TIER_MIN, LOYALTY_TIER_MAX, RARITY_MAX } from "../slugRules.js";
 import { loyaltyPerShot, LOYALTY_FULL_EPSILON, LOYALTY_TIER_LABELS } from "../loyaltyRules.js";
 import { wearPerShot } from "../careRules.js";
+import { getShipEffects } from "../travelService.js";
 import { toClientSlug } from "./slugs.js";
 import { toClientBlaster } from "./blasters.js";
 import { toClientCharacter } from "./characters.js";
@@ -3218,9 +3219,11 @@ async function breakPods(attacker, slugIds) {
 // a stronger-quality weapon wears slower. NPC/grunt blasters don't track wear.
 async function wearBlaster(blaster) {
   if (!blaster?.id) return;
+  // An Armory aboard slows the wear.
+  const { wearCutPct } = await getShipEffects();
   const { rows } = await pool.query(
     "UPDATE blasters SET durability = ROUND(GREATEST(0, durability - $1)::numeric, 3)::double precision WHERE id = $2 RETURNING *",
-    [wearPerShot(blaster.quality), blaster.id]
+    [wearPerShot(blaster.quality) * (1 - (wearCutPct || 0) / 100), blaster.id]
   );
   if (rows[0]) broadcastAll({ type: "blaster-updated", userId: rows[0].user_id, blaster: toClientBlaster(rows[0]) });
 }

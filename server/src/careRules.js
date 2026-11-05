@@ -48,6 +48,7 @@ export const TRADEABLE_SUPPLIES = {
   medpacks: "medpacks",
   revivalTonics: "revival_tonics",
   meds: "meds",
+  weaponParts: "weapon_parts",
 };
 
 // ---- Blaster durability ------------------------------------------------------
@@ -66,6 +67,33 @@ export function wearPerShot(quality) {
 export const REPAIR_DC = 15;
 export const REPAIR_FAIL_DAMAGE = 10;
 export const REPAIR_KIT_PRICE = 60;
+
+// ---- Weapon parts ------------------------------------------------------------
+// Repairing a blaster needs a Repair Kit and spare parts, and so does lifting it
+// to the next quality tier. Parts are a personal supply the DM lists in a market
+// (they are never on the shelves by default), like the ship's supplies.
+export const WEAPON_PARTS_PRICE = 12;
+// Parts one kit job eats, by the blaster's quality (Crude .. Legendary). Spent
+// whatever the roll, like the kit.
+export const REPAIR_PARTS = [2, 3, 4, 5, 6];
+
+export function repairPartsFor(quality) {
+  return REPAIR_PARTS[quality] ?? REPAIR_PARTS[0];
+}
+
+// Upgrading a blaster one quality tier: parts, and the Engineering DC. A total at
+// or above the DC (or a natural 20) lands; a miss spends half the parts, rounded up.
+export const BLASTER_UPGRADES = [
+  { to: 1, parts: 6, dc: 10 },
+  { to: 2, parts: 10, dc: 12 },
+  { to: 3, parts: 16, dc: 14 },
+  { to: 4, parts: 24, dc: 16 },
+];
+
+// What lifting a blaster of this quality to the next tier takes; null at the top.
+export function blasterUpgradeFor(quality) {
+  return BLASTER_UPGRADES.find((u) => u.to === quality + 1) ?? null;
+}
 
 // ---- Merchants' mood after a rest --------------------------------------------
 // Weighted toward Neutral so the extremes (Furious, Generous) stay rare.

@@ -21,7 +21,7 @@ import {
 } from "../careRules.js";
 import { MARKET_MOODS, moodPctFor } from "../marketRules.js";
 import { LOYALTY_TIER_MIN } from "../slugRules.js";
-import { advanceDay, medbayWorking } from "../travelService.js";
+import { advanceDay, getShipEffects } from "../travelService.js";
 import { giveStarterOutfits } from "../seedDefaultOutfits.js";
 import { announceOutfitsChanged, getClimate, getWornOutfit } from "../outfitService.js";
 import { climateSide, degreesOutside, effectiveRange, illnessChance } from "../outfitRules.js";
@@ -54,6 +54,7 @@ export function toClientCharacter(row) {
     pods: row.pods,
     kibble: row.kibble,
     repairKits: row.repair_kits,
+    weaponParts: row.weapon_parts ?? 0,
     energyCells: row.energy_cells,
     medpacks: row.medpacks,
     revivalTonics: row.revival_tonics,
@@ -249,16 +250,20 @@ router.get("/long-rest/preview", requireDungeonMaster, async (req, res) => {
        WHERE s.user_id IS NOT NULL AND s.food <= 0
        ORDER BY s.created_at ASC`
     );
+    const fx = await getShipEffects();
+    // A Tier III Terrarium keeps one starving slug a night from paying for it.
+    let spares = fx.spareSlugs;
     res.json({
       skippedInCombat: inCombat.size,
-      medbay: await medbayWorking(),
+      medbay: fx.restHealsFully,
+      foodDrain: Math.max(0, FOOD_DRAIN_PER_REST - fx.foodDrainCut),
       starving: rows
         .filter((r) => !inCombat.has(r.user_id))
         .map((r) => ({
           slugId: r.id,
           slugName: r.name,
           ownerName: r.owner_name,
-          outcome: r.loyalty_tier <= LOYALTY_TIER_MIN ? "leave" : "loyalty",
+          outcome: spares-- > 0 ? "spared" : r.loyalty_tier <= LOYALTY_TIER_MIN ? "leave" : "loyalty",
         })),
     });
   } catch (err) {
@@ -280,7 +285,9 @@ router.post(["/long-rest", "/heal-all"], requireDungeonMaster, async (req, res) 
     const inCombat = await charactersInCombat();
     // Read before the night's day-advance, so a Medbay that finishes building
     // while the party sleeps only helps from the next rest.
-    const medbay = await medbayWorking();
+    const fx = await getShipEffects();
+    const medbay = fx.restHealsFully;
+    const foodDrain = Math.max(0, FOOD_DRAIN_PER_REST - fx.foodDrainCut);
 
     const { rows: allCharacters } = await pool.query("SELECT * FROM characters");
     const characters = allCharacters.filter((c) => !inCombat.has(c.user_id));
@@ -288,6 +295,13 @@ router.post(["/long-rest", "/heal-all"], requireDungeonMaster, async (req, res) 
     // Foraging: a Survival modifier of 1+ turns the night into d6 + modifier
     // scoops of kibble, found while the rest of the party sleeps.
     const foraged = [];
+    // The Galley's cook turns up kibble for the party too, dealt out one scoop at a time.
+    const galleyShare = new Map();
+    for (let i = 0; i < fx.galleyKibble && characters.length > 0; i++) {
+      const userId = characters[i % characters.length].user_id;
+      galleyShare.set(userId, (galleyShare.get(userId) ?? 0) + 1);
+    }
+    const galley = [];
     for (const c of characters) {
       const newMax = computeMaxGrit(c.stats, c.grit_bonus);
       const survivalMod = skillModifier(c.stats, c.proficiencies, "survival");
@@ -299,6 +313,9 @@ router.post(["/long-rest", "/heal-all"], requireDungeonMaster, async (req, res) 
       }
       // Without a Medbay the night only mends Grit up to half of max (never
       // lowering what they already have) and knockout pips stay where they are.
+      const fromGalley = galleyShare.get(c.user_id) ?? 0;
+      if (fromGalley > 0) galley.push({ userId: c.user_id, name: c.name, scoops: fromGalley });
+      scoops += fromGalley;
       const restGrit = medbay
         ? newMax
         : Math.min(newMax, Math.max(c.current_grit, Math.floor(newMax * NO_MEDBAY_REST_HEAL_FRACTION)));
@@ -317,9 +334,13 @@ router.post(["/long-rest", "/heal-all"], requireDungeonMaster, async (req, res) 
     const restingSlugs = allSlugs.filter((s) => !inCombat.has(s.user_id));
     const slugEvents = [];
     const staying = [];
+    let spares = fx.spareSlugs;
     for (const s of restingSlugs) {
       const base = { userId: s.user_id, ownerName: ownerNames.get(s.user_id) ?? null, slugId: s.id, slugName: s.name };
-      if (s.food <= 0) {
+      if (s.food <= 0 && spares > 0) {
+        spares -= 1;
+        slugEvents.push({ ...base, kind: "spared" });
+      } else if (s.food <= 0) {
         if (s.loyalty_tier <= LOYALTY_TIER_MIN) {
           await pool.query("DELETE FROM slugs WHERE id = $1", [s.id]);
           broadcastAll({ type: "slug-updated", userId: s.user_id, slug: null, slugId: s.id });
@@ -329,7 +350,7 @@ router.post(["/long-rest", "/heal-all"], requireDungeonMaster, async (req, res) 
         await pool.query("UPDATE slugs SET loyalty_tier = loyalty_tier - 1, loyalty_progress = 0 WHERE id = $1", [s.id]);
         slugEvents.push({ ...base, kind: "loyalty", fromTier: s.loyalty_tier, toTier: s.loyalty_tier - 1 });
       } else {
-        const next = Math.max(0, s.food - FOOD_DRAIN_PER_REST);
+        const next = Math.max(0, s.food - foodDrain);
         await pool.query("UPDATE slugs SET food = $1 WHERE id = $2", [next, s.id]);
         if (next === 0) slugEvents.push({ ...base, kind: "starving", tier: s.loyalty_tier });
       }
@@ -364,15 +385,23 @@ router.post(["/long-rest", "/heal-all"], requireDungeonMaster, async (req, res) 
     // They sleep in `restTemp`: the ship's air on a world with no surface.
     const climate = await getClimate();
     const illness = [];
+    const cured = [];
     for (const c of characters) {
       if (c.ill) {
-        if (!c.meds_taken) await pool.query("UPDATE characters SET meds_streak = 0 WHERE user_id = $1", [c.user_id]);
+        // A Tier II Medbay cures whoever slept sick, without the course of Meds.
+        if (fx.curesIllness) {
+          await pool.query("UPDATE characters SET ill = false, meds_streak = 0 WHERE user_id = $1", [c.user_id]);
+          cured.push({ userId: c.user_id, name: c.name });
+        } else if (!c.meds_taken) {
+          await pool.query("UPDATE characters SET meds_streak = 0 WHERE user_id = $1", [c.user_id]);
+        }
         continue;
       }
       const outfit = await getWornOutfit(pool, c.user_id);
       const range = effectiveRange(outfit, skillModifier(c.stats, c.proficiencies, "fortitude"));
       const outside = degreesOutside(range, climate.restTemp);
-      if (outside > 0 && Math.random() < illnessChance(outside)) {
+      // Sleeping in Crew Quarters cuts the odds.
+      if (outside > 0 && Math.random() < illnessChance(outside) * (1 - fx.illnessCutPct / 100)) {
         await pool.query("UPDATE characters SET ill = true, meds_streak = 0 WHERE user_id = $1", [c.user_id]);
         illness.push({
           userId: c.user_id,
@@ -417,9 +446,12 @@ router.post(["/long-rest", "/heal-all"], requireDungeonMaster, async (req, res) 
       at: Date.now(),
       rested: characters.length,
       medbay,
+      foodDrain,
       skippedInCombat: inCombat.size,
       slugEvents,
       foraged,
+      galley,
+      cured,
       illness,
       marketMood: { key: marketMood, pct: moodPctFor(marketMood) },
       day,

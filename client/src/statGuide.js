@@ -45,7 +45,7 @@ export const STAT_GUIDE = [
       arcana: "Tips a slug hunt toward rarer finds.",
       history: null,
       splicing: null,
-      engineering: "Work on the ship's compartments, and make Repair Kits mend a worn blaster.",
+      engineering: "Roll to build and upgrade the ship's compartments, work on them while under way, make Repair Kits mend a worn blaster, and upgrade a blaster to its next quality tier with Weapon Parts.",
       astrogation: null,
     },
   },

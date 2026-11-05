@@ -30,7 +30,8 @@ the star console** toolbar button that works with no Nav Computer at all.
 server refuses `POST /api/travel/propose` (and scraps a vote that passes after
 it went offline), `GET /api/travel` reports `navReady: false`, and the dossier's
 button reads "The Nav Computer is offline". The DM's **Launch now** and
-teleport still work. The Nav Computer keeps its +1 speed bonus.
+teleport still work. The Nav Computer keeps its +1 speed bonus at every tier, and
+**its tier sets how far it charts** (see "Nav range" below).
 
 `NavConsole.jsx` / `NavConsole.css` is a full-screen, first-person view from the
 bridge. The room is the DM's own artwork, `client/public/ship/nav-bridge.webp`
@@ -177,6 +178,10 @@ On the map a compartment is **just a dot** in its flag colour (`STATUS_META` in 
 | route | who | purpose |
 | --- | --- | --- |
 | `GET /api/ships/active` | all | the active ship (or `null`) |
+| `GET /api/ships/blueprints` | all | blueprints with tier costs, the stores, the caller's Engineering modifier |
+| `GET /api/ships/effects` | all | what the online compartments give the crew right now |
+| `POST /api/ships/compartments/:id/build`, `/upgrade` | players | the engineering roll to build on an empty slot / upgrade an online compartment |
+| `PATCH /api/ships/stores` | DM | set the ship's stores |
 | `GET /api/ships` | DM | ship registry (no images) |
 | `GET /api/ships/:id` | DM | one full ship (for the switcher) |
 | `POST /api/ships` | DM | create (first ship auto-activates) |
@@ -193,28 +198,103 @@ parked on whichever ship they were inspecting.
 
 - **Ship stats:** `ships.speed` (base units per day, DM-edited) and
   `ships.compartment_slots` (cap on pins; only *adding* a pin past it is
-  refused). Effective speed = base + the `speedBonus` of every **online**
+  refused). Effective speed = base + the speed of every **online**
   compartment (`speedBreakdown` in `shipRules.js`). A stats strip at the top of
-  the page shows speed, compartments online / placed / slots, and the voyage.
-- **Compartment fields** (inside the `compartments` JSON): `templateKey`,
-  `speedBonus`, `buildDays`, `progressDays`, `engineers` (user ids). The server
-  carries `progressDays` and `engineers` over from what is stored — the client
-  PATCHes the whole array on every drag, so it can't be allowed to overwrite
-  progress that moves on its own. Switching a pin to `building` restarts it at 0;
-  leaving `building` clears both.
-- **Templates:** 12 built-in (`DEFAULT_COMPARTMENT_TEMPLATES` in `shipRules.js`;
-  Engine Room +2, Thruster Array +3 and Nav Computer +1 speed, the rest are
-  descriptive) plus the DM's own in `compartment_templates`
+  the page shows speed, compartments online / placed / slots, the voyage and the
+  ship's stores.
+- **Compartment fields** (inside the `compartments` JSON): `templateKey`, `tier`
+  (1-3), `upgradingTo`, `speedBonus`, `buildDays`, `progressDays`, `engineers`
+  (user ids). The server carries `progressDays`, `engineers` and `upgradingTo`
+  over from what is stored: the client PATCHes the whole array on every drag, so
+  it can't be allowed to overwrite progress that moves on its own or to invent an
+  upgrade (it can only cancel one, by sending `upgradingTo: null`). Switching a
+  pin to `building` restarts it at 0; leaving `building` clears both. The DM can
+  set `tier` by hand, clamped to what the blueprint offers.
+- **Custom templates:** the DM's own, in `compartment_templates`
   (`GET/POST /api/ships/templates`, `DELETE /api/ships/templates/:id`, DM only).
-  A pin copies a template's fields when applied, so deleting one never changes a
-  ship. In the DM's detail panel: pick a template (or type your own name, days
-  and bonus), **Start building**, or **Save as template**.
+  They have one tier and no coded effect beyond a speed bonus. A pin copies a
+  template's fields when applied, so deleting one never changes a ship.
 - **Build progress per long rest** (`buildProgressPerRest`): docked, a building
-  compartment gains 1 day. Under way it gains 1 day per **engineer** assigned to
-  it, and none otherwise (the overlay reports it as stalled). A player signs on
-  with `POST /api/ships/engineer { compartmentId | null }`; it needs Engineering
-  proficiency and a player works on one compartment at a time. A finished
-  compartment goes `online` and clears its engineers.
+  (or upgrading) compartment gains 1 day. Under way it gains 1 day per
+  **engineer** assigned to it, and none otherwise (the overlay reports it as
+  stalled). A player signs on with `POST /api/ships/engineer { compartmentId | null }`;
+  it needs Engineering proficiency and a player works on one compartment at a time.
+  A finished build goes `online`; a finished upgrade raises `tier`. Either clears
+  its engineers.
+
+## Building and upgrading (the crew's side)
+
+Players build and upgrade from the Deck Plan, paying in ship supplies and rolling
+Engineering. The rules are in `server/src/shipRules.js` (blueprints, `shipEffects`,
+`workQuote`, `resolveWorkRoll`); `node scripts/ship-check.mjs` checks them.
+
+- **Blueprints.** The 15 built-in compartments each have up to three tiers (I-III),
+  a cost in supplies, build days, an Engineering DC and an effect. **Bridge, Pub,
+  Bathroom and Lexical Graft have one tier** (no upgrades). **Thruster Array and
+  Lexical Graft are not on the crew's build list**: the DM places them, and the crew
+  can still upgrade a Thruster Array. `GET /api/ships/blueprints` (all users) returns
+  them with costs, the stores and the caller's own Engineering modifier.
+- **Building** happens only on an **empty slot the DM placed** (the dashed `+` pins).
+  Clicking one shows the buildable blueprints. Players can't add pins; the DM does.
+- **Upgrading** is offered on an **online** compartment below its top tier. It keeps
+  working at its old tier while the upgrade runs (`upgradingTo` is set on the pin),
+  and the pin pulses gold.
+- **Supplies.** Tier I uses **Ship Parts**, Tier II **Ship Components**, Tier III
+  **Ship Cores**. They live in the party's *shared* stores
+  (`campaign_settings.ship_parts/ship_components/ship_cores`), up to a capacity of 12
+  until a Cargo Hold raises it (20 / 40 / 80). The DM can also set them
+  (`PATCH /api/ships/stores`, shown as editable fields on the stats strip).
+- **Supplies are not on the shelves by default.** They are a market listing kind,
+  `ship_supply` (`market_listings.template_id` is the grade, 1-3). The DM posts them
+  for the current world with *Post listing > Ship Supplies*, with a price (defaults 15 /
+  45 / 120) and optional stock. Players see a "Ship Supplies" tab only once one is
+  listed, and buy up to 20 at a time, limited by stock and by room in the stores.
+- **The roll** (`POST /api/ships/compartments/:id/build { templateKey }` and `.../upgrade`):
+  one player rolls d20 + Engineering (+ the Workshop's build bonus) against the tier's
+  DC. A total at or above the DC, or a natural 20, succeeds. Success spends the full
+  cost and starts the work (a natural 20 saves a day). A miss spends **half** the
+  cost, rounded up, and starts nothing; the party can try again. It runs in one
+  transaction that locks the ship row and the stores, so two players can't both spend
+  the same supplies.
+- **Everyone is told.** The result is written to the Events feed as a System message
+  (`meta.type: "ship-build"`: who, what, the dice, DC, outcome) and broadcast as
+  `chat-message`, and also as `ship-build-result`, which raises a toast for every
+  player (`ShipBuildToasts.jsx`). Finished builds and upgrades show in the long-rest
+  overlay.
+
+### What each compartment gives
+
+Read from one place, `shipEffects(compartments)` (online compartments only; duplicates
+of a kind don't stack, speed does). Numbers are placeholders to tune in `shipRules.js`.
+
+| Compartment | Tier I / II / III | Hooks into |
+| --- | --- | --- |
+| Engine Room | speed +2 / +3 / +4 | `speedBreakdown` |
+| Thruster Array | speed +3 / +4 / +6 | `speedBreakdown` |
+| Nav Computer | speed +1; charts close / medium / all worlds | travel gate, `navCanReach` |
+| Medbay | full long-rest heal + knockout pips / also cures illness overnight / Medpacks heal 75% | `characters.js` long rest, `consumables.js` |
+| Galley | 2 / 4 / 6 free kibble per long rest, dealt round-robin to the party | long rest |
+| Slug Terrarium | food drain -5 / -10 / -15; III keeps one starving slug a rest from losing loyalty | long rest |
+| Crew Quarters | illness chance -25% / -50% / -100% | long rest |
+| Workshop | Repair Kit rolls +2 / +4 / +6; ship-build rolls +1 / +2 / +3 | `blasters.js`, build roll |
+| Armory | blaster wear -10% / -20% / -30% | `combat.js` `wearBlaster` |
+| Cargo Hold | stores hold 20 / 40 / 80 | stores capacity |
+| Observatory | unvisited worlds show atmosphere and gravity / every survey fact / picture and text too | the `???` rule in `GalaxyMap.jsx` |
+| Bridge, Pub, Bathroom, Lexical Graft | flavour only | |
+
+Combat asks for the effects on every shot, so `getShipEffects()` in `travelService.js`
+caches them for 3 seconds and `notifyShipUpdated()` clears the cache.
+
+### Nav range
+
+A Nav Computer charts worlds by distance: **Tier I up to 13 units** (any hop inside one
+system, and The Threshold's nearest worlds), **Tier II up to 30** (The Threshold and
+the nearer systems), **Tier III every world** (`CLOSE_RANGE_MAX` / `MEDIUM_RANGE_MAX`
+in `shipRules.js`, mirrored in the client's `NAV_RANGE_LABELS`). `POST /api/travel/propose`
+refuses a world out of range, `GET /api/travel` marks each route `reachable`, and the
+dossier's button reads "Beyond the Nav Computer's range". The DM's **Launch now** and
+teleport ignore it. Existing Nav Computers count as Tier I until the DM sets or
+upgrades them.
 
 ## Survey data, and ??? for worlds nobody has visited
 

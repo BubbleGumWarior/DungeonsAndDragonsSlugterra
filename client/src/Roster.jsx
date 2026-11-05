@@ -170,7 +170,7 @@ export default function Roster({ selectable = false, selectedUserId, onSelect, h
               {preview && !preview.medbay
                 ? `The ship has no working Medbay: everyone not in a fight only mends up to ${Math.round(NO_MEDBAY_REST_HEAL_FRACTION * 100)}% of max Grit and keeps their knockout pips, and their slugs recharge.`
                 : "Everyone not in a fight heals fully and their slugs recharge."}{" "}
-              Every slug loses {FOOD_DRAIN_PER_REST}% of its food, and the merchants wake up in a new mood.
+              Every slug loses {preview?.foodDrain ?? FOOD_DRAIN_PER_REST}% of its food, and the merchants wake up in a new mood.
             </p>
             {preview?.skippedInCombat > 0 && (
               <p className="roster-confirm-note">
@@ -185,8 +185,12 @@ export default function Roster({ selectable = false, selectedUserId, onSelect, h
                     <WarningIcon weight="fill" />
                     <span>
                       <strong>{s.slugName}</strong>
-                      {s.ownerName ? ` (${s.ownerName})` : ""} is starving and will{" "}
-                      {s.outcome === "leave" ? "leave the party" : "lose a loyalty tier"}.
+                      {s.ownerName ? ` (${s.ownerName})` : ""} is starving
+                      {s.outcome === "spared"
+                        ? ", but the Terrarium will see it through the night."
+                        : s.outcome === "leave"
+                          ? " and will leave the party."
+                          : " and will lose a loyalty tier."}
                     </span>
                   </li>
                 ))}

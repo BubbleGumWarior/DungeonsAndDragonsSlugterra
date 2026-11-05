@@ -1,5 +1,6 @@
 import { CheckIcon, GaugeIcon, PathIcon, RocketLaunchIcon, XIcon } from "@phosphor-icons/react";
 import { PLANETS } from "./planetData.js";
+import { NAV_RANGE_LABELS } from "./shipData.js";
 import "./TravelPanel.css";
 
 const worldName = (i) => PLANETS[i]?.name ?? "Unknown";
@@ -132,6 +133,11 @@ export default function TravelPanel({ travel, isDungeonMaster, act, busy, error 
               {ship ? "Pick a world on the map and propose a course." : "Without a ship the party can't travel."}
             </span>
           </p>
+          {ship && travel.navReady && (
+            <p className="travel-sub">
+              The Nav Computer (Tier {travel.navTier}) charts: {NAV_RANGE_LABELS[travel.navRange].toLowerCase()}.
+            </p>
+          )}
         </div>
       )}
 

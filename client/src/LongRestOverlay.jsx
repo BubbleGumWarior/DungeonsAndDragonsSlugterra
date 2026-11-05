@@ -14,6 +14,7 @@ import { useLiveState } from "./AccessSocket.jsx";
 import { PLANETS } from "./planetData.js";
 import { LOYALTY_TIER_LABELS } from "./slugData.js";
 import { FOOD_DRAIN_PER_REST, MEDS_DOSES_NEEDED, NO_MEDBAY_REST_HEAL_FRACTION } from "./careData.js";
+import { ROMAN } from "./shipData.js";
 import "./LongRestOverlay.css";
 
 const AUTO_CLOSE_MS = 5200;
@@ -36,6 +37,12 @@ function describeEvent(event, who) {
           : `${event.slugName} is starving. Feed it before the next long rest or it will ${penalty}.`,
       };
     }
+    case "spared":
+      return {
+        tone: "warn",
+        icon: <PlantIcon weight="fill" />,
+        text: `${owner}${event.slugName} was starving, but the Terrarium saw it through the night with its loyalty intact.`,
+      };
     case "loyalty":
       return {
         tone: "bad",
@@ -70,11 +77,18 @@ function shipNews(day) {
     });
   }
   for (const b of day.builds || []) {
-    const text = b.completed
-      ? `${b.label || "A compartment"} is finished and online.`
+    const name = b.label || "A compartment";
+    const text = b.upgrade
+      ? b.completed
+        ? `${name} has been upgraded to Tier ${ROMAN[b.tier]}.`
+        : b.stalled
+        ? `${name}'s upgrade is stalled: nobody is engineering it while the ship is under way.`
+        : `${name}: upgrade to Tier ${ROMAN[b.tier]}, ${b.progress} of ${b.buildDays} days done.`
+      : b.completed
+      ? `${name} is finished and online.`
       : b.stalled
-      ? `${b.label || "A compartment"} is stalled: nobody is engineering it while the ship is under way.`
-      : `${b.label || "A compartment"}: ${b.progress} of ${b.buildDays} days built.`;
+      ? `${name} is stalled: nobody is engineering it while the ship is under way.`
+      : `${name}: ${b.progress} of ${b.buildDays} days built.`;
     lines.push({ key: `build-${b.label}-${b.progress}`, icon: <WrenchIcon weight="bold" />, text });
   }
   return lines;
@@ -141,6 +155,23 @@ export default function LongRestOverlay() {
           text: `${isDM ? `${e.name} woke` : "You woke"} up sick. ${e.temp} °C was ${e.outside} °C too ${e.side === "cold" ? "cold" : "hot"} for ${e.outfit ?? "their clothes"}. ${isDM ? "They need" : "Take"} Meds ${MEDS_DOSES_NEEDED} rests in a row.`,
         }))
     : [];
+  // The ship's own doing: the cook's kibble and anyone the Medbay cured overnight.
+  const shipRows = shown
+    ? [
+        ...(shown.galley || [])
+          .filter((g) => isDM || g.userId === user?.id)
+          .map((g) => ({
+            key: `galley-${g.userId}`,
+            text: `${isDM ? `${g.name} was given` : "The Galley's cook set aside"} ${g.scoops} ${g.scoops === 1 ? "scoop" : "scoops"} of Slug Kibble.`,
+          })),
+        ...(shown.cured || [])
+          .filter((c) => isDM || c.userId === user?.id)
+          .map((c) => ({
+            key: `cured-${c.userId}`,
+            text: `${isDM ? `${c.name} was` : "You were"} cured of illness by the Medbay.`,
+          })),
+      ]
+    : [];
   const mood = shown?.marketMood;
   const news = shown ? shipNews(shown.day) : [];
   const hasConsequences = rows.length > 0 || illnessRows.length > 0;
@@ -177,8 +208,8 @@ export default function LongRestOverlay() {
         <p className="rest-sub">
           {shown.rested > 0
             ? shown.medbay === false
-              ? `With no working Medbay, Grit only mends to ${Math.round(NO_MEDBAY_REST_HEAL_FRACTION * 100)}% and knockout pips remain. Every slug is recharged, though each lost ${FOOD_DRAIN_PER_REST}% of its food.`
-              : `Grit is restored and every slug is recharged, though each lost ${FOOD_DRAIN_PER_REST}% of its food.`
+              ? `With no working Medbay, Grit only mends to ${Math.round(NO_MEDBAY_REST_HEAL_FRACTION * 100)}% and knockout pips remain. Every slug is recharged, though each lost ${shown.foodDrain ?? FOOD_DRAIN_PER_REST}% of its food.`
+              : `Grit is restored and every slug is recharged, though each lost ${shown.foodDrain ?? FOOD_DRAIN_PER_REST}% of its food.`
             : "Nobody was free to rest -- everyone is still in the fight."}
         </p>
 
@@ -192,6 +223,13 @@ export default function LongRestOverlay() {
             ))}
           </ul>
         )}
+
+        {shipRows.map((f) => (
+          <p key={f.key} className="rest-mood">
+            <WrenchIcon weight="bold" />
+            <span>{f.text}</span>
+          </p>
+        ))}
 
         {forage.map((f) => (
           <p key={f.key} className="rest-mood">

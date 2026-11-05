@@ -632,7 +632,7 @@ export async function initSchema() {
   // Ship stats. `speed` is distance units covered per day of travel (a
   // compartment's speed bonus stacks on top while it is online);
   // `compartment_slots` caps how many compartment pins the deck plan can hold.
-  // Compartments themselves also carry templateKey / speedBonus / buildDays /
+  // Compartments themselves also carry templateKey / tier / upgradingTo / speedBonus / buildDays /
   // progressDays / engineers inside the `compartments` JSON -- see shipRules.js.
   await pool.query(`
     ALTER TABLE ships ADD COLUMN IF NOT EXISTS speed INTEGER NOT NULL DEFAULT 5;
@@ -651,6 +651,15 @@ export async function initSchema() {
       speed_bonus INTEGER NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+  `);
+
+  // The party's shared ship stores: the supplies compartments are built and
+  // upgraded from, one counter per grade (see SUPPLY_GRADES in shipRules.js).
+  // Players buy them from a market listing the DM posts; the DM can also set them.
+  await pool.query(`
+    ALTER TABLE campaign_settings ADD COLUMN IF NOT EXISTS ship_parts INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE campaign_settings ADD COLUMN IF NOT EXISTS ship_components INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE campaign_settings ADD COLUMN IF NOT EXISTS ship_cores INTEGER NOT NULL DEFAULT 0;
   `);
 
   // The campaign calendar and the party's voyage. A long rest is one day: it
@@ -1218,6 +1227,8 @@ export async function initSchema() {
   // Slug Kibble and Repair Kits are carried supplies, like pods.
   await pool.query(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS kibble INTEGER NOT NULL DEFAULT 0;`);
   await pool.query(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS repair_kits INTEGER NOT NULL DEFAULT 0;`);
+  // Spare parts for repairing and upgrading blasters (see careRules.js, REPAIR_PARTS).
+  await pool.query(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS weapon_parts INTEGER NOT NULL DEFAULT 0;`);
   await pool.query(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS energy_cells INTEGER NOT NULL DEFAULT 0;`);
   await pool.query(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS medpacks INTEGER NOT NULL DEFAULT 0;`);
   await pool.query(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS revival_tonics INTEGER NOT NULL DEFAULT 0;`);

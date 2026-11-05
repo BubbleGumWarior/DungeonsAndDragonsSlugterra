@@ -662,6 +662,21 @@
   border-color: var(--gold-dim);
 }
 
+.chat-event--ship .chat-event-node {
+  color: var(--gold);
+  border-color: var(--gold-dim);
+}
+
+.chat-event--ship-good .chat-event-node {
+  background: var(--gold);
+  border-color: var(--gold-soft);
+  color: var(--charcoal-950);
+}
+
+.chat-event--ship-bad .chat-event-text {
+  color: var(--ink-dim);
+}
+
 .chat-event--found .chat-event-node {
   background: var(--gold);
   border-color: var(--gold-soft);

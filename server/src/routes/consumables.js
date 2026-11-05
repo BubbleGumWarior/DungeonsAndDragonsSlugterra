@@ -7,6 +7,7 @@ import { ENERGY_CELL_PIPS, MEDPACK_HEAL_FRACTION, TONIC_PIPS, MEDS_DOSES_NEEDED 
 import { toClientSlug } from "./slugs.js";
 import { toClientCharacter } from "./characters.js";
 import { getActiveEncounterRow } from "./combat.js";
+import { getShipEffects } from "../travelService.js";
 
 // Field supplies a player uses between fights: Energy Cells recharge a slug,
 // Medpacks heal Grit, Revival Tonics clear knockout pips. The server rolls
@@ -58,7 +59,9 @@ router.post("/medpack", playersOnly, async (req, res) => {
     const max = computeMaxGrit(c.stats, c.grit_bonus);
     if (c.current_grit >= max) throw new SupplyError("You're already at full Grit.");
     if (c.medpacks < 1) throw new SupplyError("You're out of Medpacks -- buy more at the Market.");
-    const heal = Math.ceil(max * MEDPACK_HEAL_FRACTION);
+    // A Medbay upgraded to Tier III makes every Medpack stronger.
+    const fraction = (await getShipEffects()).medpackHealFraction ?? MEDPACK_HEAL_FRACTION;
+    const heal = Math.ceil(max * fraction);
     const next = Math.min(max, c.current_grit + heal);
     const { rows: updated } = await client.query(
       "UPDATE characters SET current_grit = $1, medpacks = medpacks - 1 WHERE user_id = $2 RETURNING *",

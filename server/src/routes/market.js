@@ -24,8 +24,11 @@ import {
   TONIC_PRICE,
   MEDS_PRICE,
   MEDS_DOSES_NEEDED,
+  WEAPON_PARTS_PRICE,
 } from "../careRules.js";
 import { grantOutfit } from "../outfitService.js";
+import { SUPPLY_GRADES, shipEffects, storesUsed } from "../shipRules.js";
+import { getActiveShip, loadStores } from "../travelService.js";
 import { formatOutfitRange } from "../outfitRules.js";
 import {
   POD_PRICE,
@@ -267,7 +270,18 @@ const SUPPLY_ITEMS = [
 
 // characters.* counters the market and the DM purse can read/write.
 const SUPPLY_FIELDS = SUPPLY_ITEMS.map((s) => s.column);
+// Weapon Parts are a personal counter like the supplies, but not standing stock:
+// the DM lists them as a market listing (kind "weapon_supply"), so they are
+// never on the shelves by default.
+const WEAPON_PARTS = {
+  name: "Weapon Parts",
+  description:
+    "Barrels, springs, couplings and polished fittings. A Repair Kit job needs some, and lifting a blaster to its next quality tier takes a good deal more.",
+  tags: ["Blaster repairs", "Blaster upgrades"],
+};
+
 const supplyCounts = (row) => ({
+  weaponParts: row.weapon_parts ?? 0,
   credits: row.credits,
   pods: row.pods,
   kibble: row.kibble,
@@ -277,7 +291,7 @@ const supplyCounts = (row) => ({
   revivalTonics: row.revival_tonics,
   meds: row.meds,
 });
-const SUPPLY_SELECT = `credits, ${SUPPLY_FIELDS.join(", ")}`;
+const SUPPLY_SELECT = `credits, weapon_parts, ${SUPPLY_FIELDS.join(", ")}`;
 const SUPPLY_KEYS = SUPPLY_ITEMS.map((s) => s.key);
 
 async function standingItems(planet) {
@@ -343,6 +357,43 @@ async function listingItems(planet) {
   const { rows } = await pool.query("SELECT * FROM market_listings WHERE planet_index = $1 ORDER BY id", [planet]);
   const items = [];
   for (const l of rows) {
+    if (l.kind === "weapon_supply") {
+      items.push({
+        key: `listing:${l.id}`,
+        kind: "weapon_supply",
+        templateId: l.template_id,
+        listingId: l.id,
+        name: WEAPON_PARTS.name,
+        image: null,
+        description: WEAPON_PARTS.description,
+        tags: WEAPON_PARTS.tags,
+        basePrice: l.base_price,
+        quantity: l.quantity,
+        standing: false,
+        hidden: false,
+      });
+      continue;
+    }
+    // Ship supplies aren't a template row: template_id is the supply grade (1-3).
+    if (l.kind === "ship_supply") {
+      const grade = SUPPLY_GRADES.find((g) => g.tier === l.template_id);
+      if (!grade) continue;
+      items.push({
+        key: `listing:${l.id}`,
+        kind: "ship_supply",
+        templateId: l.template_id,
+        listingId: l.id,
+        name: grade.name,
+        image: null,
+        description: grade.description,
+        tags: [`Builds and upgrades to Tier ${"I".repeat(grade.tier)}`, "Goes into the ship's stores"],
+        basePrice: l.base_price,
+        quantity: l.quantity,
+        standing: false,
+        hidden: false,
+      });
+      continue;
+    }
     const def = KIND_TABLES[l.kind];
     if (!def) continue;
     const { rows: tpl } = await pool.query(`SELECT * FROM ${def.table} WHERE id = $1`, [l.template_id]);
@@ -388,7 +439,9 @@ router.get("/", async (req, res) => {
         price: finalPrice(it.basePrice, pm.pricePct, priceOpts(pm, discountPct)),
       }));
 
+    const stores = await loadStores();
     const out = {
+      stores: { ...stores, used: storesUsed(stores), capacity: shipEffects((await getActiveShip())?.compartments).storesCapacity },
       planetIndex: planet,
       open: pm.open,
       mood: pm.mood,
@@ -496,7 +549,7 @@ export async function cloneTemplateToUser(client, kind, templateId, userId) {
 router.post("/buy", async (req, res) => {
   if (isDM(req)) return res.status(403).json({ error: "Only players can buy from the market." });
   const key = String(req.body?.key ?? "");
-  const qty = SUPPLY_KEYS.includes(key) ? Number(req.body?.quantity ?? 1) : 1;
+  const qty = SUPPLY_KEYS.includes(key) || key.startsWith("listing:") ? Number(req.body?.quantity ?? 1) : 1;
   if (!Number.isInteger(qty) || qty < 1 || qty > 20) {
     return res.status(400).json({ error: "Quantity must be between 1 and 20." });
   }
@@ -569,15 +622,51 @@ router.post("/buy", async (req, res) => {
       if (!listing) throw new MarketError("That listing is no longer available.", 404);
       if (listing.quantity !== null && listing.quantity <= 0) throw new MarketError("Sold out.");
       unitPrice = priceOf(listing.base_price);
-      const { rows: tpl } = await client.query(`SELECT name FROM ${KIND_TABLES[listing.kind].table} WHERE id = $1`, [listing.template_id]);
-      label = tpl[0]?.name ?? "Item";
-      give = async () => {
-        if (listing.quantity !== null) {
-          if (listing.quantity - 1 <= 0) await client.query("DELETE FROM market_listings WHERE id = $1", [id]);
-          else await client.query("UPDATE market_listings SET quantity = quantity - 1 WHERE id = $1", [id]);
-        }
-        return cloneTemplateToUser(client, listing.kind, listing.template_id, req.user.sub);
-      };
+      if (listing.kind === "weapon_supply") {
+        if (listing.quantity !== null && listing.quantity < qty) throw new MarketError(`Only ${listing.quantity} left.`);
+        label = WEAPON_PARTS.name;
+        give = async () => {
+          if (listing.quantity !== null) {
+            if (listing.quantity - qty <= 0) await client.query("DELETE FROM market_listings WHERE id = $1", [id]);
+            else await client.query("UPDATE market_listings SET quantity = quantity - $2 WHERE id = $1", [id, qty]);
+          }
+          await client.query("UPDATE characters SET weapon_parts = weapon_parts + $1 WHERE user_id = $2", [qty, req.user.sub]);
+          return null;
+        };
+      } else if (listing.kind === "ship_supply") {
+        // Bulk goods for the ship: they go into the party's shared stores, as many
+        // as the hold has room for.
+        const grade = SUPPLY_GRADES.find((g) => g.tier === listing.template_id);
+        if (!grade) throw new MarketError("That listing is no longer available.", 404);
+        if (listing.quantity !== null && listing.quantity < qty) throw new MarketError(`Only ${listing.quantity} left.`);
+        label = grade.name;
+        give = async () => {
+          const stores = await loadStores(client, true);
+          const capacity = shipEffects((await getActiveShip())?.compartments).storesCapacity;
+          const room = capacity - storesUsed(stores);
+          if (room < qty) {
+            throw new MarketError(room <= 0 ? "The ship's stores are full." : `The ship's stores only have room for ${room} more.`);
+          }
+          if (listing.quantity !== null) {
+            if (listing.quantity - qty <= 0) await client.query("DELETE FROM market_listings WHERE id = $1", [id]);
+            else await client.query("UPDATE market_listings SET quantity = quantity - $2 WHERE id = $1", [id, qty]);
+          }
+          // `column` comes from the fixed SUPPLY_GRADES table, never from the request.
+          await client.query(`UPDATE campaign_settings SET ${grade.column} = ${grade.column} + $1 WHERE id = 1`, [qty]);
+          return { type: "ship-updated", payload: {}, userId: null };
+        };
+      } else {
+        if (qty !== 1) throw new MarketError("That is sold one at a time.");
+        const { rows: tpl } = await client.query(`SELECT name FROM ${KIND_TABLES[listing.kind].table} WHERE id = $1`, [listing.template_id]);
+        label = tpl[0]?.name ?? "Item";
+        give = async () => {
+          if (listing.quantity !== null) {
+            if (listing.quantity - 1 <= 0) await client.query("DELETE FROM market_listings WHERE id = $1", [id]);
+            else await client.query("UPDATE market_listings SET quantity = quantity - 1 WHERE id = $1", [id]);
+          }
+          return cloneTemplateToUser(client, listing.kind, listing.template_id, req.user.sub);
+        };
+      }
     } else {
       throw new MarketError("Unknown item.");
     }
@@ -738,6 +827,16 @@ router.get("/catalog", requireDungeonMaster, async (req, res) => {
         defaultPrice: templateBasePrice(kind, t),
       }));
     }
+    catalog.weapon_supply = [
+      { id: 1, name: WEAPON_PARTS.name, description: WEAPON_PARTS.description, tags: WEAPON_PARTS.tags, defaultPrice: WEAPON_PARTS_PRICE },
+    ];
+    catalog.ship_supply = SUPPLY_GRADES.map((g) => ({
+      id: g.tier,
+      name: g.name,
+      description: g.description,
+      tags: [],
+      defaultPrice: g.basePrice,
+    }));
     res.json({ catalog });
   } catch (err) {
     console.error(err);
@@ -747,16 +846,28 @@ router.get("/catalog", requireDungeonMaster, async (req, res) => {
 
 router.post("/listings", requireDungeonMaster, async (req, res) => {
   const { kind, templateId } = req.body || {};
-  const def = KIND_TABLES[kind];
+  const shipSupply = kind === "ship_supply";
+  const weaponSupply = kind === "weapon_supply";
+  const def = shipSupply || weaponSupply ? { table: null } : KIND_TABLES[kind];
   if (!def || !Number.isInteger(templateId)) return res.status(400).json({ error: "Pick a template to sell." });
   const quantity = req.body?.quantity == null || req.body.quantity === "" ? null : Number(req.body.quantity);
   if (quantity !== null && (!Number.isInteger(quantity) || quantity < 1 || quantity > 99)) {
     return res.status(400).json({ error: "Quantity must be between 1 and 99 (or blank for unlimited)." });
   }
   try {
-    const { rows: tpl } = await pool.query(`SELECT * FROM ${def.table} WHERE id = $1`, [templateId]);
-    if (!tpl[0]) return res.status(404).json({ error: "Template not found." });
-    let basePrice = templateBasePrice(kind, tpl[0]);
+    let basePrice;
+    if (weaponSupply) {
+      if (templateId !== 1) return res.status(404).json({ error: "Template not found." });
+      basePrice = WEAPON_PARTS_PRICE;
+    } else if (shipSupply) {
+      const grade = SUPPLY_GRADES.find((g) => g.tier === templateId);
+      if (!grade) return res.status(404).json({ error: "Template not found." });
+      basePrice = grade.basePrice;
+    } else {
+      const { rows: tpl } = await pool.query(`SELECT * FROM ${def.table} WHERE id = $1`, [templateId]);
+      if (!tpl[0]) return res.status(404).json({ error: "Template not found." });
+      basePrice = templateBasePrice(kind, tpl[0]);
+    }
     if (req.body?.basePrice != null && req.body.basePrice !== "") {
       basePrice = Number(req.body.basePrice);
       if (!Number.isInteger(basePrice) || basePrice < 1 || basePrice > 1000000) {
@@ -810,7 +921,7 @@ router.post("/hidden", requireDungeonMaster, async (req, res) => {
 // Absolute credits/pods for one character's purse.
 router.patch("/purse/:userId", requireDungeonMaster, async (req, res) => {
   const userId = Number(req.params.userId);
-  const { credits, pods, kibble, repairKits, energyCells, medpacks, revivalTonics, meds } = req.body || {};
+  const { credits, pods, kibble, repairKits, energyCells, medpacks, revivalTonics, meds, weaponParts } = req.body || {};
   const sets = [];
   const values = [];
   if (credits !== undefined) {
@@ -834,6 +945,7 @@ router.patch("/purse/:userId", requireDungeonMaster, async (req, res) => {
     [medpacks, "medpacks", "Medpacks"],
     [revivalTonics, "revival_tonics", "Revival tonics"],
     [meds, "meds", "Meds"],
+    [weaponParts, "weapon_parts", "Weapon parts"],
   ]) {
     if (value === undefined) continue;
     if (!Number.isInteger(value) || value < 0 || value > 999) {

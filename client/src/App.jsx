@@ -26,6 +26,7 @@ import Market from "./Market.jsx";
 import { ToastProvider } from "./Toast.jsx";
 import TradeToasts from "./TradeToasts.jsx";
 import SlugToasts from "./SlugToasts.jsx";
+import ShipBuildToasts from "./ShipBuildToasts.jsx";
 import Slugs from "./Slugs.jsx";
 import Mechas from "./Mechas.jsx";
 import ShipPage from "./ShipPage.jsx";
@@ -84,6 +85,7 @@ function App() {
        <ToastProvider>
         <TradeToasts />
         <SlugToasts />
+        <ShipBuildToasts />
         <CombatReportToasts />
         <ChallengeResultOverlay />
         <LongRestOverlay />

@@ -18,6 +18,18 @@ export const SHOTS_TO_BREAK = [100, 200, 350, 500, 1000];
 export const REPAIR_DC = 15;
 export const REPAIR_FAIL_DAMAGE = 10;
 
+// Weapon Parts: a repair needs some as well as a kit, and lifting a blaster to
+// its next quality tier takes more plus an Engineering roll (mirrors careRules.js).
+export const REPAIR_PARTS = [2, 3, 4, 5, 6];
+export const repairPartsFor = (quality) => REPAIR_PARTS[quality] ?? REPAIR_PARTS[0];
+export const BLASTER_UPGRADES = [
+  { to: 1, parts: 6, dc: 10 },
+  { to: 2, parts: 10, dc: 12 },
+  { to: 3, parts: 16, dc: 14 },
+  { to: 4, parts: 24, dc: 16 },
+];
+export const blasterUpgradeFor = (quality) => BLASTER_UPGRADES.find((u) => u.to === quality + 1) ?? null;
+
 // How many scoops of kibble it takes to fill a slug from where it is.
 export function kibbleNeeded(food, perScoop = KIBBLE_FOOD_MIN) {
   return Math.max(0, Math.ceil((FOOD_MAX - food) / perScoop));
@@ -89,8 +101,19 @@ export const SUPPLIES = [
     name: "Repair Kits",
     effect: `Mends a worn blaster (d20 + Engineering over ${REPAIR_DC})`,
     rules: [
-      `Use a kit from the Repair button on a blaster in your Inventory. Roll d20 + Engineering: above ${REPAIR_DC} and it is restored to 100%.`,
+      `Use a kit from the Repair button on a blaster in your Inventory. It also takes Weapon Parts. Roll d20 + Engineering: above ${REPAIR_DC} and it is restored to 100%.`,
       `On a fail the kit is used up and the blaster loses a further ${REPAIR_FAIL_DAMAGE}%. At 0% it is past a kit's help -- only an expert can mend it.`,
+    ],
+  },
+  {
+    key: "weapon-parts",
+    field: "weaponParts",
+    name: "Weapon Parts",
+    effect: "Spares for repairing and upgrading blasters",
+    rules: [
+      `Every Repair Kit job spends ${REPAIR_PARTS[0]}-${REPAIR_PARTS[REPAIR_PARTS.length - 1]} parts (more for a better blaster), whatever the roll.`,
+      `Use them with an Engineering roll to lift a blaster to its next quality tier, from the Upgrade button in your Inventory. It takes ${BLASTER_UPGRADES[0].parts}-${BLASTER_UPGRADES[BLASTER_UPGRADES.length - 1].parts} parts, and half are lost on a miss.`,
+      "Merchants only stock them when your DM has listed them.",
     ],
   },
   {

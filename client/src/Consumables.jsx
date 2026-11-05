@@ -5,6 +5,7 @@ import {
   BowlFoodIcon,
   FirstAidKitIcon,
   FlaskIcon,
+  HammerIcon,
   HeartbeatIcon,
   PackageIcon,
   PillIcon,
@@ -16,6 +17,7 @@ import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import { maxGrit } from "./characterData.js";
 import { MEDPACK_HEAL_FRACTION, MEDS_DOSES_NEEDED, SUPPLIES } from "./careData.js";
+import useShipEffects from "./useShipEffects.js";
 import { magazineCapacity } from "./itemData.js";
 import NavBar from "./NavBar.jsx";
 import SlugCare from "./SlugCare.jsx";
@@ -30,6 +32,7 @@ const SUPPLY_ICONS = {
   pods: PackageIcon,
   kibble: BowlFoodIcon,
   "repair-kit": ToolboxIcon,
+  "weapon-parts": HammerIcon,
   "energy-cell": BatteryChargingIcon,
   medpack: FirstAidKitIcon,
   "revival-tonic": FlaskIcon,
@@ -105,7 +108,9 @@ function FieldMedicine({ character, onCharacter }) {
   const grit = character.currentGrit ?? max;
   const pips = character.knockoutPips ?? [false, false, false];
   const knocked = pips.filter(Boolean).length;
-  const healAmount = Math.ceil(max * MEDPACK_HEAL_FRACTION);
+  // A Tier III Medbay makes Medpacks heal more.
+  const medpackFraction = useShipEffects()?.medpackHealFraction ?? MEDPACK_HEAL_FRACTION;
+  const healAmount = Math.ceil(max * medpackFraction);
   const medpacks = character.medpacks ?? 0;
   const tonics = character.revivalTonics ?? 0;
   const meds = character.meds ?? 0;
@@ -166,7 +171,7 @@ function FieldMedicine({ character, onCharacter }) {
             tip={
               <>
                 <p>
-                  A Medpack heals <b>{Math.round(MEDPACK_HEAL_FRACTION * 100)}%</b> of your maximum Grit (up to{" "}
+                  A Medpack heals <b>{Math.round(medpackFraction * 100)}%</b> of your maximum Grit (up to{" "}
                   <b>{healAmount}</b> for you), never past full.
                 </p>
                 <p>Supplies can't be used while you are in a fight.</p>

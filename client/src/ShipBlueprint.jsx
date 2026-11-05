@@ -10,6 +10,7 @@ import {
   GaugeIcon,
   PlanetIcon,
   WrenchIcon,
+  PackageIcon,
 } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
@@ -17,6 +18,8 @@ import { downscaleImageFile } from "./imageDownscale.js";
 import { PLANETS } from "./planetData.js";
 import useTravel from "./useTravel.js";
 import NavConsole from "./NavConsole.jsx";
+import ShipWorkPanel from "./ShipWorkPanel.jsx";
+import { NAV_RANGE_LABELS, ROMAN } from "./shipData.js";
 import "./ShipBlueprint.css";
 
 // The compartment a ship needs to travel: its online Nav Computer opens the star
@@ -51,7 +54,7 @@ function statusMeta(status) {
 }
 
 // Days built so far against days needed, plus the rule for how they accrue.
-function BuildProgress({ compartment }) {
+function BuildProgress({ compartment, upgrade = false }) {
   const done = compartment.progressDays || 0;
   const total = Math.max(1, compartment.buildDays || 1);
   return (
@@ -66,8 +69,8 @@ function BuildProgress({ compartment }) {
         <span style={{ transform: `scaleX(${Math.min(1, done / total)})` }} />
       </div>
       <p className="ship-progress-text">
-        {done} of {total} days built. Each long rest adds a day while docked. Under way, a day is added for each
-        engineer working on it.
+        {done} of {total} days {upgrade ? "of upgrading" : "built"}. Each long rest adds a day while docked. Under way,
+        a day is added for each engineer working on it.
       </p>
     </div>
   );
@@ -98,6 +101,8 @@ function blankCompartment(xPct, yPct) {
     xPct,
     yPct,
     templateKey: null,
+    tier: 1,
+    upgradingTo: null,
     speedBonus: 0,
     buildDays: 0,
     progressDays: 0,
@@ -113,6 +118,10 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
   const [ship, setShip] = useState(null); // { id, name, image, speed, compartmentSlots, compartments, ... }
   const [templates, setTemplates] = useState({ defaults: [], custom: [] }); // DM only
   const [engineerError, setEngineerError] = useState(null);
+  const [info, setInfo] = useState(null); // GET /api/ships/blueprints: stores, costs, my Engineering modifier
+  const [workBusy, setWorkBusy] = useState(false);
+  const [workError, setWorkError] = useState(null);
+  const [workResult, setWorkResult] = useState(null);
   const [consoleOpen, setConsoleOpen] = useState(false); // the Nav Computer's star console
   // The Deck Plan is a tablet in the player's hands. Stepping into the console
   // drops it (it falls out of view as the room comes up around you); leaving
@@ -228,6 +237,14 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
       shown = (await loadShip(keepId)) ?? active;
     }
 
+    try {
+      const res = await fetch("/api/ships/blueprints", { headers: authHeaders(token) });
+      const data = await res.json();
+      if (res.ok) setInfo(data);
+    } catch {
+      /* non-fatal -- the build panel just stays empty */
+    }
+
     setShip(shown);
     setViewShipId(shown?.id ?? null);
     firstLoadRef.current = false;
@@ -237,6 +254,12 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
   useEffect(() => {
     refresh();
   }, [refresh, shipUpdate]);
+
+  // A roll's outcome belongs to the compartment it was made on.
+  useEffect(() => {
+    setWorkResult(null);
+    setWorkError(null);
+  }, [selectedId]);
 
   // DM picked a different ship in the switcher.
   async function switchView(id) {
@@ -407,6 +430,8 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
       templateKey: t.key,
       label: t.name,
       description: t.description,
+      tier: 1,
+      upgradingTo: null,
       buildDays: t.buildDays,
       speedBonus: t.speedBonus,
     });
@@ -463,6 +488,43 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
     }
   }
 
+  // One player rolls Engineering for the party: build on an empty slot, or lift
+  // an online compartment to its next tier. The server rolls and tells everyone.
+  async function attemptWork(mode, compartmentId, templateKey) {
+    setWorkBusy(true);
+    setWorkError(null);
+    setWorkResult(null);
+    try {
+      const res = await fetch(`/api/ships/compartments/${compartmentId}/${mode}`, {
+        method: "POST",
+        headers: authHeaders(token, { "Content-Type": "application/json" }),
+        body: JSON.stringify({ templateKey }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "That didn't work.");
+      setWorkResult(data.result);
+    } catch (err) {
+      setWorkError(err.message);
+    } finally {
+      setWorkBusy(false);
+    }
+  }
+
+  async function saveStores(patch) {
+    try {
+      const res = await fetch("/api/ships/stores", {
+        method: "PATCH",
+        headers: authHeaders(token, { "Content-Type": "application/json" }),
+        body: JSON.stringify(patch),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not set the stores.");
+      setInfo((cur) => (cur ? { ...cur, stores: data.stores } : cur));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   async function saveShipStat(patch) {
     try {
       const updated = await patchShip(ship.id, patch);
@@ -480,6 +542,10 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
   const navComputer = compartments.find((c) => c.templateKey === NAV_COMPUTER_KEY) || null;
   const navReady = compartments.some((c) => c.templateKey === NAV_COMPUTER_KEY && c.status === "online");
   const isNavPin = (c) => c.templateKey === NAV_COMPUTER_KEY;
+  // How many tiers a compartment's blueprint has (1 for custom ones).
+  const blueprintTiers = (key) =>
+    info?.blueprints?.find((b) => b.key === key)?.maxTier ?? templates.defaults.find((t) => t.key === key)?.maxTier ?? 1;
+  const stores = info?.stores ?? null;
 
   return (
     <div className="ship-wrap">
@@ -645,8 +711,48 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
                 (isDungeonMaster
                   ? ". No working Nav Computer, so the ship can't travel."
                   : ". The Nav Computer isn't working, so the ship can't travel.")}
+              {navReady && ship.effects?.navRange && `. The Nav Computer charts: ${NAV_RANGE_LABELS[ship.effects.navRange].toLowerCase()}.`}
             </span>
           </div>
+
+          {stores && (
+            <div className="ship-stat">
+              <span className="ship-stat-label">
+                <PackageIcon weight="bold" /> Ship's stores
+              </span>
+              <span className="ship-stat-value">
+                {stores.used}
+                <small> of {stores.capacity} held</small>
+              </span>
+              {isDungeonMaster ? (
+                <span className="ship-stat-note ship-stores-edit">
+                  {[
+                    ["parts", "Parts"],
+                    ["components", "Components"],
+                    ["cores", "Cores"],
+                  ].map(([key, label]) => (
+                    <label key={`${key}-${stores[key]}`} className="ship-stat-edit">
+                      {label}
+                      <input
+                        type="number"
+                        min={0}
+                        max={999}
+                        defaultValue={stores[key]}
+                        onBlur={(e) => {
+                          const v = Math.max(0, Math.min(999, Math.trunc(Number(e.target.value)) || 0));
+                          if (v !== stores[key]) saveStores({ [key]: v });
+                        }}
+                      />
+                    </label>
+                  ))}
+                </span>
+              ) : (
+                <span className="ship-stat-note">
+                  {stores.parts} Parts · {stores.components} Components · {stores.cores} Cores
+                </span>
+              )}
+            </div>
+          )}
         </section>
       )}
 
@@ -680,15 +786,19 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
             {compartments.map((c) => {
               const status = STATUS_META[c.status] ? c.status : "empty";
               const navOnline = isNavPin(c) && status === "online";
+              const maxTier = blueprintTiers(c.templateKey);
+              const tierTag = maxTier > 1 && status !== "empty" ? ` · Tier ${ROMAN[c.tier || 1]}` : "";
               return (
                 <button
                   key={c.id}
                   type="button"
-                  className={`ship-node ship-node--${status} ${c.id === selectedId ? "ship-node--selected" : ""} ${navOnline ? "ship-node--nav" : ""}`}
+                  className={`ship-node ship-node--${status} ${c.id === selectedId ? "ship-node--selected" : ""} ${navOnline ? "ship-node--nav" : ""} ${c.upgradingTo ? "ship-node--upgrading" : ""}`}
                   style={{ left: `${c.xPct}%`, top: `${c.yPct}%`, "--flag": statusMeta(status).color }}
-                  title={`${c.label} · ${statusMeta(status).label}${
+                  title={`${c.label}${tierTag} · ${statusMeta(status).label}${
                     status === "building" ? ` ${c.progressDays || 0}/${c.buildDays} days` : ""
-                  }${isNavPin(c) && status === "online" ? " · click to enter the star console" : ""}`}
+                  }${c.upgradingTo ? ` · upgrading to Tier ${ROMAN[c.upgradingTo]} ${c.progressDays || 0}/${c.buildDays} days` : ""}${
+                    isNavPin(c) && status === "online" ? " · click to enter the star console" : ""
+                  }`}
                   onMouseDown={(e) => handleNodeMouseDown(e, c)}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -710,7 +820,10 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
                   {navOnline ? (
                     <span className="ship-node-nav-tag">Star console</span>
                   ) : (
-                    <span className="ship-node-hint">{c.label}</span>
+                    <span className="ship-node-hint">
+                      {c.label}
+                      {tierTag}
+                    </span>
                   )}
                 </button>
               );
@@ -830,6 +943,42 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
                   </label>
                 </div>
 
+                {blueprintTiers(selected.templateKey) > 1 && (
+                  <label className="ship-detail-field">
+                    Tier
+                    <select
+                      value={selected.tier || 1}
+                      onChange={(e) => patchSelectedNow({ tier: Number(e.target.value), upgradingTo: null })}
+                    >
+                      {Array.from({ length: blueprintTiers(selected.templateKey) }, (_, i) => i + 1).map((n) => (
+                        <option key={n} value={n}>
+                          Tier {ROMAN[n]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+
+                {selected.upgradingTo ? (
+                  <>
+                    <p className="ship-progress-text">Upgrading to Tier {ROMAN[selected.upgradingTo]}. It keeps working at Tier {ROMAN[selected.tier || 1]} meanwhile.</p>
+                    <BuildProgress compartment={selected} upgrade />
+                    <div className="ship-build-actions">
+                      <button
+                        type="button"
+                        className="ship-btn"
+                        onClick={() => patchSelectedNow({ tier: selected.upgradingTo, upgradingTo: null })}
+                      >
+                        Finish upgrade now
+                      </button>
+                      <button type="button" className="ship-btn" onClick={() => patchSelectedNow({ upgradingTo: null })}>
+                        Cancel upgrade
+                      </button>
+                    </div>
+                    <Engineers compartment={selected} />
+                  </>
+                ) : null}
+
                 {selected.status === "building" ? (
                   <>
                     <BuildProgress compartment={selected} />
@@ -877,12 +1026,22 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
             </>
           ) : (
             <>
-              <h2 className="ship-detail-name">{selected.label}</h2>
+              <h2 className="ship-detail-name">{selected.status === "empty" ? "Empty slot" : selected.label}</h2>
               <p className="ship-detail-status" style={{ "--flag": statusMeta(selected.status).color }}>
                 <span className="ship-status-swatch" style={{ background: statusMeta(selected.status).color }} />
                 {statusMeta(selected.status).label}
               </p>
-              <p className="ship-detail-body">{selected.description || "No details recorded."}</p>
+              {selected.status !== "empty" && (
+                <p className="ship-detail-body">{selected.description || "No details recorded."}</p>
+              )}
+              <ShipWorkPanel
+                compartment={selected}
+                info={info}
+                busy={workBusy}
+                error={workError}
+                result={workResult}
+                onAttempt={attemptWork}
+              />
               {isNavPin(selected) && selected.status !== "online" && (
                 <p className="ship-detail-body">The star console stays dark until this compartment is online.</p>
               )}
@@ -892,9 +1051,15 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
                   {Math.abs(selected.speedBonus)} while online.
                 </p>
               ) : null}
-              {selected.status === "building" && (
+              {(selected.status === "building" || selected.upgradingTo) && (
                 <div className="ship-build">
-                  <BuildProgress compartment={selected} />
+                  {selected.upgradingTo && (
+                    <p className="ship-progress-text">
+                      <strong>Upgrading to Tier {ROMAN[selected.upgradingTo]}.</strong> It keeps working at Tier{" "}
+                      {ROMAN[selected.tier || 1]} meanwhile.
+                    </p>
+                  )}
+                  <BuildProgress compartment={selected} upgrade={Boolean(selected.upgradingTo)} />
                   <Engineers compartment={selected} />
                   {user?.id != null && (
                     <div className="ship-build-actions">

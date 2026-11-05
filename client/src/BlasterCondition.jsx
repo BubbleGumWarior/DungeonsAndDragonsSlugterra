@@ -27,8 +27,9 @@ export function DurabilityRules({ blaster }) {
         .
       </p>
       <p>
-        A <b>Repair Kit</b> lets you roll d20 + Engineering. Above <b>{REPAIR_DC}</b> it is restored to 100%. On a fail the
-        kit is used up and the blaster loses a further <b>{REPAIR_FAIL_DAMAGE}%</b>.
+        A <b>Repair Kit</b> and some <b>Weapon Parts</b> let you roll d20 + Engineering. Above <b>{REPAIR_DC}</b> it is restored to
+        100%. On a fail the kit and parts are used up and the blaster loses a further <b>{REPAIR_FAIL_DAMAGE}%</b>. Parts and an
+        Engineering roll can also lift it to the next quality tier.
       </p>
       <p className="hint-warn">
         At 0% a blaster is broken: it can't fire, and a kit can't fix it. Only an expert's workshop can -- ask your DM.

@@ -297,10 +297,21 @@ function Dossier({
   onClose,
 }) {
   const planet = detail.planet;
-  const facts = detail.known ? planet?.facts : null;
+  // An Observatory shows part of an unvisited world's survey: atmosphere and
+  // gravity at Tier I, every fact at Tier II (picture and text come at Tier III,
+  // which marks the world `known`).
+  const survey = detail.known ? 3 : detail.survey ?? 0;
+  const facts = detail.known || survey >= 2
+    ? planet?.facts
+    : survey === 1 && planet?.facts
+      ? { atmosphere: planet.facts.atmosphere, gravityG: planet.facts.gravityG }
+      : null;
+  const has = (key) => Boolean(facts) && key in facts;
   const here = detail.flatIndex === partyFlatIndex;
+  // The Nav Computer only charts so far; the DM's launch ignores it.
+  const reachable = detail.route?.reachable !== false;
   const canPropose =
-    Boolean(travel) && !travel.traveling && !travel.proposal && Boolean(travel.ship) && travel.navReady && !here;
+    Boolean(travel) && !travel.traveling && !travel.proposal && Boolean(travel.ship) && travel.navReady && !here && reachable;
 
   let proposeLabel = "Plot a course here";
   if (here) proposeLabel = "The party is here";
@@ -308,6 +319,7 @@ function Dossier({
   else if (travel?.proposal) proposeLabel = "A vote is already open";
   else if (!travel?.ship) proposeLabel = "No ship to travel in";
   else if (!travel.navReady) proposeLabel = "The Nav Computer is offline";
+  else if (!reachable) proposeLabel = "Beyond the Nav Computer's range";
 
   return (
     <aside className="holo-dossier" aria-label={`${detail.name} survey`}>
@@ -357,12 +369,12 @@ function Dossier({
                 : null
             }
           />
-          <Fact label="Day length" value={facts ? (facts.dayHours ? `${facts.dayHours} hours` : "None") : null} />
-          <Fact label="Temperature" value={facts ? `${facts.temperatureC} °C` : null} />
-          <Fact label="Humidity" value={facts ? `${facts.humidityPct}%` : null} />
-          <Fact label="Gravity" value={facts ? `${facts.gravityG} g` : null} />
-          <Fact label="Atmosphere" value={facts ? facts.atmosphere : null} />
-          <Fact label="Moons" value={facts ? facts.moons : null} />
+          <Fact label="Day length" value={has("dayHours") ? (facts.dayHours ? `${facts.dayHours} hours` : "None") : null} />
+          <Fact label="Temperature" value={has("temperatureC") ? `${facts.temperatureC} °C` : null} />
+          <Fact label="Humidity" value={has("humidityPct") ? `${facts.humidityPct}%` : null} />
+          <Fact label="Gravity" value={has("gravityG") ? `${facts.gravityG} g` : null} />
+          <Fact label="Atmosphere" value={has("atmosphere") ? facts.atmosphere : null} />
+          <Fact label="Moons" value={has("moons") ? facts.moons : null} />
         </dl>
       )}
 
@@ -370,6 +382,8 @@ function Dossier({
         <p className="holo-route">
           {detail.route.distance} units away. <strong>{plural(detail.route.days, "day")}</strong> at speed{" "}
           {travel.ship?.effective ?? "?"}.
+          {!reachable &&
+            ` Out of the Nav Computer's range: it needs ${detail.route.range === "medium" ? "Tier II" : "Tier III"} to chart this.`}
         </p>
       )}
 
@@ -594,7 +608,8 @@ export default function GalaxyMap({
       name: p.name,
       color: p.color,
       planet: p,
-      known: isKnown(selected.flatIndex),
+      known: isKnown(selected.flatIndex) || (travel?.surveyTier ?? 0) >= 3,
+      survey: travel?.surveyTier ?? 0,
       playersKnow: visited.has(selected.flatIndex),
       where:
         loc.clusterIndex === -1

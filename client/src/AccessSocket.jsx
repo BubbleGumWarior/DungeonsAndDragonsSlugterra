@@ -86,6 +86,8 @@ export default function AccessSocket({ children }) {
   const [gruntTemplatesUpdate, setGruntTemplatesUpdate] = useState(null);
   const [slugpediaUpdate, setSlugpediaUpdate] = useState(null);
   const [shipUpdate, setShipUpdate] = useState(null);
+  // The latest engineering roll to build or upgrade a compartment (also written to the Events feed).
+  const [shipBuildResult, setShipBuildResult] = useState(null);
   const [travelUpdate, setTravelUpdate] = useState(null);
   const [slugHuntArea, setSlugHuntArea] = useState(16);
   const [slugHuntOffered, setSlugHuntOffered] = useState(null);
@@ -456,6 +458,11 @@ export default function AccessSocket({ children }) {
         return;
       }
 
+      if (data.type === "ship-build-result") {
+        setShipBuildResult({ ...data.result, at: Date.now() });
+        return;
+      }
+
       // Votes, proposals, departures and each day of the voyage all ride one
       // bare "refetch" nudge, so a burst can't drop one.
       if (data.type === "travel-updated") {
@@ -587,6 +594,7 @@ export default function AccessSocket({ children }) {
         gruntTemplatesUpdate,
         slugpediaUpdate,
         shipUpdate,
+        shipBuildResult,
         travelUpdate,
         slugHuntArea,
         slugHuntOffered,

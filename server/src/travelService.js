@@ -3,10 +3,13 @@ import { broadcastAll } from "./ws.js";
 import {
   WORLD_COUNT,
   buildProgressPerRest,
-  hasWorkingMedbay,
   hasWorkingNavComputer,
+  navCanReach,
+  routeRange,
+  shipEffects,
   speedBreakdown,
   tallyVotes,
+  tierSpeedBonus,
   travelDays,
   worldDistance,
 } from "./shipRules.js";
@@ -18,6 +21,7 @@ export function notifyTravelUpdated() {
 }
 
 export function notifyShipUpdated() {
+  invalidateShipEffects();
   broadcastAll({ type: "ship-updated" });
 }
 
@@ -26,6 +30,34 @@ export async function getActiveShip() {
     "SELECT s.* FROM ships s JOIN campaign_settings c ON c.active_ship_id = s.id WHERE c.id = 1"
   );
   return rows[0] ?? null;
+}
+
+// What the active ship's online compartments give the crew right now. Combat asks
+// on every shot, so it is cached briefly; anything that changes a ship calls
+// invalidateShipEffects (notifyShipUpdated does), and the short expiry is a backstop.
+const EFFECTS_TTL_MS = 3000;
+let effectsCache = null;
+
+export function invalidateShipEffects() {
+  effectsCache = null;
+}
+
+export async function getShipEffects() {
+  if (effectsCache && Date.now() - effectsCache.at < EFFECTS_TTL_MS) return effectsCache.value;
+  const ship = await getActiveShip();
+  const value = shipEffects(ship?.compartments);
+  effectsCache = { at: Date.now(), value };
+  return value;
+}
+
+// The party's shared ship supplies, one counter per grade (see SUPPLY_GRADES).
+// Pass a transaction client as `db` and `lock` to read them for update.
+export async function loadStores(db = pool, lock = false) {
+  const { rows } = await db.query(
+    `SELECT ship_parts, ship_components, ship_cores FROM campaign_settings WHERE id = 1${lock ? " FOR UPDATE" : ""}`
+  );
+  const r = rows[0] ?? {};
+  return { parts: r.ship_parts ?? 0, components: r.ship_components ?? 0, cores: r.ship_cores ?? 0 };
 }
 
 async function getPartyArea() {
@@ -109,10 +141,11 @@ export async function navComputerWorking() {
   return Boolean(ship) && hasWorkingNavComputer(ship.compartments);
 }
 
-// A long rest only heals fully while the active ship's Medbay is online.
-export async function medbayWorking() {
+// The Nav Computer's reach: "none" without a working one, else how far it charts.
+export async function navReach() {
   const ship = await getActiveShip();
-  return Boolean(ship) && hasWorkingMedbay(ship.compartments);
+  const fx = shipEffects(ship?.compartments);
+  return { working: Boolean(ship) && hasWorkingNavComputer(ship.compartments), range: fx.navRange, tier: fx.navTier };
 }
 
 export function shipSpeed(ship) {
@@ -146,7 +179,9 @@ export async function settleProposal() {
   const { outcome } = tallyVotes({ eligible: voters.length, yes, no });
   if (outcome === "passed") {
     // The Nav Computer can break while a vote is open; no course, no launch.
-    if (!(await navComputerWorking())) {
+    // (The DM can also have changed its tier since the course was put up.)
+    const reach = await navReach();
+    if (!reach.working || !navCanReach(reach.range, await getPartyArea(), row.proposal_area)) {
       await clearProposal();
       return "blocked";
     }
@@ -194,12 +229,19 @@ export async function buildTravelView(userId) {
     myVote = byUser.has(userId) ? byUser.get(userId) : null;
   }
 
+  const fx = shipEffects(ship?.compartments);
   const routes = [];
   if (!row.traveling) {
     for (let to = 0; to < WORLD_COUNT; to++) {
       if (to === area) continue;
       const distance = worldDistance(area, to);
-      routes.push({ area: to, distance, days: travelDays(distance, speed.effective) });
+      routes.push({
+        area: to,
+        distance,
+        days: travelDays(distance, speed.effective),
+        range: routeRange(area, to),
+        reachable: navCanReach(fx.navRange, area, to),
+      });
     }
   }
 
@@ -214,6 +256,9 @@ export async function buildTravelView(userId) {
     daysLeft: row.days_left,
     ship: ship ? { id: ship.id, name: ship.name, ...speed } : null,
     navReady: Boolean(ship) && hasWorkingNavComputer(ship.compartments),
+    navRange: fx.navRange,
+    navTier: fx.navTier,
+    surveyTier: fx.surveyTier,
     proposal,
     myVote,
     canVote: voters.some((v) => v.user_id === userId),
@@ -239,21 +284,35 @@ export async function advanceDay() {
   if (ship && Array.isArray(ship.compartments)) {
     let changed = false;
     const next = ship.compartments.map((c) => {
-      if (c?.status !== "building") return c;
+      // A new build, or an online compartment being lifted to its next tier. The
+      // second keeps working at its old tier until the upgrade lands.
+      const upgrading = c?.status === "online" && c.upgradingTo;
+      if (c?.status !== "building" && !upgrading) return c;
+      const note = upgrading ? { upgrade: true, tier: c.upgradingTo } : {};
       const engineers = Array.isArray(c.engineers) ? c.engineers : [];
       const gain = buildProgressPerRest({ traveling, engineerCount: engineers.length });
       const buildDays = Math.max(1, Number(c.buildDays) || 1);
       if (gain <= 0) {
-        builds.push({ label: c.label, progress: c.progressDays || 0, buildDays, stalled: true });
+        builds.push({ label: c.label, progress: c.progressDays || 0, buildDays, stalled: true, ...note });
         return c;
       }
       changed = true;
       const progress = (Number(c.progressDays) || 0) + gain;
       if (progress >= buildDays) {
-        builds.push({ label: c.label, progress: buildDays, buildDays, completed: true });
+        builds.push({ label: c.label, progress: buildDays, buildDays, completed: true, ...note });
+        if (upgrading) {
+          return {
+            ...c,
+            tier: c.upgradingTo,
+            upgradingTo: null,
+            speedBonus: tierSpeedBonus(c.templateKey, c.upgradingTo, c.speedBonus),
+            progressDays: 0,
+            engineers: [],
+          };
+        }
         return { ...c, status: "online", progressDays: 0, engineers: [] };
       }
-      builds.push({ label: c.label, progress, buildDays });
+      builds.push({ label: c.label, progress, buildDays, ...note });
       return { ...c, progressDays: progress };
     });
     if (changed) {
