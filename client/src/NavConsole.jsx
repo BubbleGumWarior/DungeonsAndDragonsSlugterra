@@ -45,7 +45,7 @@ function projectionLayout() {
 //
 // The hologram is built from the app's own tokens (gold light), so it follows
 // the chosen theme.
-export default function NavConsole({ isDungeonMaster = false, onClose, chamberName = "Nav Computer" }) {
+export default function NavConsole({ isDungeonMaster = false, assistant = false, onClose, chamberName = "Nav Computer" }) {
   const { travel, error, busy, act } = useTravel();
   const closeRef = useRef(null);
   const onCloseRef = useRef(onClose);
@@ -97,6 +97,7 @@ export default function NavConsole({ isDungeonMaster = false, onClose, chamberNa
                 travelAct={act}
                 travelBusy={busy}
                 isDungeonMaster={isDungeonMaster}
+                assistant={assistant}
                 dossierHost={dossierHost}
                 aspect={aspect}
                 visibleShare={visible}

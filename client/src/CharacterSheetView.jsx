@@ -109,12 +109,12 @@ export default function CharacterSheetView({ character, onChangeFame, onChangeHe
         <div className="sheet-column sheet-column-skills">
           <div className="sheet-section">
             <h2>Skills</h2>
-            <SkillList stats={character.stats} proficiencies={character.proficiencies} revealed={slugterraRevealed} onRoll={onRoll} />
+            <SkillList stats={character.stats} proficiencies={character.proficiencies} expertise={character.expertise ?? []} revealed={slugterraRevealed} onRoll={onRoll} />
           </div>
         </div>
       </div>
 
-      <StatGuide proficiencies={character.proficiencies ?? []} revealed={slugterraRevealed} />
+      <StatGuide proficiencies={character.proficiencies ?? []} expertise={character.expertise ?? []} revealed={slugterraRevealed} />
     </div>
   );
 }

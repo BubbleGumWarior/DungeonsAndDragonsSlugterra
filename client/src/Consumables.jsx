@@ -14,6 +14,7 @@ import {
   WarningIcon,
 } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
+import { canEditAsDm, canViewAsDm } from "./roles.js";
 import { useLiveState } from "./AccessSocket.jsx";
 import { maxGrit } from "./characterData.js";
 import { MEDPACK_HEAL_FRACTION, MEDS_DOSES_NEEDED, SUPPLIES } from "./careData.js";
@@ -382,7 +383,7 @@ function PlayerConsumables() {
 
 // The DM doesn't carry a pack; this is a read-only view of what each player
 // is holding (stock is set from the Market's Purses tool).
-function DMConsumables() {
+function DMConsumables({ readOnly = false }) {
   const { token } = useAuth();
   const { marketChanged, partyHealed } = useLiveState();
   const [purses, setPurses] = useState([]);
@@ -399,9 +400,11 @@ function DMConsumables() {
       <section className="pack">
         <div className="pack-head">
           <h2>What the party is carrying</h2>
-          <Link to="/market" className="slug-care-buy">
-            Set stock in Market › Purses
-          </Link>
+          {!readOnly && (
+            <Link to="/market" className="slug-care-buy">
+              Set stock in Market › Purses
+            </Link>
+          )}
         </div>
         {purses.length === 0 ? (
           <p className="consumables-empty">No characters yet.</p>
@@ -440,14 +443,14 @@ function DMConsumables() {
 
 export default function Consumables() {
   const { user } = useAuth();
-  const isDungeonMaster = user?.role === "Dungeon Master";
+  const seesAll = canViewAsDm(user);
 
   return (
     <div className="dashboard-page">
       <NavBar />
       <div className="placeholder-page placeholder-page--wide">
         <h1 className="slugs-page-title">Consumables</h1>
-        {isDungeonMaster ? <DMConsumables /> : <PlayerConsumables />}
+        {seesAll ? <DMConsumables readOnly={!canEditAsDm(user)} /> : <PlayerConsumables />}
       </div>
     </div>
   );

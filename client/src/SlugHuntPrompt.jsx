@@ -73,7 +73,7 @@ function HuntCard({ hunt, token, queueCount, onResolvedLocally }) {
           disabled={Boolean(busy)}
         >
           <CheckIcon weight="bold" />
-          {busy === "approve" ? "Approving…" : "Approve"}
+          {busy === "approve" ? "Giving…" : "Approve &amp; give"}
         </button>
         <button
           type="button"

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "./AuthContext.jsx";
+import { canViewAsDm } from "./roles.js";
 
 const LiveStateContext = createContext(null);
 
@@ -11,7 +12,7 @@ export function useLiveState() {
 }
 
 export default function AccessSocket({ children }) {
-  const { user, token, updateUser, logout } = useAuth();
+  const { user, token, login, updateUser, logout } = useAuth();
   const navigate = useNavigate();
   const [onlineUserIds, setOnlineUserIds] = useState(() => new Set());
   // Players only see the Slugterra side of the app once they've created a
@@ -24,7 +25,7 @@ export default function AccessSocket({ children }) {
   // The DM's persisted "Hide Slugterra" switch -- overrides everything below.
   const [slugterraHidden, setSlugterraHidden] = useState(false);
   const userId = user?.id;
-  const slugterraRevealed = !slugterraHidden && (user?.role === "Dungeon Master" || hasCharacter);
+  const slugterraRevealed = !slugterraHidden && (canViewAsDm(user) || hasCharacter);
   const [characterUpdate, setCharacterUpdate] = useState(null);
   const [characterCreated, setCharacterCreated] = useState(null);
   const [partyHealed, setPartyHealed] = useState(null);
@@ -33,6 +34,8 @@ export default function AccessSocket({ children }) {
   const [equipmentChanged, setEquipmentChanged] = useState(null);
   // A player's wardrobe changed (worn, bought, granted) -- same refetch signal.
   const [outfitsChanged, setOutfitsChanged] = useState(null);
+  // Fate Ledger nudge: a timestamp only; the page refetches the whole ledger.
+  const [fateChanged, setFateChanged] = useState(null);
   // The DM put the party to sleep: carries the rest's summary (who went
   // hungry, the market's new mood) for the sleep overlay.
   const [longRest, setLongRest] = useState(null);
@@ -94,6 +97,9 @@ export default function AccessSocket({ children }) {
   const [slugHuntUpdated, setSlugHuntUpdated] = useState(null);
   const [slugHuntResolved, setSlugHuntResolved] = useState(null);
   const [slugHuntLock, setSlugHuntLock] = useState(null);
+  // The open Give Slug Bundle, whole (see routes/slugBundle.js) -- every
+  // message is the full current state, so a single slot never loses anything.
+  const [slugBundle, setSlugBundle] = useState(null);
   const [damageFlash, setDamageFlash] = useState(null);
   const [voiceRoster, setVoiceRoster] = useState([]);
   // A plain "latest signal" state slot silently drops messages: ICE
@@ -250,6 +256,24 @@ export default function AccessSocket({ children }) {
         return;
       }
 
+      // The DM changed this user's role (Player / DM Assistant / Dungeon
+      // Master). The server already enforces it; /api/me returns the new user
+      // plus a fresh token carrying the new role, and the dashboard is the
+      // one page every role can land on.
+      if (data.type === "role-changed") {
+        fetch("/api/me", { headers: { Authorization: `Bearer ${token}` } })
+          .then((res) => (res.ok ? res.json() : Promise.reject(new Error("unauthorized"))))
+          .then((body) => {
+            login(body.token || token, body.user);
+            navigateRef.current("/dashboard", { replace: true });
+          })
+          .catch(() => {
+            logout();
+            navigateRef.current("/login", { replace: true });
+          });
+        return;
+      }
+
       if (data.type === "access-revoked") {
         updateUser((prev) => (prev ? { ...prev, status: "revoked" } : prev));
         navigateRef.current("/request-access", { replace: true });
@@ -304,6 +328,11 @@ export default function AccessSocket({ children }) {
         setEquipmentChanged({ userId: data.userId, at: data.at ?? Date.now() });
         return;
       }
+      if (data.type === "fate-changed") {
+        setFateChanged(data.at ?? Date.now());
+        return;
+      }
+
       if (data.type === "outfits-changed") {
         setOutfitsChanged({ userId: data.userId, at: data.at ?? Date.now() });
         return;
@@ -495,6 +524,11 @@ export default function AccessSocket({ children }) {
         return;
       }
 
+      if (data.type === "slug-bundle") {
+        setSlugBundle({ bundle: data.bundle, at: data.at ?? Date.now() });
+        return;
+      }
+
       if (data.type === "slug-hunt-lock") {
         setSlugHuntLock({ userId: data.userId, locked: data.locked, all: Boolean(data.all), at: Date.now() });
         return;
@@ -529,6 +563,14 @@ export default function AccessSocket({ children }) {
         console.log(`[voice] AccessSocket received voice-signal from ${data.from}: kind=${data.signal?.kind}`);
         voiceSignalQueueRef.current.push({ from: data.from, signal: data.signal });
         setVoiceSignalTick((t) => t + 1);
+        return;
+      }
+
+      // The server's answer to our own voice-join (see ws.js): rides the same
+      // ordered queue so VoiceChatContext handles it in sequence with signals.
+      if (data.type === "voice-joined") {
+        voiceSignalQueueRef.current.push({ from: null, signal: { kind: "joined", resumed: Boolean(data.resumed) } });
+        setVoiceSignalTick((t) => t + 1);
       }
       };
     }
@@ -545,7 +587,7 @@ export default function AccessSocket({ children }) {
     // here was the actual cause of the connection endlessly tearing down
     // and reopening before ever finishing its handshake.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, updateUser, logout]);
+  }, [token, login, updateUser, logout]);
 
   return (
     <LiveStateContext.Provider
@@ -559,6 +601,7 @@ export default function AccessSocket({ children }) {
         partyHealed,
         equipmentChanged,
         outfitsChanged,
+        fateChanged,
         longRest,
         restWokenAt,
         markRestWoken,
@@ -601,6 +644,7 @@ export default function AccessSocket({ children }) {
         slugHuntUpdated,
         slugHuntResolved,
         slugHuntLock,
+        slugBundle,
         damageFlash,
         voiceRoster,
         voiceSignalQueueRef,

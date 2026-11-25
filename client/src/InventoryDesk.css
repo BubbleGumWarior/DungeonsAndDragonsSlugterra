@@ -110,6 +110,11 @@
   align-items: start;
 }
 
+/* A DM Assistant's read-only desk has no catalog pane. */
+.desk-layout--solo {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .desk-pane--catalog {
   position: sticky;
   top: var(--desk-top);

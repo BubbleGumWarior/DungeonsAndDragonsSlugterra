@@ -16,6 +16,7 @@ import { COMBAT_TEAMS, teamById } from "./combatTeams.js";
 import { combatSide } from "./combatSkills.js";
 import { MAP_SIZE_PRESETS, MIN_MAP_METERS, MAX_MAP_METERS, mapMeters } from "./mapScale.js";
 import AtmosphereNote from "./AtmosphereNote.jsx";
+import { ControllerPicker } from "./CombatControllerPicker.jsx";
 import "./CombatSetup.css";
 
 // Where each team musters on a fresh map, as fractions of its width/height --
@@ -159,7 +160,7 @@ function CustomForm({ onAdd, busy }) {
   );
 }
 
-function Roster({ combatants, isDM, onSetTeam, onRemove }) {
+function Roster({ combatants, isDM, assistants, onAssign, onSetTeam, onRemove }) {
   const groups = COMBAT_TEAMS.map((t) => ({ team: t, members: combatants.filter((c) => combatSide(c) === t.id) })).filter(
     (g) => g.members.length > 0
   );
@@ -190,6 +191,9 @@ function Roster({ combatants, isDM, onSetTeam, onRemove }) {
                 </span>
                 {isDM && (
                   <>
+                    {onAssign && (
+                      <ControllerPicker combatant={c} assistants={assistants} onAssign={onAssign} className="setup-member-team" />
+                    )}
                     <select
                       className="setup-member-team"
                       value={team.id}
@@ -288,6 +292,8 @@ export default function CombatSetup({
   onPullGrunt,
   onSetTeam,
   onRemove,
+  assistants = [],
+  onAssignController,
   onStart,
   onCancel,
   children,
@@ -532,7 +538,14 @@ export default function CombatSetup({
             <div className="setup-block-head">
               <h3>On the map</h3>
             </div>
-            <Roster combatants={combatants} isDM={isDM} onSetTeam={onSetTeam} onRemove={onRemove} />
+            <Roster
+              combatants={combatants}
+              isDM={isDM}
+              assistants={assistants}
+              onAssign={onAssignController}
+              onSetTeam={onSetTeam}
+              onRemove={onRemove}
+            />
           </div>
         </aside>
 

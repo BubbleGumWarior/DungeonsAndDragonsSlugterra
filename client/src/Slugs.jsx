@@ -1,4 +1,5 @@
 import { useAuth } from "./AuthContext.jsx";
+import { canEditAsDm, canViewAsDm } from "./roles.js";
 import { useLiveState } from "./AccessSocket.jsx";
 import NavBar from "./NavBar.jsx";
 import SlugManagement from "./SlugManagement.jsx";
@@ -8,7 +9,7 @@ import "./PlaceholderPage.css";
 export default function Slugs() {
   const { user } = useAuth();
   const { slugterraRevealed } = useLiveState();
-  const isDungeonMaster = user?.role === "Dungeon Master";
+  const seesAll = canViewAsDm(user);
 
   return (
     <div className="dashboard-page">
@@ -16,7 +17,7 @@ export default function Slugs() {
       <div className="placeholder-page placeholder-page--wide">
         <h1 className="slugs-page-title">{slugterraRevealed ? "Slugs" : "Creatures"}</h1>
 
-        {isDungeonMaster ? <SlugManagement /> : <PlayerSlugs />}
+        {seesAll ? <SlugManagement readOnly={!canEditAsDm(user)} /> : <PlayerSlugs />}
       </div>
     </div>
   );

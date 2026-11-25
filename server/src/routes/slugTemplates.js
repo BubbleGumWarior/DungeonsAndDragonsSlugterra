@@ -1,18 +1,12 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireDmReadOrEdit } from "../roles.js";
 import { validateSlugFields } from "../slugRules.js";
 import { seedDefaultSlugTemplates } from "../seedDefaultSlugs.js";
 import { broadcastAll } from "../ws.js";
 
 const router = Router();
-
-function requireDungeonMaster(req, res, next) {
-  if (req.user.role !== "Dungeon Master") {
-    return res.status(403).json({ error: "Dungeon Master access required." });
-  }
-  next();
-}
 
 // Player-visible "gallery": name and protoform art only, no stats -- this is
 // what the NPC slug-guessing minigame picks from, so a guess is a real guess.
@@ -26,7 +20,7 @@ router.get("/gallery", requireAuth, async (req, res) => {
   }
 });
 
-router.use(requireAuth, requireDungeonMaster);
+router.use(requireAuth, requireDmReadOrEdit);
 
 export function toClientTemplate(row) {
   return {

@@ -34,6 +34,8 @@ export default function PlayerSatchel({
   onRestoreBlaster,
   onRemoveItem,
   onRemoveOutfit,
+  // A DM Assistant's view: the same inventory, with no way to change it.
+  readOnly = false,
 }) {
   if (!recipient) {
     return (
@@ -77,7 +79,7 @@ export default function PlayerSatchel({
       {total === 0 && (
         <div className="desk-empty desk-empty--big">
           <p>{recipient.name} has nothing assigned.</p>
-          <p>Pick something from the catalog and press Give.</p>
+          {!readOnly && <p>Pick something from the catalog and press Give.</p>}
         </div>
       )}
 
@@ -88,9 +90,9 @@ export default function PlayerSatchel({
               key={blaster.id}
               blaster={blaster}
               equippedMods={allMods.filter((m) => m.equippedBlasterId === blaster.id)}
-              onClick={() => onEditBlaster(blaster)}
+              onClick={readOnly ? undefined : () => onEditBlaster(blaster)}
               actions={
-                <div className="desk-card-actions">
+                readOnly ? null : <div className="desk-card-actions">
                   {(blaster.durability ?? 100) < 100 && (
                     <button
                       type="button"
@@ -117,9 +119,9 @@ export default function PlayerSatchel({
               key={mod.id}
               mod={mod}
               blasters={blasters}
-              onClick={() => onEditMod(mod)}
+              onClick={readOnly ? undefined : () => onEditMod(mod)}
               actions={
-                <div className="desk-card-actions">
+                readOnly ? null : <div className="desk-card-actions">
                   <QuickRemove name={mod.name} onRemove={() => onRemoveItem("mod", mod)} />
                 </div>
               }
@@ -134,9 +136,9 @@ export default function PlayerSatchel({
             <EquipmentCard
               key={item.id}
               item={item}
-              onClick={() => onEditEquipment(item)}
+              onClick={readOnly ? undefined : () => onEditEquipment(item)}
               actions={
-                <div className="desk-card-actions">
+                readOnly ? null : <div className="desk-card-actions">
                   <QuickRemove name={item.name} onRemove={() => onRemoveItem("equipment", item)} />
                 </div>
               }
@@ -165,7 +167,7 @@ export default function PlayerSatchel({
                     </span>
                   )}
                 </div>
-                <button
+                {!readOnly && <button
                   type="button"
                   className="slug-management-icon-btn slug-management-icon-btn--danger"
                   onClick={() => onRemoveOutfit(o)}
@@ -173,7 +175,7 @@ export default function PlayerSatchel({
                   aria-label={`Take away ${o.name}`}
                 >
                   <TrashIcon weight="bold" />
-                </button>
+                </button>}
               </li>
             );
           })}

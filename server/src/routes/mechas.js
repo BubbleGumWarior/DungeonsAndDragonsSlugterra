@@ -1,17 +1,11 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireDmView, requireDmEdit } from "../roles.js";
 import { validateMechaFields } from "../mechaRules.js";
 import { broadcastAll } from "../ws.js";
 
 const router = Router();
-
-function requireDungeonMaster(req, res, next) {
-  if (req.user.role !== "Dungeon Master") {
-    return res.status(403).json({ error: "Dungeon Master access required." });
-  }
-  next();
-}
 
 router.use(requireAuth);
 
@@ -47,7 +41,7 @@ router.get("/me", async (req, res) => {
   }
 });
 
-router.get("/", requireDungeonMaster, async (req, res) => {
+router.get("/", requireDmView, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM mechas ORDER BY created_at ASC");
     res.json({ mechas: rows.map(toClientMecha) });
@@ -57,7 +51,7 @@ router.get("/", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.post("/", requireDungeonMaster, async (req, res) => {
+router.post("/", requireDmEdit, async (req, res) => {
   const { userId, templateId, name, frameType, image, speed, handling, armor, rammingPower, passengerCapacity, modSlots, tier } = req.body || {};
 
   const validation = validateMechaFields({ name, frameType, image, speed, handling, armor, rammingPower, passengerCapacity, modSlots, tier });
@@ -99,7 +93,7 @@ router.post("/", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.patch("/:id", requireDungeonMaster, async (req, res) => {
+router.patch("/:id", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const { name, frameType, image, speed, handling, armor, rammingPower, passengerCapacity, modSlots, tier } = req.body || {};
 
@@ -131,7 +125,7 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.delete("/:id", requireDungeonMaster, async (req, res) => {
+router.delete("/:id", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   try {
     const { rows } = await pool.query("DELETE FROM mechas WHERE id = $1 RETURNING id, user_id", [id]);

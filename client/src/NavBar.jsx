@@ -5,8 +5,10 @@ import {
   EyeIcon,
   EyeSlashIcon,
   CaretDownIcon,
+  CrownSimpleIcon,
   DiceFiveIcon,
   ShieldCheckIcon,
+  SparkleIcon,
   SignOutIcon,
   BackpackIcon,
   FlaskIcon,
@@ -26,6 +28,7 @@ import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import SlugIcon from "./SlugIcon.jsx";
 import "./NavBar.css";
+import { canEditAsDm, canViewAsDm } from "./roles.js";
 
 // A navbar dropdown that groups several destinations under one trigger, so
 // the bar doesn't sprawl. Desktop: click the trigger for an absolute popover.
@@ -36,7 +39,7 @@ function NavGroup({ id, label, icon, items, openGroup, setOpenGroup }) {
   const location = useLocation();
   const open = openGroup === id;
   const childActive = items.some(
-    (it) => location.pathname === it.to || location.pathname.startsWith(`${it.to}/`)
+    (it) => it.to && (location.pathname === it.to || location.pathname.startsWith(`${it.to}/`))
   );
 
   return (
@@ -58,16 +61,25 @@ function NavGroup({ id, label, icon, items, openGroup, setOpenGroup }) {
 
       <div className={`navbar-group-menu${open ? " navbar-group-menu--open" : ""}`}>
         <span className="navbar-group-label">{label}</span>
-        {items.map((it) => (
-          <NavLink
-            key={it.to}
-            to={it.to}
-            className={({ isActive }) => `navbar-sublink${isActive ? " navbar-sublink--active" : ""}`}
-          >
-            {it.icon}
-            <span className="nav-label">{it.label}</span>
-          </NavLink>
-        ))}
+        {items.map((it) =>
+          // An item with `onClick` instead of `to` is an action (e.g. the
+          // Slugterra reveal toggle), not a destination.
+          it.onClick ? (
+            <button key={it.key} type="button" className="navbar-sublink" onClick={it.onClick}>
+              {it.icon}
+              <span className="nav-label">{it.label}</span>
+            </button>
+          ) : (
+            <NavLink
+              key={it.to}
+              to={it.to}
+              className={({ isActive }) => `navbar-sublink${isActive ? " navbar-sublink--active" : ""}`}
+            >
+              {it.icon}
+              <span className="nav-label">{it.label}</span>
+            </NavLink>
+          )
+        )}
       </div>
     </div>
   );
@@ -87,8 +99,11 @@ export default function NavBar() {
   const navRef = useRef(null);
   const actionsRef = useRef(null);
   const [indicator, setIndicator] = useState(null);
-  const isDungeonMaster = user?.role === "Dungeon Master";
-  const showSlugterraTabs = isDungeonMaster || slugterraRevealed;
+  // DM Tools (the Reveal Slugterra switch, the Sound Desk, Admin) are all
+  // controls, so they're the Dungeon Master's alone -- a DM Assistant gets no
+  // DM Tools menu. The assistant does see every Slugterra tab, read-only.
+  const isDungeonMaster = canEditAsDm(user);
+  const showSlugterraTabs = canViewAsDm(user) || slugterraRevealed;
   // On the dashboard itself there's nowhere to "go back" to -- show the
   // brand mark. Everywhere else, the brand slot becomes the way home.
   const isDashboard = location.pathname === "/dashboard";
@@ -105,6 +120,17 @@ export default function NavBar() {
     { to: "/mechas", label: "Mecha-Beasts", icon: <PawPrintIcon weight="bold" /> },
     { to: "/market", label: "Market", icon: <StorefrontIcon weight="bold" /> },
     { to: "/chronicle", label: "Chronicle", icon: <BookOpenTextIcon weight="bold" /> },
+    { to: "/fate", label: "Fate Ledger", icon: <SparkleIcon weight="bold" /> },
+  ];
+  const dmItems = [
+    {
+      key: "toggle-slugterra",
+      onClick: handleToggleSlugterra,
+      label: slugterraHidden ? "Reveal Slugterra" : "Hide Slugterra",
+      icon: slugterraHidden ? <EyeIcon weight="bold" /> : <EyeSlashIcon weight="bold" />,
+    },
+    { to: "/sound-desk", label: "Sound Desk", icon: <WaveformIcon weight="bold" /> },
+    { to: "/admin", label: "Admin", icon: <ShieldCheckIcon weight="bold" /> },
   ];
 
   // Close the mobile dropdown / an open nav group on an outside tap/click or
@@ -252,20 +278,14 @@ export default function NavBar() {
             </>
           )}
           {isDungeonMaster && (
-            <>
-              <button type="button" className="navbar-action" onClick={handleToggleSlugterra}>
-                {slugterraHidden ? <EyeIcon weight="bold" /> : <EyeSlashIcon weight="bold" />}
-                <span className="nav-label">{slugterraHidden ? "Reveal Slugterra" : "Hide Slugterra"}</span>
-              </button>
-              <NavLink className={linkClass} to="/sound-desk">
-                <WaveformIcon weight="bold" />
-                <span className="nav-label">Sound Desk</span>
-              </NavLink>
-              <NavLink className={linkClass} to="/admin">
-                <ShieldCheckIcon weight="bold" />
-                <span className="nav-label">Admin</span>
-              </NavLink>
-            </>
+            <NavGroup
+              id="dm"
+              label="DM Tools"
+              icon={<CrownSimpleIcon weight="bold" />}
+              items={dmItems}
+              openGroup={openGroup}
+              setOpenGroup={setOpenGroup}
+            />
           )}
           <NavLink className={linkClass} to="/settings">
             <GearSixIcon weight="bold" />

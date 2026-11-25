@@ -1,12 +1,13 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireDmView, requireDmEdit, isAssistant } from "../roles.js";
 import {
   validateCharacterPayload,
   validateKnockoutPips,
   validateCurrentGrit,
   computeMaxGrit,
-  skillModifier,
+  characterSkillMod,
 } from "../characterRules.js";
 import { broadcastAll } from "../ws.js";
 import { toClientSlug } from "./slugs.js";
@@ -30,13 +31,6 @@ const router = Router();
 
 router.use(requireAuth);
 
-function requireDungeonMaster(req, res, next) {
-  if (req.user.role !== "Dungeon Master") {
-    return res.status(403).json({ error: "Dungeon Master access required." });
-  }
-  next();
-}
-
 export function toClientCharacter(row) {
   return {
     id: row.id,
@@ -45,6 +39,7 @@ export function toClientCharacter(row) {
     portrait: row.portrait,
     stats: row.stats,
     proficiencies: row.proficiencies,
+    expertise: row.expertise ?? [],
     knockoutPips: row.knockout_pips,
     currentGrit: row.current_grit,
     gritBonus: row.grit_bonus ?? 0,
@@ -103,6 +98,9 @@ router.get("/me", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
+  if (isAssistant(req.user)) {
+    return res.status(403).json({ error: "A DM Assistant doesn't have a character." });
+  }
   const { name, age, portrait, stats, proficiencies } = req.body || {};
 
   const validation = validateCharacterPayload({ name, age, portrait, stats, proficiencies });
@@ -147,7 +145,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-router.get("/:userId", requireDungeonMaster, async (req, res) => {
+router.get("/:userId", requireDmView, async (req, res) => {
   const userId = Number(req.params.userId);
   try {
     const { rows } = await pool.query("SELECT * FROM characters WHERE user_id = $1", [userId]);
@@ -161,11 +159,13 @@ router.get("/:userId", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.patch("/:userId", requireDungeonMaster, async (req, res) => {
+router.patch("/:userId", requireDmEdit, async (req, res) => {
   const userId = Number(req.params.userId);
-  const { name, age, portrait, stats, proficiencies } = req.body || {};
+  // `expertise` is optional: when it's left out the stored list is kept,
+  // minus any skill that just lost its proficiency.
+  const { name, age, portrait, stats, proficiencies, expertise } = req.body || {};
 
-  const validation = validateCharacterPayload({ name, age, portrait, stats, proficiencies }, { unrestricted: true });
+  const validation = validateCharacterPayload({ name, age, portrait, stats, proficiencies, expertise }, { unrestricted: true });
   if (!validation.valid) {
     return res.status(400).json({ error: validation.error });
   }
@@ -175,10 +175,23 @@ router.patch("/:userId", requireDungeonMaster, async (req, res) => {
     const newMax = computeMaxGrit(stats);
     const { rows } = await pool.query(
       `UPDATE characters SET name = $1, age = $2, portrait = $3, stats = $4, proficiencies = $5,
-        current_grit = LEAST(current_grit, $6 + grit_bonus)
+        current_grit = LEAST(current_grit, $6 + grit_bonus),
+        expertise = COALESCE((
+          SELECT jsonb_agg(e) FROM jsonb_array_elements_text(COALESCE($8::jsonb, expertise)) AS t(e)
+          WHERE $5::jsonb ? e
+        ), '[]'::jsonb)
        WHERE user_id = $7
        RETURNING *`,
-      [name.trim(), age ?? null, portrait ?? null, JSON.stringify(stats), JSON.stringify(proficiencies), newMax, userId]
+      [
+        name.trim(),
+        age ?? null,
+        portrait ?? null,
+        JSON.stringify(stats),
+        JSON.stringify(proficiencies),
+        newMax,
+        userId,
+        expertise === undefined ? null : JSON.stringify(expertise),
+      ]
     );
 
     if (!rows[0]) {
@@ -194,7 +207,7 @@ router.patch("/:userId", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.patch("/:userId/knockout", requireDungeonMaster, async (req, res) => {
+router.patch("/:userId/knockout", requireDmEdit, async (req, res) => {
   const userId = Number(req.params.userId);
   const { knockoutPips } = req.body || {};
 
@@ -241,7 +254,7 @@ async function charactersInCombat() {
 // What a long rest would cost right now: every resting slug whose food is
 // already at 0 loses a loyalty tier, or leaves if it has no tier left. Lets the
 // DM see the damage before putting the party to sleep.
-router.get("/long-rest/preview", requireDungeonMaster, async (req, res) => {
+router.get("/long-rest/preview", requireDmView, async (req, res) => {
   try {
     const inCombat = await charactersInCombat();
     const { rows } = await pool.query(
@@ -280,7 +293,7 @@ router.get("/long-rest/preview", requireDungeonMaster, async (req, res) => {
 // a loyalty tier (or leaves the party at the lowest). Slug Hunt, haggling and the merchants' mood all reset for the new
 // day. Lives here (not combat.js) because it's a table-wide reset the DM can
 // reach for any time.
-router.post(["/long-rest", "/heal-all"], requireDungeonMaster, async (req, res) => {
+router.post(["/long-rest", "/heal-all"], requireDmEdit, async (req, res) => {
   try {
     const inCombat = await charactersInCombat();
     // Read before the night's day-advance, so a Medbay that finishes building
@@ -304,7 +317,7 @@ router.post(["/long-rest", "/heal-all"], requireDungeonMaster, async (req, res) 
     const galley = [];
     for (const c of characters) {
       const newMax = computeMaxGrit(c.stats, c.grit_bonus);
-      const survivalMod = skillModifier(c.stats, c.proficiencies, "survival");
+      const survivalMod = characterSkillMod(c, "survival");
       let scoops = 0;
       if (survivalMod >= FORAGE_MIN_MOD) {
         const roll = 1 + Math.floor(Math.random() * FORAGE_DIE);
@@ -398,7 +411,7 @@ router.post(["/long-rest", "/heal-all"], requireDungeonMaster, async (req, res) 
         continue;
       }
       const outfit = await getWornOutfit(pool, c.user_id);
-      const range = effectiveRange(outfit, skillModifier(c.stats, c.proficiencies, "fortitude"));
+      const range = effectiveRange(outfit, characterSkillMod(c, "fortitude"));
       const outside = degreesOutside(range, climate.restTemp);
       // Sleeping in Crew Quarters cuts the odds.
       if (outside > 0 && Math.random() < illnessChance(outside) * (1 - fx.illnessCutPct / 100)) {
@@ -466,7 +479,7 @@ router.post(["/long-rest", "/heal-all"], requireDungeonMaster, async (req, res) 
   }
 });
 
-router.patch("/:userId/grit", requireDungeonMaster, async (req, res) => {
+router.patch("/:userId/grit", requireDmEdit, async (req, res) => {
   const userId = Number(req.params.userId);
   const { currentGrit } = req.body || {};
 
@@ -500,7 +513,7 @@ router.patch("/:userId/grit", requireDungeonMaster, async (req, res) => {
 // /grit above) and routes the positive/negative delta through grantFame so
 // an increase mirrors into Heat exactly the same way an automatic combat
 // award would -- there's only ever one place Heat's mirroring happens.
-router.patch("/:userId/fame", requireDungeonMaster, async (req, res) => {
+router.patch("/:userId/fame", requireDmEdit, async (req, res) => {
   const userId = Number(req.params.userId);
   const { fame } = req.body || {};
 
@@ -533,7 +546,7 @@ router.patch("/:userId/fame", requireDungeonMaster, async (req, res) => {
 // DM manual Heat override -- a free +/- on top of Heat's automatic
 // mirroring of Fame gains (see grantFame in combat.js). Never touches Fame
 // in either direction; this is purely the DM's own dial.
-router.patch("/:userId/heat", requireDungeonMaster, async (req, res) => {
+router.patch("/:userId/heat", requireDmEdit, async (req, res) => {
   const userId = Number(req.params.userId);
   const { heat } = req.body || {};
 

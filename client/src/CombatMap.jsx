@@ -2237,6 +2237,7 @@ export default function CombatMap({
   estimateApCost,
   onTokenDragEnd,
   isDM = false,
+  seesAll = isDM, // the DM or a DM Assistant: sees hidden tokens and decoys for what they are
   viewerUserId = null,
   shotFx,
   shotResolved,
@@ -3031,7 +3032,11 @@ export default function CombatMap({
             // other player never gets it rendered at all, so there's
             // nothing on the map for them to click/target either.
             if (!c.statusEffects?.invisible && !isBurrowed(c)) return true;
-            return isDM || (c.kind === "character" && c.refUserId === viewerUserId);
+            return (
+              seesAll ||
+              (c.kind === "character" && c.refUserId === viewerUserId) ||
+              (c.kind === "npc" && viewerUserId != null && c.controllerUserId === viewerUserId)
+            );
           })
           // Mounted riders paint last so they sit on top of their mecha.
           .sort((a, b) => (a.mountedOn != null ? 1 : 0) - (b.mountedOn != null ? 1 : 0))
@@ -3051,7 +3056,7 @@ export default function CombatMap({
             // A Mirage Coil decoy only gives itself away to the DM and the
             // owner's own side. Everyone else sees the owner's name on it and
             // the same active-turn ring, so neither tells it from the real one.
-            const hidesAsOwner = c.kind === "decoy" && !isDM && !(viewerCombatant && combatSide(viewerCombatant) === combatSide(c));
+            const hidesAsOwner = c.kind === "decoy" && !seesAll && !(viewerCombatant && combatSide(viewerCombatant) === combatSide(c));
             const decoyOwner = hidesAsOwner ? encounter.combatants.find((o) => o.id === c.data?.decoyOwnerId) : null;
             return (
               <Token

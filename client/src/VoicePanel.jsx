@@ -9,6 +9,8 @@ import {
   SpeakerXIcon,
   ArrowsClockwiseIcon,
   SlidersHorizontalIcon,
+  VideoCameraIcon,
+  VideoCameraSlashIcon,
 } from "@phosphor-icons/react";
 import { useVoiceChat } from "./VoiceChatContext.jsx";
 import { useAudioDevices } from "./voiceAudio.js";
@@ -42,24 +44,38 @@ function DeviceSelect({ label, devices, value, onChange, fallbackName }) {
   );
 }
 
-// Mic and speaker choice. Saved per-browser (see voiceAudio.js), applied on
-// the next join -- or immediately for the mic if you're already in a call.
+// Mic, speaker and camera choice. Saved per-browser (see voiceAudio.js and
+// voiceVideo.js), applied on the next join -- or immediately if you're
+// already in a call.
 function DevicePicker() {
-  const { inputDeviceId, outputDeviceId, setInputDevice, setOutputDevice, canPickOutput } = useVoiceChat();
-  const { inputs, outputs, labeled } = useAudioDevices();
+  const {
+    inputDeviceId,
+    outputDeviceId,
+    setInputDevice,
+    setOutputDevice,
+    canPickOutput,
+    canUseCamera,
+    cameraDeviceId,
+    setCameraDevice,
+  } = useVoiceChat();
+  const { inputs, outputs, cameras, labeled } = useAudioDevices();
   const showOutput = canPickOutput && outputs.length > 0;
-  if (inputs.length === 0 && !showOutput) return null;
+  const showCamera = canUseCamera && cameras.length > 0;
+  if (inputs.length === 0 && !showOutput && !showCamera) return null;
 
   return (
     <details className="voice-devices">
       <summary className="voice-devices-summary">
         <SlidersHorizontalIcon weight="bold" />
-        Audio devices
+        Devices
       </summary>
       <div className="voice-devices-body">
         <DeviceSelect label="Microphone" devices={inputs} value={inputDeviceId} onChange={setInputDevice} fallbackName="Microphone" />
         {showOutput && (
           <DeviceSelect label="Speakers" devices={outputs} value={outputDeviceId} onChange={setOutputDevice} fallbackName="Speakers" />
+        )}
+        {showCamera && (
+          <DeviceSelect label="Camera" devices={cameras} value={cameraDeviceId} onChange={setCameraDevice} fallbackName="Camera" />
         )}
         {!labeled && <p className="voice-device-hint">Device names appear once you've allowed microphone access (join the call once).</p>}
       </div>
@@ -67,7 +83,36 @@ function DevicePicker() {
   );
 }
 
-function ParticipantRow({ name, speaking, muted, reconnecting, volume, onVolumeChange }) {
+// Data saver. Client-side only: kept in this browser, and peers simply stop
+// sending you video while it's off -- so it really saves the download.
+function VideoSaverSwitch() {
+  const { receiveVideo, setReceiveVideo } = useVoiceChat();
+  return (
+    <div className="voice-switch-row">
+      <div className="voice-switch-text">
+        <span className="voice-switch-label" id="voice-receive-video-label">
+          Show others' cameras
+        </span>
+        <span className="voice-switch-hint" id="voice-receive-video-hint">
+          {receiveVideo ? "Turn off on limited data. They'll still see you." : "Off: you won't download anyone's video."}
+        </span>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={receiveVideo}
+        aria-labelledby="voice-receive-video-label"
+        aria-describedby="voice-receive-video-hint"
+        className="voice-switch"
+        onClick={() => setReceiveVideo(!receiveVideo)}
+      >
+        <span className="voice-switch-thumb" aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
+function ParticipantRow({ name, speaking, muted, reconnecting, camera, volume, onVolumeChange }) {
   const percent = Math.round(volume * 100);
   return (
     <div className={`voice-row${speaking ? " voice-row--speaking" : ""}`}>
@@ -86,6 +131,11 @@ function ParticipantRow({ name, speaking, muted, reconnecting, volume, onVolumeC
           {reconnecting && (
             <span className="voice-row-muted-tag">
               <ArrowsClockwiseIcon weight="bold" /> reconnecting
+            </span>
+          )}
+          {camera && (
+            <span className="voice-row-muted-tag voice-row-camera-tag">
+              <VideoCameraIcon weight="fill" /> on camera
             </span>
           )}
         </span>
@@ -126,6 +176,10 @@ export default function VoicePanel({ onClose }) {
     leaveCall,
     toggleSelfMute,
     setPeerVolume,
+    canUseCamera,
+    cameraOn,
+    cameraStarting,
+    toggleCamera,
   } = useVoiceChat();
 
   const isPushToTalk = voiceInputMode === "push_to_talk";
@@ -166,6 +220,7 @@ export default function VoicePanel({ onClose }) {
               <PhoneIcon weight="fill" />
               {joining ? "Joining…" : "Join Voice Chat"}
             </button>
+            <VideoSaverSwitch />
             <DevicePicker />
           </>
         )}
@@ -183,6 +238,19 @@ export default function VoicePanel({ onClose }) {
                   <span className="voice-row-hint">{pttHeld ? "Transmitting…" : "Hold Space to talk"}</span>
                 )}
               </div>
+              {canUseCamera && (
+                <button
+                  type="button"
+                  className={`voice-mute-btn voice-cam-btn${cameraOn ? " voice-cam-btn--on" : ""}`}
+                  onClick={toggleCamera}
+                  disabled={cameraStarting}
+                  aria-pressed={cameraOn}
+                  aria-label={cameraOn ? "Turn camera off" : "Turn camera on"}
+                  title={cameraStarting ? "Starting camera…" : cameraOn ? "Turn camera off" : "Turn camera on"}
+                >
+                  {cameraOn ? <VideoCameraIcon weight="fill" /> : <VideoCameraSlashIcon weight="bold" />}
+                </button>
+              )}
               <button
                 type="button"
                 className={`voice-mute-btn${selfMuted ? " voice-mute-btn--muted" : ""}`}
@@ -217,6 +285,7 @@ export default function VoicePanel({ onClose }) {
                     speaking={p.speaking}
                     muted={p.muted}
                     reconnecting={p.reconnecting}
+                    camera={p.camera}
                     volume={p.volume}
                     onVolumeChange={(value) => setPeerVolume(p.userId, value)}
                   />
@@ -226,6 +295,7 @@ export default function VoicePanel({ onClose }) {
               <p className="voice-panel-empty-hint">You're the only one here so far.</p>
             )}
 
+            <VideoSaverSwitch />
             <DevicePicker />
             {error && <p className="panel-error">{error}</p>}
 

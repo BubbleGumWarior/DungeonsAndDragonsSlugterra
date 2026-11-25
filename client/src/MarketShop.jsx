@@ -23,6 +23,7 @@ import {
   TShirtIcon,
 } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
+import { canEditAsDm, canViewAsDm } from "./roles.js";
 import { useLiveState } from "./AccessSocket.jsx";
 import { useToast } from "./Toast.jsx";
 import { PLANETS } from "./planetData.js";
@@ -94,7 +95,10 @@ export default function MarketShop() {
   const { token, user } = useAuth();
   const { slugHuntArea, marketChanged, tradeCompleted, partyHealed } = useLiveState();
   const { push } = useToast();
-  const isDM = user?.role === "Dungeon Master";
+  // isDM: sees the market as the DM does (the DM, or a DM Assistant);
+  // canEdit: may actually change it (the DM alone).
+  const isDM = canViewAsDm(user);
+  const canEdit = canEditAsDm(user);
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [category, setCategory] = useState("supply");
@@ -240,13 +244,13 @@ export default function MarketShop() {
         )}
       </div>
 
-      {isDM && <DMMarketControls data={data} planetName={planetName} dmCall={dmCall} token={token} />}
+      {isDM && <DMMarketControls data={data} planetName={planetName} dmCall={dmCall} token={token} readOnly={!canEdit} />}
 
       {closed && !isDM ? (
         <p className="market-empty market-closed">The market on {planetName} is closed. Wait for the shopkeepers to open up.</p>
       ) : (
         <>
-      {closed && <p className="market-empty market-closed">Closed to players — open the market above when you're ready.</p>}
+      {closed && <p className="market-empty market-closed">{canEdit ? "Closed to players — open the market above when you're ready." : "Closed to players."}</p>}
       <div className="market-tabs" role="tablist">
         {CATEGORIES.map((c) => {
           const count = grouped[c.key]?.length ?? 0;
@@ -351,7 +355,7 @@ export default function MarketShop() {
                     </div>
                   )}
                 </div>
-                {isDM && (
+                {canEdit && (
                   <button
                     type="button"
                     className="market-item-dm"

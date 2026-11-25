@@ -1,12 +1,12 @@
 import { CaretDownIcon } from "@phosphor-icons/react";
-import { PROFICIENCIES, describeEntry, entryLabel, statByKey } from "./characterData.js";
+import { PROFICIENCIES, describeEntry, entryLabel, skillTraining, statByKey } from "./characterData.js";
 import { STAT_GUIDE } from "./statGuide.js";
 import "./StatGuide.css";
 
 // "What your stats do": one plain-language line per stat, and per skill what it
 // buys you in this world. Before the Slugterra reveal it shows the stat lines
 // only, worded for an ordinary job (see statGuide.js).
-export default function StatGuide({ proficiencies = [], revealed = true }) {
+export default function StatGuide({ proficiencies = [], expertise = [], revealed = true }) {
   return (
     <details className="stat-guide" open>
       <summary className="stat-guide-summary">
@@ -30,11 +30,13 @@ export default function StatGuide({ proficiencies = [], revealed = true }) {
                   <ul className="stat-guide-skills">
                     {skills.map((p) => {
                       const benefit = entry.skills[p.key];
+                      const training = skillTraining(p.key, proficiencies, expertise);
                       return (
                         <li key={p.key}>
                           <span className="stat-guide-skill-name">
                             {entryLabel(p, revealed)}
-                            {proficiencies.includes(p.key) && <span className="stat-guide-trained">Proficient</span>}
+                            {training === "expert" && <span className="stat-guide-trained stat-guide-trained--expert">Expertise</span>}
+                            {training === "proficient" && <span className="stat-guide-trained">Proficient</span>}
                           </span>
                           <span className="stat-guide-skill-note">{benefit || describeEntry(p, revealed)}</span>
                         </li>

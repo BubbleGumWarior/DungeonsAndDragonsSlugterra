@@ -1,19 +1,13 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireDmEdit } from "../roles.js";
 import { broadcastAll } from "../ws.js";
 import { resetTravel, setPartyLocation } from "../travelService.js";
 
 const router = Router();
 
 router.use(requireAuth);
-
-function requireDungeonMaster(req, res, next) {
-  if (req.user.role !== "Dungeon Master") {
-    return res.status(403).json({ error: "Dungeon Master access required." });
-  }
-  next();
-}
 
 // Personal display/audio preferences -- every signed-in user tunes their
 // own, no DM gate. See index.css's [data-theme] blocks for what each theme
@@ -188,7 +182,7 @@ router.get("/", async (req, res) => {
 // The DM points the party at one of the 17 charted worlds across the Three
 // Clusters (0-16, flat index -- see client planetData.js's PLANETS) -- drives
 // the dashboard Slug Hunt panel for everyone (see client SlugHuntPanel.jsx).
-router.post("/slug-hunt-area", requireDungeonMaster, async (req, res) => {
+router.post("/slug-hunt-area", requireDmEdit, async (req, res) => {
   const area = Number(req.body?.area);
   if (!Number.isInteger(area) || area < 0 || area > 16) {
     return res.status(400).json({ error: "Area must be a whole number between 0 and 16." });
@@ -209,7 +203,7 @@ router.post("/slug-hunt-area", requireDungeonMaster, async (req, res) => {
 // The DM hides or reveals Slugterra for the whole party. Persisted so it holds
 // across server restarts; the broadcast carries the full state (not a delta),
 // so a missed message is corrected by the next one or the next page load.
-router.post("/slugterra", requireDungeonMaster, async (req, res) => {
+router.post("/slugterra", requireDmEdit, async (req, res) => {
   const hidden = Boolean(req.body?.hidden);
   try {
     await pool.query("UPDATE campaign_settings SET slugterra_hidden = $1 WHERE id = 1", [hidden]);

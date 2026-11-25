@@ -20,6 +20,7 @@ export default function DMCharacterEditor({ userId, onSaved }) {
   const [portrait, setPortrait] = useState(null);
   const [stats, setStats] = useState(null);
   const [proficiencies, setProficiencies] = useState([]);
+  const [expertise, setExpertise] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -38,6 +39,7 @@ export default function DMCharacterEditor({ userId, onSaved }) {
         setPortrait(data.character.portrait);
         setStats(data.character.stats);
         setProficiencies(data.character.proficiencies);
+        setExpertise(data.character.expertise ?? []);
       });
   }, [userId, token]);
 
@@ -113,6 +115,7 @@ export default function DMCharacterEditor({ userId, onSaved }) {
           portrait,
           stats,
           proficiencies,
+          expertise: expertise.filter((k) => proficiencies.includes(k)),
         }),
       });
       const data = await res.json();
@@ -188,13 +191,19 @@ export default function DMCharacterEditor({ userId, onSaved }) {
       </div>
 
       <div className="dm-editor-section">
-        <h2>Proficiencies</h2>
-        <ProficiencyPicker selected={proficiencies} onChange={setProficiencies} unlimited />
+        <h2>Proficiencies &amp; Expertise</h2>
+        <ProficiencyPicker
+          selected={proficiencies}
+          onChange={setProficiencies}
+          expertise={expertise}
+          onExpertiseChange={setExpertise}
+          unlimited
+        />
       </div>
 
       <div className="dm-editor-section">
         <h2>Skills</h2>
-        <SkillList stats={stats} proficiencies={proficiencies} />
+        <SkillList stats={stats} proficiencies={proficiencies} expertise={expertise} />
       </div>
 
       {error && <div className="dm-editor-error">{error}</div>}

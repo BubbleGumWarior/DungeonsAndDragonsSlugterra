@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireDmView, requireDmEdit, canEditAsDm, isPlayerRole, canViewAsDm } from "../roles.js";
 import { broadcastAll } from "../ws.js";
-import { skillModifier } from "../characterRules.js";
+import { characterSkillMod } from "../characterRules.js";
 import { toClientBlaster } from "./blasters.js";
 import { toClientMod } from "./mods.js";
 import { toClientMecha } from "./mechas.js";
@@ -51,14 +52,6 @@ import {
 const router = Router();
 router.use(requireAuth);
 
-function requireDungeonMaster(req, res, next) {
-  if (req.user.role !== "Dungeon Master") {
-    return res.status(403).json({ error: "Dungeon Master access required." });
-  }
-  next();
-}
-
-const isDM = (req) => req.user.role === "Dungeon Master";
 
 class MarketError extends Error {
   constructor(message, status = 400) {
@@ -419,7 +412,8 @@ router.get("/", async (req, res) => {
   try {
     const planet = await currentPlanet();
     const pm = await planetRow(planet);
-    const dm = isDM(req);
+    // The DM and a DM Assistant both see the full stock, hidden items included.
+    const dm = canViewAsDm(req.user);
     const barter = dm ? null : await personalDiscount(req.user.sub, planet);
     const discountPct = barter?.discountPct ?? 0;
 
@@ -547,7 +541,7 @@ export async function cloneTemplateToUser(client, kind, templateId, userId) {
 }
 
 router.post("/buy", async (req, res) => {
-  if (isDM(req)) return res.status(403).json({ error: "Only players can buy from the market." });
+  if (!isPlayerRole(req.user)) return res.status(403).json({ error: "Only players can buy from the market." });
   const key = String(req.body?.key ?? "");
   const qty = SUPPLY_KEYS.includes(key) || key.startsWith("listing:") ? Number(req.body?.quantity ?? 1) : 1;
   if (!Number.isInteger(qty) || qty < 1 || qty > 20) {
@@ -708,12 +702,12 @@ function rollD20() {
 // each point above is 2% off for the roller (capped at 20%); each point below
 // adds 2% to every price on this planet for everyone (capped at 20% total).
 router.post("/barter", async (req, res) => {
-  if (isDM(req)) return res.status(403).json({ error: "Only players can barter." });
+  if (!isPlayerRole(req.user)) return res.status(403).json({ error: "Only players can barter." });
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const { rows: chars } = await client.query(
-      "SELECT stats, proficiencies FROM characters WHERE user_id = $1 FOR UPDATE",
+      "SELECT stats, proficiencies, expertise FROM characters WHERE user_id = $1 FOR UPDATE",
       [req.user.sub]
     );
     const character = chars[0];
@@ -725,7 +719,7 @@ router.post("/barter", async (req, res) => {
     }
 
     const die = rollD20();
-    const modifier = skillModifier(character.stats, character.proficiencies, "persuasion");
+    const modifier = characterSkillMod(character, "persuasion");
     const total = die + modifier;
     const pct = barterPctForTotal(total); // signed: +discount / -markup
     const roll = { die, modifier, total, pct };
@@ -756,7 +750,7 @@ router.post("/barter", async (req, res) => {
 
 // ---- DM management -----------------------------------------------------------------
 
-router.put("/planets/:index", requireDungeonMaster, async (req, res) => {
+router.put("/planets/:index", requireDmEdit, async (req, res) => {
   const index = Number(req.params.index);
   const pricePct = Number(req.body?.pricePct);
   if (!Number.isInteger(index) || index < 0 || index > 16) return res.status(400).json({ error: "Invalid planet." });
@@ -778,7 +772,7 @@ router.put("/planets/:index", requireDungeonMaster, async (req, res) => {
 });
 
 // The DM opens or closes the market on the planet the party is docked at.
-router.put("/open", requireDungeonMaster, async (req, res) => {
+router.put("/open", requireDmEdit, async (req, res) => {
   const open = Boolean(req.body?.open);
   try {
     const planet = await currentPlanet();
@@ -796,7 +790,7 @@ router.put("/open", requireDungeonMaster, async (req, res) => {
 });
 
 // The DM sets the merchants' mood on the current planet.
-router.put("/mood", requireDungeonMaster, async (req, res) => {
+router.put("/mood", requireDmEdit, async (req, res) => {
   const mood = String(req.body?.mood ?? "");
   if (!MARKET_MOODS.some((m) => m.key === mood)) return res.status(400).json({ error: "Unknown mood." });
   try {
@@ -815,7 +809,7 @@ router.put("/mood", requireDungeonMaster, async (req, res) => {
 });
 
 // Template picker for "post a listing": every template with its default price.
-router.get("/catalog", requireDungeonMaster, async (req, res) => {
+router.get("/catalog", requireDmView, async (req, res) => {
   try {
     const catalog = {};
     for (const kind of LISTING_KINDS) {
@@ -844,7 +838,7 @@ router.get("/catalog", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.post("/listings", requireDungeonMaster, async (req, res) => {
+router.post("/listings", requireDmEdit, async (req, res) => {
   const { kind, templateId } = req.body || {};
   const shipSupply = kind === "ship_supply";
   const weaponSupply = kind === "weapon_supply";
@@ -887,7 +881,7 @@ router.post("/listings", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.delete("/listings/:id", requireDungeonMaster, async (req, res) => {
+router.delete("/listings/:id", requireDmEdit, async (req, res) => {
   try {
     await pool.query("DELETE FROM market_listings WHERE id = $1", [Number(req.params.id)]);
     signalMarketChanged();
@@ -899,7 +893,7 @@ router.delete("/listings/:id", requireDungeonMaster, async (req, res) => {
 });
 
 // Pull standing stock from (or return it to) the current planet's shelves.
-router.post("/hidden", requireDungeonMaster, async (req, res) => {
+router.post("/hidden", requireDmEdit, async (req, res) => {
   const key = String(req.body?.key ?? "");
   const hidden = Boolean(req.body?.hidden);
   if (!SUPPLY_KEYS.includes(key) && !/^(mod:\d+|mecha_mod:\d+|outfit:\d+)$/.test(key)) return res.status(400).json({ error: "Invalid item." });
@@ -919,7 +913,7 @@ router.post("/hidden", requireDungeonMaster, async (req, res) => {
 });
 
 // Absolute credits/pods for one character's purse.
-router.patch("/purse/:userId", requireDungeonMaster, async (req, res) => {
+router.patch("/purse/:userId", requireDmEdit, async (req, res) => {
   const userId = Number(req.params.userId);
   const { credits, pods, kibble, repairKits, energyCells, medpacks, revivalTonics, meds, weaponParts } = req.body || {};
   const sets = [];

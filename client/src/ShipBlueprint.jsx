@@ -110,7 +110,10 @@ function blankCompartment(xPct, yPct) {
   };
 }
 
-export default function ShipBlueprint({ isDungeonMaster = false }) {
+// `assistant`: a DM Assistant sees the crew's deck plan without any of the
+// crew's build / upgrade / engineering buttons, and the Nav Computer's map
+// with everything the DM knows.
+export default function ShipBlueprint({ isDungeonMaster = false, assistant = false }) {
   const { token, user } = useAuth();
   const { shipUpdate } = useLiveState();
   const { travel } = useTravel();
@@ -1034,14 +1037,16 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
               {selected.status !== "empty" && (
                 <p className="ship-detail-body">{selected.description || "No details recorded."}</p>
               )}
-              <ShipWorkPanel
-                compartment={selected}
-                info={info}
-                busy={workBusy}
-                error={workError}
-                result={workResult}
-                onAttempt={attemptWork}
-              />
+              {!assistant && (
+                <ShipWorkPanel
+                  compartment={selected}
+                  info={info}
+                  busy={workBusy}
+                  error={workError}
+                  result={workResult}
+                  onAttempt={attemptWork}
+                />
+              )}
               {isNavPin(selected) && selected.status !== "online" && (
                 <p className="ship-detail-body">The star console stays dark until this compartment is online.</p>
               )}
@@ -1061,7 +1066,7 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
                   )}
                   <BuildProgress compartment={selected} upgrade={Boolean(selected.upgradingTo)} />
                   <Engineers compartment={selected} />
-                  {user?.id != null && (
+                  {user?.id != null && !assistant && (
                     <div className="ship-build-actions">
                       {(selected.engineers || []).some((e) => e.userId === user.id) ? (
                         <button type="button" className="ship-btn" onClick={() => setEngineering(null)}>
@@ -1091,6 +1096,7 @@ export default function ShipBlueprint({ isDungeonMaster = false }) {
       {consoleOpen && (
         <NavConsole
           isDungeonMaster={isDungeonMaster}
+          assistant={assistant}
           chamberName={navComputer?.label || "Nav Computer"}
           onClose={closeConsole}
         />

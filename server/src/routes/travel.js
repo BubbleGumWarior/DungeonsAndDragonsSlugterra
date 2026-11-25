@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireDmEdit, canEditAsDm, isPlayerRole } from "../roles.js";
 import { isValidArea, navCanReach } from "../shipRules.js";
 import {
   buildTravelView,
@@ -16,13 +17,6 @@ import {
 
 const router = Router();
 router.use(requireAuth);
-
-function requireDungeonMaster(req, res, next) {
-  if (req.user.role !== "Dungeon Master") {
-    return res.status(403).json({ error: "Dungeon Master access required." });
-  }
-  next();
-}
 
 async function travelRow() {
   const { rows } = await pool.query("SELECT * FROM travel_state WHERE id = 1");
@@ -46,6 +40,9 @@ router.get("/", async (req, res) => {
 // A player puts a destination to the party. Only one proposal is open at a
 // time; the proposer's own yes is counted straight away.
 router.post("/propose", async (req, res) => {
+  if (!isPlayerRole(req.user)) {
+    return res.status(403).json({ error: "Only players put a destination to the party." });
+  }
   const area = Number(req.body?.area);
   if (!isValidArea(area)) return res.status(400).json({ error: "That isn't a charted world." });
   try {
@@ -70,7 +67,7 @@ router.post("/propose", async (req, res) => {
     await pool.query("DELETE FROM travel_votes");
     // The DM isn't a voter, so their proposal starts at no votes.
     const { rows: voter } = await pool.query(
-      "SELECT 1 FROM characters c JOIN users u ON u.id = c.user_id WHERE c.user_id = $1 AND u.role <> 'Dungeon Master'",
+      "SELECT 1 FROM characters c JOIN users u ON u.id = c.user_id WHERE c.user_id = $1 AND u.role = 'Player'",
       [req.user.sub]
     );
     if (voter.length) {
@@ -86,6 +83,9 @@ router.post("/propose", async (req, res) => {
 });
 
 router.post("/vote", async (req, res) => {
+  if (!isPlayerRole(req.user)) {
+    return res.status(403).json({ error: "Only players vote on travel." });
+  }
   const vote = req.body?.vote;
   if (vote !== "yes" && vote !== "no") return res.status(400).json({ error: "Vote yes or no." });
   try {
@@ -118,7 +118,7 @@ router.post("/withdraw", async (req, res) => {
   try {
     const row = await travelRow();
     if (row.proposal_area == null) return res.json({ ok: true });
-    const isDm = req.user.role === "Dungeon Master";
+    const isDm = canEditAsDm(req.user);
     if (!isDm && row.proposer_id !== req.user.sub) {
       return res.status(403).json({ error: "Only the person who proposed it can withdraw it." });
     }
@@ -133,7 +133,7 @@ router.post("/withdraw", async (req, res) => {
 
 // The DM can launch the journey without waiting for a vote -- the open
 // proposal if there is one, or a destination of their own.
-router.post("/depart", requireDungeonMaster, async (req, res) => {
+router.post("/depart", requireDmEdit, async (req, res) => {
   try {
     const row = await travelRow();
     if (row.traveling) return res.status(409).json({ error: "The ship is already under way." });
@@ -152,7 +152,7 @@ router.post("/depart", requireDungeonMaster, async (req, res) => {
 
 // Reveal a world's survey data to the players (or hide it again) without the
 // party having to fly there.
-router.post("/visited", requireDungeonMaster, async (req, res) => {
+router.post("/visited", requireDmEdit, async (req, res) => {
   const area = Number(req.body?.area);
   if (!isValidArea(area)) return res.status(400).json({ error: "That isn't a charted world." });
   try {
@@ -168,7 +168,7 @@ router.post("/visited", requireDungeonMaster, async (req, res) => {
 });
 
 // Turn the ship around: the party is back where it set out from, docked.
-router.post("/abort", requireDungeonMaster, async (req, res) => {
+router.post("/abort", requireDmEdit, async (req, res) => {
   try {
     await resetTravel();
     res.json({ ok: true });

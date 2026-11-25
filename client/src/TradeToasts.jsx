@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { HandshakeIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
+import { isPlayer as isPlayerRole } from "./roles.js";
 import { useLiveState } from "./AccessSocket.jsx";
 import { useToast } from "./Toast.jsx";
 import { describeSide, tradeAction } from "./tradeUtils.js";
@@ -19,7 +20,7 @@ export default function TradeToasts() {
   const seenPending = useRef(new Set());
   const seenResolved = useRef(new Set());
   const initialised = useRef(false);
-  const isPlayer = Boolean(token) && user?.role !== "Dungeon Master";
+  const isPlayer = Boolean(token) && isPlayerRole(user);
 
   const sync = useCallback(async () => {
     if (!isPlayer) return;

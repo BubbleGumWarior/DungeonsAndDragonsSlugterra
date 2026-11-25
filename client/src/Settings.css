@@ -337,6 +337,147 @@
   color: var(--ink-dim);
 }
 
+/* --- Video: camera check (CameraCheck.jsx), the mic check's sibling --- */
+
+.camera-check {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--charcoal-700);
+}
+
+/* Same 16:9 frame as a call tile (VideoStage.css), so what you see here is
+   how you'll sit at the table. */
+.camera-check-preview {
+  position: relative;
+  width: 168px;
+  aspect-ratio: 16 / 9;
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: radial-gradient(120% 90% at 50% 30%, var(--charcoal-800), var(--charcoal-950) 70%);
+  border: 1px solid var(--charcoal-600);
+  transition: border-color 0.2s var(--ease-out);
+}
+
+.camera-check-preview--live {
+  border-color: var(--gold-dim);
+}
+
+.camera-check-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1); /* mirrored like your own call tile */
+  opacity: 0;
+  transition: opacity 0.24s var(--ease-out);
+}
+
+.camera-check-preview--live .camera-check-video {
+  opacity: 1;
+}
+
+.camera-check-idle {
+  width: 26px;
+  height: 26px;
+  color: var(--gold-dim);
+}
+
+.camera-check-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 14px;
+  margin: 0;
+}
+
+.camera-check-stat {
+  min-width: 0;
+}
+
+.camera-check-stat--wide {
+  grid-column: 1 / -1;
+}
+
+.camera-check-stat dt {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--ink-dim);
+}
+
+.camera-check-stat dd {
+  margin: 1px 0 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.camera-check-target {
+  font-weight: 500;
+  color: var(--ink-dim);
+}
+
+/* The one line that answers "is my camera OK?". Icon + words carry the
+   state; colour only reinforces it. */
+.camera-check-verdict {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+}
+
+.camera-check-verdict svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.camera-check-verdict--good svg {
+  color: var(--success);
+}
+
+.camera-check-verdict--good {
+  color: var(--ink);
+}
+
+.camera-check-verdict--ok svg {
+  color: var(--gold-soft);
+}
+
+.camera-check-verdict--warn {
+  color: var(--ink);
+}
+
+.camera-check-verdict--warn svg {
+  color: var(--danger);
+}
+
+@media (max-width: 480px) {
+  .camera-check {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .camera-check-preview {
+    width: 100%;
+  }
+}
+
 /* Second (and any later) volume bar stacked in the Sound panel -- a
    top-border divider sets it off from the one above. */
 .volume-control--divided {

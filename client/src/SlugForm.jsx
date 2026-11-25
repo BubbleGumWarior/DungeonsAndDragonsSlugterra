@@ -101,7 +101,7 @@ export default function SlugForm({ mode, initialValues, players, defaultPlayerId
         <div className="slug-form-actions">
           {mode === "assign" && (
             <div className="slug-form-assign-field">
-              <label htmlFor="slug-form-player">Assign To</label>
+              <label htmlFor="slug-form-player">Give To</label>
               <select
                 id="slug-form-player"
                 value={selectedPlayerId ?? ""}

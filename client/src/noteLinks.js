@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "./AuthContext.jsx";
+import { canViewAsDm } from "./roles.js";
 import { useLiveState } from "./AccessSocket.jsx";
 import { equipmentSummary, qualityInfo } from "./itemData.js";
 
@@ -60,7 +61,7 @@ export function useNoteLinkables() {
   const { token, user } = useAuth();
   // The DM reads everyone's notes, so their chips must resolve against
   // everyone's things, not just the (usually empty) pack they carry.
-  const scope = user?.role === "Dungeon Master" ? "" : "/me";
+  const scope = canViewAsDm(user) ? "" : "/me";
   const { tradeCompleted, marketChanged, slugUpdate, equipmentChanged, npcTemplatesUpdate, characterUpdate } = useLiveState();
   const [data, setData] = useState(null);
 

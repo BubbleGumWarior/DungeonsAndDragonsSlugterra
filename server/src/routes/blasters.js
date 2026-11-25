@@ -1,24 +1,18 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireDmView, requireDmEdit, canEditAsDm, isPlayerRole } from "../roles.js";
 import { validateBlasterFields } from "../itemRules.js";
 import { broadcastAll } from "../ws.js";
 import { toClientSlug } from "./slugs.js";
 import { syncTempoAura } from "../slugAura.js";
 import { syncAmmoBelt, announceEquipmentChange } from "../ammoBelt.js";
 import { EQUIPMENT_SLOT } from "../equipmentRules.js";
-import { skillModifier } from "../characterRules.js";
+import { characterSkillMod } from "../characterRules.js";
 import { DURABILITY_MAX, REPAIR_DC, REPAIR_FAIL_DAMAGE, blasterUpgradeFor, repairPartsFor } from "../careRules.js";
 import { getShipEffects } from "../travelService.js";
 
 const router = Router();
-
-function requireDungeonMaster(req, res, next) {
-  if (req.user.role !== "Dungeon Master") {
-    return res.status(403).json({ error: "Dungeon Master access required." });
-  }
-  next();
-}
 
 router.use(requireAuth);
 
@@ -73,7 +67,7 @@ router.get("/me", async (req, res) => {
   }
 });
 
-router.get("/", requireDungeonMaster, async (req, res) => {
+router.get("/", requireDmView, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM blasters ORDER BY created_at ASC");
     res.json({ blasters: rows.map(toClientBlaster) });
@@ -83,7 +77,7 @@ router.get("/", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.post("/", requireDungeonMaster, async (req, res) => {
+router.post("/", requireDmEdit, async (req, res) => {
   const { userId, templateId, name, baseType, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality } =
     req.body || {};
 
@@ -125,7 +119,7 @@ router.post("/", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.patch("/:id", requireDungeonMaster, async (req, res) => {
+router.patch("/:id", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const { name, baseType, accuracy, reloadApCost, range, speed, modSlots, magazineSize, quality } = req.body || {};
 
@@ -175,7 +169,7 @@ router.patch("/:id/equip", async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Blaster not found." });
     }
-    if (blaster.user_id !== req.user.sub && req.user.role !== "Dungeon Master") {
+    if (blaster.user_id !== req.user.sub && !canEditAsDm(req.user)) {
       await client.query("ROLLBACK");
       return res.status(403).json({ error: "You do not own this blaster." });
     }
@@ -240,7 +234,7 @@ router.patch("/:id/unequip", async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Blaster not found." });
     }
-    if (blaster.user_id !== req.user.sub && req.user.role !== "Dungeon Master") {
+    if (blaster.user_id !== req.user.sub && !canEditAsDm(req.user)) {
       await client.query("ROLLBACK");
       return res.status(403).json({ error: "You do not own this blaster." });
     }
@@ -276,7 +270,7 @@ router.patch("/:id/unequip", async (req, res) => {
 // only the DM can restore it (see /restore below).
 router.post("/:id/repair", async (req, res) => {
   const id = Number(req.params.id);
-  if (req.user.role === "Dungeon Master") {
+  if (!isPlayerRole(req.user)) {
     return res.status(403).json({ error: "Only players repair with a kit -- use Restore instead." });
   }
 
@@ -284,7 +278,7 @@ router.post("/:id/repair", async (req, res) => {
   try {
     await client.query("BEGIN");
     const { rows: chars } = await client.query(
-      "SELECT stats, proficiencies, repair_kits, weapon_parts FROM characters WHERE user_id = $1 FOR UPDATE",
+      "SELECT stats, proficiencies, expertise, repair_kits, weapon_parts FROM characters WHERE user_id = $1 FOR UPDATE",
       [req.user.sub]
     );
     const character = chars[0];
@@ -318,7 +312,7 @@ router.post("/:id/repair", async (req, res) => {
     const die = 1 + Math.floor(Math.random() * 20);
     // A Workshop aboard adds to the roll.
     const workshopBonus = (await getShipEffects()).repairBonus ?? 0;
-    const modifier = skillModifier(character.stats, character.proficiencies, "engineering") + workshopBonus;
+    const modifier = characterSkillMod(character, "engineering") + workshopBonus;
     const total = die + modifier;
     const success = total > REPAIR_DC;
     const next = success ? DURABILITY_MAX : Math.max(0, durability - REPAIR_FAIL_DAMAGE);
@@ -355,7 +349,7 @@ router.post("/:id/repair", async (req, res) => {
 // and gear in a live fight can't be reworked.
 router.post("/:id/upgrade", async (req, res) => {
   const id = Number(req.params.id);
-  if (req.user.role === "Dungeon Master") {
+  if (!isPlayerRole(req.user)) {
     return res.status(403).json({ error: "Only players upgrade with parts -- edit the blaster directly instead." });
   }
 
@@ -363,7 +357,7 @@ router.post("/:id/upgrade", async (req, res) => {
   try {
     await client.query("BEGIN");
     const { rows: chars } = await client.query(
-      "SELECT stats, proficiencies, weapon_parts FROM characters WHERE user_id = $1 FOR UPDATE",
+      "SELECT stats, proficiencies, expertise, weapon_parts FROM characters WHERE user_id = $1 FOR UPDATE",
       [req.user.sub]
     );
     const character = chars[0];
@@ -392,7 +386,7 @@ router.post("/:id/upgrade", async (req, res) => {
 
     const die = 1 + Math.floor(Math.random() * 20);
     const workshopBonus = (await getShipEffects()).repairBonus ?? 0;
-    const modifier = skillModifier(character.stats, character.proficiencies, "engineering") + workshopBonus;
+    const modifier = characterSkillMod(character, "engineering") + workshopBonus;
     const total = die + modifier;
     const crit = die === 20;
     const success = crit || total >= upgrade.dc;
@@ -437,7 +431,7 @@ router.post("/:id/upgrade", async (req, res) => {
 });
 
 // DM only: restore a blaster to full durability -- the party visited an expert.
-router.post("/:id/restore", requireDungeonMaster, async (req, res) => {
+router.post("/:id/restore", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   try {
     const { rows } = await pool.query("UPDATE blasters SET durability = $1 WHERE id = $2 RETURNING *", [DURABILITY_MAX, id]);
@@ -451,7 +445,7 @@ router.post("/:id/restore", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.delete("/:id", requireDungeonMaster, async (req, res) => {
+router.delete("/:id", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   try {
     const { rows } = await pool.query("DELETE FROM blasters WHERE id = $1 RETURNING id, user_id", [id]);

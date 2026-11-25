@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { canEditAsDm, isPlayerRole } from "../roles.js";
 import { broadcastAll } from "../ws.js";
 import { computeMaxGrit } from "../characterRules.js";
 import { ENERGY_CELL_PIPS, MEDPACK_HEAL_FRACTION, TONIC_PIPS, MEDS_DOSES_NEEDED } from "../careRules.js";
@@ -35,7 +36,7 @@ async function assertNotInCombat(userId) {
 }
 
 function playersOnly(req, res, next) {
-  if (req.user.role === "Dungeon Master") {
+  if (!isPlayerRole(req.user)) {
     return res.status(403).json({ error: "Only players use consumables." });
   }
   next();

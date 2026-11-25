@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { CastleTurretIcon, PlusIcon, UserCircleIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
+import { canEditAsDm, canViewAsDm } from "./roles.js";
 import { useLiveState } from "./AccessSocket.jsx";
 import { maxGrit } from "./characterData.js";
 import NavBar from "./NavBar.jsx";
@@ -21,7 +22,9 @@ export default function Dashboard() {
   const { slugterraRevealed, characterUpdate, partyHealed } = useLiveState();
   const [character, setCharacter] = useState(undefined);
   const [selectedUserId, setSelectedUserId] = useState(null);
-  const isDungeonMaster = user?.role === "Dungeon Master";
+  // The DM and a DM Assistant both see the whole party; only the DM edits.
+  const seesAll = canViewAsDm(user);
+  const canEdit = canEditAsDm(user);
 
   useEffect(() => {
     if (user?.role !== "Player") return;
@@ -60,7 +63,7 @@ export default function Dashboard() {
     };
   }, [partyHealed, user, token]);
 
-  const showSlugterraTabs = isDungeonMaster || slugterraRevealed;
+  const showSlugterraTabs = seesAll || slugterraRevealed;
 
   return (
     <div className="dashboard-page">
@@ -96,22 +99,27 @@ export default function Dashboard() {
                 </button>
               )
             ) : selectedUserId ? (
-              <DMCharacterViewer userId={selectedUserId} onDeselect={() => setSelectedUserId(null)} />
+              <DMCharacterViewer userId={selectedUserId} readOnly={!canEdit} onDeselect={() => setSelectedUserId(null)} />
             ) : (
               <div className="dashboard-card">
                 <span className="dashboard-icon">
                   <CastleTurretIcon weight="duotone" />
                 </span>
                 <h1>Logged in as {user?.username}</h1>
-                <p>Select a character from the roster below to view and edit their sheet.</p>
+                <p>
+                  {canEdit
+                    ? "Select a character from the roster below to view and edit their sheet."
+                    : "Select a character from the roster below to view their sheet."}
+                </p>
                 <span className="dashboard-role">{user?.role}</span>
               </div>
             )}
           </div>
 
           <Roster
-            selectable={isDungeonMaster}
-            healable={isDungeonMaster}
+            selectable={seesAll}
+            editable={canEdit}
+            healable={canEdit}
             selectedUserId={selectedUserId}
             onSelect={(c) => setSelectedUserId(c.userId)}
           />
@@ -121,11 +129,11 @@ export default function Dashboard() {
               <div className="chat-slot">
                 <ChatBox />
               </div>
-              <ChallengePanel isDungeonMaster={isDungeonMaster} />
-              <SlugHuntPanel isDungeonMaster={isDungeonMaster} />
+              <ChallengePanel isDungeonMaster={seesAll} readOnly={!canEdit} />
+              <SlugHuntPanel isDungeonMaster={seesAll} readOnly={!canEdit} />
             </>
           )}
-          {isDungeonMaster && <DiceRollPanel />}
+          {canEdit && <DiceRollPanel />}
         </div>
       </div>
     </div>

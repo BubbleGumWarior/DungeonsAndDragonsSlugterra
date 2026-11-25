@@ -10,6 +10,7 @@ import {
   TrashIcon,
 } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
+import { canViewAsDm } from "./roles.js";
 import NavBar from "./NavBar.jsx";
 import NoteEditor from "./NoteEditor.jsx";
 import NoteRefCard from "./NoteRefCard.jsx";
@@ -46,7 +47,8 @@ const SAVE_LABEL = { saved: "Saved", dirty: "Unsaved", saving: "Saving…", erro
 // anything linked. Everything a player types saves itself.
 export default function Notes() {
   const { token, user } = useAuth();
-  const isDM = user?.role === "Dungeon Master";
+  // The DM and a DM Assistant read every book (their own notes stay their own to edit).
+  const isDM = canViewAsDm(user);
   const navigate = useNavigate();
   const { entries, lookup, loaded: linksLoaded } = useNoteLinkables();
 

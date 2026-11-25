@@ -1,18 +1,12 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireDmReadOrEdit } from "../roles.js";
 import { validateBlasterFields } from "../itemRules.js";
 
 const router = Router();
 
-function requireDungeonMaster(req, res, next) {
-  if (req.user.role !== "Dungeon Master") {
-    return res.status(403).json({ error: "Dungeon Master access required." });
-  }
-  next();
-}
-
-router.use(requireAuth, requireDungeonMaster);
+router.use(requireAuth, requireDmReadOrEdit);
 
 function toClientTemplate(row) {
   return {

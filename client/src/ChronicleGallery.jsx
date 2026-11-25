@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useLocation } from "react-router-dom";
 import { EyeIcon, EyeSlashIcon, PencilSimpleIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
+import { canEditAsDm, canViewAsDm } from "./roles.js";
 import { useLiveState } from "./AccessSocket.jsx";
 import ChronicleCard from "./ChronicleCard.jsx";
 import ChronicleForm from "./ChronicleForm.jsx";
@@ -119,7 +120,10 @@ function normPc(c) {
 
 export default function ChronicleGallery() {
   const { token, user } = useAuth();
-  const isDungeonMaster = user?.role === "Dungeon Master";
+  // isDungeonMaster: sees every card, hidden lines and grunts (the DM, or a DM
+  // Assistant). canEdit: may add, edit, reveal or delete (the DM alone).
+  const isDungeonMaster = canViewAsDm(user);
+  const canEdit = canEditAsDm(user);
   const { npcTemplatesUpdate, gruntTemplatesUpdate, characterUpdate, characterCreated, slugUpdate, partyHealed, slugpediaUpdate } = useLiveState();
 
   const [npcs, setNpcs] = useState([]);
@@ -434,12 +438,12 @@ export default function ChronicleGallery() {
             ))}
         </div>
 
-        {isDungeonMaster && segment === "met" && (
+        {canEdit && segment === "met" && (
           <button type="button" className="chronicle-new" onClick={() => setModal({ type: "new" })}>
             <PlusIcon weight="bold" /> New character
           </button>
         )}
-        {isDungeonMaster && segment === "grunts" && (
+        {canEdit && segment === "grunts" && (
           <button type="button" className="chronicle-new" onClick={() => setModal({ type: "grunt" })}>
             <PlusIcon weight="bold" /> New grunt
           </button>
@@ -449,7 +453,7 @@ export default function ChronicleGallery() {
       <div className={`chronicle-view ${gridPhase === "out" ? "is-leaving" : "is-entering"}`}>
       {segment === "grunts" ? (
         grunts.length === 0 ? (
-          <p className="chronicle-empty">No grunts yet. Add a minion type the party keeps running into.</p>
+          <p className="chronicle-empty">{canEdit ? "No grunts yet. Add a minion type the party keeps running into." : "No grunts yet."}</p>
         ) : filteredGrunts.length === 0 ? (
           <p className="chronicle-empty">No grunts match this filter.</p>
         ) : (
@@ -472,7 +476,7 @@ export default function ChronicleGallery() {
                     {g.blasterTemplateIds.length} blaster{g.blasterTemplateIds.length === 1 ? "" : "s"} in pool
                   </div>
                 </div>
-                <div className="chronicle-cell-actions">
+                {canEdit && <div className="chronicle-cell-actions">
                   <button type="button" className="chronicle-cell-btn" onClick={() => setModal({ type: "grunt", id: g.id })}>
                     <PencilSimpleIcon weight="bold" /> Edit
                   </button>
@@ -483,7 +487,7 @@ export default function ChronicleGallery() {
                   >
                     <TrashIcon weight="bold" />
                   </button>
-                </div>
+                </div>}
               </div>
             ))}
           </div>
@@ -493,7 +497,7 @@ export default function ChronicleGallery() {
           {segment === "party"
             ? "No player characters yet."
             : isDungeonMaster
-              ? "No cards yet. Add the first person the party has met."
+              ? canEdit ? "No cards yet. Add the first person the party has met." : "No cards yet."
               : "Your Dungeon Master hasn't revealed anyone yet."}
         </p>
       ) : (
@@ -507,10 +511,10 @@ export default function ChronicleGallery() {
               <ChronicleCard
                 entry={entry}
                 dm={isDungeonMaster && entry.kind === "npc"}
-                onReveal={entry.kind === "npc" ? (patch) => patchProfile(entry.id, patch) : undefined}
+                onReveal={entry.kind === "npc" && canEdit ? (patch) => patchProfile(entry.id, patch) : undefined}
               />
 
-              {isDungeonMaster && entry.kind === "npc" && (
+              {canEdit && entry.kind === "npc" && (
                 <div className="chronicle-cell-actions">
                   <button
                     type="button"

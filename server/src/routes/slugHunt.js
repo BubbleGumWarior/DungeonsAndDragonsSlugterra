@@ -4,22 +4,17 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireDmView, requireDmEdit } from "../roles.js";
 import { broadcastAll, notifyUser } from "../ws.js";
-import { skillModifier } from "../characterRules.js";
+import { characterSkillMod } from "../characterRules.js";
 import { huntAttemptsFor, huntFindsOnlyFloppers, arcanaOddsFactor, FLOPPER_NAME } from "../huntRules.js";
 import { recordSlugpediaEntry } from "../slugpediaStore.js";
+import { grantSlugFromTemplate } from "../slugGrant.js";
 import { isTraveling } from "../travelService.js";
 import { toClientTemplate } from "./slugTemplates.js";
 
 const router = Router();
 router.use(requireAuth);
-
-function requireDungeonMaster(req, res, next) {
-  if (req.user.role !== "Dungeon Master") {
-    return res.status(403).json({ error: "Dungeon Master access required." });
-  }
-  next();
-}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ODDS_PATH = path.join(__dirname, "..", "data", "slugHuntOdds.json");
@@ -121,7 +116,7 @@ async function huntStatusFor(userId, character) {
   const { rows } = await pool.query("SELECT attempts, found FROM slug_hunt_locks WHERE user_id = $1", [userId]);
   const used = rows[0]?.attempts ?? 0;
   const found = rows[0]?.found ?? false;
-  const natureMod = skillModifier(character.stats, character.proficiencies, "nature");
+  const natureMod = characterSkillMod(character, "nature");
   const maxAttempts = huntAttemptsFor(natureMod);
   const attemptsLeft = found ? 0 : Math.max(0, maxAttempts - used);
   return { locked: attemptsLeft === 0, floppersOnly: huntFindsOnlyFloppers(natureMod), found, attemptsUsed: used, maxAttempts, attemptsLeft };
@@ -143,7 +138,8 @@ function huntPayload(hunt, template) {
 }
 
 async function notifyDungeonMasters(payload) {
-  const { rows } = await pool.query("SELECT id FROM users WHERE role = 'Dungeon Master'");
+  // DM Assistants see the pending list too (read-only), so they hear about it.
+  const { rows } = await pool.query("SELECT id FROM users WHERE role IN ('Dungeon Master', 'DM Assistant')");
   for (const row of rows) notifyUser(row.id, payload);
 }
 
@@ -174,7 +170,7 @@ async function postChatMessage(role, body) {
 // How many hunts the current player has left this rest.
 router.get("/status", async (req, res) => {
   try {
-    const { rows: charRows } = await pool.query("SELECT stats, proficiencies FROM characters WHERE user_id = $1", [req.user.sub]);
+    const { rows: charRows } = await pool.query("SELECT stats, proficiencies, expertise FROM characters WHERE user_id = $1", [req.user.sub]);
     if (!charRows[0]) return res.json({ locked: false, found: false, attemptsUsed: 0, maxAttempts: 1, attemptsLeft: 1 });
     res.json(await huntStatusFor(req.user.sub, charRows[0]));
   } catch (err) {
@@ -191,7 +187,7 @@ router.get("/status", async (req, res) => {
 router.post("/attempt", async (req, res) => {
   try {
     const { rows: charRows } = await pool.query(
-      "SELECT name, stats, proficiencies FROM characters WHERE user_id = $1",
+      "SELECT name, stats, proficiencies, expertise FROM characters WHERE user_id = $1",
       [req.user.sub]
     );
     const character = charRows[0];
@@ -217,9 +213,9 @@ router.post("/attempt", async (req, res) => {
     );
     const area = settingRows[0]?.slug_hunt_area ?? 0;
 
-    const modifier = skillModifier(character.stats, character.proficiencies, "creatureHandling");
-    const arcanaMod = skillModifier(character.stats, character.proficiencies, "arcana");
-    const natureMod = skillModifier(character.stats, character.proficiencies, "nature");
+    const modifier = characterSkillMod(character, "creatureHandling");
+    const arcanaMod = characterSkillMod(character, "arcana");
+    const natureMod = characterSkillMod(character, "nature");
     const roll = rollD20();
     const total = roll + modifier;
 
@@ -284,7 +280,7 @@ router.post("/attempt", async (req, res) => {
   }
 });
 
-router.get("/pending", requireDungeonMaster, async (req, res) => {
+router.get("/pending", requireDmView, async (req, res) => {
   cleanupExpired();
   try {
     const hunts = [];
@@ -299,7 +295,7 @@ router.get("/pending", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.post("/:id/reroll", requireDungeonMaster, async (req, res) => {
+router.post("/:id/reroll", requireDmEdit, async (req, res) => {
   const hunt = pendingHunts.get(req.params.id);
   if (!hunt) {
     return res.status(404).json({ error: "This hunt has expired or was already resolved." });
@@ -319,7 +315,7 @@ router.post("/:id/reroll", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.post("/:id/approve", requireDungeonMaster, async (req, res) => {
+router.post("/:id/approve", requireDmEdit, async (req, res) => {
   const hunt = pendingHunts.get(req.params.id);
   if (!hunt) {
     return res.status(404).json({ error: "This hunt has expired or was already resolved." });
@@ -334,13 +330,15 @@ router.post("/:id/approve", requireDungeonMaster, async (req, res) => {
 
     pendingHunts.delete(hunt.id);
 
-    // "Once seen, always known" -- adds a party slugpedia entry (no-op if this
-    // exact variant was already recorded). Broadcasts slugpedia-updated itself.
-    await recordSlugpediaEntry({ ...template, template_id: template.id });
+    // The find joins the hunter's own slugs. Granting also records the party
+    // slugpedia entry ("once seen, always known"; a no-op if already known).
+    const given = await grantSlugFromTemplate(template.id, hunt.initiatingUserId);
+    if (!given) await recordSlugpediaEntry({ ...template, template_id: template.id });
 
     await postChatMessage(
       "Dungeon Master",
-      `${hunt.initiatingName} tracked down a wild ${template.name} -- a ${template.type}-type slug -- on ${areaName(hunt.area)}.`
+      `${hunt.initiatingName} tracked down a wild ${template.name} -- a ${template.type}-type slug -- on ${areaName(hunt.area)}` +
+        (given ? ", and it joined their slugs." : ".")
     );
 
     await notifyDungeonMasters({ type: "slug-hunt-resolved", id: hunt.id });
@@ -359,7 +357,7 @@ router.post("/:id/approve", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.post("/:id/dismiss", requireDungeonMaster, async (req, res) => {
+router.post("/:id/dismiss", requireDmEdit, async (req, res) => {
   const hunt = pendingHunts.get(req.params.id);
   if (!hunt) {
     return res.status(404).json({ error: "This hunt has expired or was already resolved." });

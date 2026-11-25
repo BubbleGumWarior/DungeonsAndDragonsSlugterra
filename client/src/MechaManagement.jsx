@@ -8,7 +8,9 @@ import MechaModForm from "./MechaModForm.jsx";
 import CollapseTitle from "./CollapseTitle.jsx";
 import "./SlugManagement.css";
 
-export default function MechaManagement() {
+// `readOnly` is the DM Assistant's view: who has which mecha-beasts, without
+// the template catalogs or any way to edit.
+export default function MechaManagement({ readOnly = false }) {
   const { token } = useAuth();
   const [mechaTemplates, setMechaTemplates] = useState([]);
   const [modTemplates, setModTemplates] = useState([]);
@@ -153,7 +155,7 @@ export default function MechaManagement() {
 
   return (
     <div className="slug-management">
-      <section className="slug-management-section">
+      {!readOnly && <section className="slug-management-section">
         <div className="slug-management-section-header">
           <CollapseTitle title="Mecha-Beast Templates" count={mechaTemplates.length} open={mechasOpen} onToggle={() => setMechasOpen((v) => !v)} />
           <button type="button" className="slug-management-new" onClick={() => setModal({ type: "new-mecha-template" })}>
@@ -195,9 +197,9 @@ export default function MechaManagement() {
             ))}
           </div>
         ))}
-      </section>
+      </section>}
 
-      <section className="slug-management-section">
+      {!readOnly && <section className="slug-management-section">
         <div className="slug-management-section-header">
           <CollapseTitle title="Mecha Mod Templates" count={modTemplates.length} open={modsOpen} onToggle={() => setModsOpen((v) => !v)} />
           <button type="button" className="slug-management-new" onClick={() => setModal({ type: "new-mod-template" })}>
@@ -246,7 +248,7 @@ export default function MechaManagement() {
             ))}
           </div>
         ))}
-      </section>
+      </section>}
 
       <section className="slug-management-section">
         <h2>Players &amp; Their Mecha-Beasts</h2>
@@ -266,7 +268,7 @@ export default function MechaManagement() {
                         key={`mecha-${mecha.id}`}
                         mecha={mecha}
                         equippedMods={mods.filter((m) => m.equippedMechaId === mecha.id)}
-                        onClick={() => setModal({ type: "edit-mecha-instance", mecha })}
+                        onClick={readOnly ? undefined : () => setModal({ type: "edit-mecha-instance", mecha })}
                       />
                     ))}
                     {playerMods.map((mod) => (
@@ -274,7 +276,7 @@ export default function MechaManagement() {
                         key={`mod-${mod.id}`}
                         mod={mod}
                         mechas={playerMechas}
-                        onClick={() => setModal({ type: "edit-mod-instance", mod })}
+                        onClick={readOnly ? undefined : () => setModal({ type: "edit-mod-instance", mod })}
                       />
                     ))}
                   </div>
@@ -285,7 +287,7 @@ export default function MechaManagement() {
         )}
       </section>
 
-      {modal && (
+      {modal && !readOnly && (
         <div className="slug-modal-backdrop" onClick={() => setModal(null)}>
           <div className="slug-modal" onClick={(e) => e.stopPropagation()}>
             <h2>

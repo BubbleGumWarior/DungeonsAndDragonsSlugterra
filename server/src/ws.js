@@ -21,12 +21,31 @@ function voiceRosterPayload() {
         userId,
         name: state.name,
         muted: state.muted,
+        camera: state.camera,
       })),
   };
 }
 
 function broadcastVoiceRoster() {
   broadcastAll(voiceRosterPayload());
+}
+
+// A player's last socket closing doesn't drop them from the call right away.
+// Voice audio is browser-to-browser WebRTC and never rides this socket, so a
+// tunnel/WiFi blip that kills only the WebSocket leaves the audio links
+// perfectly healthy -- dropping the player instantly used to make every peer
+// tear those links down (plus a leave+join chime) for a one-second hiccup.
+// Within this window a reconnect's voice-join just resumes the existing entry.
+// A real departure still lands immediately: the client sends voice-leave on
+// pagehide, and Leave sends it too.
+const VOICE_DISCONNECT_GRACE_MS = 15000;
+const VOICE_PENDING_SIGNAL_LIMIT = 200; // an offer plus its ICE candidates is ~10-20 messages per peer
+
+function clearVoiceDropTimer(entry) {
+  if (entry?.dropTimer) {
+    clearTimeout(entry.dropTimer);
+    entry.dropTimer = null;
+  }
 }
 
 // Cloudflare's proxy (both the regular CDN edge and Tunnel, now that
@@ -114,11 +133,27 @@ export function setupWebSocket(server) {
       }
 
       if (data.type === "voice-join") {
+        // Back within the grace window (see VOICE_DISCONNECT_GRACE_MS), or a
+        // second socket for someone still in the call: keep the entry as-is.
+        // Peers never saw them leave, so their audio links are still up --
+        // the ack tells the client it can keep its own side of them too.
+        ws.inVoice = true;
+        const existing = voiceRoom.get(userId);
+        if (existing) {
+          clearVoiceDropTimer(existing);
+          ws.send(JSON.stringify({ type: "voice-joined", resumed: true }));
+          // Signals peers sent while we had no socket (e.g. an offer from
+          // someone who joined during the blip), replayed in order.
+          for (const message of existing.pendingSignals || []) ws.send(message);
+          existing.pendingSignals = null;
+          return;
+        }
+        ws.send(JSON.stringify({ type: "voice-joined", resumed: false }));
         // Shown to the table by character name, not login username. The
         // entry is registered immediately (so a mute-state sent right behind
         // this isn't dropped) but stays out of the roster until the name
         // lookup finishes, so a username never flashes up first.
-        voiceRoom.set(userId, { name: null, muted: false });
+        voiceRoom.set(userId, { name: null, muted: false, camera: false });
         loadCharacterNames([userId])
           .catch((err) => {
             console.warn(`[ws] could not load character name for user ${userId}: ${err.message}`);
@@ -134,6 +169,8 @@ export function setupWebSocket(server) {
       }
 
       if (data.type === "voice-leave") {
+        for (const socket of userSockets.get(userId) || []) socket.inVoice = false;
+        clearVoiceDropTimer(voiceRoom.get(userId));
         if (voiceRoom.delete(userId)) {
           broadcastVoiceRoster();
         }
@@ -148,10 +185,30 @@ export function setupWebSocket(server) {
         return;
       }
 
+      // Camera on/off, so peers know whether to show this player's video or
+      // their avatar. The video itself never comes near the server (it's
+      // peer-to-peer like the audio); this is just the one-bit roster flag.
+      if (data.type === "voice-camera-state") {
+        const entry = voiceRoom.get(userId);
+        if (!entry || entry.camera === Boolean(data.camera)) return;
+        entry.camera = Boolean(data.camera);
+        broadcastVoiceRoster();
+        return;
+      }
+
       if (data.type === "voice-signal") {
         const to = Number(data.to);
         if (!Number.isInteger(to) || !data.signal) return;
-        notifyUser(to, { type: "voice-signal", from: userId, signal: data.signal });
+        const payload = { type: "voice-signal", from: userId, signal: data.signal };
+        // Recipient is inside its reconnect grace window: hold the signal
+        // for the resume instead of dropping it on the floor.
+        const target = voiceRoom.get(to);
+        if (target?.dropTimer) {
+          target.pendingSignals ||= [];
+          if (target.pendingSignals.length < VOICE_PENDING_SIGNAL_LIMIT) target.pendingSignals.push(JSON.stringify(payload));
+          return;
+        }
+        notifyUser(to, payload);
         return;
       }
 
@@ -170,11 +227,21 @@ export function setupWebSocket(server) {
         }
       }
 
-      // Only drop out of the call once every socket for this user is gone --
-      // otherwise a second tab/device closing would silently boot someone
-      // still on voice in their first tab.
-      if (!userSockets.has(userId) && voiceRoom.delete(userId)) {
-        broadcastVoiceRoster();
+      // Only the socket that actually joined voice matters: a second tab
+      // closing must not boot someone still talking in their first, and the
+      // call tab dropping must not be masked by an idle second tab. Once no
+      // in-call socket is left, wait out the grace window -- a reconnect's
+      // voice-join cancels the timer; if none comes, they really left (this
+      // also catches a reload, where the fresh page never rejoins).
+      const entry = voiceRoom.get(userId);
+      const stillInVoice = [...(userSockets.get(userId) || [])].some((socket) => socket.inVoice);
+      if (ws.inVoice && !stillInVoice && entry && !entry.dropTimer) {
+        entry.dropTimer = setTimeout(() => {
+          entry.dropTimer = null;
+          if (voiceRoom.get(userId) === entry && voiceRoom.delete(userId)) {
+            broadcastVoiceRoster();
+          }
+        }, VOICE_DISCONNECT_GRACE_MS);
       }
     });
   });

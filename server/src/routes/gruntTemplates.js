@@ -1,20 +1,14 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireDmReadOrEdit } from "../roles.js";
 import { broadcastAll } from "../ws.js";
 
 const router = Router();
 
-function requireDungeonMaster(req, res, next) {
-  if (req.user.role !== "Dungeon Master") {
-    return res.status(403).json({ error: "Dungeon Master access required." });
-  }
-  next();
-}
-
 // Grunts are purely a DM prep tool -- never revealed, never shown to players,
 // no biographical profile. Every route is DM-only.
-router.use(requireAuth, requireDungeonMaster);
+router.use(requireAuth, requireDmReadOrEdit);
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const RELATIONSHIPS = ["Ally", "Friend", "Neutral", "Rival", "Enemy", "Unknown"];

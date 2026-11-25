@@ -1,21 +1,15 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireDmView, requireDmEdit, canEditAsDm } from "../roles.js";
 import { broadcastAll } from "../ws.js";
-import { skillModifier } from "../characterRules.js";
+import { characterSkillMod } from "../characterRules.js";
 import { syncArmorGrit } from "../ammoBelt.js";
 import { toClientCharacter } from "./characters.js";
 import { announceOutfitsChanged, currentAtmosphere, getClimate, getWornOutfit, grantOutfit, toClientOutfit } from "../outfitService.js";
 
 const router = Router();
 router.use(requireAuth);
-
-function requireDungeonMaster(req, res, next) {
-  if (req.user.role !== "Dungeon Master") {
-    return res.status(403).json({ error: "Dungeon Master access required." });
-  }
-  next();
-}
 
 // A fight snapshots Grit, AP and the climate penalty when it starts, so what
 // someone wears stays put until it is over.
@@ -44,14 +38,14 @@ async function announceWornChange(userId, gritChanged) {
 router.get("/me", async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM outfits WHERE user_id = $1 ORDER BY created_at ASC, id ASC", [req.user.sub]);
-    const { rows: chars } = await pool.query("SELECT stats, proficiencies FROM characters WHERE user_id = $1", [req.user.sub]);
+    const { rows: chars } = await pool.query("SELECT stats, proficiencies, expertise FROM characters WHERE user_id = $1", [req.user.sub]);
     const climate = await getClimate();
     res.json({
       outfits: rows.map(toClientOutfit),
       climate,
       // What a fight here would be like (offboard, the default) -- the Wardrobe lists it.
       atmosphere: await currentAtmosphere(),
-      fortitudeMod: chars[0] ? skillModifier(chars[0].stats, chars[0].proficiencies, "fortitude") : 0,
+      fortitudeMod: chars[0] ? characterSkillMod(chars[0], "fortitude") : 0,
     });
   } catch (err) {
     console.error(err);
@@ -66,7 +60,7 @@ router.patch("/:id/equip", async (req, res) => {
     await client.query("BEGIN");
     const { rows } = await client.query("SELECT * FROM outfits WHERE id = $1 FOR UPDATE", [id]);
     const outfit = rows[0];
-    if (!outfit || (outfit.user_id !== req.user.sub && req.user.role !== "Dungeon Master")) {
+    if (!outfit || (outfit.user_id !== req.user.sub && !canEditAsDm(req.user))) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Outfit not found." });
     }
@@ -89,7 +83,7 @@ router.patch("/:id/equip", async (req, res) => {
 
 // ---- DM: look at, grant and take away --------------------------------------
 
-router.get("/", requireDungeonMaster, async (req, res) => {
+router.get("/", requireDmView, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM outfits ORDER BY user_id ASC, created_at ASC, id ASC");
     res.json({ outfits: rows.map(toClientOutfit) });
@@ -100,7 +94,7 @@ router.get("/", requireDungeonMaster, async (req, res) => {
 });
 
 // The catalog, for the DM's grant picker.
-router.get("/templates", requireDungeonMaster, async (req, res) => {
+router.get("/templates", requireDmView, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM outfit_templates ORDER BY starter DESC, name ASC");
     res.json({
@@ -124,7 +118,7 @@ router.get("/templates", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.post("/", requireDungeonMaster, async (req, res) => {
+router.post("/", requireDmEdit, async (req, res) => {
   const { userId, templateId } = req.body || {};
   if (!Number.isInteger(userId) || !Number.isInteger(templateId)) {
     return res.status(400).json({ error: "A player and an outfit are required." });
@@ -155,7 +149,7 @@ router.post("/", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.delete("/:id", requireDungeonMaster, async (req, res) => {
+router.delete("/:id", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const client = await pool.connect();
   try {

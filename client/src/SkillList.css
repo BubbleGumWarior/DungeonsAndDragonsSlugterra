@@ -45,6 +45,11 @@
   background: rgba(201, 162, 75, 0.08);
 }
 
+.skill-row--expert {
+  border-color: var(--gold);
+  background: rgba(201, 162, 75, 0.16);
+}
+
 .skill-row-label {
   font-size: 13.5px;
   font-weight: 500;
@@ -68,6 +73,12 @@
   border-radius: 999px;
   padding: 2px 8px;
   white-space: nowrap;
+}
+
+.skill-row-badge--expert {
+  color: var(--charcoal-950);
+  background: var(--gold);
+  border-color: var(--gold);
 }
 
 .skill-row-modifier {

@@ -748,6 +748,15 @@ export async function initSchema() {
     ALTER TABLE characters ADD COLUMN IF NOT EXISTS heat INTEGER NOT NULL DEFAULT 0;
   `);
 
+  // Fate Ledger counters (routes/fate.js). Plain DM-set tallies, no rules
+  // hang off them yet. Floored at 0.
+  await pool.query(`
+    ALTER TABLE characters ADD COLUMN IF NOT EXISTS wish INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE characters ADD COLUMN IF NOT EXISTS anti_wish INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE characters ADD COLUMN IF NOT EXISTS inspiration INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE characters ADD COLUMN IF NOT EXISTS discouragement INTEGER NOT NULL DEFAULT 0;
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS slug_templates (
       id SERIAL PRIMARY KEY,
@@ -1631,6 +1640,25 @@ export async function initSchema() {
   // per-combatant flag is unused.
   await pool.query(`ALTER TABLE combatants DROP COLUMN IF EXISTS revealed;`);
 
+  // A DM Assistant the DM handed this NPC combatant to. They play it like a
+  // player plays their own character (turn rules, no override tools); NULL
+  // means the DM runs it. Cleared when the user stops being an assistant.
+  await pool.query(`
+    ALTER TABLE combatants ADD COLUMN IF NOT EXISTS controller_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+  `);
+
+  // users.role is one of three values (see roles.js). Existing rows are
+  // already "Player" or "Dungeon Master", so the check can go straight on.
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_role_check') THEN
+        ALTER TABLE users ADD CONSTRAINT users_role_check
+          CHECK (role IN ('Player', 'Dungeon Master', 'DM Assistant'));
+      END IF;
+    END $$;
+  `);
+
   // NPC-owned gear isn't tied to a real user account -- it belongs to the
   // specific spawned combatant instance instead, and is cleaned up with it.
   await pool.query(`ALTER TABLE slugs ALTER COLUMN user_id DROP NOT NULL;`);
@@ -1846,6 +1874,9 @@ export async function initSchema() {
     ALTER TABLE characters ADD COLUMN IF NOT EXISTS meds_streak INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE characters ADD COLUMN IF NOT EXISTS meds_taken BOOLEAN NOT NULL DEFAULT false;
   `);
+  // Expertise: skill keys the DM has raised past proficiency (always a subset
+  // of `proficiencies`). An expert skill adds +4 instead of +2.
+  await pool.query(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS expertise JSONB NOT NULL DEFAULT '[]'::jsonb;`);
 
   // Player notes (routes/notes.js). Private to the author: `body` is markdown,
   // and references to owned things are ordinary links with a `ref:` scheme

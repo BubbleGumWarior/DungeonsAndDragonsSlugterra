@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireDmView, requireDmEdit, canEditAsDm } from "../roles.js";
 import { validateMechaModFields } from "../mechaRules.js";
 import { broadcastAll } from "../ws.js";
 import { toClientMecha } from "./mechas.js";
@@ -25,13 +26,6 @@ export async function syncMechaModeFlags(mechaId) {
   if (updated[0]) {
     broadcastAll({ type: "mecha-updated", userId: updated[0].user_id, mecha: toClientMecha(updated[0]) });
   }
-}
-
-function requireDungeonMaster(req, res, next) {
-  if (req.user.role !== "Dungeon Master") {
-    return res.status(403).json({ error: "Dungeon Master access required." });
-  }
-  next();
 }
 
 router.use(requireAuth);
@@ -64,7 +58,7 @@ router.get("/me", async (req, res) => {
   }
 });
 
-router.get("/", requireDungeonMaster, async (req, res) => {
+router.get("/", requireDmView, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM mecha_mods ORDER BY created_at ASC");
     res.json({ mods: rows.map(toClientMod) });
@@ -74,7 +68,7 @@ router.get("/", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.post("/", requireDungeonMaster, async (req, res) => {
+router.post("/", requireDmEdit, async (req, res) => {
   const { userId, templateId, name, effect, speedBonus, speedMultiplier, handlingBonus, armorBonus, rammingBonus, unlocksMode } = req.body || {};
 
   const validation = validateMechaModFields({ name, effect, speedBonus, speedMultiplier, handlingBonus, armorBonus, rammingBonus, unlocksMode });
@@ -113,7 +107,7 @@ router.post("/", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.patch("/:id", requireDungeonMaster, async (req, res) => {
+router.patch("/:id", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const { name, effect, speedBonus, speedMultiplier, handlingBonus, armorBonus, rammingBonus, unlocksMode } = req.body || {};
 
@@ -158,7 +152,7 @@ router.patch("/:id/equip", async (req, res) => {
     if (!mod) {
       return res.status(404).json({ error: "Mod not found." });
     }
-    if (mod.user_id !== req.user.sub && req.user.role !== "Dungeon Master") {
+    if (mod.user_id !== req.user.sub && !canEditAsDm(req.user)) {
       return res.status(403).json({ error: "You do not own this mod." });
     }
 
@@ -199,7 +193,7 @@ router.patch("/:id/unequip", async (req, res) => {
     if (!mod) {
       return res.status(404).json({ error: "Mod not found." });
     }
-    if (mod.user_id !== req.user.sub && req.user.role !== "Dungeon Master") {
+    if (mod.user_id !== req.user.sub && !canEditAsDm(req.user)) {
       return res.status(403).json({ error: "You do not own this mod." });
     }
 
@@ -215,7 +209,7 @@ router.patch("/:id/unequip", async (req, res) => {
   }
 });
 
-router.delete("/:id", requireDungeonMaster, async (req, res) => {
+router.delete("/:id", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   try {
     const { rows } = await pool.query("DELETE FROM mecha_mods WHERE id = $1 RETURNING id, user_id, equipped_mecha_id", [id]);

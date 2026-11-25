@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 import { EyeIcon, EyeSlashIcon, UserCircleIcon } from "@phosphor-icons/react";
 import { typeColor } from "./slugData.js";
 import "./ChronicleCard.css";
@@ -20,9 +20,24 @@ function initials(name) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+// A card shown with `dm` but no onReveal (a DM Assistant's view): every
+// line's shown/hidden state is visible, but nothing can be flipped.
+const EyeReadOnly = createContext(false);
+
 // A small reveal toggle shown next to each line for the DM. Stops the click
 // from flipping the card.
 function Eye({ shown, onClick, label }) {
+  const readOnly = useContext(EyeReadOnly);
+  if (readOnly) {
+    return (
+      <span
+        className={`chronicle-eye chronicle-eye--static ${shown ? "" : "chronicle-eye--off"}`}
+        title={shown ? `${label} is shown to players` : `${label} is hidden from players`}
+      >
+        {shown ? <EyeIcon weight="bold" /> : <EyeSlashIcon weight="bold" />}
+      </span>
+    );
+  }
   return (
     <button
       type="button"
@@ -87,6 +102,7 @@ export default function ChronicleCard({ entry, dm = false, onReveal }) {
   }
 
   return (
+    <EyeReadOnly.Provider value={dm && !onReveal}>
     <div
       className={`chronicle-card ${flipped ? "chronicle-card--flipped" : ""}`}
       style={{ "--rel": relColor }}
@@ -254,5 +270,6 @@ export default function ChronicleCard({ entry, dm = false, onReveal }) {
         </div>
       </div>
     </div>
+    </EyeReadOnly.Provider>
   );
 }

@@ -394,3 +394,23 @@
 .combat-roster-shield--broken span:not(.combat-roster-shield-value) {
   text-decoration: line-through;
 }
+
+/* The DM's "who plays this NPC" picker (CombatControllerPicker.jsx). */
+.combat-controller-picker {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--charcoal-600);
+  background: var(--charcoal-950);
+  color: var(--ink-dim);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.combat-controller-picker:hover,
+.combat-controller-picker:focus-visible {
+  border-color: var(--gold);
+  color: var(--ink);
+}

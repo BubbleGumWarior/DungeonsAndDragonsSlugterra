@@ -3,12 +3,14 @@ import { AuthProvider, useAuth } from "./AuthContext.jsx";
 import AccessSocket, { useLiveState } from "./AccessSocket.jsx";
 import VoiceChatProvider from "./VoiceChatContext.jsx";
 import VoiceWidget from "./VoiceWidget.jsx";
+import VideoStage from "./VideoStage.jsx";
 import AmbientProvider from "./AmbientPlayer.jsx";
 import SoundDesk from "./SoundDesk.jsx";
 import ChallengeResultOverlay from "./ChallengeResultOverlay.jsx";
 import LongRestOverlay from "./LongRestOverlay.jsx";
 import DiceRollPrompt from "./DiceRollPrompt.jsx";
 import SlugHuntPrompt from "./SlugHuntPrompt.jsx";
+import SlugBundleModal from "./SlugBundleModal.jsx";
 import CounterClashPrompt from "./CounterClashPrompt.jsx";
 import KnockoutRollPrompt from "./KnockoutRollPrompt.jsx";
 import AuthGate from "./AuthGate.jsx";
@@ -34,11 +36,20 @@ import CombatPage from "./CombatPage.jsx";
 import CombatReports from "./CombatReports.jsx";
 import CombatReportToasts from "./CombatReportToasts.jsx";
 import Chronicle from "./Chronicle.jsx";
+import FateLedger from "./FateLedger.jsx";
 import Settings from "./Settings.jsx";
+import { canViewAsDm, isPlayer } from "./roles.js";
 
 function PublicOnlyRoute({ children }) {
   const { token } = useAuth();
   return token ? <Navigate to="/dashboard" replace /> : children;
+}
+
+// Character creation and the own-character sheet are for Players only -- a
+// DM Assistant has no character (the server refuses to create one too).
+function PlayerOnlyRoute({ children }) {
+  const { user } = useAuth();
+  return isPlayer(user) ? children : <Navigate to="/dashboard" replace />;
 }
 
 // Guards the routes that only exist once a player has created their character.
@@ -48,9 +59,8 @@ function PublicOnlyRoute({ children }) {
 function SlugterraGate() {
   const { user } = useAuth();
   const { slugterraRevealed, settingsLoaded } = useLiveState();
-  const isDungeonMaster = user?.role === "Dungeon Master";
-
-  if (isDungeonMaster) return <Outlet />;
+  // The DM and a DM Assistant see every page, character or not.
+  if (canViewAsDm(user)) return <Outlet />;
 
   // Wait for the character check before deciding -- otherwise a player
   // deep-linking to a revealed page would get bounced on the first render.
@@ -73,6 +83,7 @@ function AuthedVoiceChat() {
   if (!token) return null;
   return (
     <VoiceChatProvider>
+      <VideoStage />
       <VoiceWidget />
     </VoiceChatProvider>
   );
@@ -91,6 +102,7 @@ function App() {
         <LongRestOverlay />
         <DiceRollPrompt />
         <SlugHuntPrompt />
+        <SlugBundleModal />
         <CounterClashPrompt />
         <KnockoutRollPrompt />
         <AuthedVoiceChat />
@@ -118,8 +130,8 @@ function App() {
             <Route path="/request-access" element={<RequestAccess />} />
             <Route path="/change-password" element={<ChangePassword />} />
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/character/create" element={<CharacterCreate />} />
-            <Route path="/character" element={<CharacterSheet />} />
+            <Route path="/character/create" element={<PlayerOnlyRoute><CharacterCreate /></PlayerOnlyRoute>} />
+            <Route path="/character" element={<PlayerOnlyRoute><CharacterSheet /></PlayerOnlyRoute>} />
             <Route element={<SlugterraGate />}>
               <Route path="/inventory" element={<Inventory />} />
               <Route path="/notes" element={<Notes />} />
@@ -132,6 +144,7 @@ function App() {
               <Route path="/combat" element={<CombatPage />} />
               <Route path="/combat/reports" element={<CombatReports />} />
               <Route path="/chronicle" element={<Chronicle />} />
+              <Route path="/fate" element={<FateLedger />} />
               <Route path="/npcs" element={<Navigate to="/chronicle" replace />} />
             </Route>
             <Route path="/admin" element={<Admin />} />

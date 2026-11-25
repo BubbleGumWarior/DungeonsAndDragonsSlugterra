@@ -16,12 +16,14 @@ import {
   MusicNotesIcon,
 } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
+import { canViewAsDm } from "./roles.js";
 import { useLiveState } from "./AccessSocket.jsx";
 import NavBar from "./NavBar.jsx";
 import { THEMES, DEFAULT_THEME } from "./theme.js";
 import { volumeToGain } from "./soundVolume.js";
 import { useMicLevel } from "./useMicLevel.js";
 import { loadInputDeviceId, micConstraints } from "./voiceAudio.js";
+import CameraCheck from "./CameraCheck.jsx";
 import "./Panel.css";
 import "./Settings.css";
 
@@ -67,7 +69,7 @@ export default function Settings() {
   // The combat shoot sound gives away that this is a blaster game -- keep its
   // volume row out of sight until Slugterra is revealed, same gate NavBar and
   // the Dashboard use for the slug-facing tabs. The DM always sees it.
-  const showShootSound = user?.role === "Dungeon Master" || slugterraRevealed;
+  const showShootSound = canViewAsDm(user) || slugterraRevealed;
 
   const [savingTheme, setSavingTheme] = useState(null);
   const [themeError, setThemeError] = useState("");
@@ -373,8 +375,8 @@ export default function Settings() {
                 <MicrophoneIcon weight="duotone" />
               </span>
               <div className="panel-header-text">
-                <h2>Voice</h2>
-                <p>How your mic activates in party voice chat, and a way to check it works.</p>
+                <h2>Voice &amp; Video</h2>
+                <p>How your mic activates in party voice chat, and a way to check your mic and camera work.</p>
               </div>
             </div>
             <div className="panel-body">
@@ -422,6 +424,8 @@ export default function Settings() {
                 </div>
               </div>
               {micError && <p className="panel-error">{micError}</p>}
+
+              <CameraCheck />
             </div>
           </section>
 

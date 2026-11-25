@@ -1,19 +1,13 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireDmEdit } from "../roles.js";
 import { broadcastAll } from "../ws.js";
 import { loadCharacterNames } from "../displayNames.js";
 
 const router = Router();
 
 router.use(requireAuth);
-
-function requireDungeonMaster(req, res, next) {
-  if (req.user.role !== "Dungeon Master") {
-    return res.status(403).json({ error: "Dungeon Master access required." });
-  }
-  next();
-}
 
 function serializeChallenge(row) {
   return {
@@ -69,7 +63,7 @@ router.get("/current", async (req, res) => {
   }
 });
 
-router.post("/", requireDungeonMaster, async (req, res) => {
+router.post("/", requireDmEdit, async (req, res) => {
   const target = Number(req.body?.target);
   const reward = typeof req.body?.reward === "string" ? req.body.reward.trim() : "";
 
@@ -130,7 +124,7 @@ router.post("/:id/roll", async (req, res) => {
   }
 });
 
-router.delete("/:id/roll/:userId", requireDungeonMaster, async (req, res) => {
+router.delete("/:id/roll/:userId", requireDmEdit, async (req, res) => {
   const challengeId = Number(req.params.id);
   const userId = Number(req.params.userId);
   try {
@@ -149,7 +143,7 @@ router.delete("/:id/roll/:userId", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.post("/:id/finish", requireDungeonMaster, async (req, res) => {
+router.post("/:id/finish", requireDmEdit, async (req, res) => {
   const challengeId = Number(req.params.id);
   try {
     const { rows: updated } = await pool.query(

@@ -10,6 +10,7 @@ import {
   WrenchIcon,
 } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
+import { canViewAsDm } from "./roles.js";
 import { useLiveState } from "./AccessSocket.jsx";
 import { PLANETS } from "./planetData.js";
 import { LOYALTY_TIER_LABELS } from "./slugData.js";
@@ -103,7 +104,7 @@ export default function LongRestOverlay() {
   const [waking, setWaking] = useState(false);
   const buttonRef = useRef(null);
   const wakeTimer = useRef(null);
-  const isDM = user?.role === "Dungeon Master";
+  const isDM = canViewAsDm(user);
 
   useEffect(() => {
     if (!token || !longRest) return;

@@ -1,0 +1,579 @@
+/* Floating party video. Same surface as .panel (Panel.css) so it reads as
+   part of the ledger, anchored to a corner by plain CSS so it stays put as
+   tiles come and go. The drag/spring writes `transform` inline; entrances
+   use the separate `translate`/`scale` properties so the two never fight. */
+
+.video-stage {
+  --stage-edge: 20px;
+  --stage-top: 84px; /* clears the 68px navbar */
+  --stage-bottom-right: 90px; /* clears the voice button */
+  /* 288px, or narrower when the screen can't fit the columns side by side. */
+  --tile-w: min(
+    288px,
+    calc((100vw - 2 * var(--stage-edge) - 18px - (var(--video-cols, 1) - 1) * 6px) / var(--video-cols, 1))
+  );
+  --origin: bottom left;
+
+  position: fixed;
+  z-index: 999; /* just under the voice widget (1000), so its panel opens over this */
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100vw - 2 * var(--stage-edge));
+  max-height: calc(100dvh - var(--stage-top) - var(--stage-edge));
+  background: linear-gradient(160deg, var(--charcoal-800), var(--charcoal-950) 75%);
+  border: 1px solid var(--charcoal-600);
+  border-top-color: var(--charcoal-700);
+  border-radius: 16px;
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.6),
+    0 2px 0 rgba(255, 255, 255, 0.03) inset,
+    0 0 0 1px rgba(0, 0, 0, 0.4);
+  touch-action: none;
+  transition:
+    opacity 0.22s var(--ease-out),
+    translate 0.22s var(--ease-out),
+    scale 0.16s var(--ease-out),
+    box-shadow 0.16s var(--ease-out);
+}
+
+@starting-style {
+  .video-stage {
+    opacity: 0;
+    translate: 0 10px;
+  }
+}
+
+.video-stage--tl {
+  --origin: top left;
+  top: var(--stage-top);
+  left: var(--stage-edge);
+}
+
+.video-stage--tr {
+  --origin: top right;
+  top: var(--stage-top);
+  right: var(--stage-edge);
+}
+
+.video-stage--bl {
+  --origin: bottom left;
+  bottom: var(--stage-edge);
+  left: var(--stage-edge);
+}
+
+.video-stage--br {
+  --origin: bottom right;
+  bottom: var(--stage-bottom-right);
+  right: var(--stage-edge);
+}
+
+/* --- Theater: the table fills the screen for roleplay --- */
+
+.video-theater-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1001; /* over the voice widget; the theater carries its own mic/camera buttons */
+  background: rgba(8, 9, 11, 0.74);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: opacity 0.24s var(--ease-out);
+}
+
+@starting-style {
+  .video-theater-scrim {
+    opacity: 0;
+  }
+}
+
+.video-stage.video-stage--theater {
+  z-index: 1002;
+  inset: var(--stage-edge);
+  max-width: none;
+  max-height: none;
+  /* Grows out of the corner it was parked in. */
+  transform-origin: var(--origin);
+  transition:
+    opacity 0.26s var(--ease-out),
+    scale 0.32s var(--ease-out);
+}
+
+@starting-style {
+  .video-stage.video-stage--theater {
+    opacity: 0;
+    scale: 0.92;
+    translate: none;
+  }
+}
+
+.video-stage--theater .video-stage-bar {
+  gap: 10px;
+  padding: 10px 12px 10px 18px;
+  cursor: default;
+}
+
+.video-stage--theater .video-stage-heading {
+  font-size: 16px;
+}
+
+.video-stage--theater .video-stage-count {
+  font-size: 12px;
+}
+
+.video-stage--theater .video-stage-actions {
+  align-items: center;
+  gap: 6px;
+}
+
+.video-stage--theater .video-stage-grid {
+  flex: 1;
+  min-height: 0;
+  --tile-gap: 10px;
+  overflow: hidden;
+  align-items: center;
+  padding: 2px 16px 16px;
+}
+
+.video-stage--theater .video-tile {
+  border-radius: 14px;
+}
+
+.video-stage--theater .video-tile::after {
+  box-shadow: inset 0 0 0 3px var(--gold);
+}
+
+.video-stage--theater .video-stage-saver {
+  max-width: none;
+  justify-content: center;
+  padding-bottom: 14px;
+  font-size: 12px;
+}
+
+.video-stage-btn.video-stage-btn--labelled {
+  width: auto;
+  gap: 6px;
+  padding: 0 11px 0 9px;
+  border-color: var(--charcoal-700);
+  background: var(--charcoal-950);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.video-stage-btn.video-stage-btn--labelled:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+/* Same states as the voice panel's buttons: muted earns danger, a live camera earns gold. */
+.video-stage-btn.video-stage-btn--muted {
+  background: rgba(255, 122, 107, 0.12);
+  border-color: rgba(255, 122, 107, 0.5);
+  color: var(--danger);
+}
+
+.video-stage-btn.video-stage-btn--on {
+  background: rgba(201, 162, 75, 0.14);
+  border-color: var(--gold);
+  color: var(--gold-soft);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .video-stage-btn.video-stage-btn--muted:hover {
+    background: rgba(255, 122, 107, 0.18);
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+
+  .video-stage-btn.video-stage-btn--on:hover {
+    background: rgba(201, 162, 75, 0.2);
+    border-color: var(--gold);
+    color: var(--gold-soft);
+  }
+}
+
+.video-stage-divider {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--charcoal-600);
+}
+
+/* Picked up: lifts a touch, like a card off the table. */
+.video-stage--dragging {
+  scale: 1.015;
+  box-shadow:
+    0 28px 60px rgba(0, 0, 0, 0.7),
+    0 2px 0 rgba(255, 255, 255, 0.03) inset,
+    0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+/* --- Bar: the drag surface --- */
+
+.video-stage-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 6px 6px 4px;
+  cursor: grab;
+  user-select: none;
+}
+
+.video-stage--dragging .video-stage-bar {
+  cursor: grabbing;
+}
+
+.video-stage-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 30px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-dim);
+  opacity: 0.6;
+  cursor: inherit;
+  transition: opacity 0.15s var(--ease-out);
+}
+
+.video-stage-grip svg {
+  width: 16px;
+  height: 16px;
+}
+
+.video-stage-bar:hover .video-stage-grip,
+.video-stage--dragging .video-stage-grip {
+  opacity: 1;
+}
+
+.video-stage-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.video-stage-heading {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+.video-stage-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.video-stage-count svg {
+  width: 11px;
+  height: 11px;
+  color: var(--gold-dim);
+  flex-shrink: 0;
+}
+
+.video-stage-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.video-stage-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition:
+    color 0.15s var(--ease-out),
+    background 0.15s var(--ease-out),
+    border-color 0.15s var(--ease-out),
+    transform 0.12s var(--ease-out);
+}
+
+.video-stage-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .video-stage-btn:hover {
+    color: var(--ink);
+    background: var(--charcoal-900);
+    border-color: var(--charcoal-700);
+  }
+}
+
+.video-stage-btn:active,
+.video-stage-grip:active {
+  transform: scale(0.94);
+}
+
+.video-stage-btn:focus-visible,
+.video-stage-grip:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+
+/* --- Grid --- */
+
+.video-stage-grid {
+  --tile-gap: 6px;
+  display: flex;
+  justify-content: center;
+  padding: 0 8px 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--charcoal-600) transparent;
+}
+
+/* Rows of tiles, exactly --video-cols wide; a short last row sits centred. */
+.video-stage-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: center;
+  gap: var(--tile-gap);
+  width: calc(var(--video-cols, 1) * var(--tile-w) + (var(--video-cols, 1) - 1) * var(--tile-gap));
+}
+
+.video-stage-tiles > .video-tile {
+  flex: 0 0 var(--tile-w);
+}
+
+/* --- Tile --- */
+
+.video-tile {
+  position: relative;
+  margin: 0;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-700);
+  /* Avatar and name plate scale with the tile, from the corner stage up to the theater. */
+  container-type: inline-size;
+  transition:
+    opacity 0.22s var(--ease-out),
+    scale 0.22s var(--ease-out);
+}
+
+@starting-style {
+  .video-tile {
+    opacity: 0;
+    scale: 0.96;
+  }
+}
+
+/* Speaking: a gold ring drawn over the picture (inset, all four sides), so
+   it reads on any frame. Paired with the voice panel's ring on the avatar. */
+.video-tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 2px var(--gold);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s var(--ease-out);
+}
+
+.video-tile--speaking::after {
+  opacity: 1;
+}
+
+.video-tile-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  /* Centred in the space above the name plate, so a status note never runs into it. */
+  padding-bottom: clamp(26px, 9cqw, 44px);
+  background: radial-gradient(120% 90% at 50% 30%, var(--charcoal-800), var(--charcoal-950) 70%);
+}
+
+.video-tile-avatar {
+  width: clamp(36px, 15cqw, 120px);
+  height: clamp(36px, 15cqw, 120px);
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(160deg, var(--maroon-600), var(--maroon-800));
+  color: var(--gold-soft);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(16px, 6.4cqw, 50px);
+}
+
+.video-tile-note {
+  font-size: clamp(10.5px, 2.2cqw, 14px);
+  line-height: 1.2;
+  font-weight: 600;
+  color: var(--ink-dim);
+}
+
+/* Materialises once frames arrive (see VideoTile's mute/unmute tracking),
+   instead of flashing a black box first. */
+.video-tile-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  filter: blur(6px);
+  transition:
+    opacity 0.24s var(--ease-out),
+    filter 0.24s var(--ease-out);
+}
+
+.video-tile--live .video-tile-video {
+  opacity: 1;
+  filter: none;
+}
+
+/* Your own preview mirrors, like a looking-glass; everyone else sees you true. */
+.video-tile-video--mirrored {
+  transform: scaleX(-1);
+}
+
+.video-tile-plate {
+  position: absolute;
+  left: clamp(6px, 1.4cqw, 14px);
+  bottom: clamp(6px, 1.4cqw, 14px);
+  max-width: calc(100% - 2 * clamp(6px, 1.4cqw, 14px));
+  display: inline-flex;
+  align-items: center;
+  gap: 0.36em;
+  padding: 0.27em 0.64em;
+  border-radius: 6px;
+  background: rgba(12, 13, 15, 0.78);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  font-size: clamp(11px, 2.3cqw, 15px);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  z-index: 1;
+}
+
+.video-tile-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-tile-plate-icon {
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+  color: var(--ink-dim);
+}
+
+.video-tile-plate-icon--muted {
+  color: var(--danger);
+}
+
+.video-stage-saver {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0 10px 9px;
+  max-width: calc(var(--tile-w) * var(--video-cols, 1));
+  font-size: 10.5px;
+  color: var(--ink-dim);
+}
+
+.video-stage-saver svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+/* --- Phone --- */
+
+@media (max-width: 560px) {
+  .video-stage {
+    --stage-edge: 14px;
+    --stage-top: 78px;
+    --stage-bottom-right: 78px;
+    --tile-w: min(150px, calc((100vw - 2 * var(--stage-edge) - 22px) / 2));
+  }
+
+  .video-stage-count {
+    display: none;
+  }
+
+  /* Icons only: the labels won't fit beside the title on a phone. */
+  .video-stage-btn.video-stage-btn--labelled {
+    width: 30px;
+    padding: 0;
+  }
+
+  .video-stage-btn--labelled span {
+    display: none;
+  }
+
+  .video-stage--theater .video-stage-bar {
+    padding: 8px 8px 8px 14px;
+  }
+
+  .video-stage--theater .video-stage-grid {
+    padding: 2px 10px 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .video-stage--dragging {
+    scale: none;
+  }
+
+  .video-stage.video-stage--theater {
+    transition: opacity 0.2s ease;
+  }
+
+  .video-tile-video {
+    filter: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .video-theater-scrim {
+    background: rgba(8, 9, 11, 0.92);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .video-tile-plate {
+    background: var(--charcoal-950);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}

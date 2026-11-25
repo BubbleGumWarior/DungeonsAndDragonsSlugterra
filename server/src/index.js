@@ -33,6 +33,7 @@ import chronicleRouter from "./routes/chronicle.js";
 import slugpediaRouter from "./routes/slugpedia.js";
 import notesRouter from "./routes/notes.js";
 import slugHuntRouter from "./routes/slugHunt.js";
+import slugBundleRouter from "./routes/slugBundle.js";
 import shipsRouter from "./routes/ships.js";
 import travelRouter from "./routes/travel.js";
 import voiceRouter from "./routes/voice.js";
@@ -45,8 +46,9 @@ import imagesRouter from "./routes/images.js";
 import { seedDefaultShip } from "./seedDefaultShip.js";
 import { seedDefaultOutfits } from "./seedDefaultOutfits.js";
 import outfitsRouter from "./routes/outfits.js";
+import fateRouter from "./routes/fate.js";
 import { imageMiddleware } from "./imageStore.js";
-import { requireAuth } from "./middleware/auth.js";
+import { requireAuth, signToken, assistantWriteGuard } from "./middleware/auth.js";
 import { setupWebSocket, getOnlineUserIds } from "./ws.js";
 
 const app = express();
@@ -58,6 +60,7 @@ app.use(express.json({ limit: "5mb" }));
 // wrapper (it serves raw bytes, and needs no auth for an <img> tag).
 app.use("/api/img", imagesRouter);
 app.use("/api", imageMiddleware);
+app.use("/api", assistantWriteGuard);
 
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
@@ -85,6 +88,7 @@ app.use("/api/chronicle", chronicleRouter);
 app.use("/api/slugpedia", slugpediaRouter);
 app.use("/api/notes", notesRouter);
 app.use("/api/slug-hunt", slugHuntRouter);
+app.use("/api/slug-bundle", slugBundleRouter);
 app.use("/api/ships", shipsRouter);
 app.use("/api/travel", travelRouter);
 app.use("/api/voice", voiceRouter);
@@ -93,6 +97,7 @@ app.use("/api/market", marketRouter);
 app.use("/api/trades", tradesRouter);
 app.use("/api/consumables", consumablesRouter);
 app.use("/api/outfits", outfitsRouter);
+app.use("/api/fate", fateRouter);
 
 app.get("/api/presence/online", requireAuth, (req, res) => {
   res.json({ onlineUserIds: getOnlineUserIds() });
@@ -108,7 +113,13 @@ app.get("/api/me", requireAuth, async (req, res) => {
     if (!row) {
       return res.status(404).json({ error: "User not found." });
     }
+    // The DM can change a role from the admin panel while this user is
+    // signed in. The server already enforces the new role (requireAuth reads
+    // it from the database), and a fresh token here brings the client's
+    // stored token back in line so nothing still carries the old one.
+    const refreshedToken = req.user.tokenRole && req.user.tokenRole !== row.role ? signToken(row) : undefined;
     res.json({
+      token: refreshedToken,
       user: {
         id: row.id,
         username: row.username,

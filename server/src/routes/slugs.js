@@ -1,23 +1,17 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireDmView, requireDmEdit, canEditAsDm, isPlayerRole } from "../roles.js";
 import { validateSlugFields, validateEnergyPips } from "../slugRules.js";
 import { broadcastAll } from "../ws.js";
 import { recordSlugpediaEntry } from "../slugpediaStore.js";
 import { syncTempoAura } from "../slugAura.js";
 import { syncAmmoBelt } from "../ammoBelt.js";
 import { FOOD_MAX, kibbleFoodFor } from "../careRules.js";
-import { skillModifier } from "../characterRules.js";
+import { characterSkillMod } from "../characterRules.js";
 import { loyaltyShotsReadout } from "../loyaltyRules.js";
 
 const router = Router();
-
-function requireDungeonMaster(req, res, next) {
-  if (req.user.role !== "Dungeon Master") {
-    return res.status(403).json({ error: "Dungeon Master access required." });
-  }
-  next();
-}
 
 router.use(requireAuth);
 
@@ -136,13 +130,13 @@ router.get("/me", async (req, res) => {
   }
 });
 
-router.get("/", requireDungeonMaster, async (req, res) => {
+router.get("/", requireDmView, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM slugs ORDER BY created_at ASC");
     // The DM also reads loyalty as shots done / needed, at each owner's
     // current Slug Handling.
-    const { rows: owners } = await pool.query("SELECT user_id, stats, proficiencies FROM characters");
-    const handling = new Map(owners.map((o) => [o.user_id, skillModifier(o.stats, o.proficiencies, "creatureHandling")]));
+    const { rows: owners } = await pool.query("SELECT user_id, stats, proficiencies, expertise FROM characters");
+    const handling = new Map(owners.map((o) => [o.user_id, characterSkillMod(o, "creatureHandling")]));
     res.json({
       slugs: rows.map((row) => ({
         ...toClientSlug(row),
@@ -155,7 +149,7 @@ router.get("/", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.post("/", requireDungeonMaster, async (req, res) => {
+router.post("/", requireDmEdit, async (req, res) => {
   const {
     userId,
     templateId,
@@ -380,7 +374,7 @@ router.post("/", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.patch("/:id", requireDungeonMaster, async (req, res) => {
+router.patch("/:id", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const {
     name,
@@ -616,7 +610,7 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.patch("/:id/energy", requireDungeonMaster, async (req, res) => {
+router.patch("/:id/energy", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const { energyPips } = req.body || {};
 
@@ -677,7 +671,7 @@ router.get("/:id/velocity-image", async (req, res) => {
   }
 });
 
-router.patch("/:id/mega-morph", requireDungeonMaster, async (req, res) => {
+router.patch("/:id/mega-morph", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const { allowed } = req.body || {};
   if (typeof allowed !== "boolean") {
@@ -711,7 +705,7 @@ router.patch("/:id/load", async (req, res) => {
     if (!slug) {
       return res.status(404).json({ error: "Slug not found." });
     }
-    if (slug.user_id !== req.user.sub && req.user.role !== "Dungeon Master") {
+    if (slug.user_id !== req.user.sub && !canEditAsDm(req.user)) {
       return res.status(403).json({ error: "You do not own this slug." });
     }
 
@@ -760,7 +754,7 @@ router.patch("/:id/unload", async (req, res) => {
     if (!slug) {
       return res.status(404).json({ error: "Slug not found." });
     }
-    if (slug.user_id !== req.user.sub && req.user.role !== "Dungeon Master") {
+    if (slug.user_id !== req.user.sub && !canEditAsDm(req.user)) {
       return res.status(403).json({ error: "You do not own this slug." });
     }
 
@@ -778,7 +772,7 @@ router.patch("/:id/unload", async (req, res) => {
 });
 
 // DM override: set a slug's food meter outright.
-router.patch("/:id/food", requireDungeonMaster, async (req, res) => {
+router.patch("/:id/food", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const food = req.body?.food;
   if (!Number.isInteger(food) || food < 0 || food > FOOD_MAX) {
@@ -802,7 +796,7 @@ router.patch("/:id/food", requireDungeonMaster, async (req, res) => {
 // takes to top the meter up.
 router.post("/:id/feed", async (req, res) => {
   const id = Number(req.params.id);
-  if (req.user.role === "Dungeon Master") {
+  if (!isPlayerRole(req.user)) {
     return res.status(403).json({ error: "Only players feed their slugs." });
   }
   const fill = Boolean(req.body?.fill);
@@ -815,7 +809,7 @@ router.post("/:id/feed", async (req, res) => {
   try {
     await client.query("BEGIN");
     const { rows: chars } = await client.query(
-      "SELECT kibble, stats, proficiencies FROM characters WHERE user_id = $1 FOR UPDATE",
+      "SELECT kibble, stats, proficiencies, expertise FROM characters WHERE user_id = $1 FOR UPDATE",
       [req.user.sub]
     );
     const { rows: slugRows } = await client.query("SELECT * FROM slugs WHERE id = $1 FOR UPDATE", [id]);
@@ -824,7 +818,7 @@ router.post("/:id/feed", async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Slug not found." });
     }
-    const perScoop = kibbleFoodFor(skillModifier(chars[0].stats, chars[0].proficiencies, "creatureHandling"));
+    const perScoop = kibbleFoodFor(characterSkillMod(chars[0], "creatureHandling"));
     const food = slug.food ?? FOOD_MAX;
     const needed = Math.ceil((FOOD_MAX - food) / perScoop);
     if (needed <= 0) {
@@ -859,7 +853,7 @@ router.post("/:id/feed", async (req, res) => {
   }
 });
 
-router.delete("/:id", requireDungeonMaster, async (req, res) => {
+router.delete("/:id", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   try {
     const { rows } = await pool.query("DELETE FROM slugs WHERE id = $1 RETURNING id, user_id", [id]);
@@ -887,7 +881,7 @@ const INDIFFERENT_LOYALTY_TIER = 1;
 // Fills every empty magazine slot on each player's equipped blasters (ammo belt
 // slots included) with a random slug cloned from the templates at Indifferent
 // loyalty, already loaded into that slot.
-router.post("/test/give-random", requireDungeonMaster, async (req, res) => {
+router.post("/test/give-random", requireDmEdit, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -965,7 +959,7 @@ router.post("/test/give-random", requireDungeonMaster, async (req, res) => {
 
 // Deletes every slug owned by a player (NPC/combat-owned slugs have no user_id
 // and are left alone).
-router.delete("/test/player-slugs", requireDungeonMaster, async (req, res) => {
+router.delete("/test/player-slugs", requireDmEdit, async (req, res) => {
   try {
     const { rowCount } = await pool.query("DELETE FROM slugs WHERE user_id IS NOT NULL");
     broadcastAll({ type: "party-healed", at: Date.now() });

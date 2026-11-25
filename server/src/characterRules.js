@@ -86,7 +86,7 @@ export function statCost(value) {
   return POINT_BUY_COSTS[value] ?? 0;
 }
 
-export function validateCharacterPayload({ name, age, portrait, stats, proficiencies }, { unrestricted = false } = {}) {
+export function validateCharacterPayload({ name, age, portrait, stats, proficiencies, expertise },{ unrestricted = false } = {}) {
   if (typeof name !== "string" || !name.trim() || name.trim().length > 40) {
     return { valid: false, error: "Name must be a non-empty string of 40 characters or fewer." };
   }
@@ -144,6 +144,17 @@ export function validateCharacterPayload({ name, age, portrait, stats, proficien
     }
   }
 
+  if (expertise !== undefined) {
+    if (!Array.isArray(expertise) || new Set(expertise).size !== expertise.length) {
+      return { valid: false, error: "Expertise must be an array of unique skills." };
+    }
+    for (const key of expertise) {
+      if (!proficiencies.includes(key)) {
+        return { valid: false, error: `Expertise in "${key}" needs proficiency in it too.` };
+      }
+    }
+  }
+
   return { valid: true };
 }
 
@@ -158,11 +169,21 @@ export function statModifier(value) {
   return Math.floor((value - 10) / 2);
 }
 
-export function skillModifier(stats, proficiencies, skillKey) {
+export const PROFICIENCY_BONUS = 2;
+export const EXPERTISE_BONUS = 4;
+
+// Expertise only counts on a skill the character is also proficient in.
+export function skillModifier(stats, proficiencies, skillKey, expertise = []) {
   const statKey = PROFICIENCY_STATS[skillKey];
   if (!statKey) return 0;
   const isProficient = Array.isArray(proficiencies) && proficiencies.includes(skillKey);
-  return statModifier(stats[statKey]) + (isProficient ? 2 : 0);
+  const isExpert = isProficient && Array.isArray(expertise) && expertise.includes(skillKey);
+  return statModifier(stats[statKey]) + (isExpert ? EXPERTISE_BONUS : isProficient ? PROFICIENCY_BONUS : 0);
+}
+
+// Same, from a characters row (needs stats, proficiencies and expertise selected).
+export function characterSkillMod(row, skillKey) {
+  return skillModifier(row.stats, row.proficiencies, skillKey, row.expertise);
 }
 
 // `bonus` is flat extra Grit from worn armor (characters.grit_bonus).

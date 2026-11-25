@@ -15,7 +15,9 @@ import "./SlugHuntPanel.css";
 // `areas`.
 const AREAS = PLANETS;
 
-export default function SlugHuntPanel({ isDungeonMaster = false }) {
+// isDungeonMaster: the DM's full odds table, no hunting. readOnly: a DM
+// Assistant -- same table, but the party planet can't be changed here.
+export default function SlugHuntPanel({ isDungeonMaster = false, readOnly = false }) {
   const { token, user } = useAuth();
   const { slugpediaUpdate, slugHuntArea, slugHuntResolved, slugHuntLock } = useLiveState();
   const [infoOpen, setInfoOpen] = useState(false);
@@ -153,7 +155,7 @@ export default function SlugHuntPanel({ isDungeonMaster = false }) {
       </div>
 
       <div className="panel-body">
-        {isDungeonMaster ? (
+        {isDungeonMaster && !readOnly ? (
           <div className="panel-field">
             <label>Party Planet</label>
             <div className="slughunt-area-picker">
@@ -291,7 +293,7 @@ export default function SlugHuntPanel({ isDungeonMaster = false }) {
             )}
             {hunt?.state === "found" && (
               <p className="slughunt-hunt-result slughunt-hunt-result--good">
-                You found a wild <strong>{hunt.slugName}</strong> ({hunt.slugType})! It's been logged in the Slugpedia.
+                You found a wild <strong>{hunt.slugName}</strong> ({hunt.slugType})! It's joined your slugs and been logged in the Slugpedia.
               </p>
             )}
             {hunt?.state === "dismissed" && (

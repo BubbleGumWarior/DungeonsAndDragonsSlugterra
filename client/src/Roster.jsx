@@ -15,7 +15,9 @@ const MAX_ASLEEP_MS = 15 * 60 * 1000;
 // Between the DM's request finishing and the long-rest broadcast arriving.
 const PENDING_REST_MS = 5000;
 
-export default function Roster({ selectable = false, selectedUserId, onSelect, healable = false }) {
+// `editable` (the DM alone) lets the knockout pips be toggled; `selectable`
+// just opens a character's sheet, which a DM Assistant can do too.
+export default function Roster({ selectable = false, editable = selectable, selectedUserId, onSelect, healable = false }) {
   const { token } = useAuth();
   const { onlineUserIds, characterUpdate, characterCreated, partyHealed, longRest, restWokenAt } = useLiveState();
   const [characters, setCharacters] = useState([]);
@@ -234,7 +236,7 @@ export default function Roster({ selectable = false, selectedUserId, onSelect, h
                 <KnockoutPips
                   size="sm"
                   pips={character.knockoutPips}
-                  editable={selectable}
+                  editable={editable}
                   onToggle={(i) => togglePip(character, i)}
                 />
                 {!online && (

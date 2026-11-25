@@ -126,11 +126,12 @@ export async function resetTravel() {
   notifyTravelUpdated();
 }
 
-// The players who get a say: everyone with a character who isn't the DM.
+// The players who get a say: everyone with a character whose role is Player
+// (never the DM or a DM Assistant).
 async function loadVoters() {
   const { rows } = await pool.query(
     `SELECT c.user_id, c.name FROM characters c JOIN users u ON u.id = c.user_id
-     WHERE u.role <> 'Dungeon Master' ORDER BY c.name ASC`
+     WHERE u.role = 'Player' ORDER BY c.name ASC`
   );
   return rows;
 }

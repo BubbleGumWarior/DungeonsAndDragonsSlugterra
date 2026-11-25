@@ -290,6 +290,7 @@ function Dossier({
   travelBusy,
   travelAct,
   isDungeonMaster,
+  assistant,
   partyFlatIndex,
   sendPartyHere,
   sending,
@@ -342,10 +343,10 @@ function Dossier({
         {detail.where ?? "???"}
         {here && " · the party is here"}
       </p>
-      {isDungeonMaster && detail.type === "planet" && !detail.playersKnow && (
+      {(isDungeonMaster || assistant) && detail.type === "planet" && !detail.playersKnow && (
         <p className="holo-dm-note">Players still see this world as ???.</p>
       )}
-      {isDungeonMaster && detail.type === "cluster" && !detail.playersKnow && (
+      {(isDungeonMaster || assistant) && detail.type === "cluster" && !detail.playersKnow && (
         <p className="holo-dm-note">Players can't see this cluster at all until they discover one of its worlds.</p>
       )}
 
@@ -389,15 +390,18 @@ function Dossier({
 
       {detail.type === "planet" && (
         <div className="holo-actions">
-          <button
-            type="button"
-            className="holo-btn holo-btn--primary"
-            disabled={travelBusy || !canPropose}
-            onClick={() => travelAct("propose", { area: detail.flatIndex })}
-          >
-            <RocketLaunchIcon weight="bold" />
-            {proposeLabel}
-          </button>
+          {/* A DM Assistant doesn't vote on travel, so can't put a course to a vote either. */}
+          {!assistant && (
+            <button
+              type="button"
+              className="holo-btn holo-btn--primary"
+              disabled={travelBusy || !canPropose}
+              onClick={() => travelAct("propose", { area: detail.flatIndex })}
+            >
+              <RocketLaunchIcon weight="bold" />
+              {proposeLabel}
+            </button>
+          )}
 
           {isDungeonMaster && (
             <>
@@ -439,6 +443,7 @@ export default function GalaxyMap({
   travelAct,
   travelBusy = false,
   isDungeonMaster = false,
+  assistant = false, // a DM Assistant: sees every world like the DM, no controls
   dossierHost = null,
   aspect = VIEW_W / VIEW_H, // width / height the map is drawn at; wider shows more sky
   look = {}, // { ringCy, frontScale, backScale }: how big and how high the clusters sit
@@ -455,11 +460,12 @@ export default function GalaxyMap({
   // players still see as ???).
   const visited = useMemo(() => new Set(travel?.visited ?? []), [travel?.visited]);
   const clusterFlatBase = (ci) => CLUSTERS.slice(0, ci).reduce((sum, c) => sum + c.worlds.length, 0);
-  const isKnown = (flatIndex) => isDungeonMaster || visited.has(flatIndex);
+  const seesAll = isDungeonMaster || assistant;
+  const isKnown = (flatIndex) => seesAll || visited.has(flatIndex);
   // A cluster no one has set foot in is invisible to players -- not even its
   // star shows. The DM always sees all of them.
   const clusterPlayersKnow = (ci) => CLUSTERS[ci].worlds.some((_, wi) => visited.has(clusterFlatBase(ci) + wi));
-  const isClusterKnown = (ci) => isDungeonMaster || clusterPlayersKnow(ci);
+  const isClusterKnown = (ci) => seesAll || clusterPlayersKnow(ci);
 
   const stars = useMemo(() => starField(1100), []);
   const debris = useMemo(() => debrisField(UNCLAIMED.worlds[0].sizeR, 11), []);
@@ -539,7 +545,7 @@ export default function GalaxyMap({
     const next = CLUSTERS.findIndex((_, i) => isClusterKnown(i));
     if (next !== -1) focusCluster(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visited, isDungeonMaster]);
+  }, [visited, seesAll]);
 
   // selected is either a flat-planet detail ({ type: "planet", flatIndex })
   // or a cluster-lore detail ({ type: "cluster", clusterIndex }).
@@ -644,6 +650,7 @@ export default function GalaxyMap({
       travelBusy={travelBusy}
       travelAct={travelAct}
       isDungeonMaster={isDungeonMaster}
+      assistant={assistant}
       partyFlatIndex={partyFlatIndex}
       sendPartyHere={sendPartyHere}
       sending={sending}

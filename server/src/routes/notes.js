@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { canEditAsDm, canViewAsDm } from "../roles.js";
 
 const router = Router();
 
@@ -32,12 +33,12 @@ function validate({ title, body }) {
   return null;
 }
 
-// The Dungeon Master reads every player's book (`?scope=all`), each note tagged
+// The Dungeon Master (and a DM Assistant) reads every player's book (`?scope=all`), each note tagged
 // with who wrote it: their character's name, or their username until they have
 // one. Players only ever get their own. Editing and deleting stay author-only.
 router.get("/", async (req, res) => {
   try {
-    if (req.query.scope === "all" && req.user.role === "Dungeon Master") {
+    if (req.query.scope === "all" && canViewAsDm(req.user)) {
       const { rows } = await pool.query(
         `SELECT n.*, u.username, c.name AS character_name
          FROM notes n

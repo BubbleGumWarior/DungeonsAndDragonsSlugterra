@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireDmEdit, canEditAsDm, canViewAsDm, isAssistant } from "../roles.js";
 import { broadcastAll, notifyUser } from "../ws.js";
-import { statModifier, skillModifier, PROFICIENCY_KEYS, computeMaxGrit, actionPoints, initiativeBonus, npcActionPoints, npcMaxGrit, heatGainFor } from "../characterRules.js";
+import { statModifier, PROFICIENCY_KEYS, computeMaxGrit, actionPoints, initiativeBonus, npcActionPoints, npcMaxGrit, heatGainFor, characterSkillMod } from "../characterRules.js";
 import { QUALITY_TIERS, BASE_TYPES, BASE_TYPE_KEYS } from "../itemRules.js";
 import { TIER_LABELS as MECHA_TIER_LABELS, effectiveMechaStats } from "../mechaRules.js";
 import { LOYALTY_TIER_MIN, LOYALTY_TIER_MAX, RARITY_MAX } from "../slugRules.js";
@@ -303,13 +304,6 @@ function recordShotResult(encounterId, actor, target, outcome, slug, extra = {})
   });
 }
 
-function requireDungeonMaster(req, res, next) {
-  if (req.user.role !== "Dungeon Master") {
-    return res.status(403).json({ error: "Dungeon Master access required." });
-  }
-  next();
-}
-
 // ---------------------------------------------------------------------------
 // Serialization
 // ---------------------------------------------------------------------------
@@ -330,6 +324,8 @@ function toClientCombatant(row) {
     // the NPC card's per-line "shown" flag.
     relationship: row.relationship ?? row.data?.relationship ?? null,
     team: row.team ?? null,
+    // The DM Assistant playing this NPC, or null when the DM runs it.
+    controllerUserId: row.controller_user_id ?? null,
     name: row.name,
     portrait: row.portrait,
     x: row.x,
@@ -502,7 +498,7 @@ async function characterGearSnapshot(character, tempC = null) {
     baseMaxAp: actionPoints(character.stats),
     baseMaxGrit: computeMaxGrit(character.stats, character.grit_bonus),
     outfit,
-    fortitudeMod: skillModifier(character.stats, character.proficiencies, "fortitude"),
+    fortitudeMod: characterSkillMod(character, "fortitude"),
     temp,
     ill: Boolean(character.ill),
   });
@@ -540,9 +536,9 @@ async function syncCharacterFromCombatant(combatant) {
 async function grantFame(userId, delta) {
   if (!userId || !delta) return null;
   try {
-    const { rows: who } = await pool.query("SELECT stats, proficiencies FROM characters WHERE user_id = $1", [userId]);
+    const { rows: who } = await pool.query("SELECT stats, proficiencies, expertise FROM characters WHERE user_id = $1", [userId]);
     if (!who[0]) return null;
-    const heatDelta = heatGainFor(delta, skillModifier(who[0].stats, who[0].proficiencies, "deception"));
+    const heatDelta = heatGainFor(delta, characterSkillMod(who[0], "deception"));
     const { rows } = await pool.query(
       `UPDATE characters SET fame = GREATEST(0, fame + $1), heat = GREATEST(0, heat + $2) WHERE user_id = $3 RETURNING *`,
       [delta, heatDelta, userId]
@@ -607,7 +603,7 @@ function knownFoeSlugIds(combatant, slugs, viewerUserId) {
 router.get("/encounters/:id/slug-knowledge", async (req, res) => {
   const id = Number(req.params.id);
   try {
-    if (req.user.role === "Dungeon Master") return res.json({ knowledge: {} });
+    if (canViewAsDm(req.user)) return res.json({ knowledge: {} });
     const { rows: combatants } = await pool.query("SELECT * FROM combatants WHERE encounter_id = $1", [id]);
     const viewer = combatants.find((c) => c.kind === "character" && c.ref_user_id === req.user.sub);
     const npcs = combatants.filter((c) => c.kind === "npc");
@@ -691,10 +687,13 @@ async function revealFiredSlug(attacker, slug) {
 
 router.get("/reports", async (req, res) => {
   try {
+    // The DM and DM Assistants read every report, including ones written
+    // before an assistant was given the role.
+    const seesAll = canViewAsDm(req.user);
     const { rows } = await pool.query(
       `SELECT id, encounter_name, created_at, seen_by, report->'encounter' AS encounter
-       FROM combat_reports WHERE recipients @> $1::jsonb ORDER BY created_at DESC LIMIT 60`,
-      [JSON.stringify([req.user.sub])]
+       FROM combat_reports WHERE ($2 OR recipients @> $1::jsonb) ORDER BY created_at DESC LIMIT 60`,
+      [JSON.stringify([req.user.sub]), seesAll]
     );
     res.json({
       reports: rows.map((r) => ({
@@ -715,8 +714,8 @@ router.get("/reports", async (req, res) => {
 router.get("/reports/:id", async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT id, encounter_name, created_at, report FROM combat_reports WHERE id = $1 AND recipients @> $2::jsonb",
-      [Number(req.params.id), JSON.stringify([req.user.sub])]
+      "SELECT id, encounter_name, created_at, report FROM combat_reports WHERE id = $1 AND ($3 OR recipients @> $2::jsonb)",
+      [Number(req.params.id), JSON.stringify([req.user.sub]), canViewAsDm(req.user)]
     );
     if (!rows[0]) return res.status(404).json({ error: "Report not found." });
     res.json({ id: rows[0].id, name: rows[0].encounter_name, createdAt: rows[0].created_at, report: rows[0].report });
@@ -740,7 +739,7 @@ router.post("/reports/:id/seen", async (req, res) => {
   }
 });
 
-router.post("/encounters", requireDungeonMaster, async (req, res) => {
+router.post("/encounters", requireDmEdit, async (req, res) => {
   const { name, mapWidth, mapHeight } = req.body || {};
   if (typeof name !== "string" || !name.trim()) {
     return res.status(400).json({ error: "Encounter name is required." });
@@ -775,7 +774,7 @@ router.post("/encounters", requireDungeonMaster, async (req, res) => {
 // everything the DM placed in it (combatants, and the blasters/slugs spawned
 // for NPCs) simply go away. Clients already treat a "finished" encounter as
 // "no encounter", so that is what the broadcast says.
-router.delete("/encounters/:id", requireDungeonMaster, async (req, res) => {
+router.delete("/encounters/:id", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   try {
     const { rows } = await pool.query("SELECT status FROM encounters WHERE id = $1", [id]);
@@ -793,7 +792,7 @@ router.delete("/encounters/:id", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.post("/encounters/:id/end", requireDungeonMaster, async (req, res) => {
+router.post("/encounters/:id/end", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   try {
     const { rows } = await pool.query("UPDATE encounters SET status = 'finished' WHERE id = $1 RETURNING *", [id]);
@@ -863,7 +862,7 @@ router.post("/encounters/:id/end", requireDungeonMaster, async (req, res) => {
 // The picture is always cover-fitted to the map; there is no DM pan/zoom of it
 // any more (each viewer pans/zooms their own view -- see CombatMap.jsx), so
 // the old map_image_scale/offset columns are reset and otherwise unused.
-router.patch("/encounters/:id/map", requireDungeonMaster, async (req, res) => {
+router.patch("/encounters/:id/map", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const { image } = req.body || {};
   if (image === undefined) return res.status(400).json({ error: "Nothing to update." });
@@ -891,7 +890,7 @@ router.patch("/encounters/:id/map", requireDungeonMaster, async (req, res) => {
 // map automatically makes every one of them cover less of it. Setup only --
 // everything the DM has placed is rescaled to stay over the same spot of the
 // map picture, which would be meaningless once a fight is running.
-router.patch("/encounters/:id/size", requireDungeonMaster, async (req, res) => {
+router.patch("/encounters/:id/size", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const meters = Number(req.body?.meters);
   if (!Number.isFinite(meters) || meters < MIN_MAP_METERS || meters > MAX_MAP_METERS) {
@@ -952,7 +951,7 @@ async function refreshEncounterAtmosphere(id, aboard) {
   return atmosphere;
 }
 
-router.patch("/encounters/:id/aboard", requireDungeonMaster, async (req, res) => {
+router.patch("/encounters/:id/aboard", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const { aboard } = req.body || {};
   if (typeof aboard !== "boolean") return res.status(400).json({ error: "aboard must be true or false." });
@@ -975,7 +974,7 @@ router.patch("/encounters/:id/aboard", requireDungeonMaster, async (req, res) =>
 // Water terrain (painted by the DM during setup)
 // ---------------------------------------------------------------------------
 
-router.patch("/encounters/:id/water", requireDungeonMaster, async (req, res) => {
+router.patch("/encounters/:id/water", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const { cells, paint } = req.body || {};
   if (!Array.isArray(cells) || !cells.every((c) => Number.isInteger(c) && c >= 0)) {
@@ -1002,7 +1001,7 @@ router.patch("/encounters/:id/water", requireDungeonMaster, async (req, res) => 
 // Walls
 // ---------------------------------------------------------------------------
 
-router.post("/encounters/:id/walls", requireDungeonMaster, async (req, res) => {
+router.post("/encounters/:id/walls", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const { x1, y1, x2, y2 } = req.body || {};
   if ([x1, y1, x2, y2].some((v) => typeof v !== "number" || Number.isNaN(v))) {
@@ -1028,7 +1027,7 @@ router.post("/encounters/:id/walls", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.delete("/encounters/:id/walls/:wallId", requireDungeonMaster, async (req, res) => {
+router.delete("/encounters/:id/walls/:wallId", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const wallId = Number(req.params.wallId);
   try {
@@ -1048,7 +1047,7 @@ router.delete("/encounters/:id/walls/:wallId", requireDungeonMaster, async (req,
 // Combatants
 // ---------------------------------------------------------------------------
 
-router.post("/encounters/:id/combatants", requireDungeonMaster, async (req, res) => {
+router.post("/encounters/:id/combatants", requireDmEdit, async (req, res) => {
   const encounterId = Number(req.params.id);
   const { kind, refUserId, refMechaId, name, x, y, team } = req.body || {};
 
@@ -1102,7 +1101,7 @@ router.post("/encounters/:id/combatants", requireDungeonMaster, async (req, res)
         strMod: statModifier(character.stats.strength),
         shield: await shieldSnapshot(refUserId, {}),
         skills: Object.fromEntries(
-          PROFICIENCY_KEYS.map((key) => [key, skillModifier(character.stats, character.proficiencies, key)])
+          PROFICIENCY_KEYS.map((key) => [key, characterSkillMod(character, key)])
         ),
         activeWeaponSlot: PRIMARY_WEAPON_SLOT,
         gear: gearSnap.gear,
@@ -1153,7 +1152,7 @@ router.post("/encounters/:id/combatants", requireDungeonMaster, async (req, res)
   }
 });
 
-router.patch("/encounters/:id/combatants/:cid/position", requireDungeonMaster, async (req, res) => {
+router.patch("/encounters/:id/combatants/:cid/position", requireDmEdit, async (req, res) => {
   const cid = Number(req.params.cid);
   const { x, y } = req.body || {};
   if (!Number.isFinite(x) || !Number.isFinite(y)) {
@@ -1187,7 +1186,7 @@ router.patch("/encounters/:id/combatants/:cid/position", requireDungeonMaster, a
 // Teleports a combatant back to the middle of the map (and whatever rides with
 // them) -- the DM's rescue for someone who got shoved somewhere they can't walk
 // back from. Free: no AP, no hazards, no wall check, like a manual drag.
-router.post("/encounters/:id/combatants/:cid/reset-position", requireDungeonMaster, async (req, res) => {
+router.post("/encounters/:id/combatants/:cid/reset-position", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const cid = Number(req.params.cid);
   try {
@@ -1210,7 +1209,7 @@ router.post("/encounters/:id/combatants/:cid/reset-position", requireDungeonMast
   }
 });
 
-router.patch("/encounters/:id/combatants/:cid/team", requireDungeonMaster, async (req, res) => {
+router.patch("/encounters/:id/combatants/:cid/team", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const cid = Number(req.params.cid);
   const { team } = req.body || {};
@@ -1236,7 +1235,7 @@ async function setAutoCounter(combatant, enabled) {
   await updateCombatant(combatant.id, { data: JSON.stringify(data) });
 }
 
-router.patch("/encounters/:id/combatants/:cid/auto-counter", requireDungeonMaster, async (req, res) => {
+router.patch("/encounters/:id/combatants/:cid/auto-counter", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const cid = Number(req.params.cid);
   const { enabled } = req.body || {};
@@ -1254,8 +1253,34 @@ router.patch("/encounters/:id/combatants/:cid/auto-counter", requireDungeonMaste
   }
 });
 
+// Hands an NPC/grunt to a DM Assistant to play (or back to the DM with
+// userId: null). The assistant then drives it through the same action routes
+// a player uses for their own character -- see isActingCombatantAuthorized.
+router.patch("/encounters/:id/combatants/:cid/controller", requireDmEdit, async (req, res) => {
+  const id = Number(req.params.id);
+  const cid = Number(req.params.cid);
+  const userId = req.body?.userId ?? null;
+  if (userId !== null && !Number.isInteger(userId)) return res.status(400).json({ error: "userId must be a user id or null." });
+  try {
+    const combatant = await getCombatant(cid);
+    if (!combatant || combatant.encounter_id !== id) return res.status(404).json({ error: "Combatant not found." });
+    if (combatant.kind !== "npc") return res.status(400).json({ error: "Only NPCs and grunts can be handed to an assistant." });
+    if (userId !== null) {
+      const { rows } = await pool.query("SELECT role FROM users WHERE id = $1", [userId]);
+      if (!rows[0]) return res.status(404).json({ error: "User not found." });
+      if (!isAssistant(rows[0].role)) return res.status(400).json({ error: "NPCs can only be handed to a DM Assistant." });
+    }
+    await updateCombatant(cid, { controller_user_id: userId });
+    const encounter = await broadcastEncounter(id);
+    res.json({ encounter });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not assign the NPC." });
+  }
+});
+
 // Bulk toggle for a whole group at once: every grunt, every important NPC, or both.
-router.patch("/encounters/:id/auto-counter", requireDungeonMaster, async (req, res) => {
+router.patch("/encounters/:id/auto-counter", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const { enabled, scope } = req.body || {};
   if (typeof enabled !== "boolean") return res.status(400).json({ error: "enabled must be true or false." });
@@ -1274,7 +1299,7 @@ router.patch("/encounters/:id/auto-counter", requireDungeonMaster, async (req, r
   }
 });
 
-router.delete("/encounters/:id/combatants/:cid", requireDungeonMaster, async (req, res) => {
+router.delete("/encounters/:id/combatants/:cid", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const cid = Number(req.params.cid);
   try {
@@ -1560,7 +1585,7 @@ function weightedSample(items, n, weightFn) {
 // independently-geared instance. One copy only -- the card names a single
 // named character, so a second pull is rejected and the name carries no
 // number. (Disposable minions that DO stack live at /grunt-combatants.)
-router.post("/encounters/:id/npc-combatants", requireDungeonMaster, async (req, res) => {
+router.post("/encounters/:id/npc-combatants", requireDmEdit, async (req, res) => {
   const encounterId = Number(req.params.id);
   const { npcTemplateId, x, y, team } = req.body || {};
   if (team != null && !COMBAT_TEAM_IDS.includes(team)) return res.status(400).json({ error: "Unknown team." });
@@ -1624,7 +1649,7 @@ router.post("/encounters/:id/npc-combatants", requireDungeonMaster, async (req, 
 // lower-quality options, then a magazine's worth of slugs, biased toward the
 // lower-rarity options. Every grunt of the same type comes out a little
 // different and a little weaker than a hand-built NPC.
-router.post("/encounters/:id/grunt-combatants", requireDungeonMaster, async (req, res) => {
+router.post("/encounters/:id/grunt-combatants", requireDmEdit, async (req, res) => {
   const encounterId = Number(req.params.id);
   const { gruntTemplateId, x, y, team } = req.body || {};
   if (team != null && !COMBAT_TEAM_IDS.includes(team)) return res.status(400).json({ error: "Unknown team." });
@@ -1718,7 +1743,7 @@ router.post("/encounters/:id/grunt-combatants", requireDungeonMaster, async (req
 // Start encounter / turn advancement
 // ---------------------------------------------------------------------------
 
-router.post("/encounters/:id/start", requireDungeonMaster, async (req, res) => {
+router.post("/encounters/:id/start", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   try {
     const { rows: combatantRows } = await pool.query("SELECT * FROM combatants WHERE encounter_id = $1", [id]);
@@ -2172,15 +2197,16 @@ router.post("/actions/end-turn", async (req, res) => {
     if (!combatant) return res.status(404).json({ error: "Combatant not found." });
     const ownsCombatant =
       combatant.ref_user_id === req.user.sub ||
-      (combatant.kind === "mecha" && combatant.data?.ownerUserId === req.user.sub);
-    if (req.user.role !== "Dungeon Master" && !ownsCombatant) {
+      (combatant.kind === "mecha" && combatant.data?.ownerUserId === req.user.sub) ||
+      controlsNpc(req, combatant);
+    if (!canEditAsDm(req.user) && !ownsCombatant) {
       return res.status(403).json({ error: "That isn't your combatant." });
     }
     // A player may only end their own combatant's turn, and only while it's
     // actually that combatant's turn -- otherwise "End Turn" fired off-turn
     // would just skip whoever *is* active. The DM can still advance the turn
     // for anyone (nudging a stuck player, running NPCs).
-    if (req.user.role !== "Dungeon Master") {
+    if (!canEditAsDm(req.user)) {
       const { rows } = await pool.query("SELECT * FROM encounters WHERE id = $1", [combatant.encounter_id]);
       if (rows[0] && !requireOwnTurn(rows[0], combatant)) {
         return res.status(400).json({ error: "It isn't your turn." });
@@ -2194,9 +2220,17 @@ router.post("/actions/end-turn", async (req, res) => {
   }
 });
 
+// A DM Assistant playing an NPC the DM handed them (see /controller above).
+function controlsNpc(req, combatant) {
+  return combatant.kind === "npc" && combatant.controller_user_id === req.user.sub && isAssistant(req.user);
+}
+
 function isActingCombatantAuthorized(req, combatant, encounter) {
-  if (req.user.role === "Dungeon Master") return true;
+  if (canEditAsDm(req.user)) return true;
   if (combatant.kind === "character" && combatant.ref_user_id === req.user.sub) return true;
+  // A DM Assistant plays an NPC they've been given exactly like a player plays
+  // their character: every turn check below still applies to them.
+  if (controlsNpc(req, combatant)) return true;
   // A player may drive their own mecha (moving it on its turn, or riding it).
   // Non-movement actions still reject mechas on their own `kind` checks.
   if (combatant.kind === "mecha" && combatant.data?.ownerUserId === req.user.sub) return true;
@@ -2225,7 +2259,7 @@ router.post("/actions/move", async (req, res) => {
     if (!isActingCombatantAuthorized(req, combatant, encounter)) {
       return res.status(403).json({ error: "That isn't your combatant." });
     }
-    if (req.user.role !== "Dungeon Master" && !requireOwnTurn(encounter, combatant)) {
+    if (!canEditAsDm(req.user) && !requireOwnTurn(encounter, combatant)) {
       return res.status(400).json({ error: "It isn't your turn." });
     }
     if (combatant.unconscious || combatant.disabled) {
@@ -2438,7 +2472,7 @@ router.post("/actions/wall-vault", async (req, res) => {
     if (!isActingCombatantAuthorized(req, combatant, encounter)) {
       return res.status(403).json({ error: "That isn't your combatant." });
     }
-    if (req.user.role !== "Dungeon Master" && !requireOwnTurn(encounter, combatant)) {
+    if (!canEditAsDm(req.user) && !requireOwnTurn(encounter, combatant)) {
       return res.status(400).json({ error: "It isn't your turn." });
     }
     if (combatant.unconscious || combatant.disabled) {
@@ -2500,7 +2534,7 @@ router.post("/actions/wall-run", async (req, res) => {
     if (!isActingCombatantAuthorized(req, combatant, encounter)) {
       return res.status(403).json({ error: "That isn't your combatant." });
     }
-    if (req.user.role !== "Dungeon Master" && !requireOwnTurn(encounter, combatant)) {
+    if (!canEditAsDm(req.user) && !requireOwnTurn(encounter, combatant)) {
       return res.status(400).json({ error: "It isn't your turn." });
     }
     if (combatant.unconscious || combatant.disabled) {
@@ -2586,7 +2620,7 @@ async function loadSkillActor(req, res, combatantId) {
     res.status(403).json({ error: "That isn't your combatant." });
     return null;
   }
-  if (req.user.role !== "Dungeon Master" && !requireOwnTurn(encounter, combatant)) {
+  if (!canEditAsDm(req.user) && !requireOwnTurn(encounter, combatant)) {
     res.status(400).json({ error: "It isn't your turn." });
     return null;
   }
@@ -2740,7 +2774,7 @@ router.post("/actions/mecha-mode", async (req, res) => {
     const encounterRow = await pool.query("SELECT * FROM encounters WHERE id = $1", [rider.encounter_id]);
     const encounter = encounterRow.rows[0];
     if (!isActingCombatantAuthorized(req, rider, encounter)) return res.status(403).json({ error: "That isn't your combatant." });
-    if (req.user.role !== "Dungeon Master" && !requireOwnTurn(encounter, rider)) {
+    if (!canEditAsDm(req.user) && !requireOwnTurn(encounter, rider)) {
       return res.status(400).json({ error: "It isn't your turn." });
     }
     if (rider.kind === "mecha" || rider.mounted_on == null) return res.status(400).json({ error: "You need to be mounted on a mecha." });
@@ -2789,7 +2823,7 @@ router.post("/actions/switch-weapon", async (req, res) => {
     if (!isActingCombatantAuthorized(req, combatant, encounter)) {
       return res.status(403).json({ error: "That isn't your combatant." });
     }
-    if (req.user.role !== "Dungeon Master" && !requireOwnTurn(encounter, combatant)) {
+    if (!canEditAsDm(req.user) && !requireOwnTurn(encounter, combatant)) {
       return res.status(400).json({ error: "It isn't your turn." });
     }
     if (combatant.unconscious || combatant.disabled) {
@@ -2850,7 +2884,7 @@ router.post("/actions/melee", async (req, res) => {
     if (!isActingCombatantAuthorized(req, attacker, encounterRow)) {
       return res.status(403).json({ error: "That isn't your combatant." });
     }
-    if (req.user.role !== "Dungeon Master" && !requireOwnTurn(encounterRow, attacker)) {
+    if (!canEditAsDm(req.user) && !requireOwnTurn(encounterRow, attacker)) {
       return res.status(400).json({ error: "It isn't your turn." });
     }
     if (attacker.unconscious || attacker.disabled) return res.status(400).json({ error: "This combatant can't act." });
@@ -2973,7 +3007,7 @@ router.post("/actions/hunker-down", async (req, res) => {
     if (!isActingCombatantAuthorized(req, combatant, encounter)) {
       return res.status(403).json({ error: "That isn't your combatant." });
     }
-    if (req.user.role !== "Dungeon Master" && !requireOwnTurn(encounter, combatant)) {
+    if (!canEditAsDm(req.user) && !requireOwnTurn(encounter, combatant)) {
       return res.status(400).json({ error: "It isn't your turn." });
     }
     if (combatant.unconscious || combatant.disabled) {
@@ -3043,7 +3077,7 @@ router.post("/actions/reload", async (req, res) => {
     if (!isActingCombatantAuthorized(req, combatant, encounter)) {
       return res.status(403).json({ error: "That isn't your combatant." });
     }
-    if (req.user.role !== "Dungeon Master" && !requireOwnTurn(encounter, combatant)) {
+    if (!canEditAsDm(req.user) && !requireOwnTurn(encounter, combatant)) {
       return res.status(400).json({ error: "It isn't your turn." });
     }
     if (combatant.unconscious || combatant.disabled) {
@@ -3672,10 +3706,13 @@ async function triggerKnockoutRoll(combatantId, reason) {
   // A player character's own player makes the roll; an NPC's has no
   // ref_user_id, so it's handed to the DM (every DM, same as counter-clash
   // offers for NPCs).
-  const dmControlled = !combatant.ref_user_id;
+  // An NPC handed to a DM Assistant is rolled for by that assistant instead.
+  const assistantId = combatant.kind === "npc" ? combatant.controller_user_id ?? null : null;
+  const dmControlled = !combatant.ref_user_id && !assistantId;
+  const rollerId = combatant.ref_user_id ?? assistantId;
   pendingKnockouts.set(id, {
     combatantId,
-    userId: combatant.ref_user_id,
+    userId: rollerId,
     dmControlled,
     name: combatant.name,
     dc,
@@ -3684,11 +3721,11 @@ async function triggerKnockoutRoll(combatantId, reason) {
     createdAt: Date.now(),
   });
 
-  const recipients = dmControlled ? await getDungeonMasterIds() : [combatant.ref_user_id];
+  const recipients = dmControlled ? await getDungeonMasterIds() : [rollerId];
   for (const recipientId of recipients) {
     notifyUser(recipientId, {
       type: "knockout-roll-offered",
-      offer: { id, name: combatant.name, dc, reason, conMod, forNpc: dmControlled },
+      offer: { id, name: combatant.name, dc, reason, conMod, forNpc: !combatant.ref_user_id },
     });
   }
   await pushCombatLog(
@@ -5658,8 +5695,11 @@ async function launchAndOfferCounter(offer) {
     const spottedEarly = perceptionTotal >= PERCEPTION_DC;
     // A player-controlled target answers their own counter; an NPC's (no
     // ref_user_id) is handed to the DM to answer on its behalf.
-    const dmControlled = !target.ref_user_id;
-    const recipients = dmControlled ? await getDungeonMasterIds() : [target.ref_user_id];
+    // ...unless the DM handed that NPC to a DM Assistant, who answers instead.
+    const assistantId = target.kind === "npc" ? target.controller_user_id ?? null : null;
+    const dmControlled = !target.ref_user_id && !assistantId;
+    const defenderUserId = target.ref_user_id ?? assistantId;
+    const recipients = dmControlled ? await getDungeonMasterIds() : [defenderUserId];
 
     // Auto-counter: the DM has handed this NPC/grunt's reaction to the server.
     // The forecast either picks a counter/dodge (answered below after a
@@ -5676,7 +5716,7 @@ async function launchAndOfferCounter(offer) {
     const timeoutHandle = setTimeout(() => resolveCounterOffer(offer.fxId, null), offer.windowMs + COUNTER_LAG_COMP_MS);
     pendingCounters.set(offer.fxId, {
       ...offer,
-      userId: target.ref_user_id,
+      userId: defenderUserId,
       dmControlled,
       eligibleSlugRows: eligible,
       timeoutHandle,
@@ -5715,7 +5755,7 @@ async function launchAndOfferCounter(offer) {
         // Who's being shot at -- the DM may be fielding counters for several
         // NPCs at once, so the prompt names the defender.
         defenderName: offer.targetName,
-        forNpc: dmControlled,
+        forNpc: !target.ref_user_id,
         eligibleSlugs: eligible.map((s) => ({
           id: s.id,
           name: s.name,
@@ -6548,7 +6588,7 @@ async function resolveShooterSlugAndBlaster(attacker, req, { slugId, npcSlug, np
       return { error: "That slug is out of energy -- it needs to recharge." };
     }
     return { slug: applyLoyaltyToSlug(slug), blaster };
-  } else if (attacker.kind === "npc" && req.user.role === "Dungeon Master") {
+  } else if (attacker.kind === "npc" && canEditAsDm(req.user)) {
     const slug = {
       id: null,
       name: npcSlug?.name || "NPC Slug",
@@ -6959,7 +6999,7 @@ router.post("/actions/shoot", async (req, res) => {
     if (!isActingCombatantAuthorized(req, attacker, encounterRow)) {
       return res.status(403).json({ error: "That isn't your combatant." });
     }
-    if (req.user.role !== "Dungeon Master" && !requireOwnTurn(encounterRow, attacker)) {
+    if (!canEditAsDm(req.user) && !requireOwnTurn(encounterRow, attacker)) {
       return res.status(400).json({ error: "It isn't your turn." });
     }
     if (attacker.unconscious || attacker.disabled) return res.status(400).json({ error: "This combatant can't act." });
@@ -7470,7 +7510,7 @@ router.post("/counters/:id/resolve", async (req, res) => {
   const { slugId, dodge, reactedAtMs } = req.body || {};
   const offer = pendingCounters.get(id);
   if (!offer) return res.status(404).json({ error: "This counter window has already closed." });
-  const authorized = offer.dmControlled ? req.user.role === "Dungeon Master" : offer.userId === req.user.sub;
+  const authorized = offer.dmControlled ? canEditAsDm(req.user) : offer.userId === req.user.sub;
   if (!authorized) return res.status(403).json({ error: "This counter isn't yours to make." });
   try {
     // Lag compensation: the client reports how long after firing it clicked,
@@ -7504,7 +7544,7 @@ router.post("/knockout/:id/resolve", async (req, res) => {
   const { id } = req.params;
   const offer = pendingKnockouts.get(id);
   if (!offer) return res.status(404).json({ error: "This knockout roll has expired or was already made." });
-  const authorized = offer.dmControlled ? req.user.role === "Dungeon Master" : offer.userId === req.user.sub;
+  const authorized = offer.dmControlled ? canEditAsDm(req.user) : offer.userId === req.user.sub;
   if (!authorized) return res.status(403).json({ error: "This roll isn't yours to make." });
   pendingKnockouts.delete(id);
 
@@ -7541,7 +7581,7 @@ router.post("/knockout/:id/resolve", async (req, res) => {
   }
 });
 
-router.post("/actions/revive", requireDungeonMaster, async (req, res) => {
+router.post("/actions/revive", requireDmEdit, async (req, res) => {
   const { combatantId, grit } = req.body || {};
   try {
     const combatant = await getCombatant(combatantId);
@@ -7572,7 +7612,7 @@ router.post("/actions/mount", async (req, res) => {
     if (!rider || !mecha || mecha.kind !== "mecha") return res.status(404).json({ error: "Combatant not found." });
     const encounterRow = (await pool.query("SELECT * FROM encounters WHERE id = $1", [rider.encounter_id])).rows[0];
     if (!isActingCombatantAuthorized(req, rider, encounterRow)) return res.status(403).json({ error: "That isn't your combatant." });
-    if (req.user.role !== "Dungeon Master" && !requireOwnTurn(encounterRow, rider)) {
+    if (!canEditAsDm(req.user) && !requireOwnTurn(encounterRow, rider)) {
       return res.status(400).json({ error: "It isn't your turn." });
     }
     if (rider.kind === "mecha") return res.status(400).json({ error: "A mecha can't ride another mecha." });
@@ -7604,7 +7644,7 @@ router.post("/actions/dismount", async (req, res) => {
     if (!rider) return res.status(404).json({ error: "Combatant not found." });
     const encounterRow = (await pool.query("SELECT * FROM encounters WHERE id = $1", [rider.encounter_id])).rows[0];
     if (!isActingCombatantAuthorized(req, rider, encounterRow)) return res.status(403).json({ error: "That isn't your combatant." });
-    if (req.user.role !== "Dungeon Master" && !requireOwnTurn(encounterRow, rider)) {
+    if (!canEditAsDm(req.user) && !requireOwnTurn(encounterRow, rider)) {
       return res.status(400).json({ error: "It isn't your turn." });
     }
     if (!rider.mounted_on) return res.status(400).json({ error: "Not mounted on anything." });
@@ -7633,7 +7673,7 @@ router.post("/actions/ram", async (req, res) => {
     // mecha can never ram.
     const riders = await mechaRiders(mecha.id);
     if (riders.length === 0) return res.status(400).json({ error: "Only a mounted mecha can ram." });
-    const isDM = req.user.role === "Dungeon Master";
+    const isDM = canEditAsDm(req.user);
     const myRider = riders.find((r) => r.ref_user_id === req.user.sub);
     if (!isDM && !myRider) return res.status(403).json({ error: "You aren't riding that mecha." });
     const turnRider = myRider || riders[0];

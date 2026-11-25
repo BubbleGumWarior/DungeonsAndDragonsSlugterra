@@ -136,6 +136,12 @@
   border-radius: 999px;
 }
 
+.stat-guide-trained--expert {
+  color: var(--charcoal-950);
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
 .stat-guide-skill-note {
   max-width: 62ch;
   font-size: 13px;

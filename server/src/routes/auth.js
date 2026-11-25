@@ -1,8 +1,8 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
 import { pool } from "../db.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, signToken } from "../middleware/auth.js";
+import { ROLE_DM, ROLE_PLAYER } from "../roles.js";
 
 const router = Router();
 const SALT_ROUNDS = 12;
@@ -26,8 +26,8 @@ router.post("/register", async (req, res) => {
     await client.query("BEGIN");
 
     const { rows: countRows } = await client.query("SELECT COUNT(*)::int AS count FROM users");
-    const role = countRows[0].count === 0 ? "Dungeon Master" : "Player";
-    const status = role === "Dungeon Master" ? "approved" : "pending";
+    const role = countRows[0].count === 0 ? ROLE_DM : ROLE_PLAYER;
+    const status = role === ROLE_DM ? "approved" : "pending";
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
@@ -41,11 +41,7 @@ router.post("/register", async (req, res) => {
     await client.query("COMMIT");
 
     const row = rows[0];
-    const token = jwt.sign(
-      { sub: row.id, username: row.username, role: row.role },
-      process.env.JWT_SECRET,
-      { expiresIn: "12h" }
-    );
+    const token = signToken(row);
 
     res.status(201).json({
       token,
@@ -92,11 +88,7 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid username or password." });
     }
 
-    const token = jwt.sign(
-      { sub: user.id, username: user.username, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: "12h" }
-    );
+    const token = signToken(user);
 
     res.json({
       token,

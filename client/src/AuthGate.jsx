@@ -4,7 +4,7 @@ import { useAuth } from "./AuthContext.jsx";
 import "./Gate.css";
 
 export default function AuthGate() {
-  const { token, updateUser, logout } = useAuth();
+  const { token, login, updateUser, logout } = useAuth();
   const location = useLocation();
   const [me, setMe] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -23,7 +23,10 @@ export default function AuthGate() {
         const data = await res.json();
         if (cancelled) return;
         setMe(data.user);
-        updateUser(data.user);
+        // The server hands back a fresh token when the role baked into ours
+        // is out of date (the DM changed it from the admin panel).
+        if (data.token && data.token !== token) login(data.token, data.user);
+        else updateUser(data.user);
         setFailed(false);
       })
       .catch(() => {

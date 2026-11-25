@@ -1,18 +1,12 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireDmView, requireDmEdit, canEditAsDm } from "../roles.js";
 import { EQUIPMENT_SLOT, slotForKind, validateEquipmentFields, DEFAULT_MELEE_TYPE } from "../equipmentRules.js";
 import { syncAmmoBelt, announceEquipmentChange } from "../ammoBelt.js";
 import { unequipBlasterRow } from "./blasters.js";
 
 const router = Router();
-
-function requireDungeonMaster(req, res, next) {
-  if (req.user.role !== "Dungeon Master") {
-    return res.status(403).json({ error: "Dungeon Master access required." });
-  }
-  next();
-}
 
 router.use(requireAuth);
 
@@ -81,7 +75,7 @@ router.get("/me", async (req, res) => {
   }
 });
 
-router.get("/", requireDungeonMaster, async (req, res) => {
+router.get("/", requireDmView, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM equipment ORDER BY created_at ASC");
     res.json({ equipment: rows.map(toClientEquipment) });
@@ -91,7 +85,7 @@ router.get("/", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.post("/", requireDungeonMaster, async (req, res) => {
+router.post("/", requireDmEdit, async (req, res) => {
   const fields = fieldsFrom(req.body);
   const userId = req.body?.userId;
   const validation = validateEquipmentFields(fields);
@@ -126,7 +120,7 @@ router.post("/", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.patch("/:id", requireDungeonMaster, async (req, res) => {
+router.patch("/:id", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const fields = fieldsFrom(req.body);
   const validation = validateEquipmentFields(fields);
@@ -191,7 +185,7 @@ router.patch("/:id/equip", async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Equipment not found." });
     }
-    if (item.user_id !== req.user.sub && req.user.role !== "Dungeon Master") {
+    if (item.user_id !== req.user.sub && !canEditAsDm(req.user)) {
       await client.query("ROLLBACK");
       return res.status(403).json({ error: "You do not own this." });
     }
@@ -237,7 +231,7 @@ router.patch("/:id/unequip", async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Equipment not found." });
     }
-    if (item.user_id !== req.user.sub && req.user.role !== "Dungeon Master") {
+    if (item.user_id !== req.user.sub && !canEditAsDm(req.user)) {
       await client.query("ROLLBACK");
       return res.status(403).json({ error: "You do not own this." });
     }
@@ -258,7 +252,7 @@ router.patch("/:id/unequip", async (req, res) => {
   }
 });
 
-router.delete("/:id", requireDungeonMaster, async (req, res) => {
+router.delete("/:id", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const client = await pool.connect();
   try {

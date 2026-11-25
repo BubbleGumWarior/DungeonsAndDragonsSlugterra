@@ -6,7 +6,9 @@ import CharacterSheetView from "./CharacterSheetView.jsx";
 import DMCharacterEditor from "./DMCharacterEditor.jsx";
 import "./DMCharacterViewer.css";
 
-export default function DMCharacterViewer({ userId, onDeselect }) {
+// `readOnly` is the DM Assistant's view: the sheet, with no Edit button and
+// no Fame/Heat steppers.
+export default function DMCharacterViewer({ userId, onDeselect, readOnly = false }) {
   const { token } = useAuth();
   const { characterUpdate, partyHealed } = useLiveState();
   const [character, setCharacter] = useState(undefined);
@@ -80,7 +82,7 @@ export default function DMCharacterViewer({ userId, onDeselect }) {
           Back to Roster
         </button>
 
-        {mode === "view" && character && (
+        {mode === "view" && character && !readOnly && (
           <button type="button" className="dm-viewer-edit-toggle" onClick={() => setMode("edit")}>
             <PencilSimpleIcon weight="bold" />
             Edit
@@ -94,10 +96,14 @@ export default function DMCharacterViewer({ userId, onDeselect }) {
         )}
       </div>
 
-      {mode === "edit" ? (
+      {mode === "edit" && !readOnly ? (
         <DMCharacterEditor userId={userId} onSaved={handleSaved} />
       ) : character === undefined ? null : character ? (
-        <CharacterSheetView character={character} onChangeFame={changeFame} onChangeHeat={changeHeat} />
+        <CharacterSheetView
+          character={character}
+          onChangeFame={readOnly ? undefined : changeFame}
+          onChangeHeat={readOnly ? undefined : changeHeat}
+        />
       ) : (
         <div className="dm-viewer-empty">This player hasn't created a character yet.</div>
       )}

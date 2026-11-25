@@ -5,6 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireDmView, requireDmEdit } from "../roles.js";
 import { broadcastAll } from "../ws.js";
 import { AUDIO_TYPES, resolveLibraryFile, syncDefaultSounds } from "../defaultSounds.js";
 
@@ -58,13 +59,6 @@ router.get("/file/:fileId", async (req, res) => {
 });
 
 router.use(requireAuth);
-
-function requireDungeonMaster(req, res, next) {
-  if (req.user.role !== "Dungeon Master") {
-    return res.status(403).json({ error: "Only the Dungeon Master can do that." });
-  }
-  next();
-}
 
 function toSound(row) {
   return {
@@ -150,7 +144,7 @@ async function updateAmbient(res, sqlSet, values) {
   }
 }
 
-router.post("/ambient/play", requireDungeonMaster, async (req, res) => {
+router.post("/ambient/play", requireDmEdit, async (req, res) => {
   const soundId = Number(req.body?.soundId);
   if (!Number.isInteger(soundId)) return res.status(400).json({ error: "A soundId is required." });
   const { rows } = await pool.query("SELECT kind FROM sounds WHERE id = $1", [soundId]);
@@ -159,11 +153,11 @@ router.post("/ambient/play", requireDungeonMaster, async (req, res) => {
   await updateAmbient(res, "sound_id = $1, playing = true, started_at_ms = $2, paused_at_ms = 0", [soundId, Date.now()]);
 });
 
-router.post("/ambient/pause", requireDungeonMaster, async (req, res) => {
+router.post("/ambient/pause", requireDmEdit, async (req, res) => {
   await updateAmbient(res, "paused_at_ms = CASE WHEN playing THEN $1 - started_at_ms ELSE paused_at_ms END, playing = false", [Date.now()]);
 });
 
-router.post("/ambient/resume", requireDungeonMaster, async (req, res) => {
+router.post("/ambient/resume", requireDmEdit, async (req, res) => {
   await updateAmbient(
     res,
     "started_at_ms = CASE WHEN NOT playing THEN $1 - paused_at_ms ELSE started_at_ms END, playing = (sound_id IS NOT NULL)",
@@ -171,18 +165,18 @@ router.post("/ambient/resume", requireDungeonMaster, async (req, res) => {
   );
 });
 
-router.post("/ambient/stop", requireDungeonMaster, async (req, res) => {
+router.post("/ambient/stop", requireDmEdit, async (req, res) => {
   await updateAmbient(res, "playing = false, paused_at_ms = 0", []);
 });
 
-router.post("/ambient/volume", requireDungeonMaster, async (req, res) => {
+router.post("/ambient/volume", requireDmEdit, async (req, res) => {
   await updateAmbient(res, "volume = $1", [cleanUnit(req.body?.volume, 0.8)]);
 });
 
 // ---------------------------------------------------------------- library
 // Re-read server/default-sounds (also done at startup) so a file just dropped
 // in -- say, a multi-hour ambience track -- shows up without a restart.
-router.post("/rescan", requireDungeonMaster, async (req, res) => {
+router.post("/rescan", requireDmEdit, async (req, res) => {
   try {
     const result = await syncDefaultSounds();
     res.json(result);
@@ -192,7 +186,7 @@ router.post("/rescan", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.get("/", requireDungeonMaster, async (req, res) => {
+router.get("/", requireDmView, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM sounds ORDER BY kind, lower(name), id");
     res.json({ sounds: rows.map(toSound) });
@@ -206,7 +200,7 @@ router.get("/", requireDungeonMaster, async (req, res) => {
 // parser needed, and the browser can send a File straight through fetch().
 router.post(
   "/",
-  requireDungeonMaster,
+  requireDmEdit,
   raw({ type: () => true, limit: MAX_UPLOAD_BYTES }),
   async (req, res) => {
     const kind = req.query.kind === "ambient" ? "ambient" : req.query.kind === "effect" ? "effect" : null;
@@ -246,7 +240,7 @@ router.post(
   }
 );
 
-router.patch("/:id", requireDungeonMaster, async (req, res) => {
+router.patch("/:id", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: "Invalid sound." });
 
@@ -290,7 +284,7 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.delete("/:id", requireDungeonMaster, async (req, res) => {
+router.delete("/:id", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: "Invalid sound." });
   try {
@@ -319,12 +313,12 @@ router.delete("/:id", requireDungeonMaster, async (req, res) => {
 // Effects are fire-and-forget: the DM's press is broadcast once and every
 // client plays it from its own cached copy. Each carries a fresh playId so a
 // client can tell a rapid second press from a re-delivery.
-router.post("/stop-effects", requireDungeonMaster, (req, res) => {
+router.post("/stop-effects", requireDmEdit, (req, res) => {
   broadcastAll({ type: "sound-stop" });
   res.status(204).end();
 });
 
-router.post("/:id/play", requireDungeonMaster, async (req, res) => {
+router.post("/:id/play", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: "Invalid sound." });
   try {

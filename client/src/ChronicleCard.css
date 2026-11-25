@@ -397,6 +397,15 @@
   outline: 2px solid var(--gold-soft);
   outline-offset: 2px;
 }
+/* A DM Assistant's view: shows whether a line is revealed, can't flip it. */
+.chronicle-eye--static {
+  cursor: default;
+  border-color: transparent;
+  background: transparent;
+}
+.chronicle-eye--static:hover {
+  border-color: transparent;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .chronicle-card-inner {

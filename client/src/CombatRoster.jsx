@@ -6,6 +6,7 @@ import { combatantNameColor } from "./combatDisplay.js";
 import { typeColor } from "./slugData.js";
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
+import { ControllerPicker, controllerLabel } from "./CombatControllerPicker.jsx";
 import "./Panel.css";
 import "./CombatRoster.css";
 
@@ -46,12 +47,31 @@ function FoeSlugs({ name, knowledge }) {
   );
 }
 
-function Row({ combatant, knowledge, isActive, isActing, isDM, onSelect, onRevive, onRemove, onReset, onToggleAutoCounter }) {
+function Row({
+  combatant,
+  knowledge,
+  isActive,
+  isActing,
+  isDM,
+  seesAll,
+  viewerUserId,
+  assistants,
+  onSelect,
+  onRevive,
+  onRemove,
+  onReset,
+  onToggleAutoCounter,
+  onAssign,
+}) {
   const fraction = Math.max(0, Math.min(1, barFraction(combatant)));
   const autoOn = Boolean(combatant.data?.autoCounter);
   const downed = combatant.unconscious || combatant.disabled;
   const pipsUsed = Array.isArray(combatant.knockoutPips) ? combatant.knockoutPips.filter(Boolean).length : 0;
-  const clickable = isDM;
+  // The DM can take over anyone; a DM Assistant can switch between the NPCs
+  // the DM handed them.
+  const mine = combatant.kind === "npc" && viewerUserId != null && combatant.controllerUserId === viewerUserId;
+  const clickable = isDM || mine;
+  const playedBy = seesAll ? controllerLabel(combatant, assistants, viewerUserId) : null;
 
   return (
     <div
@@ -70,8 +90,10 @@ function Row({ combatant, knowledge, isActive, isActing, isDM, onSelect, onReviv
             {combatant.name}
           </span>
           <span className="combat-roster-kind">{combatant.kind}</span>
-          {autoOn && isDM && <span className="combat-roster-auto">auto-counter</span>}
+          {autoOn && isDM && !combatant.controllerUserId && <span className="combat-roster-auto">auto-counter</span>}
+          {playedBy && !isDM && <span className="combat-roster-auto combat-roster-played-by">{playedBy}</span>}
         </div>
+        {isDM && onAssign && <ControllerPicker combatant={combatant} assistants={assistants} onAssign={onAssign} />}
         <div className={`combat-roster-bar-track ${combatant.kind === "mecha" ? "combat-roster-bar-track--structure" : ""}`}>
           <div className="combat-roster-bar-fill" style={{ transform: `scaleX(${fraction})` }} />
         </div>
@@ -92,7 +114,7 @@ function Row({ combatant, knowledge, isActive, isActing, isDM, onSelect, onReviv
             </span>
           </div>
         )}
-        {!isDM && knowledge && <FoeSlugs name={combatant.name} knowledge={knowledge} />}
+        {!seesAll && knowledge && <FoeSlugs name={combatant.name} knowledge={knowledge} />}
         {downed && <span className="combat-roster-status">{combatant.unconscious ? "Unconscious" : "Disabled"}</span>}
         {combatant.data?.gear && (combatant.data.gear.ill || combatant.data.gear.tier !== "comfortable") && (
           <div className="combat-roster-effects">
@@ -248,6 +270,9 @@ function AutoCounterGroup({ label, members, onToggle }) {
 export default function CombatRoster({
   encounter,
   isDM,
+  seesAll = isDM, // the DM or a DM Assistant: every row, no foe-slug guesses
+  assistants = [],
+  onAssign,
   viewerUserId,
   actingCombatantId,
   onSelect,
@@ -264,7 +289,7 @@ export default function CombatRoster({
   // a new foe joins the fight.
   const foeKey = encounter.combatants.filter(canAutoCounter).map((c) => c.id).join(",");
   useEffect(() => {
-    if (isDM || !token || !foeKey) return undefined;
+    if (seesAll || !token || !foeKey) return undefined;
     let cancelled = false;
     fetch(`/api/combat/encounters/${encounter.id}/slug-knowledge`, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => res.json())
@@ -273,7 +298,7 @@ export default function CombatRoster({
     return () => {
       cancelled = true;
     };
-  }, [isDM, token, encounter.id, foeKey, slugKnowledgeChanged]);
+  }, [seesAll, token, encounter.id, foeKey, slugKnowledgeChanged]);
 
   const npcs = encounter.combatants.filter(canAutoCounter);
   const grunts = npcs.filter((c) => c.refGruntTemplateId != null);
@@ -282,7 +307,12 @@ export default function CombatRoster({
     // Thugglet's invisibility: same visibility rule as the map (CombatMap.jsx)
     // -- the DM and the combatant's own player still see the row, everyone
     // else doesn't get a row for them at all.
-    .filter((c) => (!c.statusEffects?.invisible && !isBurrowed(c)) || isDM || (c.kind === "character" && c.refUserId === viewerUserId))
+    .filter(
+      (c) =>
+        (!c.statusEffects?.invisible && !isBurrowed(c)) ||
+        seesAll ||
+        (c.kind === "character" && c.refUserId === viewerUserId)
+    )
     .slice()
     .sort((a, b) => encounter.turnOrder.indexOf(a.id) - encounter.turnOrder.indexOf(b.id));
 
@@ -314,6 +344,10 @@ export default function CombatRoster({
             isActive={Boolean(encounter.activeCombatantIds?.includes(c.id))}
             isActing={c.id === actingCombatantId}
             isDM={isDM}
+            seesAll={seesAll}
+            viewerUserId={viewerUserId}
+            assistants={assistants}
+            onAssign={onAssign}
             onSelect={onSelect}
             onRevive={onRevive}
             onRemove={onRemove}

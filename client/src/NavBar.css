@@ -181,6 +181,17 @@
   transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
 }
 
+/* Action items (e.g. the Slugterra toggle) render as buttons -- strip the
+   native button chrome so they match the link rows. */
+button.navbar-sublink {
+  background: transparent;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
 .navbar-sublink svg {
   width: 15px;
   height: 15px;

@@ -11,7 +11,10 @@ import "./DMMarketControls.css";
 // header), so it stays two columns wide however many consumables there are.
 const PURSE_LABELS = { credits: "Credits", ...Object.fromEntries(SUPPLIES.map((s) => [s.field, s.name])) };
 
-export default function DMMarketControls({ data, planetName, dmCall, token }) {
+// `readOnly` is the DM Assistant's view: every setting and purse is shown,
+// nothing can be changed (controls disabled, the listing form and the purse
+// inputs left out).
+export default function DMMarketControls({ data, planetName, dmCall, token, readOnly = false }) {
   const [open, setOpen] = useState(null); // null | "listing" | "purses"
   const [pct, setPct] = useState(data.pricePct);
   const [catalog, setCatalog] = useState(null);
@@ -85,7 +88,7 @@ export default function DMMarketControls({ data, planetName, dmCall, token }) {
         <div className="dmm-group">
           <span className="dmm-label">Prices on {planetName}</span>
           <div className="dmm-stepper">
-            <button type="button" onClick={() => step(-5)} aria-label="Lower price modifier">
+            <button type="button" disabled={readOnly} onClick={() => step(-5)} aria-label="Lower price modifier">
               <MinusIcon weight="bold" />
             </button>
             <input
@@ -93,16 +96,17 @@ export default function DMMarketControls({ data, planetName, dmCall, token }) {
               min={10}
               max={500}
               value={pct}
+              disabled={readOnly}
               onChange={(e) => setPct(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && dirty && savePct()}
               aria-label="Price modifier percent"
             />
             <span className="dmm-unit">%</span>
-            <button type="button" onClick={() => step(5)} aria-label="Raise price modifier">
+            <button type="button" disabled={readOnly} onClick={() => step(5)} aria-label="Raise price modifier">
               <PlusIcon weight="bold" />
             </button>
           </div>
-          {dirty && (
+          {dirty && !readOnly && (
             <button type="button" className="dmm-save" onClick={savePct}>
               Save
             </button>
@@ -112,7 +116,7 @@ export default function DMMarketControls({ data, planetName, dmCall, token }) {
 
         <label className="dmm-group">
           <span className="dmm-label">Mood</span>
-          <select className="dmm-select" value={data.mood} onChange={(e) => saveMood(e.target.value)} aria-label="Merchants' mood">
+          <select className="dmm-select" value={data.mood} disabled={readOnly} onChange={(e) => saveMood(e.target.value)} aria-label="Merchants' mood">
             {(data.moods ?? []).map((m) => (
               <option key={m.key} value={m.key}>
                 {m.label} ({m.pct > 0 ? "+" : m.pct < 0 ? "−" : ""}
@@ -127,12 +131,13 @@ export default function DMMarketControls({ data, planetName, dmCall, token }) {
             type="button"
             className={`dmm-toggle dmm-toggle--open${data.open ? " dmm-toggle--on" : ""}`}
             aria-pressed={data.open}
+            disabled={readOnly}
             onClick={toggleOpen}
           >
             {data.open ? <LockKeyOpenIcon weight="bold" /> : <LockKeyIcon weight="bold" />}
             {data.open ? "Market open" : "Market closed"}
           </button>
-          <button
+          {!readOnly && <button
             type="button"
             className={`dmm-toggle${open === "listing" ? " dmm-toggle--on" : ""}`}
             aria-expanded={open === "listing"}
@@ -140,7 +145,7 @@ export default function DMMarketControls({ data, planetName, dmCall, token }) {
           >
             <TagIcon weight="bold" />
             Post listing
-          </button>
+          </button>}
           <button
             type="button"
             className={`dmm-toggle${open === "purses" ? " dmm-toggle--on" : ""}`}
@@ -153,7 +158,7 @@ export default function DMMarketControls({ data, planetName, dmCall, token }) {
         </div>
       </div>
 
-      {open === "listing" && (
+      {open === "listing" && !readOnly && (
         <form className="dmm-panel dmm-form" onSubmit={post}>
           <label className="dmm-field">
             <span>Type</span>
@@ -209,7 +214,7 @@ export default function DMMarketControls({ data, planetName, dmCall, token }) {
               className="dmm-select dmm-purses-supply"
               value={supply}
               onChange={(e) => setSupply(e.target.value)}
-              aria-label="Supply to edit"
+              aria-label={readOnly ? "Supply to show" : "Supply to edit"}
             >
               {SUPPLIES.map((s) => (
                 <option key={s.field} value={s.field}>
@@ -225,7 +230,7 @@ export default function DMMarketControls({ data, planetName, dmCall, token }) {
                 <div key={field} className="dmm-purses-cell">
                   <span className="dmm-purses-field">{PURSE_LABELS[field]}</span>
                   <span className="dmm-purses-value num-tabular">{p[field]}</span>
-                  <input
+                  {!readOnly && <input
                     type="number"
                     min={0}
                     placeholder="set"
@@ -233,8 +238,8 @@ export default function DMMarketControls({ data, planetName, dmCall, token }) {
                     value={purses[`${p.userId}:${field}`] ?? ""}
                     onChange={(e) => setPurses((st) => ({ ...st, [`${p.userId}:${field}`]: e.target.value }))}
                     onKeyDown={(e) => e.key === "Enter" && setPurse(p.userId, field)}
-                  />
-                  <button
+                  />}
+                  {!readOnly && <button
                     type="button"
                     className="dmm-purses-set"
                     disabled={!purses[`${p.userId}:${field}`]}
@@ -242,7 +247,7 @@ export default function DMMarketControls({ data, planetName, dmCall, token }) {
                     aria-label={`Apply ${field} for ${p.name}`}
                   >
                     <CheckIcon weight="bold" />
-                  </button>
+                  </button>}
                 </div>
               ))}
             </div>

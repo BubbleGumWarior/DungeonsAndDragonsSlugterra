@@ -118,7 +118,7 @@ export function micConstraints(deviceId) {
 // once mic permission has been granted, so before the first join the lists
 // can come back unlabeled -- `labeled` lets the UI say so.
 export function useAudioDevices() {
-  const [devices, setDevices] = useState({ inputs: [], outputs: [], labeled: false });
+  const [devices, setDevices] = useState({ inputs: [], outputs: [], cameras: [], labeled: false });
 
   useEffect(() => {
     if (!navigator.mediaDevices?.enumerateDevices) return undefined;
@@ -130,7 +130,8 @@ export function useAudioDevices() {
         if (cancelled) return;
         const inputs = all.filter((d) => d.kind === "audioinput");
         const outputs = all.filter((d) => d.kind === "audiooutput");
-        setDevices({ inputs, outputs, labeled: inputs.some((d) => d.label) });
+        const cameras = all.filter((d) => d.kind === "videoinput");
+        setDevices({ inputs, outputs, cameras, labeled: inputs.some((d) => d.label) });
       } catch {
         // No device list: the picker just stays empty/hidden.
       }

@@ -12,6 +12,17 @@ import {
   saveOutputDeviceId,
   supportsOutputSelection,
 } from "./voiceAudio.js";
+import {
+  VIDEO_MAX_FRAMERATE,
+  openCameraStream,
+  canUseCamera,
+  findVideoTransceiver,
+  loadCameraDeviceId,
+  loadReceiveVideo,
+  saveCameraDeviceId,
+  saveReceiveVideo,
+  videoBitrateForPeers,
+} from "./voiceVideo.js";
 
 const VoiceChatContext = createContext(null);
 
@@ -166,6 +177,14 @@ export default function VoiceChatProvider({ children }) {
   const [peerVolumes, setPeerVolumes] = useState(() => user?.voicePeerVolumes || {});
   const [inputDeviceId, setInputDeviceIdState] = useState(loadInputDeviceId);
   const [outputDeviceId, setOutputDeviceIdState] = useState(loadOutputDeviceId);
+  // Video (see voiceVideo.js). The camera is separate from joining: anyone
+  // can stay audio-only. receiveVideo is the client-side data saver.
+  const [cameraOn, setCameraOn] = useState(false);
+  const [cameraStarting, setCameraStarting] = useState(false);
+  const [localVideoStream, setLocalVideoStream] = useState(null);
+  const [cameraDeviceId, setCameraDeviceIdState] = useState(loadCameraDeviceId);
+  const [receiveVideo, setReceiveVideoState] = useState(loadReceiveVideo);
+  const [remoteVideoStreams, setRemoteVideoStreams] = useState({}); // peerId -> MediaStream (video only)
 
   const selfId = user?.id;
   const voiceInputMode = user?.voiceInputMode || "live";
@@ -189,7 +208,15 @@ export default function VoiceChatProvider({ children }) {
   const peerVolumesRef = useRef(peerVolumes);
   const cueVolumeRef = useRef(user?.voiceCueVolume);
   const prevRosterIdsRef = useRef(null); // Set<userId> from the last roster snapshot, or null before the first
-  const iceServersRef = useRef([STUN_SERVER]); // replaced with Metered's array once fetchIceServers resolves in joinCall
+  const iceServersRef = useRef([STUN_SERVER]); // replaced with the Cloudflare TURN array once fetchIceServers resolves in joinCall
+  const localVideoTrackRef = useRef(null);
+  const cameraOnRef = useRef(false);
+  const cameraDeviceIdRef = useRef(cameraDeviceId);
+  const receiveVideoRef = useRef(receiveVideo);
+  // peerId -> false when that peer switched off viewing others' cameras; we
+  // then stop encoding/sending our video to them (see applyVideoEncoding).
+  const peerWantsVideoRef = useRef(new Map());
+  const encodingChainsRef = useRef(new WeakMap()); // RTCPeerConnection -> pending setParameters chain
 
   useEffect(() => {
     inCallRef.current = inCall;
@@ -336,6 +363,73 @@ export default function VoiceChatProvider({ children }) {
     if (el && el.srcObject !== stream) playThroughElement(peerId, el, stream);
   }
 
+  // ---------------------------------------------------------------- video
+  // The video track gets its own single-track stream: the offerer's video
+  // transceiver carries no stream id, so event.streams is empty for it, and
+  // keeping it out of the audio stream leaves the Web Audio path untouched.
+  function attachRemoteVideo(peerId, track) {
+    setRemoteVideoStreams((prev) => ({ ...prev, [peerId]: new MediaStream([track]) }));
+  }
+
+  function dropRemoteVideo(peerId) {
+    setRemoteVideoStreams((prev) => {
+      if (!(peerId in prev)) return prev;
+      const next = { ...prev };
+      delete next[peerId];
+      return next;
+    });
+  }
+
+  // Caps on what we send to one peer: 30fps, and up to 2.5 Mbps split across a
+  // big table (voiceVideo.js). `active: false` stops encoding for a peer who
+  // switched off viewing cameras -- their data saver works by us not sending,
+  // so nothing is downloaded and then thrown away. Encodings only exist once
+  // the connection is negotiated; until then this is a no-op and runs again
+  // when the answer lands.
+  // Queued per connection: a second setParameters while one is still in
+  // flight is rejected, which could silently drop a peer's data-saver
+  // request that happened to land during the connect-time update. Each run
+  // reads fresh parameters, so the last queued call always wins.
+  function applyVideoEncoding(peerId, pc) {
+    const chains = encodingChainsRef.current;
+    const next = (chains.get(pc) || Promise.resolve()).then(async () => {
+      const transceiver = findVideoTransceiver(pc);
+      if (!transceiver || pc.signalingState === "closed") return;
+      const { sender } = transceiver;
+      const params = sender.getParameters();
+      if (!params.encodings || params.encodings.length === 0) return;
+      const encoding = params.encodings[0];
+      encoding.maxBitrate = videoBitrateForPeers(peersRef.current.size);
+      encoding.maxFramerate = VIDEO_MAX_FRAMERATE;
+      encoding.active = peerWantsVideoRef.current.get(peerId) !== false;
+      try {
+        await sender.setParameters(params);
+      } catch (err) {
+        console.warn(`[voice] video encoding for ${peerId} not applied:`, err.message);
+      }
+    });
+    chains.set(pc, next);
+  }
+
+  function applyAllVideoEncodings() {
+    for (const [peerId, pc] of peersRef.current.entries()) applyVideoEncoding(peerId, pc);
+  }
+
+  function sendVideoPref(peerId) {
+    sendMessage({ type: "voice-signal", to: peerId, signal: { kind: "video-pref", receive: receiveVideoRef.current } });
+  }
+
+  // Put our current camera track (or nothing) on a connection's video sender.
+  async function syncLocalVideo(pc) {
+    const transceiver = findVideoTransceiver(pc);
+    if (!transceiver) return;
+    try {
+      await transceiver.sender.replaceTrack(localVideoTrackRef.current);
+    } catch (err) {
+      console.warn("[voice] could not attach camera track:", err.message);
+    }
+  }
+
   function ensurePeerConnection(peerId) {
     const existing = peersRef.current.get(peerId);
     if (existing) return existing;
@@ -344,6 +438,15 @@ export default function VoiceChatProvider({ children }) {
     const localStream = localStreamRef.current;
     if (localStream) {
       localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+    }
+    // Video slot, present from the first offer even with every camera off, so
+    // turning a camera on/off later is just replaceTrack -- no renegotiation,
+    // and the "only the lower id offers" rule stays the only offer path. Only
+    // the offerer adds it: an answerer-side addTransceiver would never be
+    // matched to the offer's m-line. The answerer picks it up in handleSignal.
+    if (selfId < peerId) {
+      const transceiver = pc.addTransceiver("video", { direction: "sendrecv" });
+      if (localVideoTrackRef.current) transceiver.sender.replaceTrack(localVideoTrackRef.current).catch(() => {});
     }
 
     pc.onicecandidate = (event) => {
@@ -367,8 +470,13 @@ export default function VoiceChatProvider({ children }) {
       // Ignore events from a connection that's already been replaced/closed.
       if (peersRef.current.get(peerId) === pc) {
         const state = pc.iceConnectionState;
-        if (state === "connected" || state === "completed") clearIceRecovery(peerId);
-        else if (state === "disconnected") scheduleIceRecovery(peerId, pc, ICE_DISCONNECT_GRACE_MS);
+        if (state === "connected" || state === "completed") {
+          clearIceRecovery(peerId);
+          // (Re)tell this peer whether we want their video, and make sure our
+          // caps are on now that encodings definitely exist.
+          sendVideoPref(peerId);
+          applyVideoEncoding(peerId, pc);
+        } else if (state === "disconnected") scheduleIceRecovery(peerId, pc, ICE_DISCONNECT_GRACE_MS);
         else if (state === "failed") scheduleIceRecovery(peerId, pc, 0);
       }
       if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "failed") {
@@ -393,8 +501,12 @@ export default function VoiceChatProvider({ children }) {
     };
 
     pc.ontrack = (event) => {
-      const [stream] = event.streams;
       console.log(`[voice] received remote track from ${peerId}`, event.track.kind, event.track.readyState);
+      if (event.track.kind === "video") {
+        attachRemoteVideo(peerId, event.track);
+        return;
+      }
+      const [stream] = event.streams;
       if (stream) attachRemoteStream(peerId, stream);
     };
 
@@ -411,6 +523,8 @@ export default function VoiceChatProvider({ children }) {
       peersRef.current.delete(peerId);
     }
     remoteStreamsRef.current.delete(peerId);
+    dropRemoteVideo(peerId);
+    peerWantsVideoRef.current.delete(peerId);
     playbacksRef.current.get(peerId)?.dispose();
     playbacksRef.current.delete(peerId);
     pendingCandidatesRef.current.delete(peerId);
@@ -527,6 +641,21 @@ export default function VoiceChatProvider({ children }) {
 
   async function handleSignal(peerId, signal) {
     console.log(`[voice] handleSignal from ${peerId}: kind=${signal?.kind}`);
+    // The server's reply to our own voice-join. After a socket reconnect,
+    // "resumed" means we were back inside its grace window: no peer ever saw
+    // us leave, so the existing audio links are still good and stay. Not
+    // resumed with peers still open means we were dropped -- every peer has
+    // already torn its side down, so ours are orphaned: reset and let the
+    // next roster broadcast renegotiate everyone from scratch.
+    if (signal.kind === "joined") {
+      if (!signal.resumed && peersRef.current.size > 0) {
+        console.log("[voice] rejoined after being dropped -- rebuilding all peer connections");
+        for (const id of [...peersRef.current.keys()]) closePeerConnection(id);
+        setConnectedPeerIds([]);
+        prevRosterIdsRef.current = null;
+      }
+      return;
+    }
     // The offerer gave up on restarting ICE and is rebuilding the connection:
     // drop ours so the fresh offer that follows lands on a clean slate. (Only
     // the lower id ever offers, so only it may ask for this.)
@@ -547,19 +676,36 @@ export default function VoiceChatProvider({ children }) {
       }
       return;
     }
+    // A peer saying whether they want our video (their data saver). Purely
+    // between the two browsers -- the server only relays it.
+    if (signal.kind === "video-pref") {
+      peerWantsVideoRef.current.set(peerId, signal.receive !== false);
+      const existing = peersRef.current.get(peerId);
+      if (existing) applyVideoEncoding(peerId, existing);
+      return;
+    }
     const pc = ensurePeerConnection(peerId);
     try {
       if (signal.kind === "offer") {
         await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
         await flushPendingCandidates(peerId, pc);
+        // The offer created our video transceiver as receive-only; make it
+        // two-way and put our camera (or nothing yet) on it before answering.
+        const videoTransceiver = findVideoTransceiver(pc);
+        if (videoTransceiver) {
+          videoTransceiver.direction = "sendrecv";
+          await syncLocalVideo(pc);
+        }
         const created = await pc.createAnswer();
         const answer = { type: created.type, sdp: tuneOpusSdp(created.sdp) };
         await pc.setLocalDescription(answer);
         sendMessage({ type: "voice-signal", to: peerId, signal: { kind: "answer", sdp: answer } });
         console.log(`[voice] answer sent -> ${peerId}`);
+        applyVideoEncoding(peerId, pc);
       } else if (signal.kind === "answer") {
         await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
         await flushPendingCandidates(peerId, pc);
+        applyVideoEncoding(peerId, pc);
       } else if (signal.kind === "candidate" && signal.candidate) {
         if (pc.remoteDescription) {
           await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
@@ -596,6 +742,8 @@ export default function VoiceChatProvider({ children }) {
     }
 
     setConnectedPeerIds([...peersRef.current.keys()]);
+    // Table size changed, so each stream's share of the upload budget did too.
+    applyAllVideoEncodings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceRoster, inCall, selfId]);
 
@@ -622,27 +770,31 @@ export default function VoiceChatProvider({ children }) {
 
   // The underlying /ws socket can drop and reconnect on its own (see
   // AccessSocket.jsx's auto-reconnect) without anything here ever deciding
-  // to leave the call. The server has already forgotten this client was in
-  // the voice room the moment the old socket closed, and every peer's
-  // browser has already torn its own connection down in response to that
-  // -- so the RTCPeerConnection objects still sitting in peersRef are
-  // orphaned, not just stale, and trying to reuse them (or waiting for the
-  // roster-reconciliation effect to notice "no change") doesn't recover.
-  // Reset everything and re-announce so the next roster snapshot treats
-  // every peer as new and renegotiates from scratch, instead of silently
-  // sitting connected-looking-but-actually-orphaned until someone manually
-  // leaves and rejoins.
+  // to leave the call. Audio never rides that socket, so the peer links are
+  // usually still fine -- and the server holds our place in the voice room
+  // for a grace window (ws.js) so peers don't tear them down either. Just
+  // re-announce; the server's "joined" ack (handleSignal) says whether we
+  // resumed (keep everything) or were dropped (rebuild everything).
   useEffect(() => {
     if (wsConnectedAt == null || !inCallRef.current) return;
-    for (const peerId of [...peersRef.current.keys()]) closePeerConnection(peerId);
-    setConnectedPeerIds([]);
-    // The roster round-trips away and back during a reconnect -- reseed the
-    // chime baseline so that churn doesn't fire spurious join/leave sounds.
+    // If the roster does churn (we were dropped, or the server restarted),
+    // reseed the chime baseline so that doesn't fire spurious sounds.
     prevRosterIdsRef.current = null;
     sendMessage({ type: "voice-join" });
     sendMessage({ type: "voice-mute-state", muted: selfMutedRef.current });
+    sendMessage({ type: "voice-camera-state", camera: cameraOnRef.current });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsConnectedAt]);
+
+  // Closing or reloading the tab is a real departure, not a blip -- tell the
+  // server now so the table hears the leave immediately instead of after the
+  // reconnect grace window runs out.
+  useEffect(() => {
+    if (!inCall) return undefined;
+    const handlePageHide = () => sendMessage({ type: "voice-leave" });
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, [inCall, sendMessage]);
 
   // ---------------------------------------------------------------- push-to-talk key
   useEffect(() => {
@@ -682,13 +834,11 @@ export default function VoiceChatProvider({ children }) {
     };
   }, [voiceInputMode]);
 
-  // TURN credentials are only fetched once, at joinCall() time, but they're
-  // short-lived (minutes, not hours -- the exact TTL is whatever the relay
-  // hands back). Someone who's been in a call for a while and never
-  // refreshes iceServersRef would silently be holding expired credentials
-  // by the time a peer connection actually needs them (e.g. someone else
-  // leaves and rejoins later in the same session) -- refreshing
-  // periodically while in a call keeps that from ever going stale.
+  // TURN credentials are fetched at joinCall() time and expire (the server
+  // mints 24h ones and caches them for 6h -- see server/src/routes/voice.js).
+  // Refreshing periodically while in a call means a peer connection created
+  // late in a long session (someone leaves and rejoins) never starts with
+  // stale credentials. Cheap: the server answers from its cache.
   useEffect(() => {
     if (!inCall) return undefined;
     const interval = setInterval(async () => {
@@ -757,6 +907,13 @@ export default function VoiceChatProvider({ children }) {
       stream.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
     }
+    // Camera light goes off with the call.
+    localVideoTrackRef.current?.stop();
+    localVideoTrackRef.current = null;
+    cameraOnRef.current = false;
+    setCameraOn(false);
+    setLocalVideoStream(null);
+    setRemoteVideoStreams({});
 
     // Every sampler and gain node was disposed above, so the shared context
     // can go with them.
@@ -841,6 +998,114 @@ export default function VoiceChatProvider({ children }) {
     audioGraphRef.current?.setOutputDevice(deviceId);
   }, []);
 
+  // ---------------------------------------------------------------- camera
+  // Hands a camera track (or null) to every peer's video sender. No
+  // renegotiation: the video slot was negotiated with the call.
+  async function publishLocalVideo(track) {
+    localVideoTrackRef.current = track;
+    await Promise.all([...peersRef.current.values()].map((pc) => syncLocalVideo(pc)));
+    applyAllVideoEncodings();
+  }
+
+  function stopCamera() {
+    const track = localVideoTrackRef.current;
+    if (!track && !cameraOnRef.current) return;
+    track?.stop();
+    publishLocalVideo(null);
+    cameraOnRef.current = false;
+    setCameraOn(false);
+    setLocalVideoStream(null);
+    sendMessage({ type: "voice-camera-state", camera: false });
+  }
+
+  async function openCamera(deviceId) {
+    const stream = await openCameraStream(deviceId);
+    const [track] = stream.getVideoTracks();
+    // Faces talking: keep the frame rate smooth and let resolution give way
+    // first when bandwidth tightens.
+    track.contentHint = "motion";
+    // Camera unplugged or taken by the OS: drop to avatar instead of a frozen frame.
+    track.addEventListener("ended", () => {
+      if (localVideoTrackRef.current === track) stopCamera();
+    });
+    return { stream, track };
+  }
+
+  const setCameraEnabled = useCallback(
+    async (on) => {
+      if (!inCallRef.current) return;
+      if (!on) {
+        stopCamera();
+        return;
+      }
+      if (cameraOnRef.current) return;
+      setError(null);
+      setCameraStarting(true);
+      try {
+        const { stream, track } = await openCamera(cameraDeviceIdRef.current);
+        // Left the call while the permission prompt was up.
+        if (!inCallRef.current) {
+          track.stop();
+          return;
+        }
+        await publishLocalVideo(track);
+        cameraOnRef.current = true;
+        setCameraOn(true);
+        setLocalVideoStream(stream);
+        sendMessage({ type: "voice-camera-state", camera: true });
+      } catch (err) {
+        console.error("Could not start camera:", err);
+        setError(
+          err?.name === "NotAllowedError"
+            ? "Camera access is blocked. Allow it in your browser's site settings, then try again."
+            : "Couldn't start your camera. Check that no other app is using it."
+        );
+      } finally {
+        setCameraStarting(false);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sendMessage]
+  );
+
+  const toggleCamera = useCallback(() => setCameraEnabled(!cameraOnRef.current), [setCameraEnabled]);
+
+  // Same idea as setInputDevice: swap the track under every sender live.
+  const setCameraDevice = useCallback(
+    async (deviceId) => {
+      saveCameraDeviceId(deviceId);
+      cameraDeviceIdRef.current = deviceId;
+      setCameraDeviceIdState(deviceId);
+      if (!inCallRef.current || !cameraOnRef.current) return;
+      try {
+        const previous = localVideoTrackRef.current;
+        const { stream, track } = await openCamera(deviceId);
+        await publishLocalVideo(track);
+        previous?.stop();
+        setLocalVideoStream(stream);
+      } catch (err) {
+        console.error("Could not switch camera:", err);
+        setError("Couldn't switch to that camera.");
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  // Data saver, client-side only: the choice lives in this browser's
+  // localStorage and is told to each peer directly, who then stops sending
+  // us video (applyVideoEncoding). Nothing is stored on the server.
+  const setReceiveVideo = useCallback(
+    (on) => {
+      saveReceiveVideo(on);
+      receiveVideoRef.current = on;
+      setReceiveVideoState(on);
+      for (const peerId of peersRef.current.keys()) sendVideoPref(peerId);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sendMessage]
+  );
+
   // Keep the screen from sleeping mid-call -- on a phone, a locked screen
   // suspends the page and silently drops out of the voice chat. The lock is
   // released by the browser whenever the tab is hidden, so it's re-requested
@@ -918,8 +1183,10 @@ export default function VoiceChatProvider({ children }) {
           speaking: speakingIds.has(p.userId),
           reconnecting: recoveringPeerIds.has(p.userId),
           volume: peerVolumes[p.userId] ?? 1,
+          camera: Boolean(p.camera),
+          videoStream: remoteVideoStreams[p.userId] ?? null,
         })),
-    [voiceRoster, selfId, speakingIds, recoveringPeerIds, peerVolumes]
+    [voiceRoster, selfId, speakingIds, recoveringPeerIds, peerVolumes, remoteVideoStreams]
   );
 
   // Own character name as the server resolved it, for the avatar initial.
@@ -950,8 +1217,25 @@ export default function VoiceChatProvider({ children }) {
       setInputDevice,
       setOutputDevice,
       canPickOutput: supportsOutputSelection(),
+      canUseCamera: canUseCamera(),
+      cameraOn,
+      cameraStarting,
+      localVideoStream,
+      toggleCamera,
+      cameraDeviceId,
+      setCameraDevice,
+      receiveVideo,
+      setReceiveVideo,
     }),
     [
+      cameraOn,
+      cameraStarting,
+      localVideoStream,
+      toggleCamera,
+      cameraDeviceId,
+      setCameraDevice,
+      receiveVideo,
+      setReceiveVideo,
       inCall,
       joining,
       error,

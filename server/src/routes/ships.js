@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireDmView, requireDmEdit, canEditAsDm, isPlayerRole } from "../roles.js";
 import { broadcastAll } from "../ws.js";
 import {
   COMPARTMENT_BLUEPRINTS,
@@ -18,18 +19,11 @@ import {
   tierSpeedBonus,
   workQuote,
 } from "../shipRules.js";
-import { skillModifier } from "../characterRules.js";
+import { characterSkillMod } from "../characterRules.js";
 import { getActiveShip, getShipEffects, loadStores, notifyShipUpdated } from "../travelService.js";
 
 const router = Router();
 router.use(requireAuth);
-
-function requireDungeonMaster(req, res, next) {
-  if (req.user.role !== "Dungeon Master") {
-    return res.status(403).json({ error: "Dungeon Master access required." });
-  }
-  next();
-}
 
 // notifyShipUpdated (travelService.js) is a bare "the ship data changed, refetch"
 // nudge -- same single-slot pattern as slugpedia-updated (see the client
@@ -173,7 +167,7 @@ router.get("/active", async (req, res) => {
 
 // The compartments the DM can build: the built-ins from shipRules.js plus
 // any they have designed themselves.
-router.get("/templates", requireDungeonMaster, async (req, res) => {
+router.get("/templates", requireDmView, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM compartment_templates ORDER BY created_at ASC");
     res.json({
@@ -186,7 +180,7 @@ router.get("/templates", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.post("/templates", requireDungeonMaster, async (req, res) => {
+router.post("/templates", requireDmEdit, async (req, res) => {
   const name = String(req.body?.name ?? "").trim().slice(0, 120);
   if (!name) return res.status(400).json({ error: "A compartment needs a name." });
   const description = String(req.body?.description ?? "").slice(0, 4000);
@@ -205,7 +199,7 @@ router.post("/templates", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.delete("/templates/:id", requireDungeonMaster, async (req, res) => {
+router.delete("/templates/:id", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: "Bad template id." });
   try {
@@ -274,9 +268,9 @@ router.get("/blueprints", async (req, res) => {
     const fx = await getShipEffects();
     const stores = await loadStores();
     let modifier = null;
-    if (req.user.role !== "Dungeon Master") {
-      const { rows } = await pool.query("SELECT stats, proficiencies FROM characters WHERE user_id = $1", [req.user.sub]);
-      if (rows[0]) modifier = skillModifier(rows[0].stats, rows[0].proficiencies, "engineering");
+    if (!canEditAsDm(req.user)) {
+      const { rows } = await pool.query("SELECT stats, proficiencies, expertise FROM characters WHERE user_id = $1", [req.user.sub]);
+      if (rows[0]) modifier = characterSkillMod(rows[0], "engineering");
     }
     res.json({
       stores: storesView(stores, fx),
@@ -313,7 +307,7 @@ router.get("/effects", async (req, res) => {
 });
 
 // The DM sets the stores outright, e.g. after salvage or a reward.
-router.patch("/stores", requireDungeonMaster, async (req, res) => {
+router.patch("/stores", requireDmEdit, async (req, res) => {
   const sets = [];
   const values = [];
   for (const g of SUPPLY_GRADES) {
@@ -349,7 +343,7 @@ class WorkError extends Error {
 // supplies and starts the work; a miss spends half of them and starts nothing.
 // Either way the whole table is told who rolled and how it went.
 async function attemptWork(req, res, mode) {
-  if (req.user.role === "Dungeon Master") {
+  if (!isPlayerRole(req.user)) {
     return res.status(403).json({ error: "The crew builds and upgrades. The DM edits the compartment directly." });
   }
   const compartmentId = String(req.params.id ?? "");
@@ -358,7 +352,7 @@ async function attemptWork(req, res, mode) {
   let result = null;
   try {
     await client.query("BEGIN");
-    const { rows: chars } = await client.query("SELECT name, stats, proficiencies FROM characters WHERE user_id = $1", [
+    const { rows: chars } = await client.query("SELECT name, stats, proficiencies, expertise FROM characters WHERE user_id = $1", [
       req.user.sub,
     ]);
     const character = chars[0];
@@ -399,7 +393,7 @@ async function attemptWork(req, res, mode) {
     }
 
     const fx = shipEffects(compartments);
-    const modifier = skillModifier(character.stats, character.proficiencies, "engineering");
+    const modifier = characterSkillMod(character, "engineering");
     const die = 1 + Math.floor(Math.random() * 20);
     const roll = resolveWorkRoll({
       die,
@@ -497,7 +491,7 @@ router.post("/compartments/:id/upgrade", (req, res) => attemptWork(req, res, "up
 
 // Full list for the DM's ship switcher. Images omitted -- the list can get
 // heavy and the switcher only needs names.
-router.get("/", requireDungeonMaster, async (req, res) => {
+router.get("/", requireDmView, async (req, res) => {
   try {
     const activeId = await getActiveShipId();
     const { rows } = await pool.query(
@@ -521,7 +515,7 @@ router.get("/", requireDungeonMaster, async (req, res) => {
 
 // One full ship row (image included) -- the DM switcher needs this to show a
 // non-active ship's deck plan.
-router.get("/:id", requireDungeonMaster, async (req, res) => {
+router.get("/:id", requireDmView, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: "Bad ship id." });
   try {
@@ -534,7 +528,7 @@ router.get("/:id", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.post("/", requireDungeonMaster, async (req, res) => {
+router.post("/", requireDmEdit, async (req, res) => {
   const name = String(req.body?.name ?? "").trim().slice(0, 120) || "The Ship";
   try {
     const { rows } = await pool.query(
@@ -555,7 +549,7 @@ router.post("/", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.patch("/:id", requireDungeonMaster, async (req, res) => {
+router.patch("/:id", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: "Bad ship id." });
 
@@ -633,7 +627,7 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.post("/:id/activate", requireDungeonMaster, async (req, res) => {
+router.post("/:id/activate", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: "Bad ship id." });
   try {
@@ -648,7 +642,7 @@ router.post("/:id/activate", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.delete("/:id", requireDungeonMaster, async (req, res) => {
+router.delete("/:id", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: "Bad ship id." });
   try {

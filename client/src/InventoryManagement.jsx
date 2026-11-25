@@ -13,8 +13,9 @@ import "./InventoryDesk.css";
 
 // The DM's handout desk: pick who you are giving to, then hand them things from
 // the catalog with one click. Their inventory sits beside it so the result is
-// visible at once.
-export default function InventoryManagement() {
+// visible at once. `readOnly` is the DM Assistant's view: the same party
+// inventory with the catalog and every edit control taken away.
+export default function InventoryManagement({ readOnly = false }) {
   const { token } = useAuth();
   const [blasterTemplates, setBlasterTemplates] = useState([]);
   const [modTemplates, setModTemplates] = useState([]);
@@ -287,11 +288,13 @@ export default function InventoryManagement() {
   return (
     <div className="slug-management desk">
       <RecipientRail roster={roster} recipient={recipient} countFor={heldCount} onChoose={chooseRecipient} />
-      <NarrowSwitch view={narrowView} onView={setNarrowView} recipient={recipient} count={recipient ? heldCount(recipient.id) : 0} />
+      {!readOnly && (
+        <NarrowSwitch view={narrowView} onView={setNarrowView} recipient={recipient} count={recipient ? heldCount(recipient.id) : 0} />
+      )}
 
 
-      <div className="desk-layout">
-        <div className={`desk-pane desk-pane--catalog ${narrowView !== "catalog" ? "desk-pane--away" : ""}`}>
+      <div className={`desk-layout${readOnly ? " desk-layout--solo" : ""}`}>
+        {!readOnly && <div className={`desk-pane desk-pane--catalog ${narrowView !== "catalog" ? "desk-pane--away" : ""}`}>
           <GiftCatalog
             catalog={{ blaster: blasterTemplates, mod: modTemplates, equipment: equipmentTemplates, outfit: outfitDesk.templates }}
             recipient={recipient}
@@ -303,9 +306,10 @@ export default function InventoryManagement() {
             onDelete={deleteTemplate}
             onNew={openNew}
           />
-        </div>
-        <div className={`desk-pane desk-pane--gear ${narrowView !== "gear" ? "desk-pane--away" : ""}`}>
+        </div>}
+        <div className={`desk-pane desk-pane--gear ${!readOnly && narrowView !== "gear" ? "desk-pane--away" : ""}`}>
           <PlayerSatchel
+            readOnly={readOnly}
             key={recipient?.id}
             recipient={recipient}
             blasters={held.blasters}
@@ -323,7 +327,7 @@ export default function InventoryManagement() {
         </div>
       </div>
 
-      {modal && (
+      {modal && !readOnly && (
         <div className="slug-modal-backdrop" onClick={() => setModal(null)}>
           <div className="slug-modal" onClick={(e) => e.stopPropagation()}>
             <h2>

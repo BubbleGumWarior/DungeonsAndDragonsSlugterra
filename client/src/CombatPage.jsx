@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ScrollIcon, SwordIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
+import { canEditAsDm, canViewAsDm, isAssistant } from "./roles.js";
 import { useLiveState } from "./AccessSocket.jsx";
 import NavBar from "./NavBar.jsx";
 import CombatMap from "./CombatMap.jsx";
@@ -182,7 +183,14 @@ export default function CombatPage() {
   const [wallRunId, setWallRunId] = useState(null); // combatant mid Wall Vault / Wall Run -- gives its token the slow slide
   const [hunkerConfirm, setHunkerConfirm] = useState(null); // { ap, conMod } while awaiting Patch Up's "spend all AP?" confirmation
 
-  const isDM = user?.role === "Dungeon Master";
+  // isDM: the Dungeon Master, with every override (drive anyone, drag freely,
+  // build the fight). seesAll: the DM or a DM Assistant -- sees every
+  // combatant and all the gear. An assistant otherwise plays exactly like a
+  // player, only with the NPCs the DM handed them instead of a character.
+  const isDM = canEditAsDm(user);
+  const seesAll = canViewAsDm(user);
+  const assistantMode = isAssistant(user);
+  const [assistants, setAssistants] = useState([]); // [{ id, name }]
 
   // Space is the Dodge hotkey (CounterClashPrompt) and nothing else on this page
   // wants it -- the browser's own Space would scroll the page to the bottom (or
@@ -244,6 +252,17 @@ export default function CombatPage() {
       .catch(() => {});
   }, [isDM, token]);
 
+  // DM Assistants, for "who plays this NPC" (the DM's picker, everyone's label).
+  useEffect(() => {
+    if (!seesAll) return;
+    fetch("/api/admin/users", { headers: authHeaders(token) })
+      .then((res) => res.json())
+      .then((data) =>
+        setAssistants((data.users || []).filter((u) => u.role === "DM Assistant").map((u) => ({ id: u.id, name: u.username })))
+      )
+      .catch(() => {});
+  }, [seesAll, token]);
+
   useEffect(() => {
     if (!isDM) return;
     fetch("/api/grunt-templates", { headers: authHeaders(token) })
@@ -253,8 +272,8 @@ export default function CombatPage() {
   }, [isDM, token, gruntTemplatesUpdate]);
 
   useEffect(() => {
-    const slugUrl = isDM ? "/api/slugs" : "/api/slugs/me";
-    const blasterUrl = isDM ? "/api/blasters" : "/api/blasters/me";
+    const slugUrl = seesAll ? "/api/slugs" : "/api/slugs/me";
+    const blasterUrl = seesAll ? "/api/blasters" : "/api/blasters/me";
     fetch(slugUrl, { headers: authHeaders(token) })
       .then((res) => res.json())
       .then((data) => setAllSlugs(data.slugs || []))
@@ -263,11 +282,11 @@ export default function CombatPage() {
       .then((res) => res.json())
       .then((data) => setAllBlasters(data.blasters || []))
       .catch(() => {});
-    fetch(isDM ? "/api/mods" : "/api/mods/me", { headers: authHeaders(token) })
+    fetch(seesAll ? "/api/mods" : "/api/mods/me", { headers: authHeaders(token) })
       .then((res) => res.json())
       .then((data) => setAllMods(data.mods || []))
       .catch(() => {});
-    fetch(isDM ? "/api/equipment" : "/api/equipment/me", { headers: authHeaders(token) })
+    fetch(seesAll ? "/api/equipment" : "/api/equipment/me", { headers: authHeaders(token) })
       .then((res) => res.json())
       .then((data) => setAllEquipment(data.equipment || []))
       .catch(() => {});
@@ -276,52 +295,52 @@ export default function CombatPage() {
     // survives), so refetch everything instead of trusting them.
     // partyHealed: Heal All refills every slug's pips in one burst, same story.
     // equipmentChanged: an ammo belt resized a magazine (and may have unloaded slugs).
-  }, [isDM, token, gearChanged, partyHealed, equipmentChanged]);
+  }, [seesAll, token, gearChanged, partyHealed, equipmentChanged]);
 
   // A fired slug earned loyalty: refetch the slugs (slug-updated is a single
   // slot, so a dual shot's pair could drop one) so the fill and, for the DM,
   // the shot counts are current.
   const { slugLoyaltyChanged } = useLiveState();
-  const loyaltyChangeAt = slugLoyaltyChanged && (isDM || slugLoyaltyChanged.userId === user?.id) ? slugLoyaltyChanged.at : null;
+  const loyaltyChangeAt = slugLoyaltyChanged && (seesAll || slugLoyaltyChanged.userId === user?.id) ? slugLoyaltyChanged.at : null;
   useEffect(() => {
     if (!loyaltyChangeAt || !token) return;
-    fetch(isDM ? "/api/slugs" : "/api/slugs/me", { headers: authHeaders(token) })
+    fetch(seesAll ? "/api/slugs" : "/api/slugs/me", { headers: authHeaders(token) })
       .then((res) => res.json())
       .then((data) => setAllSlugs(data.slugs || []))
       .catch(() => {});
-  }, [loyaltyChangeAt, isDM, token]);
+  }, [loyaltyChangeAt, seesAll, token]);
 
   useEffect(() => {
     if (!slugUpdate) return;
-    if (!isDM && slugUpdate.userId !== user?.id) return;
+    if (!seesAll && slugUpdate.userId !== user?.id) return;
     setAllSlugs((prev) => {
       if (!slugUpdate.slug) return prev.filter((s) => s.id !== slugUpdate.slugId);
       const exists = prev.some((s) => s.id === slugUpdate.slug.id);
       return exists ? prev.map((s) => (s.id === slugUpdate.slug.id ? slugUpdate.slug : s)) : [...prev, slugUpdate.slug];
     });
-  }, [slugUpdate, isDM, user]);
+  }, [slugUpdate, seesAll, user]);
 
   useEffect(() => {
     if (!blasterUpdate) return;
-    if (!isDM && blasterUpdate.userId !== user?.id) return;
+    if (!seesAll && blasterUpdate.userId !== user?.id) return;
     setAllBlasters((prev) => {
       if (!blasterUpdate.blaster) return prev.filter((b) => b.id !== blasterUpdate.blasterId);
       const exists = prev.some((b) => b.id === blasterUpdate.blaster.id);
       return exists ? prev.map((b) => (b.id === blasterUpdate.blaster.id ? blasterUpdate.blaster : b)) : [...prev, blasterUpdate.blaster];
     });
-  }, [blasterUpdate, isDM, user]);
+  }, [blasterUpdate, seesAll, user]);
 
   // Keeps the Range Finder / dual-shot / speed-bonus mod checks live when a
   // mod is equipped or removed mid-battle, instead of only on page load.
   useEffect(() => {
     if (!modUpdate) return;
-    if (!isDM && modUpdate.userId !== user?.id) return;
+    if (!seesAll && modUpdate.userId !== user?.id) return;
     setAllMods((prev) => {
       if (!modUpdate.mod) return prev.filter((m) => m.id !== modUpdate.modId);
       const exists = prev.some((m) => m.id === modUpdate.mod.id);
       return exists ? prev.map((m) => (m.id === modUpdate.mod.id ? modUpdate.mod : m)) : [...prev, modUpdate.mod];
     });
-  }, [modUpdate, isDM, user]);
+  }, [modUpdate, seesAll, user]);
 
   // Everyone in the current phase who still has a turn to take. Teammates next
   // to each other in the initiative order act at the same time.
@@ -338,6 +357,16 @@ export default function CombatPage() {
 
   useEffect(() => {
     if (!encounter) return;
+    if (!isDM && assistantMode) {
+      // A DM Assistant drives the NPCs handed to them: whichever of theirs is
+      // up now, or the one they last picked (roster click) while none is.
+      const mine = encounter.combatants.filter((c) => c.kind === "npc" && c.controllerUserId === user?.id);
+      const current = mine.find((c) => c.id === actingId);
+      const up = mine.filter((c) => activeIds.includes(c.id));
+      if (current && (up.length === 0 || up.includes(current))) return;
+      setActingId((up[0] ?? mine[0])?.id ?? null);
+      return;
+    }
     if (!isDM) {
       // When it's this player's own unmounted mecha's turn, hand them the
       // mecha's controls (move + End Turn); otherwise they drive their
@@ -901,9 +930,21 @@ export default function CombatPage() {
   }
 
   function handleRosterRowClick(combatant) {
-    if (!isDM) return;
+    const mine = combatant.kind === "npc" && combatant.controllerUserId === user?.id;
+    if (!isDM && !mine) return;
     setActingId(combatant.id);
     setMode(null);
+  }
+
+  async function handleAssignController(combatantId, userId) {
+    setError(null);
+    try {
+      applyEncounter(
+        await patchJson(token, `/api/combat/encounters/${encounter.id}/combatants/${combatantId}/controller`, { userId })
+      );
+    } catch (err) {
+      setError(err.message);
+    }
   }
 
   async function handleRevive(id) {
@@ -1034,6 +1075,8 @@ export default function CombatPage() {
     if (encounter.status !== "active") return false;
     if (combatant.id !== actingCombatant?.id) return false;
     if (combatant.kind === "character" && combatant.refUserId === user?.id) return true;
+    // An NPC the DM handed to this DM Assistant.
+    if (combatant.kind === "npc" && combatant.controllerUserId === user?.id) return true;
     // Your own mecha, on its own turn, only while nobody's riding it.
     if (
       combatant.kind === "mecha" &&
@@ -1325,12 +1368,15 @@ export default function CombatPage() {
             onPullGrunt={handlePullGrunt}
             onSetTeam={handleSetTeam}
             onRemove={handleRemoveCombatant}
+            assistants={assistants}
+            onAssignController={handleAssignController}
             onStart={handleStart}
             onCancel={handleCancelEncounter}
           >
             <CombatMap
               encounter={encounter}
               isDM={isDM}
+              seesAll={seesAll}
               viewerUserId={user?.id}
               drawMode={drawMode}
               waterMode={waterMode}
@@ -1411,6 +1457,7 @@ export default function CombatPage() {
           <CombatMap
             encounter={encounter}
             isDM={isDM}
+            seesAll={seesAll}
             viewerUserId={user?.id}
             drawMode={drawMode}
             onAddWall={handleAddWall}
@@ -1458,6 +1505,9 @@ export default function CombatPage() {
           <CombatRoster
             encounter={encounter}
             isDM={isDM}
+            seesAll={seesAll}
+            assistants={assistants}
+            onAssign={handleAssignController}
             viewerUserId={user?.id}
             actingCombatantId={actingCombatant?.id}
             onSelect={handleRosterRowClick}

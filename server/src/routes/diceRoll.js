@@ -1,26 +1,20 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireDmEdit } from "../roles.js";
 import { broadcastAll, notifyUser } from "../ws.js";
 import {
   PROFICIENCY_KEYS,
   PROFICIENCY_LABELS,
   PROFICIENCY_STATS,
   STAT_KEYS,
-  skillModifier,
   statModifier,
+  characterSkillMod,
 } from "../characterRules.js";
 
 const router = Router();
 
 router.use(requireAuth);
-
-function requireDungeonMaster(req, res, next) {
-  if (req.user.role !== "Dungeon Master") {
-    return res.status(403).json({ error: "Dungeon Master access required." });
-  }
-  next();
-}
 
 function rollD20() {
   return 1 + Math.floor(Math.random() * 20);
@@ -95,7 +89,7 @@ function cleanupExpired() {
 // DM calls for a roll. Sent to the target player only -- nobody else,
 // including the DM's own other sessions, is notified. The DM's panel just
 // gets a plain "sent" confirmation back.
-router.post("/", requireDungeonMaster, async (req, res) => {
+router.post("/", requireDmEdit, async (req, res) => {
   const diceCount = Number(req.body?.diceCount);
   const skill = req.body?.skill;
   const targetUserId = Number(req.body?.targetUserId);
@@ -187,7 +181,7 @@ router.post("/self", async (req, res) => {
 
   try {
     const { rows: charRows } = await pool.query(
-      "SELECT name, stats, proficiencies FROM characters WHERE user_id = $1",
+      "SELECT name, stats, proficiencies, expertise FROM characters WHERE user_id = $1",
       [req.user.sub]
     );
     const character = charRows[0];
@@ -204,7 +198,7 @@ router.post("/self", async (req, res) => {
       const { rows } = await pool.query("SELECT slugterra_hidden FROM campaign_settings WHERE id = 1");
       const revealed = !rows[0]?.slugterra_hidden;
       skillLabel = (!revealed && VEILED_LABELS[key]) || PROFICIENCY_LABELS[key];
-      modifier = skillModifier(character.stats, character.proficiencies, key);
+      modifier = characterSkillMod(character, key);
     }
 
     const value = rollD20();
@@ -243,7 +237,7 @@ router.post("/:id/resolve", async (req, res) => {
 
   try {
     const { rows: charRows } = await pool.query(
-      "SELECT stats, proficiencies FROM characters WHERE user_id = $1",
+      "SELECT stats, proficiencies, expertise FROM characters WHERE user_id = $1",
       [req.user.sub]
     );
     const character = charRows[0];
@@ -251,8 +245,9 @@ router.post("/:id/resolve", async (req, res) => {
       return res.status(400).json({ error: "You don't have a character sheet yet." });
     }
 
-    const modifier = skillModifier(character.stats, character.proficiencies, offer.skill);
+    const modifier = characterSkillMod(character, offer.skill);
     const isProficient = Array.isArray(character.proficiencies) && character.proficiencies.includes(offer.skill);
+    const isExpert = isProficient && Array.isArray(character.expertise) && character.expertise.includes(offer.skill);
 
     const results = [];
     for (let i = 0; i < offer.diceCount; i++) {
@@ -281,6 +276,7 @@ router.post("/:id/resolve", async (req, res) => {
       statKey: PROFICIENCY_STATS[offer.skill],
       modifier,
       isProficient,
+      isExpert,
       rollType: offer.rollType,
       results,
       at: Date.now(),

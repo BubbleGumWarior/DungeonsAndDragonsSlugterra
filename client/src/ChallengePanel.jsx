@@ -12,7 +12,9 @@ function sortRolls(rolls) {
   return [...rolls].sort((a, b) => b.value - a.value || new Date(a.createdAt) - new Date(b.createdAt));
 }
 
-export default function ChallengePanel({ isDungeonMaster = false }) {
+// isDungeonMaster: sees the panel as the DM does (never rolls). readOnly: a
+// DM Assistant -- the DM's view without issuing, removing or finishing.
+export default function ChallengePanel({ isDungeonMaster = false, readOnly = false }) {
   const { token, user } = useAuth();
   const { challengeIssued, challengeRollAdded, challengeRollRemoved, challengeFinished } = useLiveState();
 
@@ -219,7 +221,7 @@ export default function ChallengePanel({ isDungeonMaster = false }) {
       </div>
 
       <div className="panel-body">
-        {isDungeonMaster && (
+        {isDungeonMaster && !readOnly && (
           <form className="challenge-setup" onSubmit={handleIssue}>
             <div className="panel-row">
               <div className="panel-field">
@@ -261,7 +263,7 @@ export default function ChallengePanel({ isDungeonMaster = false }) {
         ) : !challenge ? (
           <div className="panel-empty">
             <TrophyIcon weight="duotone" />
-            {isDungeonMaster ? "Set a target and reward above to issue one." : "No challenge has been issued yet."}
+            {isDungeonMaster && !readOnly ? "Set a target and reward above to issue one." : "No challenge has been issued yet."}
           </div>
         ) : (
           <>
@@ -302,7 +304,7 @@ export default function ChallengePanel({ isDungeonMaster = false }) {
                     <span className="challenge-result-rank">#{i + 1}</span>
                     <span className="challenge-result-name">{roll.name}</span>
                     <span className="challenge-result-value num-tabular">{roll.value}</span>
-                    {isDungeonMaster && (
+                    {isDungeonMaster && !readOnly && (
                       <button
                         type="button"
                         className="panel-btn panel-btn--ghost panel-btn--icon"
@@ -317,7 +319,7 @@ export default function ChallengePanel({ isDungeonMaster = false }) {
               )}
             </div>
 
-            {isDungeonMaster && isActive && (
+            {isDungeonMaster && !readOnly && isActive && (
               <button type="button" className="panel-btn panel-btn--ghost" onClick={handleFinish}>
                 Finish Challenge
               </button>

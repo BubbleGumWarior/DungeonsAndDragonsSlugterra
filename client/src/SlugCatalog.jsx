@@ -4,6 +4,7 @@ import {
   DownloadSimpleIcon,
   FunnelSimpleIcon,
   GearSixIcon,
+  GiftIcon,
   MagnifyingGlassIcon,
   PlusIcon,
   ShuffleIcon,
@@ -104,7 +105,7 @@ function SlugRow({ template, held, recipient, onGive, onCustomize, onEdit, onDel
       details={<SlugDetails template={template} traits={traits} />}
       recipient={recipient}
       onGive={() => onGive(template)}
-      onCustomize={() => onCustomize(template)}
+      onCustomize={onCustomize ? () => onCustomize(template) : undefined}
       onEdit={() => onEdit(template)}
       onDelete={() => onDelete(template)}
       kind="template"
@@ -115,7 +116,7 @@ function SlugRow({ template, held, recipient, onGive, onCustomize, onEdit, onDel
 // The DM's slug roster as a one-click catalog: search, narrow by element or
 // ability, press Give. Bulk and test tools live behind Manage so the list
 // stays the star.
-export default function SlugCatalog({ templates, recipient, heldByTemplate, status, bulk, onGive, onCustomize, onEdit, onDelete, onNew }) {
+export default function SlugCatalog({ templates, recipient, heldByTemplate, status, bulk, onGive, onCustomize, onEdit, onDelete, onNew, onBundle, bundleOpen }) {
   const [query, setQuery] = useState("");
   const [types, setTypes] = useState(() => new Set());
   const [flags, setFlags] = useState(() => new Set());
@@ -166,6 +167,18 @@ export default function SlugCatalog({ templates, recipient, heldByTemplate, stat
             <GearSixIcon weight="bold" />
             Manage
           </button>
+          {onBundle && (
+            <button
+              type="button"
+              className="desk-pill slug-bundle-open"
+              onClick={onBundle}
+              disabled={bundleOpen || templates.length === 0}
+              title={bundleOpen ? "A slug bundle is already open on everyone's screen" : "Offer several slugs; players take one each"}
+            >
+              <GiftIcon weight="bold" />
+              Give Slug Bundle
+            </button>
+          )}
           <button type="button" className="desk-new desk-new--end" onClick={onNew}>
             <PlusIcon weight="bold" />
             New

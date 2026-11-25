@@ -5,13 +5,13 @@ import { useLiveState } from "./AccessSocket.jsx";
 import SlugCard from "./SlugCard.jsx";
 import SlugForm from "./SlugForm.jsx";
 import SlugCatalog from "./SlugCatalog.jsx";
+import SlugBundlePicker from "./SlugBundlePicker.jsx";
 import { NarrowSwitch, QuickRemove, RecipientRail, useRecipient, useStatus } from "./DeskParts.jsx";
-import { defaultSlugFields } from "./slugData.js";
 import "./SlugManagement.css";
 import "./InventoryDesk.css";
 
 // One player's slugs, with the per-slug Mega Morph permission on each card.
-function PlayerSlugPanel({ recipient, slugs, onEdit, onToggleMega, onRemove }) {
+function PlayerSlugPanel({ recipient, slugs, onEdit, onToggleMega, onRemove, readOnly = false }) {
   const [query, setQuery] = useState("");
 
   if (!recipient) {
@@ -47,7 +47,7 @@ function PlayerSlugPanel({ recipient, slugs, onEdit, onToggleMega, onRemove }) {
       {slugs.length === 0 ? (
         <div className="desk-empty desk-empty--big">
           <p>{recipient.name} has no slugs.</p>
-          <p>Pick one from the catalog and press Give.</p>
+          {!readOnly && <p>Pick one from the catalog and press Give.</p>}
         </div>
       ) : shown.length === 0 ? (
         <div className="desk-empty">
@@ -59,9 +59,9 @@ function PlayerSlugPanel({ recipient, slugs, onEdit, onToggleMega, onRemove }) {
             <SlugCard
               key={slug.id}
               slug={slug}
-              onClick={() => onEdit(slug)}
+              onClick={readOnly ? undefined : () => onEdit(slug)}
               actions={
-                <div className="desk-card-actions">
+                readOnly ? null : <div className="desk-card-actions">
                   <QuickRemove name={slug.name} onRemove={() => onRemove(slug)} />
                   <button
                     type="button"
@@ -84,8 +84,9 @@ function PlayerSlugPanel({ recipient, slugs, onEdit, onToggleMega, onRemove }) {
 }
 
 // The DM's slug desk: pick who you are giving to, hand them slugs from the
-// catalog in one click, and see their roster beside it.
-export default function SlugManagement() {
+// catalog in one click, and see their roster beside it. `readOnly` is the DM
+// Assistant's view: every player's slugs, no catalog, nothing to click.
+export default function SlugManagement({ readOnly = false }) {
   const { token } = useAuth();
   const [templates, setTemplates] = useState([]);
   const [players, setPlayers] = useState([]);
@@ -114,10 +115,36 @@ export default function SlugManagement() {
   }
 
   // Slugs earn loyalty as they're fired: refetch so the shot counts stay current.
-  const { slugLoyaltyChanged } = useLiveState();
+  const { slugLoyaltyChanged, slugUpdate, slugBundle } = useLiveState();
   useEffect(() => {
     if (slugLoyaltyChanged) loadSlugs();
   }, [slugLoyaltyChanged]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Slugs given elsewhere (a bundle claim, an approved hunt) show up here
+  // live. Merged in place so the DM-only loyalty shot counts survive.
+  useEffect(() => {
+    if (!slugUpdate) return;
+    setSlugs((prev) => {
+      if (!slugUpdate.slug) return prev.filter((s) => s.id !== slugUpdate.slugId);
+      const i = prev.findIndex((s) => s.id === slugUpdate.slug.id);
+      if (i === -1) return [...prev, slugUpdate.slug];
+      const next = prev.slice();
+      next[i] = { ...prev[i], ...slugUpdate.slug };
+      return next;
+    });
+  }, [slugUpdate]);
+
+  const [bundlePicking, setBundlePicking] = useState(false);
+  const [bundleOpen, setBundleOpen] = useState(false);
+  useEffect(() => {
+    fetch("/api/slug-bundle", { headers: authHeaders() })
+      .then((res) => res.json())
+      .then((data) => setBundleOpen(Boolean(data.bundle)))
+      .catch(() => {});
+  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (slugBundle) setBundleOpen(Boolean(slugBundle.bundle));
+  }, [slugBundle]);
 
   useEffect(() => {
     loadTemplates();
@@ -272,9 +299,12 @@ export default function SlugManagement() {
     loadSlugs();
   }
 
+  // The Give form's submit: whatever the DM tweaked goes to the chosen player.
   async function assignSlug(payload) {
     await postSlug(payload);
     setModal(null);
+    const to = roster.find((p) => p.id === payload.userId);
+    setStatus({ text: `Gave ${payload.name.trim()} to ${to?.name ?? "the player"}.` });
   }
 
   async function updateSlugInstance(id, payload) {
@@ -308,26 +338,23 @@ export default function SlugManagement() {
     return counts;
   }, [held]);
 
-  // One click: hand a template to the chosen player exactly as it is.
-  async function give(template) {
+  // Give opens the template in the edit form first, so the DM can tweak this
+  // one copy (stats, abilities, loyalty...) before it reaches the player. The
+  // template itself is left untouched. Returns false: nothing is given until
+  // the form is submitted.
+  function give(template) {
     if (!recipient) return false;
-    try {
-      await postSlug({ ...defaultSlugFields(), ...template, templateId: template.id, userId: recipient.id });
-      setStatus({ text: `Gave ${template.name} to ${recipient.name}.` });
-      return true;
-    } catch (err) {
-      setStatus({ text: err.message || "Could not give that slug.", error: true });
-      return false;
-    }
+    setModal({ type: "assign", template });
+    return false;
   }
 
   return (
     <div className="slug-management desk">
       <RecipientRail roster={roster} recipient={recipient} countFor={heldCount} onChoose={chooseRecipient} />
-      <NarrowSwitch view={narrowView} onView={setNarrowView} recipient={recipient} count={held.length} noun="slugs" />
+      {!readOnly && <NarrowSwitch view={narrowView} onView={setNarrowView} recipient={recipient} count={held.length} noun="slugs" />}
 
-      <div className="desk-layout">
-        <div className={`desk-pane desk-pane--catalog ${narrowView !== "catalog" ? "desk-pane--away" : ""}`}>
+      <div className={`desk-layout${readOnly ? " desk-layout--solo" : ""}`}>
+        {!readOnly && <div className={`desk-pane desk-pane--catalog ${narrowView !== "catalog" ? "desk-pane--away" : ""}`}>
           <SlugCatalog
             templates={templates}
             recipient={recipient}
@@ -343,24 +370,27 @@ export default function SlugManagement() {
               removePlayerSlugs: removeAllPlayerSlugs,
             }}
             onGive={give}
-            onCustomize={(template) => setModal({ type: "assign", template })}
             onEdit={(template) => setModal({ type: "edit-template", template })}
             onDelete={deleteTemplate}
             onNew={() => setModal({ type: "new-template" })}
+            onBundle={() => setBundlePicking(true)}
+            bundleOpen={bundleOpen}
           />
-        </div>
-        <div className={`desk-pane desk-pane--gear ${narrowView !== "gear" ? "desk-pane--away" : ""}`}>
-          <PlayerSlugPanel key={recipient?.id} recipient={recipient} slugs={held} onEdit={(slug) => setModal({ type: "edit-instance", slug })} onToggleMega={toggleMegaMorph} onRemove={removeSlug} />
+        </div>}
+        <div className={`desk-pane desk-pane--gear ${!readOnly && narrowView !== "gear" ? "desk-pane--away" : ""}`}>
+          <PlayerSlugPanel key={recipient?.id} readOnly={readOnly} recipient={recipient} slugs={held} onEdit={(slug) => setModal({ type: "edit-instance", slug })} onToggleMega={toggleMegaMorph} onRemove={removeSlug} />
         </div>
       </div>
 
-      {modal && (
+      {bundlePicking && !readOnly && <SlugBundlePicker templates={templates} onClose={() => setBundlePicking(false)} />}
+
+      {modal && !readOnly && (
         <div className="slug-modal-backdrop" onClick={() => setModal(null)}>
           <div className="slug-modal" onClick={(e) => e.stopPropagation()}>
             <h2>
               {modal.type === "new-template" && "New Slug Template"}
               {modal.type === "edit-template" && "Edit Slug Template"}
-              {modal.type === "assign" && `Assign "${modal.template.name}"`}
+              {modal.type === "assign" && `Give ${modal.template.name}`}
               {modal.type === "edit-instance" && `Edit ${modal.slug.name}`}
             </h2>
 
@@ -384,7 +414,7 @@ export default function SlugManagement() {
                 defaultPlayerId={recipient?.id}
                 onSubmit={assignSlug}
                 onCancel={() => setModal(null)}
-                submitLabel="Assign Slug"
+                submitLabel="Give Slug"
               />
             )}
             {modal.type === "edit-instance" && (

@@ -124,8 +124,18 @@ export function statModifier(value) {
   return Math.floor((value - 10) / 2);
 }
 
-export function skillModifier(statValue, isProficient) {
-  return statModifier(statValue) + (isProficient ? 2 : 0);
+export const PROFICIENCY_BONUS = 2;
+export const EXPERTISE_BONUS = 4;
+
+// Expertise is a step past proficiency: it replaces the +2 with +4.
+export function skillModifier(statValue, isProficient, isExpert = false) {
+  return statModifier(statValue) + (isProficient && isExpert ? EXPERTISE_BONUS : isProficient ? PROFICIENCY_BONUS : 0);
+}
+
+// "expert" | "proficient" | null for one skill on a character.
+export function skillTraining(skillKey, proficiencies = [], expertise = []) {
+  if (!proficiencies?.includes(skillKey)) return null;
+  return expertise?.includes(skillKey) ? "expert" : "proficient";
 }
 
 export function formatModifier(value) {
@@ -296,11 +306,12 @@ export function statByKey(key) {
   return STATS.find((s) => s.key === key);
 }
 
-// A character's modifier for one skill, from their stats + proficiencies.
+// A character's modifier for one skill, from their stats + proficiencies + expertise.
 export function characterSkillMod(character, skillKey) {
   const skill = PROFICIENCIES.find((p) => p.key === skillKey);
   if (!skill || !character?.stats) return 0;
-  return skillModifier(character.stats[skill.stat], Boolean(character.proficiencies?.includes(skillKey)));
+  const training = skillTraining(skillKey, character.proficiencies, character.expertise);
+  return skillModifier(character.stats[skill.stat], Boolean(training), training === "expert");
 }
 
 // Most entries carry a hand-written `hiddenDescription` for the pre-reveal

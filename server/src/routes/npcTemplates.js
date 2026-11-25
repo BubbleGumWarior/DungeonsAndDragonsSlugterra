@@ -1,24 +1,18 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireDmEdit, canEditAsDm, canViewAsDm } from "../roles.js";
 import { broadcastAll } from "../ws.js";
 import { npcActionPoints, npcMaxGrit } from "../characterRules.js";
 import { BASE_TYPES } from "../itemRules.js";
 
 const router = Router();
 
-function requireDungeonMaster(req, res, next) {
-  if (req.user.role !== "Dungeon Master") {
-    return res.status(403).json({ error: "Dungeon Master access required." });
-  }
-  next();
-}
-
 // NPC prep is a DM-only tool, but the Chronicle tab itself isn't DM-only --
 // players can see whichever cards the DM has revealed (name + portrait, plus
 // each biographical line the DM has individually lit up) and pitch in on the
 // collective "what's it carrying?" slug guesses. Every route below decides for
-// itself whether it needs requireDungeonMaster.
+// itself whether it needs requireDmEdit.
 router.use(requireAuth);
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -215,7 +209,7 @@ const SELECT_WITH_GUESSES = `
 router.get("/", async (req, res) => {
   try {
     const { rows } = await pool.query(`${SELECT_WITH_GUESSES} GROUP BY nt.id ORDER BY nt.created_at ASC`);
-    if (req.user.role === "Dungeon Master") {
+    if (canViewAsDm(req.user)) {
       return res.json({ templates: rows.map(toClientTemplate) });
     }
     // Players never see a hidden card at all -- not even that it exists.
@@ -226,7 +220,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/", requireDungeonMaster, async (req, res) => {
+router.post("/", requireDmEdit, async (req, res) => {
   const {
     name,
     image,
@@ -281,7 +275,7 @@ router.post("/", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.patch("/:id", requireDungeonMaster, async (req, res) => {
+router.patch("/:id", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const {
     name,
@@ -343,7 +337,7 @@ router.patch("/:id", requireDungeonMaster, async (req, res) => {
 // in the patch are touched -- a field entry that sends `shown` but not `value`
 // keeps its stored value; `bio` / `connections` replace wholesale when the
 // patch includes the (full) array.
-router.patch("/:id/profile", requireDungeonMaster, async (req, res) => {
+router.patch("/:id/profile", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const patch = req.body?.profile;
   if (patch === undefined || patch === null || typeof patch !== "object" || Array.isArray(patch)) {
@@ -400,7 +394,7 @@ router.patch("/:id/profile", requireDungeonMaster, async (req, res) => {
 // Flipping this shows everyone the card's name and portrait. Nothing about its
 // biographical lines, stats or loadout is sent to a player unless the DM has
 // also lit that specific line.
-router.patch("/:id/reveal", requireDungeonMaster, async (req, res) => {
+router.patch("/:id/reveal", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   const { revealed } = req.body || {};
   try {
@@ -417,7 +411,7 @@ router.patch("/:id/reveal", requireDungeonMaster, async (req, res) => {
   }
 });
 
-router.delete("/:id", requireDungeonMaster, async (req, res) => {
+router.delete("/:id", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
   try {
     const { rows } = await pool.query("DELETE FROM npc_templates WHERE id = $1 RETURNING id", [id]);
@@ -442,7 +436,7 @@ router.post("/:id/guesses/toggle", async (req, res) => {
   try {
     const template = await pool.query("SELECT id, revealed FROM npc_templates WHERE id = $1", [npcTemplateId]);
     if (!template.rows[0]) return res.status(404).json({ error: "Card not found." });
-    if (req.user.role !== "Dungeon Master") {
+    if (!canEditAsDm(req.user)) {
       if (!template.rows[0].revealed) return res.status(404).json({ error: "Card not found." });
       // Players can only guess slugs the party has actually encountered
       // before (assigned to a player, or carried by an NPC in combat) --

@@ -481,7 +481,8 @@ export async function publishCombatReport(encounterId) {
       if (c.kind === "character" && c.ref_user_id) ids.add(c.ref_user_id);
       if (c.kind === "mecha" && c.data?.ownerUserId) ids.add(c.data.ownerUserId);
     }
-    const { rows: dms } = await pool.query("SELECT id FROM users WHERE role = 'Dungeon Master'");
+    // The DM and any DM Assistants get every report too.
+    const { rows: dms } = await pool.query("SELECT id FROM users WHERE role IN ('Dungeon Master', 'DM Assistant')");
     for (const dm of dms) ids.add(dm.id);
     const recipients = [...ids];
 
