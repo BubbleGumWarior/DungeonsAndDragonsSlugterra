@@ -19,7 +19,7 @@ const VOICE_INPUT_MODES = ["live", "push_to_talk"];
 const COMBAT_SFX_KEYS = ["fail", "miss", "hit", "break", "hazard", "geyser", "zeus", "self"];
 
 router.post("/preferences", async (req, res) => {
-  const { theme, soundVolume, voiceInputMode, voiceCueVolume, masterVolume, combatSfxVolumes, ambientVolume, soundboardVolume } = req.body ?? {};
+  const { theme, soundVolume, voiceInputMode, voiceCueVolume, voiceNoiseCancel, masterVolume, combatSfxVolumes, ambientVolume, soundboardVolume } = req.body ?? {};
   const updates = [];
   const values = [];
 
@@ -55,6 +55,14 @@ router.post("/preferences", async (req, res) => {
     }
     values.push(volume);
     updates.push(`voice_cue_volume = $${values.length}`);
+  }
+
+  if (voiceNoiseCancel !== undefined) {
+    if (typeof voiceNoiseCancel !== "boolean") {
+      return res.status(400).json({ error: "voiceNoiseCancel must be true or false." });
+    }
+    values.push(voiceNoiseCancel);
+    updates.push(`voice_noise_cancel = $${values.length}`);
   }
 
   // How loud this listener hears the DM's sound desk (routes/sounds.js).
@@ -111,7 +119,7 @@ router.post("/preferences", async (req, res) => {
   values.push(req.user.sub);
   try {
     const { rows } = await pool.query(
-      `UPDATE users SET ${updates.join(", ")} WHERE id = $${values.length} RETURNING theme, sound_volume, voice_input_mode, voice_cue_volume, master_volume, combat_sfx_volumes, ambient_volume, soundboard_volume`,
+      `UPDATE users SET ${updates.join(", ")} WHERE id = $${values.length} RETURNING theme, sound_volume, voice_input_mode, voice_cue_volume, voice_noise_cancel, master_volume, combat_sfx_volumes, ambient_volume, soundboard_volume`,
       values
     );
     const row = rows[0];
@@ -120,6 +128,7 @@ router.post("/preferences", async (req, res) => {
       soundVolume: row.sound_volume,
       voiceInputMode: row.voice_input_mode,
       voiceCueVolume: row.voice_cue_volume,
+      voiceNoiseCancel: row.voice_noise_cancel,
       masterVolume: row.master_volume,
       combatSfxVolumes: row.combat_sfx_volumes,
       ambientVolume: row.ambient_volume,

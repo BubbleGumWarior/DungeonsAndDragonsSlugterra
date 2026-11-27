@@ -349,6 +349,7 @@ export default function AccessSocket({ children }) {
           skippedInCombat: data.skippedInCombat,
           slugEvents: data.slugEvents || [],
           foraged: data.foraged || [],
+          forageBlocked: data.forageBlocked || null,
           illness: data.illness || [],
           marketMood: data.marketMood || null,
           day: data.day || null,

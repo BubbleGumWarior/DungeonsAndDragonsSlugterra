@@ -1,6 +1,9 @@
 // What a world's air, gravity and weather do in a fight. Pure rules -- no DB.
 // A fight on a world ("offboard", the default) reads that world's survey facts;
-// a fight aboard the ship (or while it is under way) gets plain ship air.
+// a fight aboard the ship (or while it is under way) gets plain ship air -- but
+// not ship gravity: a Veylan-drive ship has no artificial gravity. Aboard, the
+// caller says what the deck feels like (aboardGravityG): the ship's own thrust
+// while under way, the world's gravity while docked at its orbiting station.
 // buildAtmosphere() is snapshotted onto the encounter (encounters.atmosphere)
 // and the client reads the finished object, so this file has no client mirror.
 //
@@ -21,7 +24,8 @@ import {
   typeBallistics,
 } from "./combatRules.js";
 
-// Plain ship air: what an aboard fight (or one in transit) is fought in.
+// Plain ship air: what an aboard fight (or one in transit) is fought in. Its
+// gravityG is only the fallback for an old snapshot with no place at all.
 export const STANDARD_AIR = { temperatureC: 21, humidityPct: 45, gravityG: 1, atmosphere: "Breathable, clear" };
 
 export const THIN_AIR_RANGE_MULT = 0.8; // of the slug type's range
@@ -78,9 +82,15 @@ const pct = (mult) => `${mult > 1 ? "+" : ""}${Math.round((mult - 1) * 100)}%`;
 const times = (mult) => `×${mult}`;
 
 // The full set of fight effects for a place. `aboard` marks the plain ship-air
-// case (the facts are replaced with STANDARD_AIR).
-export function buildAtmosphere({ facts, aboard = false } = {}) {
-  const used = aboard || !facts ? STANDARD_AIR : facts;
+// case (the facts are replaced with STANDARD_AIR). Aboard, gravity is
+// `aboardGravityG` if given, else the world's own (docked at its station).
+export function buildAtmosphere({ facts, aboard = false, aboardGravityG } = {}) {
+  const shipGravity = Number.isFinite(aboardGravityG)
+    ? aboardGravityG
+    : Number.isFinite(facts?.gravityG)
+      ? facts.gravityG
+      : STANDARD_AIR.gravityG;
+  const used = aboard || !facts ? { ...STANDARD_AIR, gravityG: shipGravity } : facts;
   const tags = atmosphereTags(used);
   const has = (t) => tags.includes(t);
   const gravity = gravityEffects(used.gravityG);

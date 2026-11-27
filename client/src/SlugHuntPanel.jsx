@@ -34,6 +34,9 @@ export default function SlugHuntPanel({ isDungeonMaster = false, readOnly = fals
   // Hunting needs solid ground: no tries while the ship is under way.
   const { travel } = useTravel();
   const inTransit = Boolean(travel?.traveling);
+  // ...and a world with something living on it (The Threshold has nothing).
+  const noWildlife = Boolean(area?.noWildlife);
+  const cantHunt = inTransit || noWildlife;
 
   useEffect(() => {
     if (isDungeonMaster || !token) return;
@@ -133,7 +136,7 @@ export default function SlugHuntPanel({ isDungeonMaster = false, readOnly = fals
   }, [isDungeonMaster, token, slugpediaUpdate]);
 
   // Draft odds from docs/slug-hunt-odds.md — each area is a distribution summing to 100%.
-  const allOdds = oddsByArea[area.name] ?? [];
+  const allOdds = noWildlife ? [] : oddsByArea[area.name] ?? [];
   const odds = useMemo(() => {
     if (isDungeonMaster) return allOdds;
     if (!knownNames) return [];
@@ -211,7 +214,9 @@ export default function SlugHuntPanel({ isDungeonMaster = false, readOnly = fals
           <p className="panel-empty">Loading your Slugpedia…</p>
         ) : odds.length === 0 ? (
           <p className="panel-empty">
-            {isDungeonMaster
+            {noWildlife
+              ? `No slugs live on ${area.name}.`
+              : isDungeonMaster
               ? "No slugs are listed for this planet."
               : "None of the slugs in your Slugpedia turn up here — discover more to see their odds."}
           </p>
@@ -240,7 +245,7 @@ export default function SlugHuntPanel({ isDungeonMaster = false, readOnly = fals
               type="button"
               className="panel-btn slughunt-hunt-btn"
               onClick={tryHunt}
-              disabled={inTransit || locked || hunt?.state === "rolling" || hunt?.state === "pending"}
+              disabled={cantHunt || locked || hunt?.state === "rolling" || hunt?.state === "pending"}
             >
               <BinocularsIcon weight="bold" />
               {hunt?.state === "rolling"
@@ -249,6 +254,8 @@ export default function SlugHuntPanel({ isDungeonMaster = false, readOnly = fals
                 ? "Waiting for the DM…"
                 : inTransit
                 ? "Ship in transit"
+                : noWildlife
+                ? "Nothing lives here"
                 : locked
                 ? status?.found
                   ? "Found a slug today"
@@ -262,7 +269,13 @@ export default function SlugHuntPanel({ isDungeonMaster = false, readOnly = fals
               </p>
             )}
 
-            {status && !inTransit && (
+            {!inTransit && noWildlife && (
+              <p className="slughunt-hunt-tally">
+                {area.name} is dead hulls in open vacuum — no slugs live here. Hunt again once the party lands somewhere alive.
+              </p>
+            )}
+
+            {status && !cantHunt && (
               <p className="slughunt-hunt-tally">
                 {status.found
                   ? "A find ends the day's hunting — it refreshes when the party rests."

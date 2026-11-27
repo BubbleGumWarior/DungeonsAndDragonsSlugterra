@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { requireDmEdit, canEditAsDm } from "../roles.js";
 import { broadcastAll } from "../ws.js";
 import { grantSlugFromTemplate } from "../slugGrant.js";
+import { BUNDLE_SLUG_FOOD } from "../careRules.js";
 
 // Give Slug Bundle: the DM lays out a set of slugs, everyone sees them in a
 // shared modal, and the DM calls players up one at a time (or several at once)
@@ -130,7 +131,8 @@ router.post("/claim", async (req, res) => {
   const bundleId = bundle.id;
   claiming.add(slot.key);
   try {
-    const slug = await grantSlugFromTemplate(slot.templateId, userId);
+    // Bundle slugs arrive hungry (25% food) -- the new owner has to feed them.
+    const slug = await grantSlugFromTemplate(slot.templateId, userId, { food: BUNDLE_SLUG_FOOD });
     if (!slug) return res.status(409).json({ error: `The ${slot.name} template no longer exists.` });
     // The DM may have closed the bundle while the insert ran; the slug is
     // given either way, there's just nothing left to mark.

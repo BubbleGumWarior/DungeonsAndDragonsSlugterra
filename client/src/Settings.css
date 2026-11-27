@@ -337,6 +337,35 @@
   color: var(--ink-dim);
 }
 
+.mic-check-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Noise cancellation switch -- VoicePanel.css's switch row, sized up a touch
+   to sit with the rest of the Settings panel. */
+.settings-noise-row {
+  padding: 11px 12px;
+}
+
+.settings-noise-row .voice-switch-label {
+  font-size: 13px;
+}
+
+.settings-noise-row .voice-switch-hint {
+  font-size: 11.5px;
+}
+
+.settings-noise-row .voice-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.settings-noise-row .voice-switch[aria-checked="true"]:disabled {
+  cursor: progress;
+}
+
 /* --- Video: camera check (CameraCheck.jsx), the mic check's sibling --- */
 
 .camera-check {

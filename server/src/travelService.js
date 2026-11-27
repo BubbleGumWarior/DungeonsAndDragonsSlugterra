@@ -3,16 +3,17 @@ import { broadcastAll } from "./ws.js";
 import {
   WORLD_COUNT,
   buildProgressPerRest,
+  driveBreakdown,
   hasWorkingNavComputer,
   navCanReach,
   routeRange,
   shipEffects,
-  speedBreakdown,
   tallyVotes,
-  tierSpeedBonus,
-  travelDays,
-  worldDistance,
+  tierAccelBonus,
 } from "./shipRules.js";
+import { directInterstellar, gateState, legAt, planRoute } from "./routePlanner.js";
+import { PHYSICS } from "./travelPhysics.js";
+import { SYSTEMS, THRESHOLD_AREA } from "./universe.js";
 
 // Bare "refetch" nudges, same single-slot-safe pattern as ship-updated: the
 // client re-reads GET /api/travel rather than trusting a payload.
@@ -120,7 +121,7 @@ export async function clearProposal() {
 // Drops any voyage and open proposal, leaving the party docked where it is.
 export async function resetTravel() {
   await pool.query(
-    "UPDATE travel_state SET traveling = false, origin = NULL, destination = NULL, days_total = 0, days_left = 0 WHERE id = 1"
+    "UPDATE travel_state SET traveling = false, origin = NULL, destination = NULL, days_total = 0, days_left = 0, route = NULL WHERE id = 1"
   );
   await clearProposal();
   notifyTravelUpdated();
@@ -149,21 +150,118 @@ export async function navReach() {
   return { working: Boolean(ship) && hasWorkingNavComputer(ship.compartments), range: fx.navRange, tier: fx.navTier };
 }
 
-export function shipSpeed(ship) {
-  return speedBreakdown(ship ? { speed: ship.speed, compartments: ship.compartments } : null);
+// The active ship's Veylan Drive: class, ratings and what compartments add.
+export function shipDrive(ship) {
+  return driveBreakdown(
+    ship
+      ? { shipClass: ship.ship_class, accelG: ship.accel_g, maxSpeedC: ship.max_speed_c, compartments: ship.compartments }
+      : null
+  );
 }
 
+async function getCampaignDay() {
+  const { rows } = await pool.query("SELECT campaign_day FROM campaign_settings WHERE id = 1");
+  return rows[0]?.campaign_day ?? 1;
+}
+
+// The DM's gate state: { threxa: { operational, authorized }, ... }. Missing
+// means open and cleared.
+export async function getGates() {
+  const { rows } = await pool.query("SELECT gate_status FROM campaign_settings WHERE id = 1");
+  return rows[0]?.gate_status ?? {};
+}
+
+export async function setGate(systemKey, patch) {
+  const gates = await getGates();
+  const current = gates[systemKey] ?? {};
+  const next = { ...current };
+  if (typeof patch.operational === "boolean") next.operational = patch.operational;
+  if (typeof patch.authorized === "boolean") next.authorized = patch.authorized;
+  await pool.query("UPDATE campaign_settings SET gate_status = $1::jsonb WHERE id = 1", [
+    JSON.stringify({ ...gates, [systemKey]: next }),
+  ]);
+  notifyTravelUpdated();
+}
+
+// The full route plan from one world to another, leaving on `day`.
+export function planFor({ from, to, day, ship, gates }) {
+  const drive = shipDrive(ship);
+  return planRoute({ from, to, departDay: day, drive: drive.drive, gates, flipCutPct: drive.flipCutPct });
+}
+
+// What the client needs of a plan: the legs without the solver's internals.
+function routeSummary(route) {
+  return {
+    routeType: route.routeType,
+    days: route.days,
+    jumps: route.jumps,
+    coordinateSeconds: route.coordinateSeconds,
+    shipProperSeconds: route.shipProperSeconds,
+    distanceMeters: route.distanceMeters,
+    peakSpeedFractionC: route.peakSpeedFractionC,
+    launchable: route.launchable,
+    blockedBy: route.blockedBy,
+    legs: route.legs.map((l) => ({
+      kind: l.kind,
+      label: l.label,
+      startSeconds: l.startSeconds,
+      seconds: l.flight ? l.flight.coordinateSeconds : l.seconds,
+      properSeconds: l.flight ? l.flight.shipProperSeconds : l.seconds,
+      distanceMeters: l.distanceMeters ?? null,
+      peakSpeedFractionC: l.flight?.peakSpeedFractionC ?? null,
+    })),
+  };
+}
+
+// The no-gates figure, as information only.
+function directSummary(from, to, ship) {
+  const d = directInterstellar(from, to, shipDrive(ship).drive);
+  if (!d) return null;
+  return {
+    routeType: d.routeType,
+    distanceMeters: d.distanceMeters,
+    coordinateSeconds: d.coordinateSeconds,
+    shipProperSeconds: d.shipProperSeconds,
+    peakSpeedFractionC: d.peakSpeedFractionC,
+    reachedSpeedCap: d.reachedSpeedCap,
+  };
+}
+
+// Why a route can't be launched right now, in words, or null if it can.
+export function routeBlockedReason(route) {
+  const b = route?.blockedBy?.[0];
+  if (!b) return null;
+  return b.reason === "offline"
+    ? `The ${b.gate} is shut down, so the course can't go through it.`
+    : `The ${b.gate}'s control station hasn't cleared the ship to jump.`;
+}
+
+// Plans the voyage from where the party is and sets it going. Returns the plan.
 export async function startTravel(destination) {
-  const origin = await getPartyArea();
-  const speed = shipSpeed(await getActiveShip()).effective;
-  const days = travelDays(worldDistance(origin, destination), speed);
+  const [origin, ship, gates, day] = await Promise.all([getPartyArea(), getActiveShip(), getGates(), getCampaignDay()]);
+  const route = planFor({ from: origin, to: destination, day, ship, gates });
   await pool.query(
     `UPDATE travel_state SET traveling = true, origin = $1, destination = $2, days_total = $3, days_left = $3,
-       proposal_area = NULL, proposer_id = NULL WHERE id = 1`,
-    [origin, destination, days]
+       route = $4::jsonb, proposal_area = NULL, proposer_id = NULL WHERE id = 1`,
+    [origin, destination, route.days, JSON.stringify(routeSummary(route))]
   );
   await pool.query("DELETE FROM travel_votes");
-  return days;
+  return route;
+}
+
+// The plan the party would fly right now, for the propose / launch checks.
+export async function currentPlan(destination) {
+  const [origin, ship, gates, day] = await Promise.all([getPartyArea(), getActiveShip(), getGates(), getCampaignDay()]);
+  return planFor({ from: origin, to: destination, day, ship, gates });
+}
+
+// What the deck feels like aboard: no artificial gravity. Under way the Veylan
+// Drive is always burning (accelerating, then braking after the flip) so the
+// crew feels its thrust; docked at a station, the world's own gravity (null,
+// which atmosphereRules reads as "the world's").
+export async function aboardGravityG() {
+  if (!(await isTraveling())) return null;
+  return shipDrive(await getActiveShip()).accelG;
 }
 
 // Re-counts the open proposal's votes: a majority launches the journey, an
@@ -186,6 +284,11 @@ export async function settleProposal() {
       await clearProposal();
       return "blocked";
     }
+    // A gate can close (or clearance be pulled) while the vote is open.
+    if (!(await currentPlan(row.proposal_area)).launchable) {
+      await clearProposal();
+      return "gate-closed";
+    }
     await startTravel(row.proposal_area);
   } else if (outcome === "failed") {
     await clearProposal();
@@ -201,8 +304,9 @@ export async function buildTravelView(userId) {
     getActiveShip(),
     loadVoters(),
   ]);
-  const { rows: dayRows } = await pool.query("SELECT campaign_day FROM campaign_settings WHERE id = 1");
-  const speed = shipSpeed(ship);
+  const [day, gates] = await Promise.all([getCampaignDay(), getGates()]);
+  const drive = shipDrive(ship);
+  const plan = (to) => routeSummary(planFor({ from: area, to, day, ship, gates }));
 
   let proposal = null;
   let myVote = null;
@@ -213,7 +317,7 @@ export async function buildTravelView(userId) {
     const no = voters.filter((v) => byUser.get(v.user_id) === false).map((v) => v.name);
     const waiting = voters.filter((v) => !byUser.has(v.user_id)).map((v) => v.name);
     const proposer = voters.find((v) => v.user_id === row.proposer_id);
-    const distance = worldDistance(area, row.proposal_area);
+    const route = plan(row.proposal_area);
     proposal = {
       area: row.proposal_area,
       proposerId: row.proposer_id,
@@ -224,8 +328,8 @@ export async function buildTravelView(userId) {
       waiting,
       needed: tallyVotes({ eligible: voters.length, yes: 0, no: 0 }).needed,
       eligible: voters.length,
-      distance,
-      days: travelDays(distance, speed.effective),
+      days: route.days,
+      route,
     };
     myVote = byUser.has(userId) ? byUser.get(userId) : null;
   }
@@ -235,19 +339,27 @@ export async function buildTravelView(userId) {
   if (!row.traveling) {
     for (let to = 0; to < WORLD_COUNT; to++) {
       if (to === area) continue;
-      const distance = worldDistance(area, to);
+      const route = plan(to);
       routes.push({
         area: to,
-        distance,
-        days: travelDays(distance, speed.effective),
+        ...route,
         range: routeRange(area, to),
         reachable: navCanReach(fx.navRange, area, to),
+        direct: directSummary(area, to, ship),
       });
     }
   }
 
+  // Under way: which leg of the planned route the ship is on today.
+  let voyage = null;
+  if (row.traveling && row.route) {
+    const elapsed = (row.days_total - row.days_left) * PHYSICS.DAY;
+    const leg = legAt(row.route, elapsed);
+    voyage = { ...row.route, currentLeg: leg ? row.route.legs.indexOf(leg) : null };
+  }
+
   return {
-    day: dayRows[0]?.campaign_day ?? 1,
+    day,
     area,
     visited: await visitedAreas(area),
     traveling: row.traveling,
@@ -255,7 +367,17 @@ export async function buildTravelView(userId) {
     destination: row.destination,
     daysTotal: row.days_total,
     daysLeft: row.days_left,
-    ship: ship ? { id: ship.id, name: ship.name, ...speed } : null,
+    voyage,
+    ship: ship ? { id: ship.id, name: ship.name, ...drive } : null,
+    gates: SYSTEMS.map((sys, i) => ({
+      system: i,
+      key: sys.key,
+      name: sys.name,
+      angleDeg: sys.gateAngleDeg,
+      radiusAU: sys.gateRadiusAU,
+      ...gateState(gates, i),
+    })),
+    thresholdArea: THRESHOLD_AREA,
     navReady: Boolean(ship) && hasWorkingNavComputer(ship.compartments),
     navRange: fx.navRange,
     navTier: fx.navTier,
@@ -306,7 +428,7 @@ export async function advanceDay() {
             ...c,
             tier: c.upgradingTo,
             upgradingTo: null,
-            speedBonus: tierSpeedBonus(c.templateKey, c.upgradingTo, c.speedBonus),
+            accelBonusG: tierAccelBonus(c.templateKey, c.upgradingTo, c.accelBonusG),
             progressDays: 0,
             engineers: [],
           };
@@ -328,7 +450,7 @@ export async function advanceDay() {
     if (left === 0) {
       const destination = travelRow.destination;
       await pool.query(
-        "UPDATE travel_state SET traveling = false, origin = NULL, destination = NULL, days_total = 0, days_left = 0 WHERE id = 1"
+        "UPDATE travel_state SET traveling = false, origin = NULL, destination = NULL, days_total = 0, days_left = 0, route = NULL WHERE id = 1"
       );
       await setPartyLocation(destination);
       travel = { status: "arrived", destination };

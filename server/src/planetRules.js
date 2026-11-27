@@ -62,6 +62,13 @@ export const REST_ABOARD_WORLDS = new Set([16]);
 
 export const restsAboard = (area) => REST_ABOARD_WORLDS.has(area);
 
+// Worlds where nothing lives: no wild slugs to hunt and nothing to forage
+// (The Threshold is dead hulls in vacuum). Mirrored by the `noWildlife` flag
+// on worlds in client/src/planetData.js.
+export const SLUGLESS_WORLDS = new Set([16]);
+
+export const worldHasWildlife = (area) => !SLUGLESS_WORLDS.has(area);
+
 // The air a long rest is slept in.
 export function restTemperature(area, traveling) {
   return traveling || restsAboard(area) ? SHIP_TEMPERATURE_C : temperatureForArea(area);

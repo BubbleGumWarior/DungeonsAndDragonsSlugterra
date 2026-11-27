@@ -490,6 +490,15 @@
   gap: 6px;
 }
 
+.ship-stat-edit select {
+  padding: 2px 6px;
+  border: 1px solid var(--charcoal-600);
+  border-radius: 6px;
+  background: rgba(7, 7, 11, 0.6);
+  color: var(--ink);
+  font: inherit;
+}
+
 .ship-stat-edit input {
   width: 56px;
   padding: 2px 6px;

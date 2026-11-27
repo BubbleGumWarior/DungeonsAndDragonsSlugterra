@@ -6,12 +6,14 @@ import SlugCard from "./SlugCard.jsx";
 import SlugForm from "./SlugForm.jsx";
 import SlugCatalog from "./SlugCatalog.jsx";
 import SlugBundlePicker from "./SlugBundlePicker.jsx";
+import DmFoodControl from "./DmFoodControl.jsx";
 import { NarrowSwitch, QuickRemove, RecipientRail, useRecipient, useStatus } from "./DeskParts.jsx";
 import "./SlugManagement.css";
 import "./InventoryDesk.css";
 
-// One player's slugs, with the per-slug Mega Morph permission on each card.
-function PlayerSlugPanel({ recipient, slugs, onEdit, onToggleMega, onRemove, readOnly = false }) {
+// One player's slugs, with the per-slug Mega Morph permission and the food
+// meter (DM can nudge it up or down) on each card.
+function PlayerSlugPanel({ recipient, slugs, onEdit, onToggleMega, onRemove, onSlugChange, readOnly = false }) {
   const [query, setQuery] = useState("");
 
   if (!recipient) {
@@ -61,7 +63,12 @@ function PlayerSlugPanel({ recipient, slugs, onEdit, onToggleMega, onRemove, rea
               slug={slug}
               onClick={readOnly ? undefined : () => onEdit(slug)}
               actions={
-                readOnly ? null : <div className="desk-card-actions">
+                readOnly ? (
+                  <div className="desk-card-actions">
+                    <DmFoodControl slug={slug} readOnly />
+                  </div>
+                ) : <div className="desk-card-actions">
+                  <DmFoodControl slug={slug} onChange={onSlugChange} />
                   <QuickRemove name={slug.name} onRemove={() => onRemove(slug)} />
                   <button
                     type="button"
@@ -378,7 +385,7 @@ export default function SlugManagement({ readOnly = false }) {
           />
         </div>}
         <div className={`desk-pane desk-pane--gear ${!readOnly && narrowView !== "gear" ? "desk-pane--away" : ""}`}>
-          <PlayerSlugPanel key={recipient?.id} readOnly={readOnly} recipient={recipient} slugs={held} onEdit={(slug) => setModal({ type: "edit-instance", slug })} onToggleMega={toggleMegaMorph} onRemove={removeSlug} />
+          <PlayerSlugPanel key={recipient?.id} readOnly={readOnly} recipient={recipient} slugs={held} onEdit={(slug) => setModal({ type: "edit-instance", slug })} onToggleMega={toggleMegaMorph} onRemove={removeSlug} onSlugChange={(next) => setSlugs((prev) => prev.map((s) => (s.id === next.id ? { ...s, ...next } : s)))} />
         </div>
       </div>
 

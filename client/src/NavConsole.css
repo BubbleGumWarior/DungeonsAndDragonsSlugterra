@@ -387,6 +387,66 @@
   color: var(--gold-soft);
 }
 
+.holo-route-head {
+  margin: 0 0 4px;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.holo-route-sub {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.holo-legs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.holo-leg {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(var(--holo), 0.12);
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+
+.holo-leg--flight {
+  color: var(--ink);
+}
+
+.holo-leg--jump {
+  color: var(--gold-soft);
+}
+
+.holo-leg-time {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.holo-route-warn {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--danger);
+}
+
+.holo-route-direct {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  font-style: italic;
+}
+
+.holo-gate {
+  margin-top: 14px;
+}
+
 .holo-actions {
   display: flex;
   flex-direction: column;

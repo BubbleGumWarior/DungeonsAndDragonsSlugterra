@@ -11,7 +11,8 @@ import { toClientSlug } from "./routes/slugs.js";
 //
 // Sends one slug-updated for the new slug and records it in the party
 // slugpedia. Returns the client-shaped slug, or null if the template is gone.
-export async function grantSlugFromTemplate(templateId, userId) {
+// `food` sets the starting food meter (default: the column default, full).
+export async function grantSlugFromTemplate(templateId, userId, { food } = {}) {
   const { rows: cols } = await pool.query(
     `SELECT a.column_name FROM information_schema.columns a
      JOIN information_schema.columns b ON b.column_name = a.column_name AND b.table_name = 'slugs' AND b.table_schema = a.table_schema
@@ -27,6 +28,10 @@ export async function grantSlugFromTemplate(templateId, userId) {
     [templateId, userId]
   );
   if (!rows[0]) return null;
+  if (Number.isInteger(food)) {
+    const { rows: fed } = await pool.query("UPDATE slugs SET food = $1 WHERE id = $2 RETURNING *", [food, rows[0].id]);
+    rows[0] = fed[0] ?? rows[0];
+  }
 
   // A new slug arrives full, Tempo Aura stamina included (see slugAura.js).
   const changed = await syncTempoAura({ userId }, { fill: true });

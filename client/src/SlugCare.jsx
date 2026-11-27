@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { BatteryChargingIcon, BowlFoodIcon, CircleDashedIcon, WarningIcon } from "@phosphor-icons/react";
+import { BatteryChargingIcon, BowlFoodIcon, CircleDashedIcon, HandHeartIcon, WarningIcon } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { LOYALTY_TIER_LABELS, loyaltyTierColor } from "./slugData.js";
 import {
@@ -15,6 +15,7 @@ import {
 } from "./careData.js";
 import { characterSkillMod } from "./characterData.js";
 import EnergyPips from "./EnergyPips.jsx";
+import FeedAllyModal from "./FeedAllyModal.jsx";
 import Hint from "./Hint.jsx";
 import LoyaltyMeter from "./LoyaltyMeter.jsx";
 import "./Panel.css";
@@ -64,6 +65,7 @@ export default function SlugCare({ slugs, character, kibble, energyCells, onSlug
   const perScoop = kibbleFoodFor(characterSkillMod(character, "creatureHandling"));
   const [busy, setBusy] = useState(null); // "feed:<id>" | "charge:<id>"
   const [error, setError] = useState(null);
+  const [feedingAlly, setFeedingAlly] = useState(false);
 
   async function call(tag, url, body, onDone) {
     setBusy(tag);
@@ -109,12 +111,32 @@ export default function SlugCare({ slugs, character, kibble, energyCells, onSlug
                 : `${hungry} ${hungry === 1 ? "slug has" : "slugs have"} room for a meal.`}
           </p>
         </div>
-        {(kibble === 0 || energyCells === 0) && (
-          <Link to="/market" className="slug-care-buy">
-            Restock at the Market
-          </Link>
-        )}
+        <div className="slug-care-head-actions">
+          {(kibble === 0 || energyCells === 0) && (
+            <Link to="/market" className="slug-care-buy">
+              Restock at the Market
+            </Link>
+          )}
+          <button
+            type="button"
+            className="panel-btn panel-btn--ghost slug-care-btn"
+            onClick={() => setFeedingAlly(true)}
+            title="Spend your kibble on another player's slugs, hungriest first"
+          >
+            <HandHeartIcon weight="bold" />
+            Feed ally slugs
+          </button>
+        </div>
       </div>
+
+      {feedingAlly && (
+        <FeedAllyModal
+          kibble={kibble}
+          perScoop={perScoop}
+          onClose={() => setFeedingAlly(false)}
+          onFed={(d) => onSupplies?.({ kibble: d.kibble })}
+        />
+      )}
 
       {error && <p className="panel-error">{error}</p>}
 

@@ -5,6 +5,7 @@ import { pool } from "./db.js";
 import { broadcastAll } from "./ws.js";
 import { climateTemperature, restTemperature, restsAboard, worldFacts } from "./planetRules.js";
 import { buildAtmosphere } from "./atmosphereRules.js";
+import { aboardGravityG } from "./travelService.js";
 
 export function toClientOutfit(row) {
   return {
@@ -68,10 +69,17 @@ export async function getClimate(db = pool) {
 
 // The air a fight here would be fought in: the world's own when offboard (the
 // default), plain ship air when the DM marks it aboard -- or whenever the ship
-// is under way, since everyone is inside it then.
+// is under way, since everyone is inside it then. There is no artificial
+// gravity aboard: under way the deck feels the Veylan Drive's thrust; docked at
+// a world's station, the world's own gravity (aboardGravityG returns null).
 export async function currentAtmosphere({ aboard = false } = {}, db = pool) {
   const climate = await getClimate(db);
-  return buildAtmosphere({ facts: worldFacts(climate.area), aboard: aboard || climate.traveling });
+  const inside = aboard || climate.traveling;
+  return buildAtmosphere({
+    facts: worldFacts(climate.area),
+    aboard: inside,
+    aboardGravityG: inside ? (await aboardGravityG()) ?? undefined : undefined,
+  });
 }
 
 // One bare "it happened" nudge -- views refetch (see single-slot signals).

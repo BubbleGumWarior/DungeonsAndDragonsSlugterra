@@ -22,7 +22,8 @@ import {
 } from "../careRules.js";
 import { MARKET_MOODS, moodPctFor } from "../marketRules.js";
 import { LOYALTY_TIER_MIN } from "../slugRules.js";
-import { advanceDay, getShipEffects } from "../travelService.js";
+import { advanceDay, getShipEffects, isTraveling } from "../travelService.js";
+import { worldHasWildlife } from "../planetRules.js";
 import { giveStarterOutfits } from "../seedDefaultOutfits.js";
 import { announceOutfitsChanged, getClimate, getWornOutfit } from "../outfitService.js";
 import { climateSide, degreesOutside, effectiveRange, illnessChance } from "../outfitRules.js";
@@ -288,7 +289,8 @@ router.get("/long-rest/preview", requireDmView, async (req, res) => {
 // The party goes to sleep. Every character not in a fight is fully healed --
 // Grit back to max, knockout pips cleared -- if the ship has a working Medbay;
 // without one, Grit only comes back up to half of max and knockout pips are
-// left alone. Every slug they own is recharged either way. Anyone good at Survival forages kibble overnight. Sleeping also
+// left alone. Every slug they own is recharged either way. Anyone good at Survival forages kibble overnight
+// (not in transit or at The Threshold -- nothing grows there). Sleeping also
 // costs food: each slug's meter drains, and a slug that was already at 0 loses
 // a loyalty tier (or leaves the party at the lowest). Slug Hunt, haggling and the merchants' mood all reset for the new
 // day. Lives here (not combat.js) because it's a table-wide reset the DM can
@@ -306,8 +308,17 @@ router.post(["/long-rest", "/heal-all"], requireDmEdit, async (req, res) => {
     const characters = allCharacters.filter((c) => !inCombat.has(c.user_id));
     const ownerNames = new Map(allCharacters.map((c) => [c.user_id, c.name]));
     // Foraging: a Survival modifier of 1+ turns the night into d6 + modifier
-    // scoops of kibble, found while the rest of the party sleeps.
+    // scoops of kibble, found while the rest of the party sleeps. Only on a
+    // world with something living on it: never under way in deep space, and
+    // never at The Threshold. Judged where the party falls asleep, before the
+    // night's travel day lands them anywhere.
     const foraged = [];
+    const { rows: restArea } = await pool.query("SELECT slug_hunt_area FROM campaign_settings WHERE id = 1");
+    const forageBlocked = (await isTraveling())
+      ? "transit"
+      : !worldHasWildlife(restArea[0]?.slug_hunt_area ?? 0)
+        ? "barren"
+        : null;
     // The Galley's cook turns up kibble for the party too, dealt out one scoop at a time.
     const galleyShare = new Map();
     for (let i = 0; i < fx.galleyKibble && characters.length > 0; i++) {
@@ -319,7 +330,7 @@ router.post(["/long-rest", "/heal-all"], requireDmEdit, async (req, res) => {
       const newMax = computeMaxGrit(c.stats, c.grit_bonus);
       const survivalMod = characterSkillMod(c, "survival");
       let scoops = 0;
-      if (survivalMod >= FORAGE_MIN_MOD) {
+      if (!forageBlocked && survivalMod >= FORAGE_MIN_MOD) {
         const roll = 1 + Math.floor(Math.random() * FORAGE_DIE);
         scoops = roll + survivalMod;
         foraged.push({ userId: c.user_id, name: c.name, roll, modifier: survivalMod, scoops });
@@ -463,6 +474,7 @@ router.post(["/long-rest", "/heal-all"], requireDmEdit, async (req, res) => {
       skippedInCombat: inCombat.size,
       slugEvents,
       foraged,
+      forageBlocked,
       galley,
       cured,
       illness,

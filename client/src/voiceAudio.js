@@ -101,12 +101,14 @@ export const saveOutputDeviceId = (id) => writePref(OUTPUT_KEY, id);
 
 // Same constraints the call itself uses, optionally pinned to a chosen mic.
 // `ideal` (not `exact`) so an unplugged headset falls back to the default mic
-// instead of failing the join outright.
-export function micConstraints(deviceId) {
+// instead of failing the join outright. With `noiseCancel` the browser's own
+// noise suppression is switched off, because RNNoise (micPipeline.js) takes
+// its place and stacking the two makes voices sound underwater.
+export function micConstraints(deviceId, { noiseCancel = false } = {}) {
   return {
     audio: {
       echoCancellation: true,
-      noiseSuppression: true,
+      noiseSuppression: !noiseCancel,
       autoGainControl: true,
       channelCount: 1,
       ...(deviceId ? { deviceId: { ideal: deviceId } } : {}),

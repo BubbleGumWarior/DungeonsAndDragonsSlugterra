@@ -22,9 +22,9 @@ export async function seedDefaultShip() {
     const image = `data:${mime};base64,${fs.readFileSync(imageFile).toString("base64")}`;
 
     const { rows: created } = await pool.query(
-      `INSERT INTO ships (name, image, speed, compartment_slots, compartments)
-       VALUES ($1, $2, $3, $4, $5::jsonb) RETURNING id`,
-      [spec.name, image, spec.speed, spec.compartmentSlots, JSON.stringify(spec.compartments)]
+      `INSERT INTO ships (name, image, ship_class, accel_g, max_speed_c, compartment_slots, compartments)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb) RETURNING id`,
+      [spec.name, image, spec.shipClass, spec.accelG, spec.maxSpeedC, spec.compartmentSlots, JSON.stringify(spec.compartments)]
     );
     await pool.query(
       "UPDATE campaign_settings SET active_ship_id = COALESCE(active_ship_id, $1) WHERE id = 1",

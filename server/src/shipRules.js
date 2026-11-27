@@ -1,8 +1,34 @@
 // Pure rules for ship stats, compartments, and travel -- no DB access, so it
 // can be reasoned about (and tested) on its own. The DB-touching half lives in
-// travelService.js.
+// travelService.js; the travel physics in travelPhysics.js, the geography in
+// universe.js and the legs of a journey in routePlanner.js.
 
-export const DEFAULT_SHIP_SPEED = 5;
+import { isThreshold, isValidArea as validArea, WORLD_COUNT as COUNT } from "./universe.js";
+import { jumpsBetween } from "./routePlanner.js";
+
+// ---- Ship classes (the Veylan Drive) ----------------------------------------
+// Every conventional ship flies on a Veylan Drive: a fusion-powered reaction
+// drive that heats reaction mass and throws it out of a field-shaped nozzle. It
+// is not reactionless, not an artificial-gravity generator and not FTL. A class
+// is a baseline rating -- sustained proper acceleration (in g) and a speed cap
+// (fraction of c) -- that a ship row copies and the DM can then edit per ship.
+// These are idealised ratings: they don't prove the ship's reactor, radiators
+// or reaction mass could sustain them (that is a separate, unmodelled layer).
+export const SHIP_CLASSES = [
+  { id: "heavy_freighter", name: "Heavy freighter", accelG: 0.05, maxSpeedC: 0.75 },
+  { id: "civilian_transport", name: "Civilian transport", accelG: 0.1, maxSpeedC: 0.75 },
+  { id: "fast_courier", name: "Fast courier", accelG: 0.25, maxSpeedC: 0.85 },
+  { id: "military_warship", name: "Military warship", accelG: 0.5, maxSpeedC: 0.9 },
+  { id: "experimental_elite", name: "Experimental / elite", accelG: 1.0, maxSpeedC: 0.95 },
+];
+export const DEFAULT_SHIP_CLASS = "civilian_transport";
+// 0.95c is the civilisation's technological ceiling -- no ship is set above it.
+export const ABSOLUTE_MAX_SPEED_C = 0.95;
+export const MIN_ACCEL_G = 0.01;
+export const MAX_ACCEL_G = 3;
+
+export const shipClassFor = (id) =>
+  SHIP_CLASSES.find((c) => c.id === id) ?? SHIP_CLASSES.find((c) => c.id === DEFAULT_SHIP_CLASS);
 export const DEFAULT_COMPARTMENT_SLOTS = 12;
 export const DEFAULT_BUILD_DAYS = 3;
 
@@ -67,34 +93,34 @@ const COMPARTMENTS = [
   {
     key: "engine-room",
     name: "Engine Room",
-    description: "The main drive and its keepers. A well-tuned engine room makes every journey shorter.",
+    description: "The Veylan main drive and its keepers: reactor, reaction-mass feed and the magnetic nozzle at the stern. A well-tuned drive pushes harder, and every journey gets shorter.",
     buildable: true,
     tiers: [
-      tier(6, 10, 10, "Travel speed +2.", { speed: 2 }),
-      tier(6, 8, 13, "Travel speed +3.", { speed: 3 }),
-      tier(8, 8, 16, "Travel speed +4.", { speed: 4 }),
+      tier(6, 10, 10, "Veylan Drive acceleration +0.05 g.", { accel: 0.05 }),
+      tier(6, 8, 13, "Veylan Drive acceleration +0.10 g.", { accel: 0.1 }),
+      tier(8, 8, 16, "Veylan Drive acceleration +0.15 g.", { accel: 0.15 }),
     ],
   },
   {
     key: "thruster-array",
     name: "Thruster Array",
-    description: "Oversized auxiliary thrusters bolted to the hull. Loud, thirsty and fast.",
+    description: "Oversized manoeuvring thrusters (RCS) bolted round the hull. They don't push the ship along -- that is the main drive's job -- but they swing it through the midpoint flip and nose it into dock fast.",
     buildable: false,
     tiers: [
-      tier(8, 10, 10, "Travel speed +3.", { speed: 3 }),
-      tier(8, 8, 13, "Travel speed +4.", { speed: 4 }),
-      tier(10, 8, 16, "Travel speed +6.", { speed: 6 }),
+      tier(8, 10, 10, "Flip, alignment and docking take 25% less time on every leg.", { flipCut: 25 }),
+      tier(8, 8, 13, "Flip, alignment and docking take 50% less time.", { flipCut: 50 }),
+      tier(10, 8, 16, "Flip, alignment and docking take 75% less time.", { flipCut: 75 }),
     ],
   },
   {
     key: NAV_COMPUTER_KEY,
     name: "Nav Computer",
-    description: "Plots tighter routes between worlds and shaves days off long hauls. Its holographic star table is how the crew charts a course: without a working one the ship can't travel.",
+    description: "Plots burns, flips and gate approaches. Its holographic star table is how the crew charts a course: without a working one the ship can't travel.",
     buildable: true,
     tiers: [
-      tier(4, 8, 10, "Travel speed +1. Charts nearby worlds, up to 13 units away.", { speed: 1, navRange: "close" }),
-      tier(5, 7, 13, "Travel speed +1. Charts worlds up to 30 units away: The Threshold and the nearer systems.", { speed: 1, navRange: "medium" }),
-      tier(6, 7, 16, "Travel speed +1. Charts every world.", { speed: 1, navRange: "all" }),
+      tier(4, 8, 10, "Charts the worlds of the ship's own system, and the run through one gate to or from The Threshold.", { navRange: "close" }),
+      tier(5, 7, 13, "Also charts the other systems, through both gates and across The Threshold.", { navRange: "medium" }),
+      tier(6, 7, 16, "Charts every world, and works out what the trip would take with no gates at all.", { navRange: "all" }),
     ],
   },
   {
@@ -225,7 +251,7 @@ export const DEFAULT_COMPARTMENT_TEMPLATES = COMPARTMENT_BLUEPRINTS.map((b) => (
   name: b.name,
   description: b.description,
   buildDays: b.tiers[0].buildDays,
-  speedBonus: b.tiers[0].speed ?? 0,
+  accelBonusG: b.tiers[0].accel ?? 0,
   maxTier: b.maxTier,
   buildable: b.buildable,
 }));
@@ -238,18 +264,20 @@ export function compartmentTier(c) {
   return Math.max(1, Math.min(bp.maxTier, Math.trunc(Number(c?.tier)) || 1));
 }
 
-// What a compartment's speed bonus should read at a tier. The fallback is the
-// stored number, which is all a custom compartment has.
-export function tierSpeedBonus(templateKey, tierNumber, fallback = 0) {
-  const t = blueprintFor(templateKey)?.tiers[tierNumber - 1];
-  return t && t.speed !== undefined ? t.speed : fallback;
+// What a compartment's acceleration bonus (g) should read at a tier. The
+// fallback is the stored number, which is all a custom compartment has.
+export function tierAccelBonus(templateKey, tierNumber, fallback = 0) {
+  const bp = blueprintFor(templateKey);
+  if (!bp) return fallback;
+  return bp.tiers[tierNumber - 1]?.accel ?? 0;
 }
 
 // Everything the online compartments give the crew, in one place. Duplicates of
-// one kind don't stack (the best one counts); speed does, as it always has.
+// one kind don't stack (the best one counts); drive acceleration does.
 export function shipEffects(compartments) {
   const fx = {
-    speedBonus: 0,
+    accelBonusG: 0,
+    flipCutPct: 0,
     navTier: 0,
     navRange: "none",
     medbayTier: 0,
@@ -271,12 +299,13 @@ export function shipEffects(compartments) {
     if (c?.status !== "online") continue;
     const bp = blueprintFor(c.templateKey);
     if (!bp) {
-      fx.speedBonus += Number(c.speedBonus) || 0;
+      fx.accelBonusG += Number(c.accelBonusG) || 0;
       continue;
     }
     const n = compartmentTier(c);
     const t = bp.tiers[n - 1];
-    fx.speedBonus += t.speed !== undefined ? t.speed : Number(c.speedBonus) || 0;
+    fx.accelBonusG += t.accel ?? 0;
+    fx.flipCutPct = Math.max(fx.flipCutPct, t.flipCut ?? 0);
     if (t.navRange) {
       fx.navTier = Math.max(fx.navTier, n);
       if (NAV_RANGE_RANK[t.navRange] > NAV_RANGE_RANK[fx.navRange]) fx.navRange = t.navRange;
@@ -297,6 +326,7 @@ export function shipEffects(compartments) {
     fx.surveyTier = Math.max(fx.surveyTier, t.survey ?? 0);
     if (t.storage) fx.storesCapacity = Math.max(fx.storesCapacity, t.storage);
   }
+  fx.accelBonusG = Math.round(fx.accelBonusG * 1000) / 1000;
   return fx;
 }
 
@@ -341,61 +371,20 @@ export function resolveWorkRoll({ die, modifier, bonus = 0, dc, cost, buildDays 
   };
 }
 
-// The flat world index (campaign_settings.slug_hunt_area) mapped back onto the
-// star system it sits in: how many worlds each cluster holds, in
-// planetData.js's CLUSTERS order (Threxa, Verrin, Kaeth), with The Threshold
-// last as its own one-world "cluster". Keep in step with planetData.js.
-const CLUSTER_SIZES = [6, 5, 5, 1];
-export const WORLD_COUNT = CLUSTER_SIZES.reduce((a, b) => a + b, 0);
-const THRESHOLD_CLUSTER = CLUSTER_SIZES.length - 1;
+// Worlds are indexed by campaign_settings.slug_hunt_area; the geography lives
+// in universe.js.
+export const WORLD_COUNT = COUNT;
+export const isValidArea = validArea;
 
-export function isValidArea(area) {
-  return Number.isInteger(area) && area >= 0 && area < WORLD_COUNT;
-}
-
-function locate(area) {
-  let idx = area;
-  for (let cluster = 0; cluster < CLUSTER_SIZES.length; cluster++) {
-    if (idx < CLUSTER_SIZES[cluster]) return { cluster, slot: idx };
-    idx -= CLUSTER_SIZES[cluster];
-  }
-  return { cluster: THRESHOLD_CLUSTER, slot: 0 };
-}
-
-// Gap between the three star systems, in distance units (the same unit a
-// ship's speed is measured in per day).
-const CLUSTER_GAP = { "0-1": 20, "1-2": 24, "0-2": 32 };
-const THRESHOLD_GAP = 12;
-
-// Distance in units between two worlds. Worlds in one system are close, with
-// further-out orbits farther apart; crossing between systems is a long haul;
-// The Threshold sits in the void between them all, a middling trip from anywhere.
-export function worldDistance(from, to) {
-  if (from === to) return 0;
-  const a = locate(from);
-  const b = locate(to);
-  if (a.cluster === b.cluster) return 3 + 2 * Math.abs(a.slot - b.slot);
-  if (a.cluster === THRESHOLD_CLUSTER || b.cluster === THRESHOLD_CLUSTER) {
-    const other = a.cluster === THRESHOLD_CLUSTER ? b : a;
-    return THRESHOLD_GAP + 2 * other.slot;
-  }
-  const lo = Math.min(a.cluster, b.cluster);
-  const hi = Math.max(a.cluster, b.cluster);
-  return CLUSTER_GAP[`${lo}-${hi}`] + 2 * (a.slot + b.slot);
-}
-
-// How far a Nav Computer has to reach to chart a route, by distance in units.
-// Close covers any hop inside one star system (the longest is 13) and The
-// Threshold's nearest worlds; medium stretches to The Threshold and the nearer
-// worlds of the next system over; the rest needs a Tier III. Mirrored in the
-// client's shipData.js labels.
-export const CLOSE_RANGE_MAX = 13;
-export const MEDIUM_RANGE_MAX = 30;
-
+// How far a Nav Computer has to reach to chart a route, by the gates it uses.
+// "close": inside one system, or one jump to or from The Threshold (so a Tier I
+// computer can always get the ship out of the debris field). "medium": the
+// other systems, two jumps through The Threshold. Tier III ("all") charts the
+// same worlds and adds the no-gates figures. Mirrored in shipData.js labels.
 export function routeRange(from, to) {
-  const distance = worldDistance(from, to);
-  if (distance <= CLOSE_RANGE_MAX) return "close";
-  return distance <= MEDIUM_RANGE_MAX ? "medium" : "all";
+  const jumps = jumpsBetween(from, to);
+  if (jumps === 0 || isThreshold(from) || isThreshold(to)) return "close";
+  return "medium";
 }
 
 // Can a Nav Computer of this reach ("none" | "close" | "medium" | "all") chart
@@ -404,16 +393,28 @@ export function navCanReach(navRange, from, to) {
   return (NAV_RANGE_RANK[navRange] ?? 0) >= NAV_RANGE_RANK[routeRange(from, to)];
 }
 
-export function travelDays(distance, speed) {
-  return Math.max(1, Math.ceil(distance / Math.max(1, speed)));
-}
+const clampNum = (n, lo, hi, fallback) =>
+  n !== null && n !== undefined && Number.isFinite(Number(n)) ? Math.min(hi, Math.max(lo, Number(n))) : fallback;
 
-// Base speed plus every online compartment's bonus.
-export function speedBreakdown(ship) {
-  const base = Number.isFinite(Number(ship?.speed)) ? Number(ship.speed) : DEFAULT_SHIP_SPEED;
-  const compartments = Array.isArray(ship?.compartments) ? ship.compartments : [];
-  const bonus = shipEffects(compartments).speedBonus;
-  return { base, bonus, effective: Math.max(1, base + bonus) };
+// The ship's drive: its class baseline, the row's own ratings (the DM can edit
+// them), plus every online compartment's acceleration bonus. `drive` is in the
+// shape travelPhysics.computeFlight takes.
+export function driveBreakdown(ship) {
+  const cls = shipClassFor(ship?.shipClass);
+  const baseG = clampNum(ship?.accelG, MIN_ACCEL_G, MAX_ACCEL_G, cls.accelG);
+  const maxSpeedC = clampNum(ship?.maxSpeedC, 0.01, ABSOLUTE_MAX_SPEED_C, cls.maxSpeedC);
+  const fx = shipEffects(ship?.compartments);
+  const accelG = Math.round(clampNum(baseG + fx.accelBonusG, MIN_ACCEL_G, MAX_ACCEL_G, MIN_ACCEL_G) * 1000) / 1000;
+  return {
+    shipClass: cls.id,
+    className: cls.name,
+    baseG,
+    bonusG: fx.accelBonusG,
+    accelG,
+    maxSpeedC,
+    flipCutPct: fx.flipCutPct,
+    drive: { properAccelerationG: accelG, maxSpeedFractionC: maxSpeedC },
+  };
 }
 
 // A proposal passes with a strict majority of the party's players saying yes,

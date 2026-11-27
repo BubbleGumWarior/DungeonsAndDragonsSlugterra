@@ -7,11 +7,11 @@ import {
   createVoiceAudioGraph,
   loadInputDeviceId,
   loadOutputDeviceId,
-  micConstraints,
   saveInputDeviceId,
   saveOutputDeviceId,
   supportsOutputSelection,
 } from "./voiceAudio.js";
+import { openMic } from "./micPipeline.js";
 import {
   VIDEO_MAX_FRAMERATE,
   openCameraStream,
@@ -188,8 +188,13 @@ export default function VoiceChatProvider({ children }) {
 
   const selfId = user?.id;
   const voiceInputMode = user?.voiceInputMode || "live";
+  // RNNoise on the outgoing mic (micPipeline.js), toggled in Settings.
+  const noiseCancel = Boolean(user?.voiceNoiseCancel);
 
-  const localStreamRef = useRef(null);
+  const localStreamRef = useRef(null); // the stream peers receive: the mic, or RNNoise's output
+  const micRef = useRef(null); // openMic() result that owns localStreamRef's stream
+  const micSwapSeqRef = useRef(0); // newest mic (re)open wins if two overlap
+  const noiseCancelRef = useRef(noiseCancel);
   const peersRef = useRef(new Map()); // peerId -> RTCPeerConnection
   const remoteStreamsRef = useRef(new Map()); // peerId -> MediaStream
   const audioElsRef = useRef(new Map()); // peerId -> <audio> element
@@ -863,17 +868,15 @@ export default function VoiceChatProvider({ children }) {
       // (it always resolves, falling back to [STUN_SERVER] after retries
       // fail), so this only ever fails on the getUserMedia half, and a
       // slow TURN fetch never adds latency to getting the mic.
-      const [stream, iceServers] = await Promise.all([
-        navigator.mediaDevices.getUserMedia(micConstraints(inputDeviceIdRef.current)),
+      const [mic, iceServers] = await Promise.all([
+        openMic(inputDeviceIdRef.current, { noiseCancel: noiseCancelRef.current }),
         fetchIceServers(token),
       ]);
       iceServersRef.current = iceServers;
-      // Tells the encoder this is speech (favors intelligibility over fidelity).
-      stream.getAudioTracks().forEach((track) => {
-        track.contentHint = "speech";
-      });
-      localStreamRef.current = stream;
-      ensureSampler("self", stream);
+      micSwapSeqRef.current += 1;
+      micRef.current = mic;
+      localStreamRef.current = mic.stream;
+      ensureSampler("self", mic.stream);
       applyLocalTrackState();
       sendMessage({ type: "voice-join" });
       setInCall(true);
@@ -902,11 +905,11 @@ export default function VoiceChatProvider({ children }) {
       samplersRef.current.delete("self");
     }
 
-    const stream = localStreamRef.current;
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      localStreamRef.current = null;
-    }
+    // Also drops any mic swap still opening (it checks the sequence number).
+    micSwapSeqRef.current += 1;
+    micRef.current?.dispose();
+    micRef.current = null;
+    localStreamRef.current = null;
     // Camera light goes off with the call.
     localVideoTrackRef.current?.stop();
     localVideoTrackRef.current = null;
@@ -961,8 +964,34 @@ export default function VoiceChatProvider({ children }) {
     [token]
   );
 
-  // Swapping microphones mid-call: grab the new mic, hand its track to every
-  // peer's existing sender (no renegotiation needed), then retire the old one.
+  // Rebuilding the outgoing mic mid-call (new device, or noise cancellation
+  // switched): open the new one, hand its track to every peer's existing
+  // sender (no renegotiation needed), then retire the old one. If a newer
+  // swap started meanwhile, or the call ended, this one quietly bows out.
+  async function swapMic(deviceId) {
+    const seq = ++micSwapSeqRef.current;
+    const mic = await openMic(deviceId, { noiseCancel: noiseCancelRef.current });
+    if (seq !== micSwapSeqRef.current || !inCallRef.current) {
+      mic.dispose();
+      return;
+    }
+    const [track] = mic.stream.getAudioTracks();
+    // Carry the current mute / push-to-talk state over before it goes live.
+    const previous = localStreamRef.current?.getAudioTracks()[0];
+    if (previous) track.enabled = previous.enabled;
+    for (const pc of peersRef.current.values()) {
+      // Found by the receiver's kind, which is fixed per m-line, so the video
+      // slot (whose sender track may be null) is never picked by mistake.
+      const sender = pc.getTransceivers().find((t) => t.receiver.track?.kind === "audio")?.sender;
+      if (sender) await sender.replaceTrack(track);
+    }
+    micRef.current?.dispose();
+    micRef.current = mic;
+    localStreamRef.current = mic.stream;
+    ensureSampler("self", mic.stream);
+    applyLocalTrackState();
+  }
+
   // Outside a call it just remembers the choice for the next join.
   const setInputDevice = useCallback(
     async (deviceId) => {
@@ -970,26 +999,29 @@ export default function VoiceChatProvider({ children }) {
       inputDeviceIdRef.current = deviceId;
       setInputDeviceIdState(deviceId);
       if (!inCallRef.current) return;
-
       try {
-        const stream = await navigator.mediaDevices.getUserMedia(micConstraints(deviceId));
-        const [track] = stream.getAudioTracks();
-        track.contentHint = "speech";
-        for (const pc of peersRef.current.values()) {
-          const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
-          if (sender) await sender.replaceTrack(track);
-        }
-        localStreamRef.current?.getTracks().forEach((t) => t.stop());
-        localStreamRef.current = stream;
-        ensureSampler("self", stream);
-        applyLocalTrackState();
+        await swapMic(deviceId);
       } catch (err) {
         console.error("Could not switch microphone:", err);
         setError("Couldn't switch to that microphone.");
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [applyLocalTrackState]
   );
+
+  // Noise cancellation flipped in Settings (on this or another device's
+  // session): rebuild the live mic with or without RNNoise. Skipped when the
+  // running mic already matches, which also covers the join itself.
+  useEffect(() => {
+    noiseCancelRef.current = noiseCancel;
+    if (!inCallRef.current || !micRef.current || micRef.current.requested === noiseCancel) return;
+    swapMic(inputDeviceIdRef.current).catch((err) => {
+      console.error("Could not apply noise cancellation:", err);
+      setError("Couldn't restart your microphone with the new noise setting.");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noiseCancel]);
 
   const setOutputDevice = useCallback((deviceId) => {
     saveOutputDeviceId(deviceId);
@@ -1137,6 +1169,7 @@ export default function VoiceChatProvider({ children }) {
       if (document.visibilityState !== "visible") return;
       if (!sentinel) acquire();
       audioGraphRef.current?.resume();
+      micRef.current?.resume();
     }
 
     acquire();

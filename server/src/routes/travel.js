@@ -3,9 +3,13 @@ import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireDmEdit, canEditAsDm, isPlayerRole } from "../roles.js";
 import { isValidArea, navCanReach } from "../shipRules.js";
+import { SYSTEMS } from "../universe.js";
 import {
   buildTravelView,
   clearProposal,
+  currentPlan,
+  routeBlockedReason,
+  setGate,
   getActiveShip,
   navReach,
   notifyTravelUpdated,
@@ -62,6 +66,8 @@ router.post("/propose", async (req, res) => {
         error: "That world is beyond the Nav Computer's range. Upgrade it to chart farther.",
       });
     }
+    const blocked = routeBlockedReason(await currentPlan(area));
+    if (blocked) return res.status(409).json({ error: blocked });
 
     await pool.query("UPDATE travel_state SET proposal_area = $1, proposer_id = $2 WHERE id = 1", [area, req.user.sub]);
     await pool.query("DELETE FROM travel_votes");
@@ -106,6 +112,9 @@ router.post("/vote", async (req, res) => {
     if (outcome === "blocked") {
       return res.status(409).json({ error: "The ship's Nav Computer went offline, so the course was scrapped." });
     }
+    if (outcome === "gate-closed") {
+      return res.status(409).json({ error: "A gate on the course closed (or pulled the ship's clearance), so the course was scrapped." });
+    }
     res.json({ outcome });
   } catch (err) {
     console.error(err);
@@ -141,9 +150,12 @@ router.post("/depart", requireDmEdit, async (req, res) => {
     if (!isValidArea(area)) return res.status(400).json({ error: "Pick a charted world to fly to." });
     if (area === (await partyArea())) return res.status(400).json({ error: "The party is already there." });
     if (!(await getActiveShip())) return res.status(409).json({ error: "The party has no ship to travel in." });
-    const days = await startTravel(area);
+    // Gates are never bypassed: open the gate (or clear the ship) first.
+    const blocked = routeBlockedReason(await currentPlan(area));
+    if (blocked) return res.status(409).json({ error: blocked });
+    const route = await startTravel(area);
     notifyTravelUpdated();
-    res.json({ days });
+    res.json({ days: route.days });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not launch the journey." });
@@ -164,6 +176,24 @@ router.post("/visited", requireDmEdit, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not update the chart." });
+  }
+});
+
+// The DM opens or shuts a system's gate pair, or grants / pulls the party's
+// clearance to jump through it. { system: "threxa", operational?, authorized? }
+router.post("/gates", requireDmEdit, async (req, res) => {
+  const key = String(req.body?.system ?? "");
+  if (!SYSTEMS.some((s) => s.key === key)) return res.status(400).json({ error: "No such gate." });
+  const { operational, authorized } = req.body ?? {};
+  if (typeof operational !== "boolean" && typeof authorized !== "boolean") {
+    return res.status(400).json({ error: "Set operational or authorized." });
+  }
+  try {
+    await setGate(key, { operational, authorized });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not update the gate." });
   }
 });
 

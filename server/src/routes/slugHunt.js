@@ -11,6 +11,7 @@ import { huntAttemptsFor, huntFindsOnlyFloppers, arcanaOddsFactor, FLOPPER_NAME 
 import { recordSlugpediaEntry } from "../slugpediaStore.js";
 import { grantSlugFromTemplate } from "../slugGrant.js";
 import { isTraveling } from "../travelService.js";
+import { worldHasWildlife } from "../planetRules.js";
 import { toClientTemplate } from "./slugTemplates.js";
 
 const router = Router();
@@ -200,6 +201,16 @@ router.post("/attempt", async (req, res) => {
       return res.status(409).json({ error: "The ship is in transit -- you can hunt once it lands." });
     }
 
+    const { rows: settingRows } = await pool.query(
+      "SELECT slug_hunt_area FROM campaign_settings WHERE id = 1"
+    );
+    const area = settingRows[0]?.slug_hunt_area ?? 0;
+
+    // Some worlds (The Threshold) are dead hulls in vacuum -- no slugs live there.
+    if (!worldHasWildlife(area)) {
+      return res.status(409).json({ error: `No slugs live on ${areaName(area)} -- there's nothing to hunt here.` });
+    }
+
     const before = await huntStatusFor(req.user.sub, character);
     if (before.found) {
       return res.status(409).json({ error: "You've already found a slug today -- wait for the party to rest." });
@@ -207,11 +218,6 @@ router.post("/attempt", async (req, res) => {
     if (before.attemptsLeft < 1) {
       return res.status(409).json({ error: "You're out of hunts this rest -- wait for the party to rest." });
     }
-
-    const { rows: settingRows } = await pool.query(
-      "SELECT slug_hunt_area FROM campaign_settings WHERE id = 1"
-    );
-    const area = settingRows[0]?.slug_hunt_area ?? 0;
 
     const modifier = characterSkillMod(character, "creatureHandling");
     const arcanaMod = characterSkillMod(character, "arcana");

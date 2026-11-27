@@ -30,8 +30,8 @@ the star console** toolbar button that works with no Nav Computer at all.
 server refuses `POST /api/travel/propose` (and scraps a vote that passes after
 it went offline), `GET /api/travel` reports `navReady: false`, and the dossier's
 button reads "The Nav Computer is offline". The DM's **Launch now** and
-teleport still work. The Nav Computer keeps its +1 speed bonus at every tier, and
-**its tier sets how far it charts** (see "Nav range" below).
+teleport still work. The Nav Computer adds no thrust; **its tier sets how far it
+charts** (see "Nav range" below).
 
 `NavConsole.jsx` / `NavConsole.css` is a full-screen, first-person view from the
 bridge. The room is the DM's own artwork, `client/public/ship/nav-bridge.webp`
@@ -102,8 +102,9 @@ Space (The Threshold), all orbiting a shared gravitational anchor on the long
   function of the campaign day (`planetPos`): it sits at `phaseDeg` on day 1 and
   goes once round every `yearDays` days. After a long rest the map catches up
   from the old day to the new one over a couple of seconds (`clock`), so you
-  watch each world sweep exactly one day's worth along its orbit. The stars and
-  The Threshold (no year; it wanders on a ~120 day cycle) follow the same clock.
+  watch each world sweep exactly one day's worth along its orbit. The stars
+  follow the same clock. The Threshold (no year) stays put with its three gates;
+  only its junk tumbles.
   `prefers-reduced-motion` skips both tweens.
 - Illustrations: clicking a world (or a cluster's star) shows `client/public/planets/<name>.jpg`
   at the top of the detail panel, and clicking that image opens it full screen
@@ -115,19 +116,71 @@ Space (The Threshold), all orbiting a shared gravitational anchor on the long
   to `POST /api/settings/slug-hunt-area`, which also cancels any voyage or open
   vote. Normal movement goes through the travel system below.
 - `TravelPanel.jsx` (fed by `useTravel.js`) is the console's left-hand readout:
-  day, ship speed, and the current state (docked / vote open / under way). The
+  day, the ship's drive, and the current state (docked / vote open / under way, with the leg the ship is on). The
   world being voted on or flown to gets a dashed ring.
 
 ## Travel & voting
 
 Players choose where the ship goes; a long rest is one day of the voyage.
 
-- **Distance** is in units, and a ship's speed is units per day. `worldDistance`
-  in `server/src/shipRules.js`: same system `3 + 2 × orbit-slot gap`; between
-  systems the system gap (Threxa–Verrin 20, Verrin–Kaeth 24, Threxa–Kaeth 32)
-  plus `2 × (slotA + slotB)`; The Threshold `12 + 2 × slot` from anywhere.
-  Days = `ceil(distance / effective speed)`, minimum 1. The world sizes there
-  mirror `planetData.js`, so keep them in step if worlds are added.
+### The physics (Veylan Drive, gates)
+
+Travel follows `space_travel_implementation_spec_v1_1_veylan_drive.md`, adapted to
+**three** systems. Five files, all pure (no DB):
+
+- `server/src/travelPhysics.js` -- SI constants and `computeFlight(distanceMeters,
+  { properAccelerationG, maxSpeedFractionC })`: the exact constant-proper-acceleration
+  solution (accelerate, flip at the midpoint, brake; coast at the speed cap if the trip
+  is long enough). Returns galactic-frame time *and* time aboard. Never shortcut it
+  with `distance / speed`.
+- `server/src/universe.js` -- the geography. Three systems, each with one **fixed**
+  gate (`gateRadiusAU`, `gateAngleDeg`); worlds' orbital radii come from their
+  `yearDays` and the star's mass by Kepler's law (`starMassSolar`), and their place on
+  the orbit from the campaign day, so **planets move and trips change length with the
+  day; gates never move**. **The Threshold** is the Neutral Transit Zone: open space
+  full of wrecks and junk, with each system's twin gate on its outskirts (an
+  equilateral triangle, 4,000,000 km sides, debris at the middle). `INTERSTELLAR_LY`
+  (Threxa-Verrin 4, Verrin-Kaeth 5, Threxa-Kaeth 6) is only for the no-gates figure.
+  Every number is a proposed, editable value; `WORLDS` mirrors `planetData.js` names,
+  `yearDays` and `phaseDeg` (a test checks it).
+- `server/src/routePlanner.js` -- `planRoute` builds the legs. Inside a system:
+  station to station. To/from The Threshold: one jump. System to system: world -> its
+  gate -> jump -> across The Threshold -> jump -> world (always through The
+  Threshold). `TRAVEL_OVERHEADS` are visible extra legs: 2 h of flip, alignment and
+  docking per flight (a Thruster Array cuts it), and gate queue / jump / inspection
+  time, all 0 for now. Each leg uses planet positions at the moment it starts. A route
+  reports `physicallyReachable`, `gateOperational`, `authorizedForTransit` and
+  `launchable`. `directInterstellar` is the no-gates flight (years): information only,
+  never launched. Route types: `INTRA_SYSTEM`, `GATE_NETWORK`, `DIRECT_INTERSTELLAR`.
+- `server/src/shipRules.js` -- `SHIP_CLASSES` (heavy freighter 0.05 g / 0.75c,
+  civilian 0.10 g / 0.75c, courier 0.25 g / 0.85c, warship 0.50 g / 0.90c,
+  experimental/elite 1.00 g / 0.95c) and `driveBreakdown(ship)`. **The Traveler is
+  experimental/elite.** 0.95c is the hard ceiling.
+- `server/test/travel.test.js` -- `cd server && npm test` (Node's built-in runner):
+  the spec's reference journeys and tables, validation, property tests over random
+  flights, gates, routes, the Nav range and gravity aboard.
+
+Ships dock at each world's orbiting station: there is no launch or landing. Days =
+`ceil(galactic seconds / 1 day)`, minimum 1. Typical results: a civilian transport
+needs ~3-14 days inside a system (about 9 on average) and ~22 days system to system;
+The Traveler at 1 g, 1-5 days inside a system and 5-9 days between systems.
+
+**No artificial gravity.** Under way the drive is always burning (accelerate, flip,
+brake), so a fight aboard feels the ship's own acceleration (1 g on The Traveler, 0.1 g
+on a civilian ship). Docked at a world's station, aboard means that world's gravity (the
+user's call); docked in The Threshold, zero. `aboardGravityG()` in `travelService.js`,
+read by `currentAtmosphere` in `outfitService.js`.
+
+**Gates.** `campaign_settings.gate_status` (`{ threxa: { operational, authorized } }`,
+missing = open). The DM flips them from a system's dossier (click its star) via `POST
+/api/travel/gates`. A route through a shut gate, or one the ship isn't cleared for, is
+still drawn and timed but can't be proposed or launched (the DM's launch too). An open
+vote is scrapped if a gate on its course closes. Gates are drawn on the map: one just
+beyond each system's outer orbit, three on The Threshold's outskirts (red and dashed
+when shut).
+
+### Voting and the voyage
+
 - **Vote** (`routes/travel.js`): any player proposes a charted world (one open
   proposal at a time, needs an active ship); the proposer's yes counts at once.
   Voters are everyone with a character who isn't the DM. A strict majority of
@@ -149,7 +202,9 @@ Players choose where the ship goes; a long rest is one day of the voyage.
   `medbay` is in both the `long-rest` summary and `GET /long-rest/preview`.
 - While under way, Slug Hunt attempts are refused (`routes/slugHunt.js`). Markets
   are not gated.
-- State: `travel_state` (single row), `travel_votes`, `campaign_settings.campaign_day`.
+- State: `travel_state` (single row; `route` holds the planned legs, and `GET
+  /api/travel` reports `voyage.currentLeg` from the days elapsed), `travel_votes`,
+  `campaign_settings.campaign_day`.
   `GET /api/travel` returns everything the UI needs, tailored to the caller, and
   every change sends one bare `travel-updated` WebSocket nudge to refetch.
 
@@ -196,14 +251,15 @@ parked on whichever ship they were inspecting.
 
 ### Stats and compartment building
 
-- **Ship stats:** `ships.speed` (base units per day, DM-edited) and
-  `ships.compartment_slots` (cap on pins; only *adding* a pin past it is
-  refused). Effective speed = base + the speed of every **online**
-  compartment (`speedBreakdown` in `shipRules.js`). A stats strip at the top of
-  the page shows speed, compartments online / placed / slots, the voyage and the
-  ship's stores.
+- **Ship stats:** `ships.ship_class`, `ships.accel_g` (sustained proper
+  acceleration) and `ships.max_speed_c` (speed cap), DM-edited (picking a class resets
+  the two ratings to its baseline), and `ships.compartment_slots` (cap on pins; only
+  *adding* a pin past it is refused). The old `ships.speed` column is no longer read.
+  Effective acceleration = base + every **online** compartment's `accelBonusG`
+  (`driveBreakdown` in `shipRules.js`). A stats strip at the top of the page shows the
+  Veylan Drive, compartments online / placed / slots, the voyage and the ship's stores.
 - **Compartment fields** (inside the `compartments` JSON): `templateKey`, `tier`
-  (1-3), `upgradingTo`, `speedBonus`, `buildDays`, `progressDays`, `engineers`
+  (1-3), `upgradingTo`, `accelBonusG`, `buildDays`, `progressDays`, `engineers`
   (user ids). The server carries `progressDays`, `engineers` and `upgradingTo`
   over from what is stored: the client PATCHes the whole array on every drag, so
   it can't be allowed to overwrite progress that moves on its own or to invent an
@@ -212,7 +268,7 @@ parked on whichever ship they were inspecting.
   set `tier` by hand, clamped to what the blueprint offers.
 - **Custom templates:** the DM's own, in `compartment_templates`
   (`GET/POST /api/ships/templates`, `DELETE /api/ships/templates/:id`, DM only).
-  They have one tier and no coded effect beyond a speed bonus. A pin copies a
+  They have one tier and no coded effect beyond an acceleration bonus (g). A pin copies a
   template's fields when applied, so deleting one never changes a ship.
 - **Build progress per long rest** (`buildProgressPerRest`): docked, a building
   (or upgrading) compartment gains 1 day. Under way it gains 1 day per
@@ -265,13 +321,13 @@ Engineering. The rules are in `server/src/shipRules.js` (blueprints, `shipEffect
 ### What each compartment gives
 
 Read from one place, `shipEffects(compartments)` (online compartments only; duplicates
-of a kind don't stack, speed does). Numbers are placeholders to tune in `shipRules.js`.
+of a kind don't stack, drive acceleration does). Numbers are placeholders to tune in `shipRules.js`.
 
 | Compartment | Tier I / II / III | Hooks into |
 | --- | --- | --- |
-| Engine Room | speed +2 / +3 / +4 | `speedBreakdown` |
-| Thruster Array | speed +3 / +4 / +6 | `speedBreakdown` |
-| Nav Computer | speed +1; charts close / medium / all worlds | travel gate, `navCanReach` |
+| Engine Room (the Veylan main drive) | acceleration +0.05 / +0.10 / +0.15 g | `driveBreakdown` |
+| Thruster Array (RCS) | flip, alignment and docking time -25% / -50% / -75%; no thrust | `planRoute` overheads |
+| Nav Computer | charts own system + The Threshold / every world / every world + no-gates figures | `navCanReach` |
 | Medbay | full long-rest heal + knockout pips / also cures illness overnight / Medpacks heal 75% | `characters.js` long rest, `consumables.js` |
 | Galley | 2 / 4 / 6 free kibble per long rest, dealt round-robin to the party | long rest |
 | Slug Terrarium | food drain -5 / -10 / -15; III keeps one starving slug a rest from losing loyalty | long rest |
@@ -287,14 +343,15 @@ caches them for 3 seconds and `notifyShipUpdated()` clears the cache.
 
 ### Nav range
 
-A Nav Computer charts worlds by distance: **Tier I up to 13 units** (any hop inside one
-system, and The Threshold's nearest worlds), **Tier II up to 30** (The Threshold and
-the nearer systems), **Tier III every world** (`CLOSE_RANGE_MAX` / `MEDIUM_RANGE_MAX`
-in `shipRules.js`, mirrored in the client's `NAV_RANGE_LABELS`). `POST /api/travel/propose`
-refuses a world out of range, `GET /api/travel` marks each route `reachable`, and the
-dossier's button reads "Beyond the Nav Computer's range". The DM's **Launch now** and
-teleport ignore it. Existing Nav Computers count as Tier I until the DM sets or
-upgrades them.
+A Nav Computer charts routes by the gates they use (`routeRange` in `shipRules.js`,
+mirrored in the client's `NAV_RANGE_LABELS`): **Tier I** the ship's own system plus
+the one-jump run to or from The Threshold (so it can always get out of the debris
+field), **Tier II** the other systems too (two jumps through The Threshold), **Tier
+III** the same worlds plus the no-gates figures in the dossier. `POST
+/api/travel/propose` refuses a route out of range, `GET /api/travel` marks each route
+`reachable`, and the dossier's button reads "Beyond the Nav Computer's range". The DM's
+**Launch now** and teleport ignore range (never a shut gate). Existing Nav Computers
+count as Tier I until the DM sets or upgrades them.
 
 ## Survey data, and ??? for worlds nobody has visited
 
@@ -324,7 +381,7 @@ The party only knows what it has visited:
 
 A brand-new database is seeded with **The Traveler**, the ship the DM built:
 `server/src/seedDefaultShip.js` reads `server/src/seed/default-ship.json` (name,
-speed 5, 12 slots, all 12 compartments with their positions, statuses and
+class experimental/elite at 1 g and 0.95c, 12 slots, all 12 compartments with their positions, statuses and
 build numbers) and `default-ship.jpg` (the deck plan), inserts it and makes it
 the active ship. It runs once: `campaign_settings.default_ship_seeded` is set
 even when nothing was inserted, so an existing campaign, or a DM who deletes

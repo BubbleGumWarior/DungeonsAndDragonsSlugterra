@@ -130,6 +130,145 @@ router.get("/me", async (req, res) => {
   }
 });
 
+// Feed Ally Slugs: the other players and how hungry their slugs are, so a
+// player can look after an absent friend's slugs. Only what feeding needs --
+// names, art and food -- never anyone's loadout.
+router.get("/allies", async (req, res) => {
+  if (!isPlayerRole(req.user)) return res.status(403).json({ error: "Only players feed slugs." });
+  try {
+    const { rows: allies } = await pool.query(
+      `SELECT c.user_id, c.name FROM characters c JOIN users u ON u.id = c.user_id
+       WHERE u.role = 'Player' AND c.user_id <> $1 ORDER BY c.name ASC`,
+      [req.user.sub]
+    );
+    const { rows: slugRows } = await pool.query(
+      `SELECT id, user_id, name, type, protoform_image, food FROM slugs
+       WHERE user_id = ANY($1::int[]) ORDER BY created_at ASC`,
+      [allies.map((a) => a.user_id)]
+    );
+    res.json({
+      allies: allies.map((a) => ({
+        userId: a.user_id,
+        name: a.name,
+        slugs: slugRows
+          .filter((s) => s.user_id === a.user_id)
+          .map((s) => ({ id: s.id, name: s.name, type: s.type, protoformImage: s.protoform_image, food: s.food ?? FOOD_MAX })),
+      })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not load your allies' slugs." });
+  }
+});
+
+// Feed Ally Slugs: a player spends up to `count` scoops of their own kibble on
+// another player's slugs. Each scoop goes to whichever of that player's slugs
+// is hungriest right now (lowest food; oldest first on a tie) and restores
+// kibbleFoodFor(the feeder's Slug Handling). Never spends more than it takes
+// to fill every one of them.
+router.post("/feed-ally", async (req, res) => {
+  if (!isPlayerRole(req.user)) return res.status(403).json({ error: "Only players feed slugs." });
+  const targetId = req.body?.userId;
+  const asked = Number(req.body?.count);
+  if (!Number.isInteger(targetId)) return res.status(400).json({ error: "Choose whose slugs to feed." });
+  if (targetId === req.user.sub) return res.status(400).json({ error: "Feed your own slugs from Slug Care." });
+  if (!Number.isInteger(asked) || asked < 1 || asked > 200) {
+    return res.status(400).json({ error: "Feed between 1 and 200 scoops at a time." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows: feeders } = await client.query(
+      "SELECT name, kibble, stats, proficiencies, expertise FROM characters WHERE user_id = $1 FOR UPDATE",
+      [req.user.sub]
+    );
+    const feeder = feeders[0];
+    const { rows: targets } = await client.query(
+      `SELECT c.name FROM characters c JOIN users u ON u.id = c.user_id WHERE c.user_id = $1 AND u.role = 'Player'`,
+      [targetId]
+    );
+    if (!feeder || !targets[0]) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "That player wasn't found." });
+    }
+    const { rows: slugRows } = await client.query(
+      "SELECT * FROM slugs WHERE user_id = $1 ORDER BY created_at ASC FOR UPDATE",
+      [targetId]
+    );
+
+    const perScoop = kibbleFoodFor(characterSkillMod(feeder, "creatureHandling"));
+    const meals = slugRows.map((s) => ({ row: s, food: s.food ?? FOOD_MAX, scoops: 0 }));
+    const needed = meals.reduce((sum, m) => sum + Math.max(0, Math.ceil((FOOD_MAX - m.food) / perScoop)), 0);
+    if (needed <= 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: `${targets[0].name}'s slugs aren't hungry.` });
+    }
+    const spend = Math.min(asked, needed, feeder.kibble ?? 0);
+    if (spend < 1) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "You're out of Slug Kibble -- buy more at the Market." });
+    }
+
+    // One scoop at a time to the hungriest. `spend` never exceeds `needed`, so
+    // there is always a slug with room left.
+    for (let i = 0; i < spend; i++) {
+      let pick = null;
+      for (const m of meals) {
+        if (m.food < FOOD_MAX && (!pick || m.food < pick.food)) pick = m;
+      }
+      if (!pick) break;
+      pick.food = Math.min(FOOD_MAX, pick.food + perScoop);
+      pick.scoops += 1;
+    }
+
+    const fed = [];
+    for (const m of meals.filter((x) => x.scoops > 0)) {
+      const { rows } = await client.query("UPDATE slugs SET food = $1 WHERE id = $2 RETURNING *", [m.food, m.row.id]);
+      fed.push({ slug: toClientSlug(rows[0]), scoops: m.scoops, from: m.row.food ?? FOOD_MAX });
+    }
+    const { rows: left } = await client.query(
+      "UPDATE characters SET kibble = kibble - $1 WHERE user_id = $2 RETURNING kibble",
+      [spend, req.user.sub]
+    );
+    const { rows: chat } = await client.query(
+      `INSERT INTO messages (user_id, username, role, body)
+       VALUES (NULL, 'Slug Care', 'Player', $1)
+       RETURNING id, user_id, username, role, body, meta, created_at`,
+      [
+        `${feeder.name} fed ${targets[0].name}'s slugs ${spend} ${spend === 1 ? "scoop" : "scoops"} of Slug Kibble (` +
+          fed.map((f) => `${f.slug.name} ${f.from}% → ${f.slug.food}%`).join(", ") +
+          ").",
+      ]
+    );
+    await client.query("COMMIT");
+
+    for (const f of fed) broadcastAll({ type: "slug-updated", userId: targetId, slug: f.slug });
+    // Several slug-updated in a row can coalesce in the client's single-slot
+    // socket state, and the feeder's kibble changed too: one "stock moved
+    // between players" nudge (same as a trade) makes both sides refetch.
+    broadcastAll({ type: "trade-completed", userIds: [req.user.sub, targetId], at: Date.now() });
+    const m = chat[0];
+    broadcastAll({
+      type: "chat-message",
+      message: { id: m.id, userId: m.user_id, username: m.username, role: m.role, body: m.body, meta: m.meta, createdAt: m.created_at },
+    });
+
+    res.json({
+      spent: spend,
+      kibble: left[0].kibble,
+      perScoop,
+      fed: fed.map((f) => ({ slugId: f.slug.id, name: f.slug.name, scoops: f.scoops, from: f.from, to: f.slug.food })),
+    });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error(err);
+    res.status(500).json({ error: "Could not feed those slugs." });
+  } finally {
+    client.release();
+  }
+});
+
 router.get("/", requireDmView, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM slugs ORDER BY created_at ASC");
@@ -771,15 +910,25 @@ router.patch("/:id/unload", async (req, res) => {
   }
 });
 
-// DM override: set a slug's food meter outright.
+// DM override for a slug's food meter: `{ food }` sets it outright, `{ delta }`
+// nudges it up or down (clamped to 0..FOOD_MAX). The delta is applied in SQL,
+// so a burst of +/- clicks never loses a step to a stale read.
 router.patch("/:id/food", requireDmEdit, async (req, res) => {
   const id = Number(req.params.id);
-  const food = req.body?.food;
-  if (!Number.isInteger(food) || food < 0 || food > FOOD_MAX) {
-    return res.status(400).json({ error: `Food must be a whole number from 0 to ${FOOD_MAX}.` });
+  const { food, delta } = req.body ?? {};
+  const byDelta = delta !== undefined;
+  if (byDelta ? !Number.isInteger(delta) || Math.abs(delta) > FOOD_MAX : !Number.isInteger(food) || food < 0 || food > FOOD_MAX) {
+    return res.status(400).json({
+      error: byDelta ? `Change food by a whole number from -${FOOD_MAX} to ${FOOD_MAX}.` : `Food must be a whole number from 0 to ${FOOD_MAX}.`,
+    });
   }
   try {
-    const { rows } = await pool.query("UPDATE slugs SET food = $1 WHERE id = $2 RETURNING *", [food, id]);
+    const { rows } = byDelta
+      ? await pool.query(
+          "UPDATE slugs SET food = LEAST($3::int, GREATEST(0, COALESCE(food, $3::int) + $1::int)) WHERE id = $2 RETURNING *",
+          [delta, id, FOOD_MAX]
+        )
+      : await pool.query("UPDATE slugs SET food = $1 WHERE id = $2 RETURNING *", [food, id]);
     if (!rows[0]) return res.status(404).json({ error: "Slug not found." });
     const slug = toClientSlug(rows[0]);
     broadcastAll({ type: "slug-updated", userId: slug.userId, slug });

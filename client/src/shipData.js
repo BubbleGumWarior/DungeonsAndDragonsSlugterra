@@ -6,12 +6,18 @@ export const ROMAN = ["", "I", "II", "III"];
 const signed = (n) => (n >= 0 ? `+${n}` : `${n}`);
 
 // The routes a Nav Computer charts at each tier, from the server's `navRange`
-// (the distances mirror CLOSE_RANGE_MAX / MEDIUM_RANGE_MAX in shipRules.js).
+// (mirrors routeRange in server/src/shipRules.js: by the gates a route uses).
 export const NAV_RANGE_LABELS = {
   none: "No worlds",
-  close: "Worlds up to 13 units away",
-  medium: "Worlds up to 30 units away",
-  all: "Every world",
+  close: "Its own system, and one jump to or from The Threshold",
+  medium: "Every world, through the gates",
+  all: "Every world, plus the no-gates figures",
+};
+
+// The label mid-sentence: only its first letter lowered, so names keep their capitals.
+export const navRangeText = (range) => {
+  const label = NAV_RANGE_LABELS[range] ?? NAV_RANGE_LABELS.none;
+  return label.charAt(0).toLowerCase() + label.slice(1);
 };
 
 // "Mira rolled to build Medbay (Tier I)" + the roll and what came of it, for a

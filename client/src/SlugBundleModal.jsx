@@ -123,8 +123,9 @@ export default function SlugBundleModal() {
   }
 
   let prompt;
-  if (myTurn) prompt = "You've been called up. Choose one slug to take.";
-  else if (me?.claimedKey) prompt = `You took ${slugByKey.get(me.claimedKey)?.name ?? "a slug"}. It's in your Slugs tab now.`;
+  if (myTurn) prompt = "You've been called up. Choose one slug to take. It arrives hungry, so feed it soon.";
+  else if (me?.claimedKey)
+    prompt = `You took ${slugByKey.get(me.claimedKey)?.name ?? "a slug"}. It's in your Slugs tab now, hungry at 25% food.`;
   else if (done) prompt = remaining === 0 ? "Every slug has been claimed." : "Everyone has picked a slug.";
   else if (active.length > 0) prompt = `Waiting for ${active.map((p) => p.name).join(" and ")} to choose…`;
   else if (isDm) prompt = "Click a player to call them up. They choose one slug each.";

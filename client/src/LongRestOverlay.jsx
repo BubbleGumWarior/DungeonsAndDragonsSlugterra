@@ -238,6 +238,16 @@ export default function LongRestOverlay() {
             <span>{f.text}</span>
           </p>
         ))}
+        {shown.forageBlocked && (
+          <p className="rest-mood">
+            <PlantIcon weight="bold" />
+            <span>
+              {shown.forageBlocked === "transit"
+                ? "No foraging tonight: there's nothing to find in deep space."
+                : "No foraging tonight: nothing grows among the dead hulls."}
+            </span>
+          </p>
+        )}
 
         {shown.day?.day != null && <p className="rest-sub">Day {shown.day.day}</p>}
         {news.map((n) => (

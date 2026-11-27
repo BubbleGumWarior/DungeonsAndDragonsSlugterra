@@ -4,6 +4,7 @@ import { ArrowsOutIcon, EyeIcon, EyeSlashIcon, RocketLaunchIcon, XIcon } from "@
 import { useAuth } from "./AuthContext.jsx";
 import { useLiveState } from "./AccessSocket.jsx";
 import { CLUSTERS, UNCLAIMED, PLANETS, planetImageUrl, starImageUrl } from "./planetData.js";
+import { blockedText, formatDistance, formatDuration, formatSpeed, routeTypeLabel } from "./travelFormat.js";
 import "./GalaxyMap.css";
 
 const VIEW_W = 1000;
@@ -281,6 +282,116 @@ function Fact({ label, value }) {
   );
 }
 
+// A jump gate on the map: a ring with four struts. Dimmed and dashed while it
+// is shut down; a gate with no state (travel not loaded) draws as running.
+function GateGlyph({ x, y, size, gate, title }) {
+  const down = gate && !gate.operational;
+  const denied = gate && gate.operational && !gate.authorized;
+  return (
+    <g
+      className={`galaxy-gate ${down ? "galaxy-gate--down" : ""} ${denied ? "galaxy-gate--denied" : ""}`}
+      transform={`translate(${x} ${y})`}
+    >
+      <title>
+        {title}
+        {down ? " (shut down)" : denied ? " (clearance denied)" : ""}
+      </title>
+      <circle r={size} />
+      {[0, 90, 180, 270].map((deg) => (
+        <line key={deg} x1={0} y1={-size - size * 0.45} x2={0} y2={-size + size * 0.2} transform={`rotate(${deg})`} />
+      ))}
+    </g>
+  );
+}
+
+// How a course to this world would go: the route type, whole days (a long rest
+// is a day), every leg of flying, jumping and docking, and -- for a Tier III
+// Nav Computer or the DM -- what the trip would take with no gates at all.
+function RouteBreakdown({ route, reachable, showDirect }) {
+  const flying = route.legs.filter((l) => l.kind === "flight").reduce((s, l) => s + l.seconds, 0);
+  const aboard = route.shipProperSeconds;
+  const blocked = blockedText(route);
+  return (
+    <div className="holo-route">
+      <p className="holo-route-head">
+        <strong>{plural(route.days, "day")}</strong> · {routeTypeLabel(route)}
+      </p>
+      <p className="holo-route-sub">
+        {formatDistance(route.distanceMeters)} of flying, {formatDuration(flying)} under thrust. Peak{" "}
+        {formatSpeed(route.peakSpeedFractionC)}.
+        {Math.abs(route.coordinateSeconds - aboard) > 60 && ` ${formatDuration(aboard)} passes aboard.`}
+      </p>
+      <ol className="holo-legs">
+        {route.legs.map((leg, i) => (
+          <li key={i} className={`holo-leg holo-leg--${leg.kind}`}>
+            <span>{leg.label}</span>
+            <span className="holo-leg-time">{leg.kind === "jump" && leg.seconds === 0 ? "instant" : formatDuration(leg.seconds)}</span>
+          </li>
+        ))}
+      </ol>
+      {blocked && <p className="holo-route-warn">{blocked}</p>}
+      {!reachable && (
+        <p className="holo-route-warn">
+          Out of the Nav Computer's range: it needs Tier {route.range === "medium" ? "II" : "III"} to chart this.
+        </p>
+      )}
+      {showDirect && route.direct && (
+        <p className="holo-route-direct">
+          Without the gates: {formatDistance(route.direct.distanceMeters)} of open space,{" "}
+          {formatDuration(route.direct.coordinateSeconds)} ({formatDuration(route.direct.shipProperSeconds)} aboard, peak{" "}
+          {formatSpeed(route.direct.peakSpeedFractionC)}). Information only.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// A system's gate on its system dossier: whether it is running and whether the
+// ship is cleared to jump. The DM can flip either.
+function GatePanel({ gate, isDungeonMaster, travelBusy, travelAct }) {
+  return (
+    <div className="holo-gate">
+      <p className="holo-route-head">
+        <strong>{gate.name.replace(/^The /, "")} gate</strong>
+      </p>
+      <p className="holo-route-sub">
+        A fixed gate beyond the outer orbits. Its twin sits on The Threshold's outskirts, run by this system's own
+        control station.
+      </p>
+      <dl className="holo-facts">
+        <div className="holo-fact">
+          <dt>Gate</dt>
+          <dd>{gate.operational ? "Running" : "Shut down"}</dd>
+        </div>
+        <div className="holo-fact">
+          <dt>Clearance</dt>
+          <dd>{gate.authorized ? "The ship may jump" : "Denied"}</dd>
+        </div>
+      </dl>
+      {isDungeonMaster && (
+        <div className="holo-actions">
+          <button
+            type="button"
+            className="holo-btn"
+            disabled={travelBusy}
+            onClick={() => travelAct("gates", { system: gate.key, operational: !gate.operational })}
+          >
+            {gate.operational ? "Shut the gate down" : "Bring the gate online"}
+          </button>
+          <button
+            type="button"
+            className="holo-btn"
+            disabled={travelBusy}
+            onClick={() => travelAct("gates", { system: gate.key, authorized: !gate.authorized })}
+          >
+            {gate.authorized ? "Deny the ship clearance" : "Clear the ship to jump"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // The world's dossier: picture, name, survey facts and what the party can do
 // about it. Everything the party hasn't surveyed reads ???, but the name and
 // the distance stay, since you can still plot a course to a world you haven't seen.
@@ -311,8 +422,17 @@ function Dossier({
   const here = detail.flatIndex === partyFlatIndex;
   // The Nav Computer only charts so far; the DM's launch ignores it.
   const reachable = detail.route?.reachable !== false;
+  // A shut gate (or no clearance) on the course stops it; the DM opens it first.
+  const gateBlocked = detail.route ? detail.route.launchable === false : false;
   const canPropose =
-    Boolean(travel) && !travel.traveling && !travel.proposal && Boolean(travel.ship) && travel.navReady && !here && reachable;
+    Boolean(travel) &&
+    !travel.traveling &&
+    !travel.proposal &&
+    Boolean(travel.ship) &&
+    travel.navReady &&
+    !here &&
+    reachable &&
+    !gateBlocked;
 
   let proposeLabel = "Plot a course here";
   if (here) proposeLabel = "The party is here";
@@ -321,6 +441,7 @@ function Dossier({
   else if (!travel?.ship) proposeLabel = "No ship to travel in";
   else if (!travel.navReady) proposeLabel = "The Nav Computer is offline";
   else if (!reachable) proposeLabel = "Beyond the Nav Computer's range";
+  else if (gateBlocked) proposeLabel = "A gate on the course is closed";
 
   return (
     <aside className="holo-dossier" aria-label={`${detail.name} survey`}>
@@ -380,12 +501,15 @@ function Dossier({
       )}
 
       {detail.type === "planet" && !here && detail.route && (
-        <p className="holo-route">
-          {detail.route.distance} units away. <strong>{plural(detail.route.days, "day")}</strong> at speed{" "}
-          {travel.ship?.effective ?? "?"}.
-          {!reachable &&
-            ` Out of the Nav Computer's range: it needs ${detail.route.range === "medium" ? "Tier II" : "Tier III"} to chart this.`}
-        </p>
+        <RouteBreakdown
+          route={detail.route}
+          reachable={reachable}
+          showDirect={isDungeonMaster || assistant || travel?.navRange === "all"}
+        />
+      )}
+
+      {detail.type === "cluster" && detail.gate && (
+        <GatePanel gate={detail.gate} isDungeonMaster={isDungeonMaster} travelBusy={travelBusy} travelAct={travelAct} />
       )}
 
       {detail.type === "planet" && (
@@ -408,7 +532,7 @@ function Dossier({
               <button
                 type="button"
                 className="holo-btn"
-                disabled={travelBusy || !travel || travel.traveling || !travel.ship || here}
+                disabled={travelBusy || !travel || travel.traveling || !travel.ship || here || gateBlocked}
                 onClick={() => travelAct("depart", { area: detail.flatIndex })}
               >
                 Launch there now, no vote
@@ -576,14 +700,19 @@ export default function GalaxyMap({
   }
 
   const threshold = UNCLAIMED.worlds[0];
-  // The Threshold has no year; it wanders slowly between the clusters.
-  // It sits above the front cluster's outer orbits; when the clusters are drawn
-  // larger and lifted (`look`), it rides higher so it stays clear of their rings.
-  const thresholdBaseY = 150 - (RING_CY - (look.ringCy ?? RING_CY)) * 0.8;
-  const thresholdPos = {
-    x: RING_CX + 30 * Math.sin((clock * Math.PI * 2) / 120),
-    y: thresholdBaseY + 14 * Math.cos((clock * Math.PI * 2) / 170),
-  };
+  // The Threshold sits still: its three gates ring its outskirts and gates never
+  // move (only the junk inside it tumbles). It sits above the front cluster's
+  // outer orbits; when the clusters are drawn larger and lifted (`look`), it
+  // rides higher so it stays clear of their rings.
+  const thresholdPos = { x: RING_CX, y: 150 - (RING_CY - (look.ringCy ?? RING_CY)) * 0.8 };
+  // Where each system's twin gate sits on the Threshold's outskirts (same
+  // triangle as NTZ_GATES in server/src/universe.js, y flipped for the screen).
+  const ntzGateR = threshold.sizeR + 24;
+  const ntzGates = CLUSTERS.map((c, i) => {
+    const a = Math.PI / 2 + (i * 2 * Math.PI) / CLUSTERS.length;
+    return { key: c.key, name: c.name, x: ntzGateR * Math.cos(a), y: -ntzGateR * Math.sin(a) };
+  });
+  const gateByKey = new Map((travel?.gates ?? []).map((g) => [g.key, g]));
   const thresholdFlatIndex = PLANETS.length - 1;
   const thresholdIsParty = party.clusterIndex === -1;
 
@@ -638,6 +767,7 @@ export default function GalaxyMap({
       where: c.subtitle ? `Orbiting ${c.subtitle}` : "Star system",
       body: c.blurb,
       image: starImageUrl(c.key),
+      gate: travel?.gates?.find((g) => g.key === c.key) ?? null,
     };
   }
 
@@ -727,7 +857,7 @@ export default function GalaxyMap({
           <circle key={`star-${i}`} cx={s.x} cy={s.y} r={s.r} fill={s.c} opacity={s.o} />
         ))}
 
-        {/* The Threshold -- unclaimed, drifts on its own, no cluster to belong to */}
+        {/* The Threshold -- unclaimed, fixed in place with the three gates on its outskirts */}
         <g
           className={`galaxy-threshold ${thresholdIsParty ? "galaxy-planet--party" : ""} ${
             targetFlatIndex === thresholdFlatIndex ? "galaxy-planet--target" : ""
@@ -750,6 +880,9 @@ export default function GalaxyMap({
             <circle className="galaxy-planet-ring" r={threshold.sizeR + 8} />
           )}
           <circle className="galaxy-planet-hit" r={Math.max(threshold.sizeR + 10, 18)} />
+          {ntzGates.map((g) => (
+            <GateGlyph key={g.key} x={g.x} y={g.y} size={5} gate={gateByKey.get(g.key)} title={`${g.name.replace(/^The /, "")} gate (Threshold side)`} />
+          ))}
           <g className="galaxy-threshold-debris" transform={`rotate(${(clock * 3) % 360})`}>
             {debris.map((d, i) => (
               <rect
@@ -895,8 +1028,31 @@ export default function GalaxyMap({
                   );
                 };
 
+                // The system's gate: fixed just beyond the outermost orbit at
+                // the angle the server gives (universe.js gateAngleDeg).
+                const gate = gateByKey.get(cluster.key);
+                const outer = cluster.worlds[cluster.worlds.length - 1];
+                const gateGlyph =
+                  gate &&
+                  (() => {
+                    const a = (gate.angleDeg * Math.PI) / 180;
+                    const gx = (outer.orbitRx + 34) * Math.cos(a);
+                    const gy = (outer.orbitRy + 34 * (outer.orbitRy / outer.orbitRx)) * Math.sin(a);
+                    return (
+                      <g>
+                        <GateGlyph x={gx} y={gy} size={9} gate={gate} title={`${cluster.name.replace(/^The /, "")} gate`} />
+                        {isFocused && (
+                          <text className="galaxy-gate-label" x={gx} y={gy + 22}>
+                            Gate
+                          </text>
+                        )}
+                      </g>
+                    );
+                  })();
+
                 return (
                   <>
+                    {gateGlyph}
                     {behind.map(renderPlanet)}
                     <g
                       className="galaxy-cluster-star-hit"

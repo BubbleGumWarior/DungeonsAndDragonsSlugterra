@@ -1,0 +1,247 @@
+/* Feed Ally Slugs: the barter card, a little wider, with the Slug Care meters. */
+.feed-ally {
+  --care-good: var(--success);
+  --care-warn: #dd7a4a;
+  --care-bad: var(--danger);
+  max-width: 480px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+.feed-ally-sub {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+
+.feed-ally-sub strong {
+  color: var(--ink);
+}
+
+.feed-ally-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.feed-ally-empty,
+.feed-ally-hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+
+/* Step one: who to feed for. */
+.feed-ally-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.feed-ally-pick {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 12px;
+  text-align: left;
+  color: var(--ink);
+  background: var(--charcoal-900, var(--charcoal-950));
+  border: 1px solid var(--charcoal-600);
+  border-radius: 10px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s var(--ease-out),
+    background 0.15s var(--ease-out);
+}
+
+.feed-ally-pick:hover:not(:disabled) {
+  border-color: var(--gold-dim);
+  background: var(--charcoal-800);
+}
+
+.feed-ally-pick:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.feed-ally-pick-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.feed-ally-pick-name {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.feed-ally-pick-meta {
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+.feed-ally-tone--warn {
+  color: var(--care-warn);
+}
+
+.feed-ally-tone--bad {
+  color: var(--care-bad);
+}
+
+.feed-ally-pick-need {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--gold-soft);
+  white-space: nowrap;
+}
+
+.feed-ally-pick-need small {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-dim);
+}
+
+.feed-ally-pick-caret {
+  flex-shrink: 0;
+  color: var(--ink-dim);
+}
+
+/* Step two: how many scoops. */
+.feed-ally-need {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+}
+
+.feed-ally-need strong {
+  font-size: 15px;
+  color: var(--gold-soft);
+}
+
+.feed-ally-amount {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.feed-ally-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  color: var(--ink);
+  background: var(--charcoal-800);
+  border: 1px solid var(--charcoal-600);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.feed-ally-step:hover:not(:disabled) {
+  border-color: var(--gold-dim);
+}
+
+.feed-ally-step:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.feed-ally-input {
+  width: 64px;
+  height: 34px;
+  padding: 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--ink);
+  background: var(--charcoal-950);
+  border: 1px solid var(--charcoal-600);
+  border-radius: 8px;
+}
+
+.feed-ally-amount .slug-care-btn {
+  margin-left: auto;
+}
+
+.feed-ally-preview {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.feed-ally-preview-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto 32px;
+  align-items: center;
+  column-gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--charcoal-700);
+}
+
+.feed-ally-preview-row:first-child {
+  border-top: 0;
+}
+
+.feed-ally-thumb {
+  width: 32px;
+  height: 32px;
+}
+
+.feed-ally-slug {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.feed-ally-slug-name {
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-ally-change {
+  font-size: 12.5px;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+
+.feed-ally-change strong {
+  color: var(--ink);
+}
+
+.feed-ally-scoops {
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: right;
+  color: var(--gold-soft);
+}
+
+.feed-ally-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.feed-ally-done {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+/* The result list has no thumbnails or meters. */
+.feed-ally-body > .feed-ally-preview .feed-ally-preview-row:not(:has(.slug-care-meter)) {
+  grid-template-columns: minmax(0, 1fr) auto 32px;
+}

@@ -557,6 +557,13 @@ export async function initSchema() {
   await pool.query(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS voice_cue_volume REAL NOT NULL DEFAULT 0.5;
   `);
+  // voice_noise_cancel -- run the outgoing mic through RNNoise (a small
+  // neural noise suppressor, client/src/micPipeline.js) before it reaches the
+  // call. Off by default; the browser's lighter built-in suppression covers
+  // the off state.
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS voice_noise_cancel BOOLEAN NOT NULL DEFAULT false;
+  `);
   // master_volume (0-1) is a convenience control only -- moving it writes
   // its value into every individual sound level at once (sound_volume,
   // voice_cue_volume, every combat_sfx_volumes entry). It never scales
@@ -684,6 +691,27 @@ export async function initSchema() {
       user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       vote BOOLEAN NOT NULL
     );
+  `);
+
+  // The Veylan Drive model (shipRules.js SHIP_CLASSES, travelPhysics.js): a ship
+  // has a class and its own sustained proper acceleration (g) and speed cap (c),
+  // replacing the old units-per-day `speed` (left in place, no longer read).
+  // The Traveler is the experimental/elite class; any other existing ship starts
+  // as a civilian transport. Custom compartments add acceleration in g.
+  // `gate_status` is the DM's per-system gate state ({ threxa: { operational,
+  // authorized } }, missing = open); `travel_state.route` is the planned voyage
+  // (legs and times) from routePlanner.js.
+  await pool.query(`
+    ALTER TABLE ships ADD COLUMN IF NOT EXISTS ship_class TEXT;
+    ALTER TABLE ships ADD COLUMN IF NOT EXISTS accel_g REAL;
+    ALTER TABLE ships ADD COLUMN IF NOT EXISTS max_speed_c REAL;
+    UPDATE ships SET ship_class = CASE WHEN name = 'The Traveler' THEN 'experimental_elite' ELSE 'civilian_transport' END
+      WHERE ship_class IS NULL;
+    UPDATE ships SET accel_g = CASE WHEN ship_class = 'experimental_elite' THEN 1.0 ELSE 0.1 END WHERE accel_g IS NULL;
+    UPDATE ships SET max_speed_c = CASE WHEN ship_class = 'experimental_elite' THEN 0.95 ELSE 0.75 END WHERE max_speed_c IS NULL;
+    ALTER TABLE compartment_templates ADD COLUMN IF NOT EXISTS accel_bonus_g REAL NOT NULL DEFAULT 0;
+    ALTER TABLE campaign_settings ADD COLUMN IF NOT EXISTS gate_status JSONB NOT NULL DEFAULT '{}';
+    ALTER TABLE travel_state ADD COLUMN IF NOT EXISTS route JSONB;
   `);
 
   // Set once the starting ship has been seeded (or skipped because ships

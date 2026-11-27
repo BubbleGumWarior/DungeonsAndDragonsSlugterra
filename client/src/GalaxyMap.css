@@ -209,3 +209,47 @@
   width: 18px;
   height: 18px;
 }
+
+/* Jump gates: fixed rings just beyond a system's outer orbit, and their twins
+   on The Threshold's outskirts. Dashed and dim when shut down. */
+.galaxy-gate {
+  pointer-events: none;
+}
+
+.galaxy-gate circle,
+.galaxy-gate line {
+  fill: none;
+  stroke: var(--gold-soft);
+  stroke-width: 1.6;
+}
+
+.galaxy-gate circle {
+  fill: rgba(201, 162, 75, 0.12);
+  filter: drop-shadow(0 0 4px rgba(201, 162, 75, 0.55));
+}
+
+.galaxy-gate--denied circle,
+.galaxy-gate--denied line {
+  stroke: var(--gold);
+}
+
+.galaxy-gate--down circle,
+.galaxy-gate--down line {
+  stroke: var(--danger);
+  stroke-dasharray: 2 2;
+  opacity: 0.7;
+  filter: none;
+}
+
+.galaxy-gate-label {
+  fill: var(--gold);
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: #07070b;
+  stroke-width: 3;
+  pointer-events: none;
+}

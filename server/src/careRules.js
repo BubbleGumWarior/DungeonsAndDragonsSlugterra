@@ -8,6 +8,8 @@
 // slug already at the lowest tier leaves the party.
 export const FOOD_MAX = 100;
 export const FOOD_DRAIN_PER_REST = 25;
+// A slug handed out in a Slug Bundle arrives hungry: its meter starts here.
+export const BUNDLE_SLUG_FOOD = 25;
 // One scoop of Slug Kibble restores 10% food, and a better Slug Handling
 // modifier stretches it: 8% more per point, topping out at 50% (a +5 handler).
 export const KIBBLE_FOOD_MIN = 10;

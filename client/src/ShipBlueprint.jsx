@@ -19,7 +19,8 @@ import { PLANETS } from "./planetData.js";
 import useTravel from "./useTravel.js";
 import NavConsole from "./NavConsole.jsx";
 import ShipWorkPanel from "./ShipWorkPanel.jsx";
-import { NAV_RANGE_LABELS, ROMAN } from "./shipData.js";
+import { ROMAN, navRangeText } from "./shipData.js";
+import { formatG, formatSpeed } from "./travelFormat.js";
 import "./ShipBlueprint.css";
 
 // The compartment a ship needs to travel: its online Nav Computer opens the star
@@ -103,7 +104,7 @@ function blankCompartment(xPct, yPct) {
     templateKey: null,
     tier: 1,
     upgradingTo: null,
-    speedBonus: 0,
+    accelBonusG: 0,
     buildDays: 0,
     progressDays: 0,
     engineers: [],
@@ -436,7 +437,7 @@ export default function ShipBlueprint({ isDungeonMaster = false, assistant = fal
       tier: 1,
       upgradingTo: null,
       buildDays: t.buildDays,
-      speedBonus: t.speedBonus,
+      accelBonusG: t.accelBonusG ?? 0,
     });
   }
 
@@ -451,7 +452,7 @@ export default function ShipBlueprint({ isDungeonMaster = false, assistant = fal
           name: c.label,
           description: c.description,
           buildDays: c.buildDays || 3,
-          speedBonus: c.speedBonus || 0,
+          accelBonusG: c.accelBonusG || 0,
         }),
       });
       const data = await res.json();
@@ -645,31 +646,63 @@ export default function ShipBlueprint({ isDungeonMaster = false, assistant = fal
         <section className="ship-stats" aria-label="Ship stats">
           <div className="ship-stat">
             <span className="ship-stat-label">
-              <GaugeIcon weight="bold" /> Travel speed
+              <GaugeIcon weight="bold" /> Veylan Drive
             </span>
             <span className="ship-stat-value">
-              {ship.speedStats?.effective ?? ship.speed}
-              <small> units a day</small>
+              {ship.drive ? formatG(ship.drive.accelG) : "…"}
+              <small> sustained</small>
             </span>
             <span className="ship-stat-note">
-              {isDungeonMaster ? (
-                <label className="ship-stat-edit">
-                  Base
-                  <input
-                    type="number"
-                    min={1}
-                    max={99}
-                    value={ship.speed}
-                    onChange={(e) => setShip((s) => ({ ...s, speed: Number(e.target.value) }))}
-                    onBlur={() => saveShipStat({ speed: ship.speed })}
-                  />
-                </label>
-              ) : (
-                <>Base {ship.speed}</>
-              )}
-              {ship.speedStats?.bonus
-                ? ` ${ship.speedStats.bonus > 0 ? "+" : "−"} ${Math.abs(ship.speedStats.bonus)} from online compartments`
-                : " · no compartment bonuses yet"}
+              {isDungeonMaster && ship.drive ? (
+                <>
+                  <label className="ship-stat-edit">
+                    <select
+                      value={ship.shipClass}
+                      onChange={(e) => saveShipStat({ shipClass: e.target.value })}
+                      aria-label="Ship class"
+                    >
+                      {(ship.shipClasses ?? []).map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>{" "}
+                  <label className="ship-stat-edit">
+                    Base
+                    <input
+                      type="number"
+                      min={0.01}
+                      max={3}
+                      step={0.01}
+                      value={ship.drive.baseG}
+                      onChange={(e) => setShip((s) => ({ ...s, drive: { ...s.drive, baseG: e.target.value } }))}
+                      onBlur={() => saveShipStat({ accelG: Number(ship.drive.baseG) })}
+                    />
+                    g
+                  </label>{" "}
+                  <label className="ship-stat-edit">
+                    Cap
+                    <input
+                      type="number"
+                      min={0.01}
+                      max={0.95}
+                      step={0.01}
+                      value={ship.drive.maxSpeedC}
+                      onChange={(e) => setShip((s) => ({ ...s, drive: { ...s.drive, maxSpeedC: e.target.value } }))}
+                      onBlur={() => saveShipStat({ maxSpeedC: Number(ship.drive.maxSpeedC) })}
+                    />
+                    c
+                  </label>
+                </>
+              ) : ship.drive ? (
+                <>
+                  {ship.drive.className}: base {formatG(ship.drive.baseG)}, speed cap {formatSpeed(ship.drive.maxSpeedC)}
+                </>
+              ) : null}
+              {ship.drive?.bonusG
+                ? ` · ${ship.drive.bonusG > 0 ? "+" : "−"}${formatG(Math.abs(ship.drive.bonusG))} from online compartments`
+                : ""}
             </span>
           </div>
 
@@ -714,7 +747,7 @@ export default function ShipBlueprint({ isDungeonMaster = false, assistant = fal
                 (isDungeonMaster
                   ? ". No working Nav Computer, so the ship can't travel."
                   : ". The Nav Computer isn't working, so the ship can't travel.")}
-              {navReady && ship.effects?.navRange && `. The Nav Computer charts: ${NAV_RANGE_LABELS[ship.effects.navRange].toLowerCase()}.`}
+              {navReady && ship.effects?.navRange && `. The Nav Computer charts: ${navRangeText(ship.effects.navRange)}.`}
             </span>
           </div>
 
@@ -934,13 +967,14 @@ export default function ShipBlueprint({ isDungeonMaster = false, assistant = fal
                     />
                   </label>
                   <label className="ship-detail-field">
-                    Speed bonus
+                    Acceleration bonus (g)
                     <input
                       type="number"
-                      min={-20}
-                      max={20}
-                      value={selected.speedBonus ?? 0}
-                      onChange={(e) => updateSelected({ speedBonus: Number(e.target.value) })}
+                      min={-1}
+                      max={1}
+                      step={0.01}
+                      value={selected.accelBonusG ?? 0}
+                      onChange={(e) => updateSelected({ accelBonusG: Number(e.target.value) })}
                       onBlur={commitSelected}
                     />
                   </label>
@@ -1050,10 +1084,10 @@ export default function ShipBlueprint({ isDungeonMaster = false, assistant = fal
               {isNavPin(selected) && selected.status !== "online" && (
                 <p className="ship-detail-body">The star console stays dark until this compartment is online.</p>
               )}
-              {selected.speedBonus ? (
+              {selected.accelBonusG ? (
                 <p className="ship-detail-body">
-                  Travel speed {selected.speedBonus > 0 ? "+" : "−"}
-                  {Math.abs(selected.speedBonus)} while online.
+                  Veylan Drive acceleration {selected.accelBonusG > 0 ? "+" : "−"}
+                  {formatG(Math.abs(selected.accelBonusG))} while online.
                 </p>
               ) : null}
               {(selected.status === "building" || selected.upgradingTo) && (

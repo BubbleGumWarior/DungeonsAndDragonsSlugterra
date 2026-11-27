@@ -14,6 +14,7 @@ import {
   BellRingingIcon,
   FadersIcon,
   MusicNotesIcon,
+  HeadphonesIcon,
 } from "@phosphor-icons/react";
 import { useAuth } from "./AuthContext.jsx";
 import { canViewAsDm } from "./roles.js";
@@ -22,9 +23,11 @@ import NavBar from "./NavBar.jsx";
 import { THEMES, DEFAULT_THEME } from "./theme.js";
 import { volumeToGain } from "./soundVolume.js";
 import { useMicLevel } from "./useMicLevel.js";
-import { loadInputDeviceId, micConstraints } from "./voiceAudio.js";
+import { loadInputDeviceId } from "./voiceAudio.js";
+import { openMic, supportsNoiseCancel } from "./micPipeline.js";
 import CameraCheck from "./CameraCheck.jsx";
 import "./Panel.css";
+import "./VoicePanel.css";
 import "./Settings.css";
 
 const VOICE_INPUT_MODES = [
@@ -116,8 +119,20 @@ export default function Settings() {
   const sfxVolumesRef = useRef(sfxVolumes);
   sfxVolumesRef.current = sfxVolumes;
 
+  const [noiseCancel, setNoiseCancel] = useState(Boolean(user?.voiceNoiseCancel));
+  const [savingNoiseCancel, setSavingNoiseCancel] = useState(false);
+  const [noiseCancelError, setNoiseCancelError] = useState("");
+
+  // The mic test opens the mic exactly as a call would (micPipeline.js), so
+  // with noise cancellation on, the meter and the listen-back are RNNoise's
+  // output. micRef owns it; micStream is just its stream for rendering.
   const [micStream, setMicStream] = useState(null);
   const [micError, setMicError] = useState("");
+  const [micFellBack, setMicFellBack] = useState(false); // asked for noise cancellation but it couldn't start
+  const [listenBack, setListenBack] = useState(false);
+  const micRef = useRef(null);
+  const micOpenSeq = useRef(0);
+  const listenBackRef = useRef(null);
   const micLevel = useMicLevel(micStream);
 
   useEffect(() => {
@@ -135,6 +150,19 @@ export default function Settings() {
   useEffect(() => {
     if (typeof user?.voiceCueVolume === "number") setCueVolume(user.voiceCueVolume);
   }, [user?.voiceCueVolume]);
+
+  useEffect(() => {
+    if (typeof user?.voiceNoiseCancel === "boolean") setNoiseCancel(user.voiceNoiseCancel);
+  }, [user?.voiceNoiseCancel]);
+
+  // Listen-back plays the test stream straight to the speakers.
+  useEffect(() => {
+    const el = listenBackRef.current;
+    if (!el) return;
+    const stream = listenBack ? micStream : null;
+    if (el.srcObject !== stream) el.srcObject = stream;
+    if (stream) el.play().catch(() => {});
+  }, [listenBack, micStream]);
 
   useEffect(() => {
     if (user?.combatSfxVolumes) setSfxVolumes(user.combatSfxVolumes);
@@ -158,11 +186,10 @@ export default function Settings() {
       clearTimeout(sfxTestTimer.current);
       Object.values(sfxSaveTimers.current).forEach(clearTimeout);
       // Leaving the page mid-test shouldn't leave the mic hot in the
-      // background -- release whatever stream the test button opened.
-      setMicStream((prev) => {
-        prev?.getTracks().forEach((track) => track.stop());
-        return null;
-      });
+      // background -- release whatever the test button opened.
+      micOpenSeq.current += 1;
+      micRef.current?.dispose();
+      micRef.current = null;
     };
   }, []);
 
@@ -340,19 +367,58 @@ export default function Settings() {
     setSavingVoiceMode(false);
   }
 
-  async function handleToggleMicTest() {
-    if (micStream) {
-      micStream.getTracks().forEach((track) => track.stop());
-      setMicStream(null);
-      return;
-    }
+  function stopMicTest() {
+    micOpenSeq.current += 1;
+    micRef.current?.dispose();
+    micRef.current = null;
+    setMicStream(null);
+    setMicFellBack(false);
+    setListenBack(false);
+  }
+
+  // (Re)opens the test mic with the given noise setting. A newer open
+  // supersedes an older one still waiting on the permission prompt.
+  async function startMicTest(withNoiseCancel) {
+    const seq = ++micOpenSeq.current;
     setMicError("");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia(micConstraints(loadInputDeviceId()));
-      setMicStream(stream);
+      const mic = await openMic(loadInputDeviceId(), { noiseCancel: withNoiseCancel });
+      if (seq !== micOpenSeq.current) {
+        mic.dispose();
+        return;
+      }
+      micRef.current?.dispose();
+      micRef.current = mic;
+      setMicStream(mic.stream);
+      setMicFellBack(withNoiseCancel && !mic.noiseCancel);
     } catch {
-      setMicError("Couldn't access your microphone. Check your browser's site permissions.");
+      if (seq === micOpenSeq.current) setMicError("Couldn't access your microphone. Check your browser's site permissions.");
     }
+  }
+
+  function handleToggleMicTest() {
+    if (micStream) stopMicTest();
+    else startMicTest(noiseCancel);
+  }
+
+  async function handleToggleNoiseCancel() {
+    if (savingNoiseCancel) return;
+    const next = !noiseCancel;
+    setNoiseCancelError("");
+    setSavingNoiseCancel(true);
+    setNoiseCancel(next);
+    // Optimistic: VoiceChatContext rebuilds a live call's mic off this.
+    updateUser({ ...user, voiceNoiseCancel: next });
+    // A running test switches over too, so the difference is audible.
+    if (micRef.current) startMicTest(next);
+    const result = await savePreferences({ voiceNoiseCancel: next });
+    if (!result) {
+      setNoiseCancel(!next);
+      updateUser({ ...user, voiceNoiseCancel: !next });
+      if (micRef.current) startMicTest(!next);
+      setNoiseCancelError("Couldn't save your noise setting. Try again.");
+    }
+    setSavingNoiseCancel(false);
   }
 
   const volumePercent = Math.round(volume * 100);
@@ -408,21 +474,70 @@ export default function Settings() {
               </p>
               {voiceModeError && <p className="panel-error">{voiceModeError}</p>}
 
+              <div className="voice-switch-row settings-noise-row">
+                <div className="voice-switch-text">
+                  <span className="voice-switch-label" id="settings-noise-label">
+                    Noise cancellation
+                  </span>
+                  <span className="voice-switch-hint" id="settings-noise-hint">
+                    {!supportsNoiseCancel()
+                      ? "This browser can't run it, so your mic uses its standard noise filter."
+                      : noiseCancel
+                        ? "On: an AI filter strips keyboards, fans and background chatter before the table hears you."
+                        : "Off: your browser's standard filter only. Turn on if the table hears your room."}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={noiseCancel}
+                  aria-labelledby="settings-noise-label"
+                  aria-describedby="settings-noise-hint"
+                  className="voice-switch"
+                  onClick={handleToggleNoiseCancel}
+                  disabled={savingNoiseCancel || !supportsNoiseCancel()}
+                >
+                  <span className="voice-switch-thumb" aria-hidden="true" />
+                </button>
+              </div>
+              {noiseCancelError && <p className="panel-error">{noiseCancelError}</p>}
+
               <div className="mic-check">
                 <div className={`mic-check-meter${micStream ? " mic-check-meter--live" : ""}`} style={{ "--mic-level": micLevel }}>
                   <span className="mic-check-ring" />
                   <WaveformIcon weight="bold" className="mic-check-icon" />
                 </div>
                 <div className="mic-check-controls">
-                  <button type="button" className="panel-btn panel-btn--test" onClick={handleToggleMicTest}>
-                    {micStream ? <StopIcon weight="fill" /> : <PlayIcon weight="fill" />}
-                    {micStream ? "Stop Test" : "Test Microphone"}
-                  </button>
+                  <div className="mic-check-buttons">
+                    <button type="button" className="panel-btn panel-btn--test" onClick={handleToggleMicTest}>
+                      {micStream ? <StopIcon weight="fill" /> : <PlayIcon weight="fill" />}
+                      {micStream ? "Stop Test" : "Test Microphone"}
+                    </button>
+                    {micStream && (
+                      <button
+                        type="button"
+                        className="panel-btn panel-btn--test"
+                        onClick={() => setListenBack((on) => !on)}
+                        aria-pressed={listenBack}
+                      >
+                        {listenBack ? <SpeakerXIcon weight="bold" /> : <HeadphonesIcon weight="bold" />}
+                        {listenBack ? "Stop Listening" : "Hear Yourself"}
+                      </button>
+                    )}
+                  </div>
                   <span className="mic-check-hint">
-                    {micStream ? "Speak up -- the ring should pulse with your voice." : "Checks that your mic is picked up before you join a call."}
+                    {!micStream
+                      ? "Checks that your mic is picked up before you join a call."
+                      : listenBack
+                        ? "Wear headphones. This is how you sound to the table -- flip noise cancellation to compare."
+                        : "Speak up -- the ring should pulse with your voice."}
                   </span>
                 </div>
               </div>
+              <audio ref={listenBackRef} playsInline hidden />
+              {micFellBack && (
+                <p className="mic-check-hint">Noise cancellation couldn't start in this browser, so this test uses the standard filter.</p>
+              )}
               {micError && <p className="panel-error">{micError}</p>}
 
               <CameraCheck />

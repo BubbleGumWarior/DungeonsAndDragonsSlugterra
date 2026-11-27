@@ -54,14 +54,19 @@ check("upgrading costs more of a better grade", () => {
   assert.equal(rules.workQuote("pub", 2), null, "no second tier to buy");
 });
 
-check("speed comes from the tier, and a tier-less compartment from its stored bonus", () => {
-  assert.equal(rules.shipEffects([online("thruster-array", 1)]).speedBonus, 3);
-  assert.equal(rules.shipEffects([online("thruster-array", 3)]).speedBonus, 6);
-  assert.equal(rules.shipEffects([online("engine-room", 2), online("nav-computer", 1)]).speedBonus, 4);
-  assert.equal(rules.shipEffects([online("custom-4", 1, { speedBonus: 2 })]).speedBonus, 2);
-  const offline = { ...online("thruster-array", 3), status: "offline" };
-  assert.equal(rules.shipEffects([offline]).speedBonus, 0, "only online compartments count");
-  assert.equal(rules.speedBreakdown({ speed: 5, compartments: [online("thruster-array", 1)] }).effective, 8);
+check("drive acceleration comes from the tier, and a tier-less compartment from its stored bonus", () => {
+  assert.equal(rules.shipEffects([online("engine-room", 1)]).accelBonusG, 0.05);
+  assert.equal(rules.shipEffects([online("engine-room", 3)]).accelBonusG, 0.15);
+  assert.equal(rules.shipEffects([online("custom-4", 1, { accelBonusG: 0.02 })]).accelBonusG, 0.02);
+  const offline = { ...online("engine-room", 3), status: "offline" };
+  assert.equal(rules.shipEffects([offline]).accelBonusG, 0, "only online compartments count");
+  assert.equal(rules.driveBreakdown({ shipClass: "civilian_transport", compartments: [online("engine-room", 1)] }).accelG, 0.15);
+});
+
+check("thrusters are RCS: no thrust, they cut flip and docking time", () => {
+  assert.equal(rules.shipEffects([online("thruster-array", 3)]).accelBonusG, 0);
+  assert.equal(rules.shipEffects([online("thruster-array", 2)]).flipCutPct, 50);
+  assert.equal(rules.shipEffects([online("nav-computer", 3)]).accelBonusG, 0, "a computer adds no thrust");
 });
 
 check("a Nav Computer's tier sets how far it charts", () => {
@@ -71,19 +76,13 @@ check("a Nav Computer's tier sets how far it charts", () => {
   assert.equal(rules.shipEffects([online("nav-computer", 3)]).navRange, "all");
 });
 
-check("routes sort into close, medium and far by distance", () => {
-  // Same system: close. Threxa slot 0 to slot 5 is the longest hop inside a system (13).
-  assert.equal(rules.routeRange(0, 5), "close");
-  // The Threshold (16) to Threxa's first world is 12; to its last, 22.
-  assert.equal(rules.routeRange(16, 0), "close");
-  assert.equal(rules.routeRange(16, 5), "medium");
-  // Threxa-Verrin: 20 + 2 * (slot + slot). 0 and 6 (slot 0) is 20; 5 and 10 is 38.
-  assert.equal(rules.routeRange(0, 6), "medium");
-  assert.equal(rules.routeRange(5, 10), "all");
+check("routes sort by the gates they use", () => {
+  assert.equal(rules.routeRange(0, 5), "close", "inside one system");
+  assert.equal(rules.routeRange(0, 16), "close", "one jump to the Threshold");
+  assert.equal(rules.routeRange(16, 10), "close", "one jump out of it");
+  assert.equal(rules.routeRange(0, 6), "medium", "two jumps, system to system");
   assert.equal(rules.navCanReach("close", 0, 6), false);
   assert.equal(rules.navCanReach("medium", 0, 6), true);
-  assert.equal(rules.navCanReach("medium", 5, 10), false);
-  assert.equal(rules.navCanReach("all", 5, 10), true);
   assert.equal(rules.navCanReach("none", 0, 1), false);
 });
 
@@ -94,8 +93,6 @@ check("every route from every world is within a Tier III Nav Computer", () => {
 });
 
 check("a close Nav Computer can always take a first step", () => {
-  // From anywhere there is at least one world within close range, so a Tier I
-  // computer never leaves the party stranded.
   for (let a = 0; a < rules.WORLD_COUNT; a++) {
     const close = [...Array(rules.WORLD_COUNT).keys()].filter((b) => b !== a && rules.navCanReach("close", a, b));
     assert.ok(close.length > 0, `world ${a} has nowhere close`);

@@ -1,31 +1,38 @@
 import { CheckIcon, GaugeIcon, PathIcon, RocketLaunchIcon, XIcon } from "@phosphor-icons/react";
 import { PLANETS } from "./planetData.js";
-import { NAV_RANGE_LABELS } from "./shipData.js";
+import { navRangeText } from "./shipData.js";
+import { formatG, formatSpeed, routeTypeLabel } from "./travelFormat.js";
 import "./TravelPanel.css";
 
 const worldName = (i) => PLANETS[i]?.name ?? "Unknown";
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-// The strip above the Galaxy Map: what day it is, how fast the ship goes, and
+// The strip above the Galaxy Map: what day it is, the ship's Veylan Drive, and
 // whichever of the three states the party is in -- docked, voting on a
 // destination, or under way. Every long rest is a day.
 export default function TravelPanel({ travel, isDungeonMaster, act, busy, error }) {
   if (!travel) return null;
   const { ship, proposal, traveling } = travel;
   const elapsed = travel.daysTotal - travel.daysLeft;
+  const leg = travel.voyage?.legs?.[travel.voyage.currentLeg] ?? null;
 
   return (
     <section className="travel-panel" aria-label="Ship travel">
       <header className="travel-head">
         <span className="travel-day">Day {travel.day}</span>
         {ship ? (
-          <span className="travel-ship" title={`Base speed ${ship.base}, compartments ${ship.bonus >= 0 ? "+" : ""}${ship.bonus}`}>
+          <span
+            className="travel-ship"
+            title={`${ship.className}, Veylan Drive ${formatG(ship.baseG)}${
+              ship.bonusG ? `, compartments ${ship.bonusG > 0 ? "+" : "−"}${formatG(Math.abs(ship.bonusG))}` : ""
+            }. Speed cap ${formatSpeed(ship.maxSpeedC)}.`}
+          >
             <GaugeIcon weight="bold" />
-            {ship.name} · speed {ship.effective}
-            {ship.bonus !== 0 && (
+            {ship.name} · {formatG(ship.accelG)}
+            {ship.bonusG !== 0 && (
               <span className="travel-ship-bonus">
                 {" "}
-                ({ship.base} {ship.bonus > 0 ? "+" : "−"} {Math.abs(ship.bonus)})
+                ({formatG(ship.baseG)} {ship.bonusG > 0 ? "+" : "−"} {formatG(Math.abs(ship.bonusG))})
               </span>
             )}
           </span>
@@ -54,6 +61,12 @@ export default function TravelPanel({ travel, isDungeonMaster, act, busy, error 
           <p className="travel-sub">
             {plural(travel.daysLeft, "day")} left of {travel.daysTotal}. Each long rest is one day.
           </p>
+          {leg && (
+            <p className="travel-sub">
+              {leg.kind === "flight" ? "Burning: " : ""}
+              {leg.label}
+            </p>
+          )}
           {isDungeonMaster && (
             <button type="button" className="travel-btn travel-btn--danger" disabled={busy} onClick={() => act("abort")}>
               <XIcon weight="bold" /> Turn the ship around
@@ -66,7 +79,8 @@ export default function TravelPanel({ travel, isDungeonMaster, act, busy, error 
             <PathIcon weight="bold" />
             <span>
               {proposal.proposerName ?? "The DM"} proposes flying to <strong>{worldName(proposal.area)}</strong>:{" "}
-              {plural(proposal.days, "day")} at speed {ship?.effective ?? "?"}
+              {plural(proposal.days, "day")}
+              {proposal.route ? `, ${routeTypeLabel(proposal.route).toLowerCase()}` : ""}
             </span>
           </p>
 
@@ -135,7 +149,7 @@ export default function TravelPanel({ travel, isDungeonMaster, act, busy, error 
           </p>
           {ship && travel.navReady && (
             <p className="travel-sub">
-              The Nav Computer (Tier {travel.navTier}) charts: {NAV_RANGE_LABELS[travel.navRange].toLowerCase()}.
+              The Nav Computer (Tier {travel.navTier}) charts: {navRangeText(travel.navRange)}.
             </p>
           )}
         </div>

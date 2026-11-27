@@ -1,6 +1,8 @@
 {
   "name": "The Traveler",
-  "speed": 5,
+  "shipClass": "experimental_elite",
+  "accelG": 1.0,
+  "maxSpeedC": 0.95,
   "compartmentSlots": 12,
   "image": "default-ship.jpg",
   "compartments": [
@@ -12,10 +14,10 @@
       "status": "online",
       "buildDays": 5,
       "engineers": [],
-      "speedBonus": 0,
       "description": "The flight deck: helm, navigation and the captain's chair. Where the party decides where the ship goes.",
       "templateKey": "bridge",
-      "progressDays": 0
+      "progressDays": 0,
+      "accelBonusG": 0
     },
     {
       "id": "c-mvpox970-dsl05",
@@ -25,10 +27,10 @@
       "status": "online",
       "buildDays": 4,
       "engineers": [],
-      "speedBonus": 1,
-      "description": "Plots tighter routes between worlds and shaves days off long hauls.",
+      "description": "Plots burns, flips and gate approaches. Its holographic star table is how the crew charts a course: without a working one the ship can't travel.",
       "templateKey": "nav-computer",
-      "progressDays": 0
+      "progressDays": 0,
+      "accelBonusG": 0
     },
     {
       "id": "c-mvpoxqlw-j51y7",
@@ -38,10 +40,10 @@
       "status": "online",
       "buildDays": 0,
       "engineers": [],
-      "speedBonus": 0,
       "description": "A place to make food, and eat it.",
       "templateKey": "pub",
-      "progressDays": 0
+      "progressDays": 0,
+      "accelBonusG": 0
     },
     {
       "id": "c-mvpoz6ea-qh0cx",
@@ -51,10 +53,10 @@
       "status": "online",
       "buildDays": 4,
       "engineers": [],
-      "speedBonus": 0,
       "description": "Cots, scanners and a locked cabinet of medicine for patching up the crew.",
       "templateKey": "medbay",
-      "progressDays": 0
+      "progressDays": 0,
+      "accelBonusG": 0
     },
     {
       "id": "c-mvpozh45-bchxq",
@@ -64,10 +66,10 @@
       "status": "online",
       "buildDays": 3,
       "engineers": [],
-      "speedBonus": 0,
       "description": "Bunks, lockers and a little privacy. Somewhere to actually take a long rest.",
       "templateKey": "crew-quarters",
-      "progressDays": 0
+      "progressDays": 0,
+      "accelBonusG": 0
     },
     {
       "id": "c-mvpozpu1-05qu1",
@@ -77,10 +79,10 @@
       "status": "online",
       "buildDays": 3,
       "engineers": [],
-      "speedBonus": 0,
       "description": "Bunks, lockers and a little privacy. Somewhere to actually take a long rest.",
       "templateKey": "crew-quarters",
-      "progressDays": 0
+      "progressDays": 0,
+      "accelBonusG": 0
     },
     {
       "id": "c-mvpozx7x-ijof2",
@@ -90,10 +92,10 @@
       "status": "online",
       "buildDays": 3,
       "engineers": [],
-      "speedBonus": 0,
       "description": "Bunks, lockers and a little privacy. Somewhere to actually take a long rest.",
       "templateKey": "crew-quarters",
-      "progressDays": 0
+      "progressDays": 0,
+      "accelBonusG": 0
     },
     {
       "id": "c-mvpp03j8-7a143",
@@ -103,10 +105,10 @@
       "status": "online",
       "buildDays": 3,
       "engineers": [],
-      "speedBonus": 0,
       "description": "Bunks, lockers and a little privacy. Somewhere to actually take a long rest.",
       "templateKey": "crew-quarters",
-      "progressDays": 0
+      "progressDays": 0,
+      "accelBonusG": 0
     },
     {
       "id": "c-mvpp0fuv-5ntiw",
@@ -116,10 +118,10 @@
       "status": "online",
       "buildDays": 0,
       "engineers": [],
-      "speedBonus": 0,
       "description": "When you ate too much and need to let go, this is the place to go.",
       "templateKey": "bathroom",
-      "progressDays": 0
+      "progressDays": 0,
+      "accelBonusG": 0
     },
     {
       "id": "c-mvpp12vg-jz6ft",
@@ -129,10 +131,10 @@
       "status": "online",
       "buildDays": 3,
       "engineers": [],
-      "speedBonus": 0,
       "description": "Lashed-down crates and loose floor space for loot, trade goods and anything that shouldn't be in the cabins.",
       "templateKey": "cargo-hold",
-      "progressDays": 0
+      "progressDays": 0,
+      "accelBonusG": 0
     },
     {
       "id": "c-mvpp1bev-ayo7g",
@@ -142,10 +144,10 @@
       "status": "online",
       "buildDays": 0,
       "engineers": [],
-      "speedBonus": 0,
       "description": "A living neurological interface designed for rapid linguistic assimilation.",
       "templateKey": "lexical-graft",
-      "progressDays": 0
+      "progressDays": 0,
+      "accelBonusG": 0
     },
     {
       "id": "c-mvpp2nf6-lenpn",
@@ -155,10 +157,10 @@
       "status": "online",
       "buildDays": 8,
       "engineers": [],
-      "speedBonus": 3,
       "description": "Oversized auxiliary thrusters bolted to the hull. Loud, thirsty and fast.",
       "templateKey": "thruster-array",
-      "progressDays": 0
+      "progressDays": 0,
+      "accelBonusG": 0
     }
   ]
 }

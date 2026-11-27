@@ -263,7 +263,8 @@ export const CLUSTERS = [
 ];
 
 // Unclaimed Space isn't part of the three-cluster convergence cycle -- it
-// drifts on its own in the open space between them (see GalaxyMap.jsx).
+// sits in the open space between them, with each system's gate on its outskirts
+// (see GalaxyMap.jsx and server/src/universe.js).
 export const UNCLAIMED = {
   key: "unclaimed",
   name: "Unclaimed Space",
@@ -271,6 +272,9 @@ export const UNCLAIMED = {
   worlds: [
     {
       name: "The Threshold",
+      // Nothing lives out here: no wild slugs to hunt, nothing to forage.
+      // Mirrors SLUGLESS_WORLDS in server/src/planetRules.js.
+      noWildlife: true,
       color: "#8a6a52",
       sizeR: 11,
       yearDays: null,

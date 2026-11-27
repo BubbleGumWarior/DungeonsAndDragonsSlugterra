@@ -122,15 +122,18 @@ check("ice patches: heat melts, cold and dry keep", () => {
   assert.ok(air(1).iceRounds >= 1);
 });
 
-check("aboard is plain ship air with no effects", () => {
+check("aboard is plain ship air, with the world's gravity while docked", () => {
   for (const i of [0, 2, 12, 16]) {
     const a = air(i, true);
     assert.ok(a.aboard);
-    assert.deepEqual(a.effects, [], `world ${i}`);
     assert.equal(a.temperatureC, 21);
-    assert.equal(a.walkMult, 1);
+    assert.equal(a.gravityG, rules.buildAtmosphere({ facts: worldFacts(i) }).gravityG, `world ${i}`);
     assert.ok(!a.noFire && !a.noHazards && !a.noBlind);
+    assert.ok(a.effects.every((e) => /gravity/i.test(e)), `only gravity effects aboard, world ${i}`);
   }
+  assert.deepEqual(air(4, true).effects, [], "1 g world: nothing changes");
+  assert.equal(air(16, true).gravity, "zero", "docked in the Threshold's debris: no gravity at all");
+  assert.equal(rules.buildAtmosphere({ facts: worldFacts(0), aboard: true, aboardGravityG: 0.1 }).gravity, "low", "under way: the drive's thrust");
   assert.equal(air(16).aboard, false);
   assert.equal(air(16).temperatureC, -170, "offboard is the default and keeps the vacuum");
 });

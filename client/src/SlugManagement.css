@@ -248,6 +248,95 @@
   filter: brightness(1.08);
 }
 
+/* DM food control: - [ 45 ]% + Hungry. Colour follows the food state, and the
+   state word always rides along. */
+.dm-food {
+  --food-tone: var(--success);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: auto;
+  padding: 3px 8px 3px 6px;
+  border: 1px solid var(--charcoal-600);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-dim);
+}
+
+.dm-food--warn {
+  --food-tone: #dd7a4a;
+}
+
+.dm-food--bad {
+  --food-tone: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+}
+
+.dm-food-icon {
+  width: 13px;
+  height: 13px;
+  color: var(--food-tone);
+}
+
+.dm-food-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  color: var(--ink-dim);
+  background: transparent;
+  border: 1px solid var(--charcoal-600);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.dm-food-step svg {
+  width: 10px;
+  height: 10px;
+}
+
+.dm-food-step:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--gold-dim);
+}
+
+.dm-food-step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.dm-food-value {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink);
+}
+
+.dm-food-value input {
+  width: 3ch;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  text-align: right;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px dashed transparent;
+}
+
+.dm-food-value input:not([readonly]):hover,
+.dm-food-value input:focus {
+  border-bottom-color: var(--gold-dim);
+  outline: none;
+}
+
+.dm-food-label {
+  margin-left: 2px;
+  color: var(--food-tone);
+}
+
 .slug-modal-backdrop {
   position: fixed;
   inset: 0;

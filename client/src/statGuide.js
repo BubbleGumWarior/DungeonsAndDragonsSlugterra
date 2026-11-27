@@ -58,7 +58,7 @@ export const STAT_GUIDE = [
       insight: "At the start of a fight, read a foe and learn which slugs they carry. Miss, and you only learn them as they fire.",
       perception: "Spot a shot early enough to answer it, and see through foes who are hiding.",
       medicine: "Patch up a friend in a fight for less of your turn.",
-      survival: "Forage while the party sleeps: every long rest you turn up Slug Kibble, as long as your Survival is above zero.",
+      survival: "Forage while the party sleeps: every long rest you turn up Slug Kibble, as long as your Survival is above zero. Nothing to forage while the ship is in transit or docked at The Threshold.",
     },
   },
   {

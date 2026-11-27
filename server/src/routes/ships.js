@@ -8,15 +8,20 @@ import {
   DEFAULT_BUILD_DAYS,
   DEFAULT_COMPARTMENT_SLOTS,
   DEFAULT_COMPARTMENT_TEMPLATES,
-  DEFAULT_SHIP_SPEED,
+  DEFAULT_SHIP_CLASS,
+  ABSOLUTE_MAX_SPEED_C,
+  MAX_ACCEL_G,
+  MIN_ACCEL_G,
+  SHIP_CLASSES,
   SUPPLY_GRADES,
   blueprintFor,
   compartmentTier,
+  driveBreakdown,
   resolveWorkRoll,
+  shipClassFor,
   shipEffects,
-  speedBreakdown,
   storesUsed,
-  tierSpeedBonus,
+  tierAccelBonus,
   workQuote,
 } from "../shipRules.js";
 import { characterSkillMod } from "../characterRules.js";
@@ -37,6 +42,21 @@ function clampInt(value, min, max, fallback) {
   if (!Number.isFinite(n)) return fallback;
   return Math.max(min, Math.min(max, n));
 }
+
+function clampNum(value, min, max, fallback) {
+  if (value === null || value === undefined || value === "") return fallback;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(n * 1000) / 1000));
+}
+
+// The ship row's drive fields, in the shape shipRules.driveBreakdown reads.
+const driveInput = (row, compartments) => ({
+  shipClass: row.ship_class,
+  accelG: row.accel_g,
+  maxSpeedC: row.max_speed_c,
+  compartments,
+});
 
 // The deck-plan nodes the DM drops on the ship image. Percent coords so they
 // track the image at any rendered size (mirrors CombatMap's mapPoint math).
@@ -78,8 +98,8 @@ function cleanCompartments(raw, prev = []) {
       c.upgradingTo === old.upgradingTo;
     const upgradingTo = keepUpgrade ? old.upgradingTo : null;
 
-    const stored = clampInt(c.speedBonus, -20, 20, 0);
-    const speedBonus = tierSpeedBonus(templateKey, tier, stored);
+    const stored = clampNum(c.accelBonusG, -1, 1, 0);
+    const accelBonusG = tierAccelBonus(templateKey, tier, stored);
     let buildDays = clampInt(c.buildDays, 0, 365, 0);
     if (status === "building" && buildDays < 1) buildDays = DEFAULT_BUILD_DAYS;
 
@@ -94,7 +114,7 @@ function cleanCompartments(raw, prev = []) {
       templateKey,
       tier,
       upgradingTo,
-      speedBonus,
+      accelBonusG,
       buildDays,
       progressDays: keepBuild ? clampInt(old.progressDays, 0, 365, 0) : 0,
       engineers: keepBuild && Array.isArray(old.engineers) ? old.engineers : [],
@@ -126,9 +146,10 @@ async function toClientShip(row) {
     id: row.id,
     name: row.name,
     image: row.image ?? null,
-    speed: row.speed ?? DEFAULT_SHIP_SPEED,
+    shipClass: shipClassFor(row.ship_class).id,
     compartmentSlots: row.compartment_slots ?? DEFAULT_COMPARTMENT_SLOTS,
-    speedStats: speedBreakdown({ speed: row.speed, compartments }),
+    drive: driveBreakdown(driveInput(row, compartments)),
+    shipClasses: SHIP_CLASSES,
     effects: shipEffects(compartments),
     compartments: resolved,
   };
@@ -142,7 +163,7 @@ function toClientTemplate(row) {
     name: row.name,
     description: row.description,
     buildDays: row.build_days,
-    speedBonus: row.speed_bonus,
+    accelBonusG: row.accel_bonus_g ?? 0,
   };
 }
 
@@ -185,12 +206,12 @@ router.post("/templates", requireDmEdit, async (req, res) => {
   if (!name) return res.status(400).json({ error: "A compartment needs a name." });
   const description = String(req.body?.description ?? "").slice(0, 4000);
   const buildDays = clampInt(req.body?.buildDays, 1, 365, DEFAULT_BUILD_DAYS);
-  const speedBonus = clampInt(req.body?.speedBonus, -20, 20, 0);
+  const accelBonusG = clampNum(req.body?.accelBonusG, -1, 1, 0);
   try {
     const { rows } = await pool.query(
-      `INSERT INTO compartment_templates (name, description, build_days, speed_bonus)
+      `INSERT INTO compartment_templates (name, description, build_days, accel_bonus_g)
        VALUES ($1, $2, $3, $4) RETURNING *`,
-      [name, description, buildDays, speedBonus]
+      [name, description, buildDays, accelBonusG]
     );
     res.status(201).json({ template: toClientTemplate(rows[0]) });
   } catch (err) {
@@ -417,7 +438,7 @@ async function attemptWork(req, res, mode) {
             description: bp.description,
             tier: 1,
             upgradingTo: null,
-            speedBonus: tierSpeedBonus(templateKey, 1, 0),
+            accelBonusG: tierAccelBonus(templateKey, 1, 0),
             buildDays: roll.buildDays,
             progressDays: 0,
             engineers: [],
@@ -532,8 +553,8 @@ router.post("/", requireDmEdit, async (req, res) => {
   const name = String(req.body?.name ?? "").trim().slice(0, 120) || "The Ship";
   try {
     const { rows } = await pool.query(
-      "INSERT INTO ships (name) VALUES ($1) RETURNING *",
-      [name]
+      "INSERT INTO ships (name, ship_class, accel_g, max_speed_c) VALUES ($1, $2, $3, $4) RETURNING *",
+      [name, DEFAULT_SHIP_CLASS, shipClassFor(DEFAULT_SHIP_CLASS).accelG, shipClassFor(DEFAULT_SHIP_CLASS).maxSpeedC]
     );
     const ship = rows[0];
     // First ship ever -> make it active so there's always something to show.
@@ -572,13 +593,41 @@ router.patch("/:id", requireDmEdit, async (req, res) => {
     sets.push(`image = $${values.length}`);
   }
 
-  if (req.body?.speed !== undefined) {
-    const speed = Number(req.body.speed);
-    if (!Number.isInteger(speed) || speed < 1 || speed > 99) {
-      return res.status(400).json({ error: "Speed must be a whole number from 1 to 99." });
+  // The drive. Picking a class resets the ratings to that class's baseline
+  // unless the same request also sets them; the ratings can then be tuned per ship.
+  let driveChanged = false;
+  if (req.body?.shipClass !== undefined) {
+    const cls = SHIP_CLASSES.find((c) => c.id === req.body.shipClass);
+    if (!cls) return res.status(400).json({ error: "Unknown ship class." });
+    values.push(cls.id);
+    sets.push(`ship_class = $${values.length}`);
+    if (req.body?.accelG === undefined) {
+      values.push(cls.accelG);
+      sets.push(`accel_g = $${values.length}`);
     }
-    values.push(speed);
-    sets.push(`speed = $${values.length}`);
+    if (req.body?.maxSpeedC === undefined) {
+      values.push(cls.maxSpeedC);
+      sets.push(`max_speed_c = $${values.length}`);
+    }
+    driveChanged = true;
+  }
+  if (req.body?.accelG !== undefined) {
+    const g = Number(req.body.accelG);
+    if (!Number.isFinite(g) || g < MIN_ACCEL_G || g > MAX_ACCEL_G) {
+      return res.status(400).json({ error: `Acceleration must be between ${MIN_ACCEL_G} and ${MAX_ACCEL_G} g.` });
+    }
+    values.push(g);
+    sets.push(`accel_g = $${values.length}`);
+    driveChanged = true;
+  }
+  if (req.body?.maxSpeedC !== undefined) {
+    const c = Number(req.body.maxSpeedC);
+    if (!Number.isFinite(c) || c <= 0 || c > ABSOLUTE_MAX_SPEED_C) {
+      return res.status(400).json({ error: `The speed cap must be above 0 and at most ${ABSOLUTE_MAX_SPEED_C}c.` });
+    }
+    values.push(c);
+    sets.push(`max_speed_c = $${values.length}`);
+    driveChanged = true;
   }
 
   let slots;
@@ -617,7 +666,7 @@ router.patch("/:id", requireDmEdit, async (req, res) => {
       values
     );
     notifyShipUpdated();
-    if (req.body?.speed !== undefined || req.body?.compartments !== undefined) {
+    if (driveChanged || req.body?.compartments !== undefined) {
       broadcastAll({ type: "travel-updated" });
     }
     res.json({ ship: await toClientShip(rows[0]) });

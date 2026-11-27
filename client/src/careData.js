@@ -35,6 +35,26 @@ export function kibbleNeeded(food, perScoop = KIBBLE_FOOD_MIN) {
   return Math.max(0, Math.ceil((FOOD_MAX - food) / perScoop));
 }
 
+// Scoops it takes to fill every slug in a list (each rounded up on its own).
+export function kibbleNeededAll(slugs, perScoop = KIBBLE_FOOD_MIN) {
+  return slugs.reduce((sum, s) => sum + kibbleNeeded(s.food ?? FOOD_MAX, perScoop), 0);
+}
+
+// Feed Ally Slugs preview, mirroring POST /api/slugs/feed-ally: each scoop goes
+// to the hungriest slug that still has room (oldest first on a tie). Returns
+// [{ ...slug, after, scoops }] in the order given.
+export function distributeKibble(slugs, scoops, perScoop = KIBBLE_FOOD_MIN) {
+  const meals = slugs.map((s) => ({ ...s, after: s.food ?? FOOD_MAX, scoops: 0 }));
+  for (let i = 0; i < scoops; i++) {
+    let pick = null;
+    for (const m of meals) if (m.after < FOOD_MAX && (!pick || m.after < pick.after)) pick = m;
+    if (!pick) break;
+    pick.after = Math.min(FOOD_MAX, pick.after + perScoop);
+    pick.scoops += 1;
+  }
+  return meals;
+}
+
 // tone drives colour; the label always carries the meaning too.
 export function foodState(food) {
   if (food <= 0) return { key: "starving", label: "Starving", tone: "bad" };
